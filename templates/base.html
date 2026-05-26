@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}مشاريب{% endblock %}</title>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <style>
+    body { font-family: Tahoma, sans-serif; background: #f9fafb; margin: 0; }
+    header { background: #0f766e; color: #fff; padding: 1rem; }
+    main { max-width: 960px; margin: 1rem auto; background: #fff; padding: 1rem; border-radius: 10px; }
+  </style>
+</head>
+<body>
+  <header><h1>نظام مشاريب</h1></header>
+  <main>{% block content %}{% endblock %}</main>
+</body>
+</html>
