@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}أدوات القائمة{% endblock %}
+{% block content %}
+<h2>أدوات متابعة القائمة</h2>
+<p><a href="{% url 'staff_home' %}">العودة لصفحة الفريق</a></p>
+{% for section_name, products in grouped %}
+<section style="border:1px solid #ddd; border-radius:10px; padding:0.75rem; margin-bottom:1rem; overflow-x:auto;">
+  <h3>{{ section_name }}</h3>
+  <table style="width:100%; border-collapse:collapse; min-width:900px;">
+    <thead>
+      <tr>
+        <th>المنتج</th><th>السعر</th><th>النوع</th><th>مرئي QR</th><th>قابل للطلب QR</th><th>متاح</th><th>كحولي</th><th>يتطلب تأكيد</th><th>إجراءات</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in products %}
+      <tr style="border-top:1px solid #eee;">
+        <td>{{ p.name_ar }}</td><td>{{ p.price_syp }}</td><td>{{ p.item_type }}</td><td>{{ p.visible_on_qr|yesno:"نعم,لا" }}</td><td>{{ p.orderable_on_qr|yesno:"نعم,لا" }}</td><td>{{ p.is_available|yesno:"نعم,لا" }}</td><td>{{ p.is_alcoholic|yesno:"نعم,لا" }}</td><td>{{ p.requires_staff_confirmation|yesno:"نعم,لا" }}</td>
+        <td>
+          <form method="post" style="display:inline;">{% csrf_token %}<input type="hidden" name="product_code" value="{{ p.public_code }}"><input type="hidden" name="action" value="is_available"><button type="submit">تبديل التوفر</button></form>
+          <form method="post" style="display:inline;">{% csrf_token %}<input type="hidden" name="product_code" value="{{ p.public_code }}"><input type="hidden" name="action" value="visible_on_qr"><button type="submit">تبديل الظهور</button></form>
+          <form method="post" style="display:inline;">{% csrf_token %}<input type="hidden" name="product_code" value="{{ p.public_code }}"><input type="hidden" name="action" value="orderable_on_qr"><button type="submit">تبديل الطلب</button></form>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="9">لا توجد منتجات في هذا القسم.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endfor %}
+{% endblock %}

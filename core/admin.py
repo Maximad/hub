@@ -6,7 +6,7 @@ from .models import Room, TableArea, Category, Product, Order, OrderItem, Paymen
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     list_display = ('name_ar', 'item_type', 'beverage_type', 'food_type', 'service_type', 'price_syp', 'is_alcoholic', 'visible_on_qr', 'orderable_on_qr', 'requires_staff_confirmation', 'vendor', 'is_available')
-    list_filter = ('item_type', 'beverage_type', 'food_type', 'service_type', 'is_alcoholic', 'vendor', 'is_available', 'menu_sections', 'tags')
+    list_filter = ('is_available', 'visible_on_qr', 'orderable_on_qr', 'item_type', 'is_alcoholic', 'requires_staff_confirmation', 'beverage_type', 'food_type', 'service_type', 'vendor', 'menu_sections', 'tags')
     search_fields = ('name_ar', 'name_en', 'description_ar')
 
 
@@ -17,7 +17,7 @@ class TableAreaAdmin(admin.ModelAdmin):
 
     @admin.display(description='رابط منيو QR')
     def qr_menu_link(self, obj):
-        return format_html('/menu/table/{}/', obj.qr_token)
+        return format_html('<a href="/menu/table/{}/" target="_blank">/menu/table/{}/</a>', obj.qr_token, obj.qr_token)
 
 
 admin.site.register([Room, Category, Order, OrderItem, Payment, Member, InternetPackage, InternetSession, Shift, ActivityLog])
