@@ -1,11 +1,14 @@
 from django.db import transaction
+import uuid
 from django.db.models import Prefetch
 from django.http import Http404
+from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
 from catalog.models import MenuSection
-from core.models import Order, OrderItem, Product, TableArea
+from core.models import ActivityLog, Order, OrderItem, Payment, Product, TableArea
 
 
 def dashboard(request):
@@ -90,3 +93,124 @@ def order_public(request, public_code):
     total = sum(item.quantity * item.unit_price_syp_snapshot for item in order.items.all())
     needs_confirmation = any(item.product.requires_staff_confirmation for item in order.items.all() if item.product_id)
     return render(request, 'menu/order_confirm.html', {'order': order, 'total': total, 'needs_confirmation': needs_confirmation})
+
+
+def _can_access_staff(user):
+    if not user.is_authenticated:
+        return False
+    if user.is_superuser or user.is_staff:
+        return True
+    return getattr(user, 'role', '') in {'admin', 'cashier', 'waiter', 'kitchen', 'staff'}
+
+
+def _assert_staff_access(request):
+    if not _can_access_staff(request.user):
+        raise PermissionDenied("غير مصرح")
+
+
+def _order_financials(order):
+    total = sum(item.quantity * item.unit_price_syp_snapshot for item in order.items.all())
+    paid = sum(p.amount_syp for p in order.payments.exclude(method=Payment.Method.UNPAID))
+    remaining = max(total - paid, 0)
+    if order.status == Order.Status.CANCELLED:
+        payment_label = 'ملغى'
+    elif total == 0:
+        payment_label = 'ضيافة'
+    elif remaining == 0:
+        payment_label = 'مدفوع'
+    elif paid > 0:
+        payment_label = 'مدفوع جزئياً'
+    else:
+        payment_label = 'غير مدفوع'
+    return total, paid, remaining, payment_label
+
+
+@login_required
+def staff_orders(request):
+    _assert_staff_access(request)
+    statuses = [choice[0] for choice in Order.Status.choices]
+    orders = (
+        Order.objects.select_related('table')
+        .prefetch_related('items', 'payments')
+        .order_by('-created_at')
+    )
+    grouped = []
+    for status in statuses:
+        rows = []
+        for order in orders:
+            if order.status != status:
+                continue
+            total, paid, remaining, payment_label = _order_financials(order)
+            rows.append({'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label})
+        grouped.append((status, Order.Status(status).label, rows))
+    template = 'staff/orders_partial.html' if request.htmx else 'staff/orders.html'
+    return render(request, template, {'grouped': grouped})
+
+
+@login_required
+def staff_order_status(request, public_code):
+    _assert_staff_access(request)
+    if request.method != 'POST':
+        raise Http404()
+    order = get_object_or_404(Order, public_code=public_code)
+    new_status = request.POST.get('status')
+    valid = {choice[0] for choice in Order.Status.choices}
+    if new_status not in valid:
+        return redirect('staff_orders')
+    old_status = order.status
+    if old_status != new_status:
+        order.status = new_status
+        order.save(update_fields=['status', 'updated_at'])
+        ActivityLog.objects.create(
+            actor=request.user,
+            action='order_status_changed',
+            details={'order_public_code': str(order.public_code), 'old_status': old_status, 'new_status': new_status},
+        )
+    return redirect('staff_orders')
+
+
+@login_required
+def staff_cashier(request):
+    _assert_staff_access(request)
+    query = request.GET.get('q', '').strip()
+    orders = Order.objects.select_related('table').prefetch_related('items', 'payments').order_by('-created_at')
+    if query:
+        try:
+            orders = orders.filter(public_code=uuid.UUID(query))
+        except ValueError:
+            orders = orders.none()
+    rows = []
+    for order in orders[:100]:
+        total, paid, remaining, payment_label = _order_financials(order)
+        rows.append({'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label})
+    return render(request, 'staff/cashier.html', {'rows': rows, 'query': query})
+
+
+@login_required
+def staff_cashier_order(request, public_code):
+    _assert_staff_access(request)
+    order = get_object_or_404(Order.objects.select_related('table').prefetch_related('items', 'payments'), public_code=public_code)
+    total, paid, remaining, payment_label = _order_financials(order)
+    methods = Payment.Method.choices
+    return render(request, 'staff/cashier_order.html', {'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods})
+
+
+@login_required
+def staff_cashier_pay(request, public_code):
+    _assert_staff_access(request)
+    if request.method != 'POST':
+        raise Http404()
+    order = get_object_or_404(Order, public_code=public_code)
+    method = request.POST.get('method', Payment.Method.CASH)
+    valid_methods = {m[0] for m in Payment.Method.choices}
+    if method not in valid_methods:
+        method = Payment.Method.CASH
+    amount = request.POST.get('amount_syp', '0').strip()
+    try:
+        amount_val = int(amount)
+    except ValueError:
+        amount_val = 0
+    if amount_val < 0:
+        amount_val = 0
+    Payment.objects.create(order=order, amount_syp=amount_val, method=method)
+    return redirect('staff_cashier_order', public_code=order.public_code)

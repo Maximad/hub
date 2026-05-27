@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}لوحة الطلبات{% endblock %}
+{% block content %}
+<h2>لوحة الطلبات</h2>
+<div style="margin-bottom:1rem;display:flex;gap:.6rem;flex-wrap:wrap;">
+  <a href="{% url 'staff_cashier' %}">الكاشير</a>
+  <a href="{% url 'menu_public' %}">القائمة العامة</a>
+</div>
+<div id="orders-board" hx-get="{% url 'staff_orders_partial' %}" hx-trigger="load, every 5s" hx-target="#orders-board" hx-swap="innerHTML">
+  {% include "staff/orders_partial.html" %}
+</div>
+{% endblock %}

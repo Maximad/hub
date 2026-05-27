@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}تفاصيل الدفع{% endblock %}
+{% block content %}
+<h2>تفاصيل طلب للكاشير</h2>
+<p><a href="{% url 'staff_cashier' %}">← العودة إلى الكاشير</a></p>
+<div><strong>رقم الطلب:</strong> {{ order.public_code }}</div>
+<div><strong>الطاولة:</strong> {% if order.table %}{{ order.table.name_ar }}{% else %}طلب عام / تيك أواي{% endif %}</div>
+<ul>{% for item in order.items.all %}<li>{{ item.product_name_ar_snapshot }} × {{ item.quantity }} = {% widthratio item.quantity 1 item.unit_price_syp_snapshot %} ل.س</li>{% endfor %}</ul>
+<p><strong>المجموع:</strong> {{ total }} ل.س</p><p><strong>المدفوع:</strong> {{ paid }} ل.س</p><p><strong>المتبقي:</strong> {{ remaining }} ل.س</p><p><strong>حالة الدفع:</strong> {{ payment_label }}</p>
+<h3>إضافة دفعة</h3>
+<form method="post" action="{% url 'staff_cashier_pay' order.public_code %}">{% csrf_token %}
+<label>المبلغ (ل.س): <input type="number" min="0" name="amount_syp" value="0" required></label><br>
+<label>طريقة الدفع:<select name="method">{% for value, label in methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label><br>
+<button type="submit">حفظ الدفعة</button>
+</form>
+<h3>سجل الدفعات</h3>
+<ul>{% for p in order.payments.all %}<li>{{ p.get_method_display }} - {{ p.amount_syp }} ل.س - {{ p.created_at }}</li>{% empty %}<li>لا توجد دفعات بعد.</li>{% endfor %}</ul>
+{% endblock %}

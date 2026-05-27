@@ -1,0 +1,27 @@
+{% for status_value, status_label, rows in grouped %}
+<section style="margin-bottom:1rem;border:1px solid #ddd;border-radius:10px;padding:.75rem;">
+  <h3>{{ status_label }} ({{ rows|length }})</h3>
+  {% if rows %}
+    {% for row in rows %}
+      {% with order=row.order %}
+      <article style="padding:.6rem 0;border-top:1px solid #eee;">
+        <div><strong>رقم الطلب:</strong> {{ order.public_code }}</div>
+        <div><strong>الطاولة / المكان:</strong> {% if order.table %}{{ order.table.name_ar }}{% else %}طلب عام / تيك أواي{% endif %}</div>
+        <div><strong>وقت الإنشاء:</strong> {{ order.created_at }}</div>
+        <ul>{% for item in order.items.all %}<li>{{ item.product_name_ar_snapshot }} × {{ item.quantity }}</li>{% endfor %}</ul>
+        {% if order.notes %}<div><strong>ملاحظات الطلب:</strong><br>{{ order.notes|linebreaksbr }}</div>{% endif %}
+        <div><strong>المجموع:</strong> {{ row.total }} ل.س</div>
+        <div><strong>حالة الدفع:</strong> {{ row.payment_label }}</div>
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.4rem;">
+          {% for choice_value, choice_label in order.Status.choices %}
+          <form method="post" action="{% url 'staff_order_status' order.public_code %}">{% csrf_token %}<input type="hidden" name="status" value="{{ choice_value }}"><button type="submit">{{ choice_label }}</button></form>
+          {% endfor %}
+        </div>
+      </article>
+      {% endwith %}
+    {% endfor %}
+  {% else %}
+    <p>لا توجد طلبات ضمن هذه الحالة.</p>
+  {% endif %}
+</section>
+{% endfor %}

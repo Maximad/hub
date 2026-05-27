@@ -89,3 +89,8 @@ Bootstrap updates structural/reference data with `update_or_create` and does not
 - `/menu/`
 - `/menu/table/<qr_token>/`
 - `/order/<public_code>/`
+
+## Phase 3 Staff Ops
+اختبار روابط الفريق:
+- `/staff/orders/`
+- `/staff/cashier/`
