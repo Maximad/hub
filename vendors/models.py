@@ -1,5 +1,6 @@
 import uuid
 from django.db import models
+from events.models import Event
 
 
 class Vendor(models.Model):
@@ -39,6 +40,7 @@ class VendorParticipation(models.Model):
     starts_at = models.DateTimeField()
     ends_at = models.DateTimeField(null=True, blank=True)
     location_area = models.ForeignKey('core.TableArea', on_delete=models.SET_NULL, null=True, blank=True)
+    event = models.ForeignKey(Event, on_delete=models.SET_NULL, null=True, blank=True, related_name='vendor_participations')
     notes = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PLANNED)
     created_at = models.DateTimeField(auto_now_add=True)
