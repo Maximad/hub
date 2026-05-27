@@ -116,3 +116,18 @@ Bootstrap updates structural/reference data with `update_or_create` and does not
 - `/staff/members/`
 - `/staff/internet/`
 - `/staff/wifi/`
+
+## Phase 7 Events, Reservations, Vendors & Food Lab
+اختبار الروابط الجديدة:
+- `/staff/events/`
+- `/staff/events/new/`
+- `/staff/events/<event_id>/`
+- `/staff/reservations/`
+- `/staff/reservations/new/`
+- `/staff/reservations/<reservation_id>/`
+- `/staff/reservations/<reservation_id>/status/`
+- `/staff/vendors/`
+- `/staff/vendors/new/`
+- `/staff/vendors/<vendor_id>/`
+- `/staff/vendors/<vendor_id>/participation/new/`
+- `/staff/food-lab/`

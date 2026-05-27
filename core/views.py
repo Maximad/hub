@@ -14,6 +14,9 @@ from members.models import MembershipBenefitRule, MembershipPlan, MembershipSubs
 from internet.models import WifiNetwork
 from catalog.models import MenuSection
 from core.models import ActivityLog, InternetPackage, InternetSession, Member, Order, OrderItem, Payment, Product, TableArea
+from events.models import Event
+from reservations.models import Reservation
+from vendors.models import Vendor, VendorParticipation
 
 
 DAMASCUS_TZ = ZoneInfo('Asia/Damascus')
@@ -548,3 +551,192 @@ def staff_wifi(request):
     _assert_staff_access(request)
     networks = WifiNetwork.objects.filter(is_active=True).order_by('name_ar')
     return render(request, 'staff/wifi.html', {'networks': networks})
+
+
+@login_required
+def staff_events(request):
+    _assert_staff_access(request)
+    events = Event.objects.select_related('location_area').order_by('starts_at', '-created_at')
+    return render(request, 'staff/events.html', {'events': events})
+
+
+@login_required
+def staff_event_new(request):
+    _assert_staff_access(request)
+    table_areas = TableArea.objects.order_by('name_ar')
+    if request.method == 'POST':
+        title_ar = request.POST.get('title_ar', '').strip()
+        starts_at_raw = request.POST.get('starts_at', '').strip()
+        if not title_ar or not starts_at_raw:
+            return render(request, 'staff/event_form.html', {'table_areas': table_areas, 'statuses': Event.Status.choices, 'error': 'الاسم ووقت البداية مطلوبان.'})
+        starts_at = datetime.fromisoformat(starts_at_raw)
+        if timezone.is_naive(starts_at):
+            starts_at = timezone.make_aware(starts_at, timezone.get_current_timezone())
+        ends_at = None
+        ends_at_raw = request.POST.get('ends_at', '').strip()
+        if ends_at_raw:
+            ends_at = datetime.fromisoformat(ends_at_raw)
+            if timezone.is_naive(ends_at):
+                ends_at = timezone.make_aware(ends_at, timezone.get_current_timezone())
+        event = Event(
+            title_ar=title_ar,
+            title_en=request.POST.get('title_en', '').strip(),
+            description_ar=request.POST.get('description_ar', '').strip(),
+            starts_at=starts_at,
+            ends_at=ends_at,
+            capacity=int(request.POST.get('capacity') or 0) or None,
+            status=request.POST.get('status') or Event.Status.DRAFT,
+        )
+        location_area_id = request.POST.get('location_area')
+        if location_area_id:
+            event.location_area = TableArea.objects.filter(pk=location_area_id).first()
+        event.save()
+        return redirect('staff_event_detail', event_id=event.id)
+    return render(request, 'staff/event_form.html', {'table_areas': table_areas, 'statuses': Event.Status.choices})
+
+
+@login_required
+def staff_event_detail(request, event_id):
+    _assert_staff_access(request)
+    event = get_object_or_404(Event.objects.select_related('location_area'), pk=event_id)
+    reservations = Reservation.objects.filter(event=event).select_related('table_area').order_by('reservation_date', 'start_time')
+    participations = VendorParticipation.objects.filter(notes__icontains=event.title_ar).select_related('vendor', 'location_area').order_by('starts_at')
+    return render(request, 'staff/event_detail.html', {'event': event, 'reservations': reservations, 'participations': participations})
+
+
+@login_required
+def staff_reservations(request):
+    _assert_staff_access(request)
+    today = timezone.localdate()
+    all_rows = Reservation.objects.select_related('table_area', 'event').order_by('reservation_date', 'start_time')
+    today_rows = all_rows.filter(reservation_date=today).exclude(status=Reservation.Status.CANCELLED)
+    upcoming_rows = all_rows.filter(reservation_date__gt=today).exclude(status__in=[Reservation.Status.CANCELLED, Reservation.Status.COMPLETED])
+    past_cancelled_rows = all_rows.filter(Q(reservation_date__lt=today) | Q(status__in=[Reservation.Status.CANCELLED, Reservation.Status.COMPLETED]))
+    return render(request, 'staff/reservations.html', {'today_rows': today_rows, 'upcoming_rows': upcoming_rows, 'past_cancelled_rows': past_cancelled_rows})
+
+
+@login_required
+def staff_reservation_new(request):
+    _assert_staff_access(request)
+    events = Event.objects.order_by('starts_at')
+    table_areas = TableArea.objects.order_by('name_ar')
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        phone = request.POST.get('phone', '').strip()
+        reservation_date_raw = request.POST.get('reservation_date', '').strip()
+        start_time_raw = request.POST.get('start_time', '').strip()
+        if not (name and phone and reservation_date_raw and start_time_raw):
+            return render(request, 'staff/reservation_form.html', {'events': events, 'table_areas': table_areas, 'types': Reservation.ReservationType.choices, 'error': 'الاسم والهاتف والتاريخ ووقت البداية مطلوبة.'})
+        reservation = Reservation(
+            name=name, phone=phone, reservation_date=reservation_date_raw, start_time=start_time_raw,
+            reservation_type=request.POST.get('reservation_type') or Reservation.ReservationType.TABLE,
+            party_size=int(request.POST.get('party_size') or 1),
+            status=request.POST.get('status') or Reservation.Status.PENDING,
+            notes=request.POST.get('notes', '').strip(),
+            created_by=request.user,
+        )
+        end_time = request.POST.get('end_time', '').strip()
+        if end_time:
+            reservation.end_time = end_time
+        area_id = request.POST.get('table_area')
+        if area_id:
+            reservation.table_area = TableArea.objects.filter(pk=area_id).first()
+        event_id = request.POST.get('event')
+        if event_id:
+            reservation.event = Event.objects.filter(pk=event_id).first()
+        reservation.save()
+        return redirect('staff_reservation_detail', reservation_id=reservation.id)
+    return render(request, 'staff/reservation_form.html', {'events': events, 'table_areas': table_areas, 'types': Reservation.ReservationType.choices, 'statuses': Reservation.Status.choices})
+
+
+@login_required
+def staff_reservation_detail(request, reservation_id):
+    _assert_staff_access(request)
+    reservation = get_object_or_404(Reservation.objects.select_related('table_area', 'event'), pk=reservation_id)
+    return render(request, 'staff/reservation_detail.html', {'reservation': reservation, 'statuses': Reservation.Status.choices})
+
+
+@login_required
+def staff_reservation_status(request, reservation_id):
+    _assert_staff_access(request)
+    if request.method != 'POST':
+        raise Http404()
+    reservation = get_object_or_404(Reservation, pk=reservation_id)
+    new_status = request.POST.get('status')
+    allowed = {c[0] for c in Reservation.Status.choices}
+    if new_status in allowed:
+        reservation.status = new_status
+        reservation.save(update_fields=['status', 'updated_at'])
+    return redirect('staff_reservation_detail', reservation_id=reservation.id)
+
+
+@login_required
+def staff_vendors(request):
+    _assert_staff_access(request)
+    vendors = Vendor.objects.order_by('name_ar')
+    return render(request, 'staff/vendors.html', {'vendors': vendors})
+
+
+@login_required
+def staff_vendor_new(request):
+    _assert_staff_access(request)
+    if request.method == 'POST':
+        name_ar = request.POST.get('name_ar', '').strip()
+        if not name_ar:
+            return render(request, 'staff/vendor_form.html', {'types': Vendor.VendorType.choices, 'error': 'اسم الشريك مطلوب.'})
+        vendor = Vendor.objects.create(
+            name_ar=name_ar,
+            name_en=request.POST.get('name_en', '').strip(),
+            vendor_type=request.POST.get('vendor_type') or Vendor.VendorType.OTHER,
+            contact_person=request.POST.get('contact_person', '').strip(),
+            phone=request.POST.get('phone', '').strip(),
+            settlement_notes=request.POST.get('settlement_notes', '').strip(),
+            is_active=bool(request.POST.get('is_active')),
+        )
+        return redirect('staff_vendor_detail', vendor_id=vendor.id)
+    return render(request, 'staff/vendor_form.html', {'types': Vendor.VendorType.choices})
+
+
+@login_required
+def staff_vendor_detail(request, vendor_id):
+    _assert_staff_access(request)
+    vendor = get_object_or_404(Vendor, pk=vendor_id)
+    participations = vendor.participations.select_related('location_area').order_by('-starts_at')
+    linked_products = Product.objects.filter(vendor=vendor).order_by('name_ar')
+    return render(request, 'staff/vendor_detail.html', {'vendor': vendor, 'participations': participations, 'linked_products': linked_products})
+
+
+@login_required
+def staff_vendor_participation_new(request, vendor_id):
+    _assert_staff_access(request)
+    vendor = get_object_or_404(Vendor, pk=vendor_id)
+    areas = TableArea.objects.order_by('name_ar')
+    if request.method == 'POST':
+        title_ar = request.POST.get('title_ar', '').strip() or f'مشاركة {vendor.name_ar}'
+        starts_at_raw = request.POST.get('starts_at', '').strip()
+        if not starts_at_raw:
+            return render(request, 'staff/vendor_participation_form.html', {'vendor': vendor, 'areas': areas, 'statuses': VendorParticipation.Status.choices, 'error': 'وقت البداية مطلوب.'})
+        starts_at = datetime.fromisoformat(starts_at_raw)
+        if timezone.is_naive(starts_at):
+            starts_at = timezone.make_aware(starts_at, timezone.get_current_timezone())
+        participation = VendorParticipation(vendor=vendor, title_ar=title_ar, starts_at=starts_at, notes=request.POST.get('notes', '').strip(), status=request.POST.get('status') or VendorParticipation.Status.PLANNED)
+        ends_at_raw = request.POST.get('ends_at', '').strip()
+        if ends_at_raw:
+            ends_at = datetime.fromisoformat(ends_at_raw)
+            if timezone.is_naive(ends_at):
+                ends_at = timezone.make_aware(ends_at, timezone.get_current_timezone())
+            participation.ends_at = ends_at
+        area_id = request.POST.get('location_area')
+        if area_id:
+            participation.location_area = TableArea.objects.filter(pk=area_id).first()
+        participation.save()
+        return redirect('staff_vendor_detail', vendor_id=vendor.id)
+    return render(request, 'staff/vendor_participation_form.html', {'vendor': vendor, 'areas': areas, 'statuses': VendorParticipation.Status.choices})
+
+
+@login_required
+def staff_food_lab(request):
+    _assert_staff_access(request)
+    participations = VendorParticipation.objects.select_related('vendor', 'location_area').order_by('-starts_at')
+    events = Event.objects.filter(Q(title_ar__icontains='Food Lab') | Q(description_ar__icontains='Food Lab') | Q(title_ar__icontains='مختبر') | Q(description_ar__icontains='مختبر')).order_by('-starts_at')
+    return render(request, 'staff/food_lab.html', {'participations': participations, 'events': events})

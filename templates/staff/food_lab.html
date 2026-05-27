@@ -1,0 +1,4 @@
+{% extends "base.html" %}
+{% block content %}<h2>Food Lab / الشركاء</h2>
+<h3>مشاركات الشركاء</h3><ul>{% for p in participations %}<li>{{ p.vendor.name_ar }} - {{ p.title_ar }} - {{ p.starts_at }}</li>{% empty %}<li>لا يوجد</li>{% endfor %}</ul>
+<h3>فعاليات ذات صلة</h3><ul>{% for e in events %}<li><a href="{% url 'staff_event_detail' e.id %}">{{ e.title_ar }}</a></li>{% empty %}<li>لا يوجد</li>{% endfor %}</ul>{% endblock %}

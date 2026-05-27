@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}الفعاليات{% endblock %}
+{% block content %}
+<h2>الفعاليات</h2><a href="{% url 'staff_event_new' %}">إضافة فعالية</a>
+<table><tr><th>الاسم</th><th>البداية</th><th>الحالة</th><th>الموقع</th><th>السعة</th><th></th></tr>
+{% for e in events %}<tr><td>{{ e.title_ar }}</td><td>{{ e.starts_at }}</td><td>{{ e.get_status_display }}</td><td>{% if e.location_area %}{{ e.location_area.name_ar }}{% endif %}</td><td>{{ e.capacity|default:'-' }}</td><td><a href="{% url 'staff_event_detail' e.id %}">عرض</a></td></tr>{% empty %}<tr><td colspan="6">لا توجد فعاليات</td></tr>{% endfor %}
+</table>{% endblock %}

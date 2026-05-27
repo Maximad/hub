@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block content %}<h2>{{ vendor.name_ar }}</h2><p>{{ vendor.contact_person }} - {{ vendor.phone }}</p><p>{{ vendor.settlement_notes|default:'-' }}</p>
+<p><a href="{% url 'staff_vendor_participation_new' vendor.id %}">إضافة مشاركة</a></p>
+<h3>المشاركات</h3><ul>{% for p in participations %}<li>{{ p.title_ar }} - {{ p.starts_at }} - {{ p.get_status_display }}</li>{% empty %}<li>لا يوجد</li>{% endfor %}</ul>
+<h3>المنتجات المرتبطة</h3><ul>{% for p in linked_products %}<li>{{ p.name_ar }}</li>{% empty %}<li>لا يوجد</li>{% endfor %}</ul>{% endblock %}

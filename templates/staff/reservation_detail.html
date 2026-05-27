@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block content %}<h2>تفاصيل الحجز</h2><p>{{ reservation.name }} - {{ reservation.phone }}</p>
+<p>{{ reservation.reservation_date }} {{ reservation.start_time }} / {{ reservation.end_time|default:'-' }}</p>
+<p>الحالة: {{ reservation.get_status_display }}</p><p>الملاحظات: {{ reservation.notes|default:'-' }}</p>
+<form method="post" action="{% url 'staff_reservation_status' reservation.id %}">{% csrf_token %}<select name="status">{% for v,l in statuses %}<option value="{{ v }}" {% if reservation.status == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select><button>تحديث الحالة</button></form>
+{% endblock %}
