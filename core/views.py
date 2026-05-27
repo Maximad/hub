@@ -160,16 +160,29 @@ def order_public(request, public_code):
     return render(request, 'menu/order_confirm.html', {'order': order, 'total': total, 'needs_confirmation': needs_confirmation})
 
 
-def _can_access_staff(user):
+STAFF_CAPABILITIES = {
+    'reporting/close-day': {'admin'},
+    'cashier/payments': {'admin', 'cashier'},
+    'reservations': {'admin', 'waiter'},
+    'events': {'admin', 'waiter'},
+    'vendors': {'admin'},
+    'members/internet': {'admin', 'cashier'},
+    'operations': {'admin', 'cashier', 'waiter', 'kitchen'},
+}
+
+
+def _assert_staff_capability(user, capability_name):
     if not user.is_authenticated:
-        return False
-    if user.is_superuser or user.is_staff:
-        return True
-    return getattr(user, 'role', '') in {'admin', 'cashier', 'waiter', 'kitchen', 'staff'}
+        raise PermissionDenied("غير مصرح")
+    if user.is_superuser:
+        return
 
-
-def _assert_staff_access(request):
-    if not _can_access_staff(request.user):
+    allowed_roles = STAFF_CAPABILITIES.get(capability_name, set())
+    if getattr(user, 'role', '') not in allowed_roles:
+        ActivityLog.objects.create(
+            action='staff_access_denied',
+            details=f'capability={capability_name}; user={user.pk}; role={getattr(user, "role", "")}',
+        )
         raise PermissionDenied("غير مصرح")
 
 
@@ -192,13 +205,13 @@ def _order_financials(order):
 
 @login_required
 def staff_home(request):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'operations')
     return render(request, 'staff/home.html')
 
 
 @login_required
 def staff_qr_links(request):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'operations')
     tables = TableArea.objects.select_related('room').order_by('room__name_ar', 'name_ar')
     rows = []
     for table in tables:
@@ -209,7 +222,7 @@ def staff_qr_links(request):
 
 @login_required
 def staff_qr_print(request):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'operations')
     tables = TableArea.objects.select_related('room').order_by('room__name_ar', 'name_ar')
     rows = []
     for table in tables:
@@ -220,7 +233,7 @@ def staff_qr_print(request):
 
 @login_required
 def staff_menu_tools(request):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'operations')
     if request.method == 'POST':
         product = get_object_or_404(Product, public_code=request.POST.get('product_code'))
         action = request.POST.get('action')
@@ -249,7 +262,7 @@ def staff_menu_tools(request):
 
 @login_required
 def staff_orders(request):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'operations')
     statuses = [choice[0] for choice in Order.Status.choices]
     orders = (
         Order.objects.select_related('table')
@@ -272,7 +285,7 @@ def staff_orders(request):
 
 @login_required
 def staff_order_status(request, public_code):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'operations')
     if request.method != 'POST':
         raise Http404()
     order = get_object_or_404(Order, public_code=public_code)
@@ -294,7 +307,7 @@ def staff_order_status(request, public_code):
 
 @login_required
 def staff_cashier(request):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'cashier/payments')
     query = request.GET.get('q', '').strip()
     orders = Order.objects.select_related('table').prefetch_related('items', 'payments').order_by('-created_at')
     if query:
@@ -311,7 +324,7 @@ def staff_cashier(request):
 
 @login_required
 def staff_cashier_order(request, public_code):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'cashier/payments')
     order = get_object_or_404(Order.objects.select_related('table').prefetch_related('items', 'payments'), public_code=public_code)
     total, paid, remaining, payment_label = _order_financials(order)
     methods = Payment.Method.choices
@@ -320,7 +333,7 @@ def staff_cashier_order(request, public_code):
 
 @login_required
 def staff_cashier_pay(request, public_code):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'cashier/payments')
     if request.method != 'POST':
         raise Http404()
     order = get_object_or_404(Order, public_code=public_code)
@@ -341,7 +354,7 @@ def staff_cashier_pay(request, public_code):
 
 @login_required
 def staff_reports_home(request):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'reporting/close-day')
     today = datetime.now(DAMASCUS_TZ).date()
     _rows, sums = _build_day_report(today)
     return render(request, 'staff/reports_home.html', {'report_date': today, 'sums': sums})
@@ -349,7 +362,7 @@ def staff_reports_home(request):
 
 @login_required
 def staff_reports_day(request):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'reporting/close-day')
     report_date = _parse_report_date(request.GET.get('date', '').strip())
     rows, sums = _build_day_report(report_date)
     return render(request, 'staff/reports_day.html', {'report_date': report_date, 'rows': rows, 'sums': sums})
@@ -357,7 +370,7 @@ def staff_reports_day(request):
 
 @login_required
 def staff_reports_day_csv(request):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'reporting/close-day')
     report_date = _parse_report_date(request.GET.get('date', '').strip())
     rows, _sums = _build_day_report(report_date)
     response = HttpResponse(content_type='text/csv; charset=utf-8')
@@ -373,7 +386,7 @@ def staff_reports_day_csv(request):
 
 @login_required
 def staff_close_day(request):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'reporting/close-day')
     today = datetime.now(DAMASCUS_TZ).date()
     _rows, sums = _build_day_report(today)
     return render(request, 'staff/close_day.html', {'report_date': today, 'sums': sums})
@@ -445,7 +458,7 @@ def _best_plan_benefits(plan):
 
 @login_required
 def staff_members(request):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'members/internet')
     query = request.GET.get('q', '').strip()
     members = Member.objects.select_related('default_plan').prefetch_related('subscriptions').order_by('-created_at')
     if query:
@@ -459,7 +472,7 @@ def staff_members(request):
 
 @login_required
 def staff_member_new(request):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'members/internet')
     plans = MembershipPlan.objects.filter(is_active=True).order_by('name_ar')
     if request.method == 'POST':
         name_ar = request.POST.get('name_ar', '').strip()
@@ -479,7 +492,7 @@ def staff_member_new(request):
 
 @login_required
 def staff_member_detail(request, member_id):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'members/internet')
     member = _get_member_or_404(member_id)
     subscriptions = member.subscriptions.select_related('plan').order_by('-created_at')
     ledger = member.credit_ledger.select_related('subscription', 'created_by').order_by('-created_at')[:100]
@@ -489,7 +502,7 @@ def staff_member_detail(request, member_id):
 
 @login_required
 def staff_member_subscribe(request, member_id):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'members/internet')
     member = _get_member_or_404(member_id)
     if request.method != 'POST':
         plans = MembershipPlan.objects.filter(is_active=True).order_by('name_ar')
@@ -517,7 +530,7 @@ def staff_member_subscribe(request, member_id):
 
 @login_required
 def staff_internet(request):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'members/internet')
     active_sessions = InternetSession.objects.select_related('member', 'package').filter(status='active').order_by('-start_time')
     recent_sessions = InternetSession.objects.select_related('member', 'package').exclude(status='active').order_by('-updated_at')[:50]
     packages = InternetPackage.objects.order_by('name_ar')
@@ -527,7 +540,7 @@ def staff_internet(request):
 
 @login_required
 def staff_internet_start(request):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'members/internet')
     if request.method != 'POST':
         return redirect('staff_internet')
     member = None
@@ -549,14 +562,14 @@ def staff_internet_start(request):
 
 @login_required
 def staff_internet_session(request, session_id):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'members/internet')
     session = get_object_or_404(InternetSession.objects.select_related('member', 'package'), pk=session_id)
     return render(request, 'staff/internet_session.html', {'session': session})
 
 
 @login_required
 def staff_internet_end(request, session_id):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'members/internet')
     if request.method != 'POST':
         return redirect('staff_internet_session', session_id=session_id)
     session = get_object_or_404(InternetSession.objects.select_related('member'), pk=session_id)
@@ -580,21 +593,21 @@ def staff_internet_end(request, session_id):
 
 @login_required
 def staff_wifi(request):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'members/internet')
     networks = WifiNetwork.objects.filter(is_active=True).order_by('name_ar')
     return render(request, 'staff/wifi.html', {'networks': networks})
 
 
 @login_required
 def staff_events(request):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'events')
     events = Event.objects.select_related('location_area').order_by('starts_at', '-created_at')
     return render(request, 'staff/events.html', {'events': events})
 
 
 @login_required
 def staff_event_new(request):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'events')
     table_areas = TableArea.objects.order_by('name_ar')
     if request.method == 'POST':
         title_ar = request.POST.get('title_ar', '').strip()
@@ -628,7 +641,7 @@ def staff_event_new(request):
 
 @login_required
 def staff_event_detail(request, event_id):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'events')
     event = get_object_or_404(Event.objects.select_related('location_area'), pk=event_id)
     reservations = Reservation.objects.filter(event=event).select_related('table_area').order_by('reservation_date', 'start_time')
     participations = VendorParticipation.objects.filter(notes__icontains=event.title_ar).select_related('vendor', 'location_area').order_by('starts_at')
@@ -637,7 +650,7 @@ def staff_event_detail(request, event_id):
 
 @login_required
 def staff_reservations(request):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'reservations')
     today = timezone.localdate()
     all_rows = Reservation.objects.select_related('table_area', 'event').order_by('reservation_date', 'start_time')
     today_rows = all_rows.filter(reservation_date=today).exclude(status=Reservation.Status.CANCELLED)
@@ -648,7 +661,7 @@ def staff_reservations(request):
 
 @login_required
 def staff_reservation_new(request):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'reservations')
     events = Event.objects.order_by('starts_at')
     table_areas = TableArea.objects.order_by('name_ar')
     if request.method == 'POST':
@@ -686,14 +699,14 @@ def staff_reservation_new(request):
 
 @login_required
 def staff_reservation_detail(request, reservation_id):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'reservations')
     reservation = get_object_or_404(Reservation.objects.select_related('table_area', 'event'), pk=reservation_id)
     return render(request, 'staff/reservation_detail.html', {'reservation': reservation, 'statuses': Reservation.Status.choices})
 
 
 @login_required
 def staff_reservation_status(request, reservation_id):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'reservations')
     if request.method != 'POST':
         raise Http404()
     reservation = get_object_or_404(Reservation, pk=reservation_id)
@@ -707,14 +720,14 @@ def staff_reservation_status(request, reservation_id):
 
 @login_required
 def staff_vendors(request):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'vendors')
     vendors = Vendor.objects.order_by('name_ar')
     return render(request, 'staff/vendors.html', {'vendors': vendors})
 
 
 @login_required
 def staff_vendor_new(request):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'vendors')
     if request.method == 'POST':
         name_ar = request.POST.get('name_ar', '').strip()
         if not name_ar:
@@ -734,7 +747,7 @@ def staff_vendor_new(request):
 
 @login_required
 def staff_vendor_detail(request, vendor_id):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'vendors')
     vendor = get_object_or_404(Vendor, pk=vendor_id)
     participations = vendor.participations.select_related('location_area').order_by('-starts_at')
     linked_products = Product.objects.filter(vendor=vendor).order_by('name_ar')
@@ -743,7 +756,7 @@ def staff_vendor_detail(request, vendor_id):
 
 @login_required
 def staff_vendor_participation_new(request, vendor_id):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'vendors')
     vendor = get_object_or_404(Vendor, pk=vendor_id)
     areas = TableArea.objects.order_by('name_ar')
     if request.method == 'POST':
@@ -771,7 +784,7 @@ def staff_vendor_participation_new(request, vendor_id):
 
 @login_required
 def staff_food_lab(request):
-    _assert_staff_access(request)
+    _assert_staff_capability(request.user, 'operations')
     participations = VendorParticipation.objects.select_related('vendor', 'location_area').order_by('-starts_at')
     events = Event.objects.filter(Q(title_ar__icontains='Food Lab') | Q(description_ar__icontains='Food Lab') | Q(title_ar__icontains='مختبر') | Q(description_ar__icontains='مختبر')).order_by('-starts_at')
     return render(request, 'staff/food_lab.html', {'participations': participations, 'events': events})
