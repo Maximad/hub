@@ -14,6 +14,10 @@ from core.views import (
     staff_cashier,
     staff_cashier_order,
     staff_cashier_pay,
+    staff_reports_home,
+    staff_reports_day,
+    staff_reports_day_csv,
+    staff_close_day,
 )
 
 urlpatterns = [
@@ -32,4 +36,8 @@ urlpatterns = [
     path('staff/cashier/', staff_cashier, name='staff_cashier'),
     path('staff/cashier/<uuid:public_code>/', staff_cashier_order, name='staff_cashier_order'),
     path('staff/cashier/<uuid:public_code>/pay/', staff_cashier_pay, name='staff_cashier_pay'),
+    path('staff/reports/', staff_reports_home, name='staff_reports_home'),
+    path('staff/reports/day/', staff_reports_day, name='staff_reports_day'),
+    path('staff/reports/day.csv', staff_reports_day_csv, name='staff_reports_day_csv'),
+    path('staff/close-day/', staff_close_day, name='staff_close_day'),
 ]

@@ -1,7 +1,9 @@
 from django.db import transaction
 import uuid
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 from django.db.models import Prefetch
-from django.http import Http404
+from django.http import Http404, HttpResponse
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404, redirect, render
@@ -9,6 +11,63 @@ from django.urls import reverse
 
 from catalog.models import MenuSection
 from core.models import ActivityLog, Order, OrderItem, Payment, Product, TableArea
+
+
+DAMASCUS_TZ = ZoneInfo('Asia/Damascus')
+
+
+def _parse_report_date(raw_date):
+    if raw_date:
+        try:
+            return datetime.strptime(raw_date, '%Y-%m-%d').date()
+        except ValueError:
+            pass
+    return datetime.now(DAMASCUS_TZ).date()
+
+
+def _day_range_utc(report_date):
+    local_start = datetime.combine(report_date, time.min).replace(tzinfo=DAMASCUS_TZ)
+    local_end = local_start + timedelta(days=1)
+    return local_start.astimezone(ZoneInfo('UTC')), local_end.astimezone(ZoneInfo('UTC'))
+
+
+def _build_day_report(report_date):
+    start_utc, end_utc = _day_range_utc(report_date)
+    orders = (
+        Order.objects.select_related('table')
+        .prefetch_related('items', 'payments')
+        .filter(created_at__gte=start_utc, created_at__lt=end_utc)
+        .order_by('-created_at')
+    )
+    rows = []
+    sums = {
+        'orders_count': 0, 'order_total': 0, 'paid_total': 0, 'remaining_total': 0,
+        'cash_total': 0, 'manual_transfer_total': 0, 'free_total': 0, 'discount_total': 0,
+        'cancelled_count': 0, 'served_or_paid_count': 0, 'unpaid_orders_count': 0,
+    }
+    for order in orders:
+        total, paid, remaining, payment_label = _order_financials(order)
+        methods = {}
+        for p in order.payments.all():
+            methods[p.method] = methods.get(p.method, 0) + p.amount_syp
+        is_paid = remaining == 0
+        if order.status == Order.Status.CANCELLED:
+            sums['cancelled_count'] += 1
+        if order.status == Order.Status.SERVED or is_paid:
+            sums['served_or_paid_count'] += 1
+        if remaining > 0:
+            sums['unpaid_orders_count'] += 1
+        sums['orders_count'] += 1
+        sums['order_total'] += total
+        sums['paid_total'] += paid
+        sums['remaining_total'] += remaining
+        sums['cash_total'] += methods.get(Payment.Method.CASH, 0)
+        sums['manual_transfer_total'] += methods.get(Payment.Method.MANUAL_TRANSFER, 0)
+        sums['free_total'] += methods.get(Payment.Method.FREE, 0)
+        sums['discount_total'] += methods.get(Payment.Method.MEMBER_DISCOUNT, 0)
+        rows.append({'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods})
+    sums['avg_order_value'] = int(sums['order_total'] / sums['orders_count']) if sums['orders_count'] else 0
+    return rows, sums
 
 
 def dashboard(request):
@@ -272,3 +331,43 @@ def staff_cashier_pay(request, public_code):
         amount_val = 0
     Payment.objects.create(order=order, amount_syp=amount_val, method=method)
     return redirect('staff_cashier_order', public_code=order.public_code)
+
+
+@login_required
+def staff_reports_home(request):
+    _assert_staff_access(request)
+    today = datetime.now(DAMASCUS_TZ).date()
+    _rows, sums = _build_day_report(today)
+    return render(request, 'staff/reports_home.html', {'report_date': today, 'sums': sums})
+
+
+@login_required
+def staff_reports_day(request):
+    _assert_staff_access(request)
+    report_date = _parse_report_date(request.GET.get('date', '').strip())
+    rows, sums = _build_day_report(report_date)
+    return render(request, 'staff/reports_day.html', {'report_date': report_date, 'rows': rows, 'sums': sums})
+
+
+@login_required
+def staff_reports_day_csv(request):
+    _assert_staff_access(request)
+    report_date = _parse_report_date(request.GET.get('date', '').strip())
+    rows, _sums = _build_day_report(report_date)
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="report-{report_date.isoformat()}.csv"'
+    response.write('public_code,created_at,table,status,total,paid,remaining,payment_methods\n')
+    for row in rows:
+        order = row['order']
+        methods_txt = '; '.join(f'{k}:{v}' for k, v in row['methods'].items())
+        table_name = order.table.name_ar if order.table_id else 'طلب عام / تيك أواي'
+        response.write(f'{order.public_code},{order.created_at.isoformat()},{table_name},{order.get_status_display()},{row["total"]},{row["paid"]},{row["remaining"]},"{methods_txt}"\n')
+    return response
+
+
+@login_required
+def staff_close_day(request):
+    _assert_staff_access(request)
+    today = datetime.now(DAMASCUS_TZ).date()
+    _rows, sums = _build_day_report(today)
+    return render(request, 'staff/close_day.html', {'report_date': today, 'sums': sums})
