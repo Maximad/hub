@@ -7,7 +7,7 @@
 - Custom user model from day one.
 - Core operational models (rooms, tables, catalog, orders, payments, members, internet, shifts, activity log).
 - Django Admin enabled.
-- Demo seed command in Arabic.
+- Bootstrap command for Phase 1.5+ safe Arabic setup data.
 - Dockerized local/dev and production setup.
 
 ## Stack
@@ -30,9 +30,9 @@
    ```bash
    docker compose exec web python manage.py createsuperuser
    ```
-4. Seed demo Arabic data:
+4. Run bootstrap data setup (recommended):
    ```bash
-   docker compose exec web python manage.py seed_demo_ar
+   docker compose exec web python manage.py bootstrap_masharib
    ```
 
 ## VPS Deployment (Production)
@@ -56,7 +56,11 @@ Your existing gateway/proxy should route to:
 - `http://127.0.0.1:8899`
 
 ## Management Commands
-- Seed Arabic demo data:
+- Primary setup command (recommended):
+  ```bash
+  python manage.py bootstrap_masharib
+  ```
+- Legacy wrapper (deprecated, delegates to bootstrap):
   ```bash
   python manage.py seed_demo_ar
   ```
