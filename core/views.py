@@ -2,15 +2,18 @@ from django.db import transaction
 import uuid
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from django.http import Http404, HttpResponse
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 
+from members.models import MembershipBenefitRule, MembershipPlan, MembershipSubscription, MemberCreditLedger
+from internet.models import WifiNetwork
 from catalog.models import MenuSection
-from core.models import ActivityLog, Order, OrderItem, Payment, Product, TableArea
+from core.models import ActivityLog, InternetPackage, InternetSession, Member, Order, OrderItem, Payment, Product, TableArea
 
 
 DAMASCUS_TZ = ZoneInfo('Asia/Damascus')
@@ -371,3 +374,177 @@ def staff_close_day(request):
     today = datetime.now(DAMASCUS_TZ).date()
     _rows, sums = _build_day_report(today)
     return render(request, 'staff/close_day.html', {'report_date': today, 'sums': sums})
+
+
+def _get_member_or_404(member_id):
+    try:
+        parsed_uuid = uuid.UUID(str(member_id))
+        return get_object_or_404(Member, public_code=parsed_uuid)
+    except ValueError:
+        return get_object_or_404(Member, pk=member_id)
+
+
+def _active_subscription_for_member(member):
+    return (
+        member.subscriptions.filter(status='active')
+        .order_by('-starts_at', '-created_at')
+        .first()
+    )
+
+
+def _best_plan_benefits(plan):
+    rules = plan.benefit_rules.filter(is_active=True).order_by('-priority', '-created_at')
+    minutes = 0
+    credit = 0
+    for rule in rules:
+        if rule.included_minutes and rule.included_minutes > minutes:
+            minutes = rule.included_minutes
+        if rule.monthly_credit_syp and rule.monthly_credit_syp > credit:
+            credit = rule.monthly_credit_syp
+    return minutes, credit
+
+
+@login_required
+def staff_members(request):
+    _assert_staff_access(request)
+    query = request.GET.get('q', '').strip()
+    members = Member.objects.select_related('default_plan').prefetch_related('subscriptions').order_by('-created_at')
+    if query:
+        members = members.filter(Q(name_ar__icontains=query) | Q(phone__icontains=query) | Q(default_plan__code__icontains=query) | Q(subscriptions__plan__code__icontains=query)).distinct()
+    rows = []
+    for member in members[:200]:
+        active_subscription = _active_subscription_for_member(member)
+        rows.append({'member': member, 'active_subscription': active_subscription})
+    return render(request, 'staff/members.html', {'rows': rows, 'query': query})
+
+
+@login_required
+def staff_member_new(request):
+    _assert_staff_access(request)
+    plans = MembershipPlan.objects.filter(is_active=True).order_by('name_ar')
+    if request.method == 'POST':
+        name_ar = request.POST.get('name_ar', '').strip()
+        phone = request.POST.get('phone', '').strip()
+        if not name_ar or not phone:
+            return render(request, 'staff/member_form.html', {'plans': plans, 'error': 'الاسم ورقم الهاتف مطلوبان.'})
+        member = Member(name_ar=name_ar, phone=phone)
+        default_plan_id = request.POST.get('default_plan')
+        if default_plan_id:
+            member.default_plan = MembershipPlan.objects.filter(pk=default_plan_id, is_active=True).first()
+        if hasattr(Member, 'notes'):
+            member.notes = request.POST.get('notes', '').strip()
+        member.save()
+        return redirect('staff_member_detail', member_id=member.public_code)
+    return render(request, 'staff/member_form.html', {'plans': plans})
+
+
+@login_required
+def staff_member_detail(request, member_id):
+    _assert_staff_access(request)
+    member = _get_member_or_404(member_id)
+    subscriptions = member.subscriptions.select_related('plan').order_by('-created_at')
+    ledger = member.credit_ledger.select_related('subscription', 'created_by').order_by('-created_at')[:100]
+    sessions = member.internet_sessions.select_related('package').order_by('-start_time')[:50]
+    return render(request, 'staff/member_detail.html', {'member': member, 'subscriptions': subscriptions, 'ledger': ledger, 'sessions': sessions})
+
+
+@login_required
+def staff_member_subscribe(request, member_id):
+    _assert_staff_access(request)
+    member = _get_member_or_404(member_id)
+    if request.method != 'POST':
+        plans = MembershipPlan.objects.filter(is_active=True).order_by('name_ar')
+        return render(request, 'staff/member_subscribe.html', {'member': member, 'plans': plans, 'now': timezone.now()})
+    plan = get_object_or_404(MembershipPlan, pk=request.POST.get('plan'), is_active=True)
+    starts_at_raw = request.POST.get('starts_at', '').strip()
+    starts_at = timezone.now()
+    if starts_at_raw:
+        starts_at = datetime.fromisoformat(starts_at_raw)
+        if timezone.is_naive(starts_at):
+            starts_at = timezone.make_aware(starts_at, timezone.get_current_timezone())
+    ends_at = None
+    ends_at_raw = request.POST.get('ends_at', '').strip()
+    if ends_at_raw:
+        ends_at = datetime.fromisoformat(ends_at_raw)
+        if timezone.is_naive(ends_at):
+            ends_at = timezone.make_aware(ends_at, timezone.get_current_timezone())
+    default_minutes, default_credit = _best_plan_benefits(plan)
+    remaining_minutes = request.POST.get('remaining_internet_minutes', '').strip()
+    remaining_credit = request.POST.get('remaining_credit_syp', '').strip()
+    minutes_val = int(remaining_minutes) if remaining_minutes else default_minutes
+    credit_val = int(remaining_credit) if remaining_credit else default_credit
+    with transaction.atomic():
+        sub = MembershipSubscription.objects.create(member=member, plan=plan, starts_at=starts_at, ends_at=ends_at, remaining_internet_minutes=minutes_val, remaining_credit_syp=credit_val, notes=request.POST.get('notes', '').strip(), status='active')
+        if minutes_val > 0:
+            MemberCreditLedger.objects.create(member=member, subscription=sub, change_type='add_minutes', minutes_delta=minutes_val, notes='إضافة دقائق تلقائية من الاشتراك', created_by=request.user)
+        if credit_val > 0:
+            MemberCreditLedger.objects.create(member=member, subscription=sub, change_type='add_credit', credit_delta_syp=credit_val, notes='إضافة رصيد تلقائي من الاشتراك', created_by=request.user)
+    return redirect('staff_member_detail', member_id=member.public_code)
+
+
+@login_required
+def staff_internet(request):
+    _assert_staff_access(request)
+    active_sessions = InternetSession.objects.select_related('member', 'package').filter(status='active').order_by('-start_time')
+    recent_sessions = InternetSession.objects.select_related('member', 'package').exclude(status='active').order_by('-updated_at')[:50]
+    packages = InternetPackage.objects.order_by('name_ar')
+    members = Member.objects.order_by('-created_at')[:200]
+    return render(request, 'staff/internet.html', {'active_sessions': active_sessions, 'recent_sessions': recent_sessions, 'packages': packages, 'members': members, 'now': timezone.now()})
+
+
+@login_required
+def staff_internet_start(request):
+    _assert_staff_access(request)
+    if request.method != 'POST':
+        return redirect('staff_internet')
+    member = None
+    member_id = request.POST.get('member')
+    if member_id:
+        member = Member.objects.filter(pk=member_id).first()
+    package = get_object_or_404(InternetPackage, pk=request.POST.get('package'))
+    start_time_raw = request.POST.get('start_time', '').strip()
+    start_time = timezone.now()
+    if start_time_raw:
+        start_time = datetime.fromisoformat(start_time_raw)
+        if timezone.is_naive(start_time):
+            start_time = timezone.make_aware(start_time, timezone.get_current_timezone())
+    InternetSession.objects.create(member=member, package=package, customer_name=request.POST.get('customer_name', '').strip(), customer_phone=request.POST.get('customer_phone', '').strip(), start_time=start_time, end_time=start_time, notes=(request.POST.get('session_type', '').strip() + ' ' + request.POST.get('notes', '').strip()).strip(), status='active')
+    return redirect('staff_internet')
+
+
+@login_required
+def staff_internet_session(request, session_id):
+    _assert_staff_access(request)
+    session = get_object_or_404(InternetSession.objects.select_related('member', 'package'), pk=session_id)
+    return render(request, 'staff/internet_session.html', {'session': session})
+
+
+@login_required
+def staff_internet_end(request, session_id):
+    _assert_staff_access(request)
+    if request.method != 'POST':
+        return redirect('staff_internet_session', session_id=session_id)
+    session = get_object_or_404(InternetSession.objects.select_related('member'), pk=session_id)
+    if session.status != 'active':
+        return redirect('staff_internet_session', session_id=session_id)
+    now = timezone.now()
+    duration = max(int((now - session.start_time).total_seconds() // 60), 0)
+    session.end_time = now
+    session.actual_duration_minutes = duration
+    session.status = 'ended'
+    session.save(update_fields=['end_time', 'actual_duration_minutes', 'status', 'updated_at'])
+    if session.member_id:
+        sub = _active_subscription_for_member(session.member)
+        if sub and (sub.remaining_internet_minutes or 0) > 0 and duration > 0:
+            used = min(sub.remaining_internet_minutes, duration)
+            sub.remaining_internet_minutes = max((sub.remaining_internet_minutes or 0) - used, 0)
+            sub.save(update_fields=['remaining_internet_minutes', 'updated_at'])
+            MemberCreditLedger.objects.create(member=session.member, subscription=sub, change_type='use_minutes', minutes_delta=-used, notes=f'استهلاك دقائق لجلسة إنترنت #{session.id}', created_by=request.user)
+    return redirect('staff_internet_session', session_id=session_id)
+
+
+@login_required
+def staff_wifi(request):
+    _assert_staff_access(request)
+    networks = WifiNetwork.objects.filter(is_active=True).order_by('name_ar')
+    return render(request, 'staff/wifi.html', {'networks': networks})

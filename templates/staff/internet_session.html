@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}تفاصيل الجلسة{% endblock %}
+{% block content %}
+<h2>جلسة #{{ session.id }}</h2>
+<p>العضو: {% if session.member %}{{ session.member.name_ar }}{% else %}-{% endif %}</p>
+<p>الزبون: {{ session.customer_name }} - {{ session.customer_phone }}</p>
+<p>الباقة: {{ session.package.name_ar }}</p>
+<p>البدء: {{ session.start_time }} | الانتهاء: {{ session.end_time }}</p>
+<p>المدة: {{ session.actual_duration_minutes }} دقيقة</p>
+<p>الحالة: {{ session.status }}</p>
+<p>ملاحظات: {{ session.notes }}</p>
+{% if session.status == 'active' %}<form method="post" action="{% url 'staff_internet_end' session.id %}">{% csrf_token %}<button type="submit">إنهاء الجلسة</button></form>{% endif %}
+{% endblock %}
