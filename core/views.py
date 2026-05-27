@@ -143,7 +143,8 @@ def staff_orders(request):
             total, paid, remaining, payment_label = _order_financials(order)
             rows.append({'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label})
         grouped.append((status, Order.Status(status).label, rows))
-    template = 'staff/orders_partial.html' if request.htmx else 'staff/orders.html'
+    is_htmx = request.headers.get("HX-Request") == "true"
+    template = 'staff/orders_partial.html' if is_htmx else 'staff/orders.html'
     return render(request, template, {'grouped': grouped})
 
 
