@@ -22,6 +22,36 @@ from vendors.models import Vendor, VendorParticipation
 DAMASCUS_TZ = ZoneInfo('Asia/Damascus')
 
 
+def _safe_parse_int(raw_value, *, field_label, min_value=None, allow_blank=True, default=None):
+    value = (raw_value or '').strip()
+    if not value:
+        if allow_blank:
+            return default, None
+        return None, f'{field_label} مطلوب.'
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None, f'{field_label} يجب أن يكون رقماً صحيحاً.'
+    if min_value is not None and parsed < min_value:
+        return None, f'{field_label} يجب أن يكون {min_value} أو أكبر.'
+    return parsed, None
+
+
+def _safe_parse_iso_datetime(raw_value, *, field_label, required=False):
+    value = (raw_value or '').strip()
+    if not value:
+        if required:
+            return None, f'{field_label} مطلوب.'
+        return None, None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None, f'صيغة {field_label} غير صحيحة.'
+    if timezone.is_naive(parsed):
+        parsed = timezone.make_aware(parsed, timezone.get_current_timezone())
+    return parsed, None
+
+
 def _parse_report_date(raw_date):
     if raw_date:
         try:
@@ -462,20 +492,26 @@ def staff_member_subscribe(request, member_id):
     starts_at_raw = request.POST.get('starts_at', '').strip()
     starts_at = timezone.now()
     if starts_at_raw:
-        starts_at = datetime.fromisoformat(starts_at_raw)
-        if timezone.is_naive(starts_at):
-            starts_at = timezone.make_aware(starts_at, timezone.get_current_timezone())
-    ends_at = None
+        starts_at, starts_err = _safe_parse_iso_datetime(starts_at_raw, field_label='وقت البداية')
+        if starts_err:
+            plans = MembershipPlan.objects.filter(is_active=True).order_by('name_ar')
+            return render(request, 'staff/member_subscribe.html', {'member': member, 'plans': plans, 'now': timezone.now(), 'error': starts_err, 'form_data': request.POST})
     ends_at_raw = request.POST.get('ends_at', '').strip()
-    if ends_at_raw:
-        ends_at = datetime.fromisoformat(ends_at_raw)
-        if timezone.is_naive(ends_at):
-            ends_at = timezone.make_aware(ends_at, timezone.get_current_timezone())
+    ends_at, ends_err = _safe_parse_iso_datetime(ends_at_raw, field_label='وقت النهاية')
+    if ends_err:
+        plans = MembershipPlan.objects.filter(is_active=True).order_by('name_ar')
+        return render(request, 'staff/member_subscribe.html', {'member': member, 'plans': plans, 'now': timezone.now(), 'error': ends_err, 'form_data': request.POST})
     default_minutes, default_credit = _best_plan_benefits(plan)
     remaining_minutes = request.POST.get('remaining_internet_minutes', '').strip()
     remaining_credit = request.POST.get('remaining_credit_syp', '').strip()
-    minutes_val = int(remaining_minutes) if remaining_minutes else default_minutes
-    credit_val = int(remaining_credit) if remaining_credit else default_credit
+    minutes_val, minutes_err = _safe_parse_int(remaining_minutes, field_label='الدقائق المتبقية', min_value=0, default=default_minutes)
+    if minutes_err:
+        plans = MembershipPlan.objects.filter(is_active=True).order_by('name_ar')
+        return render(request, 'staff/member_subscribe.html', {'member': member, 'plans': plans, 'now': timezone.now(), 'error': minutes_err, 'form_data': request.POST})
+    credit_val, credit_err = _safe_parse_int(remaining_credit, field_label='الرصيد المتبقي', min_value=0, default=default_credit)
+    if credit_err:
+        plans = MembershipPlan.objects.filter(is_active=True).order_by('name_ar')
+        return render(request, 'staff/member_subscribe.html', {'member': member, 'plans': plans, 'now': timezone.now(), 'error': credit_err, 'form_data': request.POST})
     with transaction.atomic():
         sub = MembershipSubscription.objects.create(member=member, plan=plan, starts_at=starts_at, ends_at=ends_at, remaining_internet_minutes=minutes_val, remaining_credit_syp=credit_val, notes=request.POST.get('notes', '').strip(), status='active')
         if minutes_val > 0:
@@ -569,22 +605,23 @@ def staff_event_new(request):
         starts_at_raw = request.POST.get('starts_at', '').strip()
         if not title_ar or not starts_at_raw:
             return render(request, 'staff/event_form.html', {'table_areas': table_areas, 'statuses': Event.Status.choices, 'error': 'الاسم ووقت البداية مطلوبان.'})
-        starts_at = datetime.fromisoformat(starts_at_raw)
-        if timezone.is_naive(starts_at):
-            starts_at = timezone.make_aware(starts_at, timezone.get_current_timezone())
-        ends_at = None
+        starts_at, starts_err = _safe_parse_iso_datetime(starts_at_raw, field_label='وقت البداية', required=True)
+        if starts_err:
+            return render(request, 'staff/event_form.html', {'table_areas': table_areas, 'statuses': Event.Status.choices, 'error': starts_err, 'form_data': request.POST})
         ends_at_raw = request.POST.get('ends_at', '').strip()
-        if ends_at_raw:
-            ends_at = datetime.fromisoformat(ends_at_raw)
-            if timezone.is_naive(ends_at):
-                ends_at = timezone.make_aware(ends_at, timezone.get_current_timezone())
+        ends_at, ends_err = _safe_parse_iso_datetime(ends_at_raw, field_label='وقت النهاية')
+        if ends_err:
+            return render(request, 'staff/event_form.html', {'table_areas': table_areas, 'statuses': Event.Status.choices, 'error': ends_err, 'form_data': request.POST})
+        capacity, capacity_err = _safe_parse_int(request.POST.get('capacity'), field_label='السعة', min_value=0, default=0)
+        if capacity_err:
+            return render(request, 'staff/event_form.html', {'table_areas': table_areas, 'statuses': Event.Status.choices, 'error': capacity_err, 'form_data': request.POST})
         event = Event(
             title_ar=title_ar,
             title_en=request.POST.get('title_en', '').strip(),
             description_ar=request.POST.get('description_ar', '').strip(),
             starts_at=starts_at,
             ends_at=ends_at,
-            capacity=int(request.POST.get('capacity') or 0) or None,
+            capacity=capacity or None,
             status=request.POST.get('status') or Event.Status.DRAFT,
         )
         location_area_id = request.POST.get('location_area')
@@ -627,10 +664,13 @@ def staff_reservation_new(request):
         start_time_raw = request.POST.get('start_time', '').strip()
         if not (name and phone and reservation_date_raw and start_time_raw):
             return render(request, 'staff/reservation_form.html', {'events': events, 'table_areas': table_areas, 'types': Reservation.ReservationType.choices, 'error': 'الاسم والهاتف والتاريخ ووقت البداية مطلوبة.'})
+        party_size, party_size_err = _safe_parse_int(request.POST.get('party_size'), field_label='عدد الأشخاص', min_value=1, default=1)
+        if party_size_err:
+            return render(request, 'staff/reservation_form.html', {'events': events, 'table_areas': table_areas, 'types': Reservation.ReservationType.choices, 'statuses': Reservation.Status.choices, 'error': party_size_err, 'form_data': request.POST})
         reservation = Reservation(
             name=name, phone=phone, reservation_date=reservation_date_raw, start_time=start_time_raw,
             reservation_type=request.POST.get('reservation_type') or Reservation.ReservationType.TABLE,
-            party_size=int(request.POST.get('party_size') or 1),
+            party_size=party_size,
             status=request.POST.get('status') or Reservation.Status.PENDING,
             notes=request.POST.get('notes', '').strip(),
             created_by=request.user,
@@ -716,15 +756,15 @@ def staff_vendor_participation_new(request, vendor_id):
         starts_at_raw = request.POST.get('starts_at', '').strip()
         if not starts_at_raw:
             return render(request, 'staff/vendor_participation_form.html', {'vendor': vendor, 'areas': areas, 'statuses': VendorParticipation.Status.choices, 'error': 'وقت البداية مطلوب.'})
-        starts_at = datetime.fromisoformat(starts_at_raw)
-        if timezone.is_naive(starts_at):
-            starts_at = timezone.make_aware(starts_at, timezone.get_current_timezone())
+        starts_at, starts_err = _safe_parse_iso_datetime(starts_at_raw, field_label='وقت البداية', required=True)
+        if starts_err:
+            return render(request, 'staff/vendor_participation_form.html', {'vendor': vendor, 'areas': areas, 'statuses': VendorParticipation.Status.choices, 'error': starts_err, 'form_data': request.POST})
         participation = VendorParticipation(vendor=vendor, title_ar=title_ar, starts_at=starts_at, notes=request.POST.get('notes', '').strip(), status=request.POST.get('status') or VendorParticipation.Status.PLANNED)
         ends_at_raw = request.POST.get('ends_at', '').strip()
         if ends_at_raw:
-            ends_at = datetime.fromisoformat(ends_at_raw)
-            if timezone.is_naive(ends_at):
-                ends_at = timezone.make_aware(ends_at, timezone.get_current_timezone())
+            ends_at, ends_err = _safe_parse_iso_datetime(ends_at_raw, field_label='وقت النهاية')
+            if ends_err:
+                return render(request, 'staff/vendor_participation_form.html', {'vendor': vendor, 'areas': areas, 'statuses': VendorParticipation.Status.choices, 'error': ends_err, 'form_data': request.POST})
             participation.ends_at = ends_at
         area_id = request.POST.get('location_area')
         if area_id:
