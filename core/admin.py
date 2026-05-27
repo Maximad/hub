@@ -20,4 +20,18 @@ class TableAreaAdmin(admin.ModelAdmin):
         return format_html('<a href="/menu/table/{}/" target="_blank">/menu/table/{}/</a>', obj.qr_token, obj.qr_token)
 
 
-admin.site.register([Room, Category, Order, OrderItem, Payment, Member, InternetPackage, InternetSession, Shift, ActivityLog])
+@admin.register(Member)
+class MemberAdmin(admin.ModelAdmin):
+    list_display = ('name_ar', 'phone', 'balance_syp', 'default_plan', 'created_at')
+    list_filter = ('default_plan',)
+    search_fields = ('name_ar', 'name_en', 'phone')
+
+
+@admin.register(InternetSession)
+class InternetSessionAdmin(admin.ModelAdmin):
+    list_display = ('id', 'member', 'package', 'start_time', 'end_time', 'actual_duration_minutes', 'status')
+    list_filter = ('status', 'package')
+    search_fields = ('member__name_ar', 'customer_name', 'customer_phone')
+
+
+admin.site.register([Room, Category, Order, OrderItem, Payment, InternetPackage, Shift, ActivityLog])

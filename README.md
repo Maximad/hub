@@ -109,3 +109,10 @@ Bootstrap updates structural/reference data with `update_or_create` and does not
 - `/staff/reports/day/`
 - `/staff/close-day/`
 - `/staff/reports/day.csv`
+
+
+## Phase 6 Memberships & Internet Sessions
+اختبار الروابط الجديدة:
+- `/staff/members/`
+- `/staff/internet/`
+- `/staff/wifi/`

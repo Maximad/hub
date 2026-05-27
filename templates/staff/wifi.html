@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}شبكة الواي فاي{% endblock %}
+{% block content %}
+<h2>شبكات الواي فاي الفعالة</h2>
+<table style="width:100%"><tr><th>الاسم</th><th>SSID</th><th>كلمة المرور</th><th>ظاهر في QR</th><th>عرض كلمة المرور في QR</th><th>ملاحظات</th></tr>
+{% for w in networks %}<tr><td>{{ w.name_ar }}</td><td>{{ w.ssid }}</td><td>{{ w.password }}</td><td>{{ w.visible_on_qr|yesno:"نعم,لا" }}</td><td>{{ w.show_password_on_qr|yesno:"نعم,لا" }}</td><td>{{ w.notes }}</td></tr>{% empty %}<tr><td colspan="6">لا يوجد.</td></tr>{% endfor %}
+</table>
+{% endblock %}

@@ -18,6 +18,15 @@ from core.views import (
     staff_reports_day,
     staff_reports_day_csv,
     staff_close_day,
+    staff_members,
+    staff_member_new,
+    staff_member_detail,
+    staff_member_subscribe,
+    staff_internet,
+    staff_internet_start,
+    staff_internet_session,
+    staff_internet_end,
+    staff_wifi,
 )
 
 urlpatterns = [
@@ -40,4 +49,13 @@ urlpatterns = [
     path('staff/reports/day/', staff_reports_day, name='staff_reports_day'),
     path('staff/reports/day.csv', staff_reports_day_csv, name='staff_reports_day_csv'),
     path('staff/close-day/', staff_close_day, name='staff_close_day'),
+    path('staff/members/', staff_members, name='staff_members'),
+    path('staff/members/new/', staff_member_new, name='staff_member_new'),
+    path('staff/members/<str:member_id>/', staff_member_detail, name='staff_member_detail'),
+    path('staff/members/<str:member_id>/subscribe/', staff_member_subscribe, name='staff_member_subscribe'),
+    path('staff/internet/', staff_internet, name='staff_internet'),
+    path('staff/internet/start/', staff_internet_start, name='staff_internet_start'),
+    path('staff/internet/<int:session_id>/', staff_internet_session, name='staff_internet_session'),
+    path('staff/internet/<int:session_id>/end/', staff_internet_end, name='staff_internet_end'),
+    path('staff/wifi/', staff_wifi, name='staff_wifi'),
 ]

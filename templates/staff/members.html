@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}الأعضاء{% endblock %}
+{% block content %}
+<h2>الأعضاء</h2>
+<form method="get" style="display:flex; gap:.5rem; margin-bottom:1rem; flex-wrap:wrap;">
+  <input type="text" name="q" value="{{ query }}" placeholder="ابحث بالاسم أو الهاتف أو الكود" style="flex:1; min-width:220px; padding:.5rem;">
+  <button type="submit">بحث</button>
+  <a href="{% url 'staff_member_new' %}">عضو جديد</a>
+</form>
+<table style="width:100%; border-collapse:collapse;">
+  <tr><th>الاسم</th><th>الهاتف</th><th>الرصيد</th><th>الاشتراك الفعال</th><th>الدقائق المتبقية</th><th></th></tr>
+  {% for row in rows %}<tr>
+    <td>{{ row.member.name_ar }}</td><td>{{ row.member.phone }}</td><td>{{ row.member.balance_syp }}</td>
+    <td>{% if row.active_subscription %}{{ row.active_subscription.plan.name_ar }}{% else %}-{% endif %}</td>
+    <td>{% if row.active_subscription and row.active_subscription.remaining_internet_minutes != None %}{{ row.active_subscription.remaining_internet_minutes }}{% else %}-{% endif %}</td>
+    <td><a href="{% url 'staff_member_detail' row.member.public_code %}">تفاصيل</a></td>
+  </tr>{% empty %}<tr><td colspan="6">لا يوجد أعضاء.</td></tr>{% endfor %}
+</table>
+{% endblock %}
