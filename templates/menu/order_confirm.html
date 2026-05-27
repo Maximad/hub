@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}تأكيد الطلب{% endblock %}
+{% block content %}
+<h2>تم استلام طلبك</h2>
+<p><strong>رقم الطلب:</strong> {{ order.public_code }}</p>
+<p><strong>الحالة:</strong> {{ order.get_status_display }}</p>
+<p><strong>المكان / الطاولة:</strong> {% if order.table %}{{ order.table.name_ar }}{% else %}طلب عام / تيك أواي{% endif %}</p>
+<ul>
+  {% for item in order.items.all %}
+  <li>{{ item.product_name_ar_snapshot }} × {{ item.quantity }} = {% widthratio item.quantity 1 item.unit_price_syp_snapshot %} ل.س</li>
+  {% endfor %}
+</ul>
+<p><strong>المجموع:</strong> {{ total }} ل.س</p>
+<p>ملاحظة: الطلب بانتظار تأكيد الفريق</p>
+{% if needs_confirmation %}<p><strong>بعض العناصر تحتاج تأكيد من الفريق</strong></p>{% endif %}
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}المنيو{% endblock %}
+{% block content %}
+<h2>منيو مشاريب</h2>
+{% if table %}<p><strong>الطاولة:</strong> {{ table.name_ar }}</p>{% endif %}
+{% if error %}<p style="color:#b91c1c;">{{ error }}</p>{% endif %}
+<form method="post">
+  {% csrf_token %}
+  {% for section, products in section_products %}
+  <section style="margin-bottom:1rem; border:1px solid #ddd; border-radius:10px; padding:0.75rem;">
+    <h3>{{ section.name_ar }}</h3>
+    {% for p in products %}
+      <div style="padding:0.5rem 0; border-top:1px solid #eee;">
+        <div><strong>{{ p.name_ar }}</strong> - {{ p.price_syp }} ل.س</div>
+        {% if p.is_alcoholic %}<small>يحتوي على كحول</small><br>{% endif %}
+        {% if p.age_restricted %}<small>للبالغين فقط</small><br>{% endif %}
+        {% if p.requires_staff_confirmation %}<small>يحتاج تأكيد من الفريق</small><br>{% endif %}
+        <label>الكمية: <input type="number" min="0" name="qty_{{ p.id }}" style="width:80px;"></label>
+        <label>ملاحظة العنصر: <input type="text" name="note_{{ p.id }}"></label>
+      </div>
+    {% endfor %}
+  </section>
+  {% endfor %}
+
+  <h3>بيانات اختيارية</h3>
+  <label>الاسم <input type="text" name="customer_name"></label><br>
+  <label>الهاتف <input type="text" name="customer_phone"></label><br>
+  <label>ملاحظة عامة<br><textarea name="general_note" rows="3" style="width:100%;"></textarea></label><br>
+  <button type="submit" style="font-size:1.1rem; padding:0.7rem 1rem;">إرسال الطلب</button>
+</form>
+{% endblock %}
