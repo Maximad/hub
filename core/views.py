@@ -726,8 +726,9 @@ def staff_event_detail(request, event_id):
     _assert_staff_capability(request.user, 'events')
     event = get_object_or_404(Event.objects.select_related('location_area'), pk=event_id)
     reservations = Reservation.objects.filter(event=event).select_related('table_area').order_by('reservation_date', 'start_time')
-    participations = VendorParticipation.objects.filter(notes__icontains=event.title_ar).select_related('vendor', 'location_area').order_by('starts_at')
-    return render(request, 'staff/event_detail.html', {'event': event, 'reservations': reservations, 'participations': participations})
+    participations = VendorParticipation.objects.filter(event=event).select_related('vendor', 'location_area', 'event').order_by('starts_at')
+    legacy_participations = VendorParticipation.objects.filter(event__isnull=True, notes__icontains=event.title_ar).select_related('vendor', 'location_area').order_by('starts_at')
+    return render(request, 'staff/event_detail.html', {'event': event, 'reservations': reservations, 'participations': participations, 'legacy_participations': legacy_participations})
 
 
 @login_required
@@ -841,11 +842,12 @@ def staff_vendor_participation_new(request, vendor_id):
     _assert_staff_capability(request.user, 'vendors')
     vendor = get_object_or_404(Vendor, pk=vendor_id)
     areas = TableArea.objects.order_by('name_ar')
+    events = Event.objects.order_by('starts_at')
     if request.method == 'POST':
         title_ar = request.POST.get('title_ar', '').strip() or f'مشاركة {vendor.name_ar}'
         starts_at_raw = request.POST.get('starts_at', '').strip()
         if not starts_at_raw:
-            return render(request, 'staff/vendor_participation_form.html', {'vendor': vendor, 'areas': areas, 'statuses': VendorParticipation.Status.choices, 'error': 'وقت البداية مطلوب.'})
+            return render(request, 'staff/vendor_participation_form.html', {'vendor': vendor, 'areas': areas, 'events': events, 'statuses': VendorParticipation.Status.choices, 'error': 'وقت البداية مطلوب.'})
         errors = {}
         starts_at = _parse_local_dt_or_error(starts_at_raw, 'وقت البداية', errors, required=True)
         participation = VendorParticipation(vendor=vendor, title_ar=title_ar, starts_at=starts_at, notes=request.POST.get('notes', '').strip(), status=request.POST.get('status') or VendorParticipation.Status.PLANNED)
@@ -855,13 +857,16 @@ def staff_vendor_participation_new(request, vendor_id):
         if ends_at:
             participation.ends_at = ends_at
         if errors:
-            return render(request, 'staff/vendor_participation_form.html', {'vendor': vendor, 'areas': areas, 'statuses': VendorParticipation.Status.choices, 'errors': errors, 'form_values': request.POST})
+            return render(request, 'staff/vendor_participation_form.html', {'vendor': vendor, 'areas': areas, 'events': events, 'statuses': VendorParticipation.Status.choices, 'errors': errors, 'form_values': request.POST})
         area_id = request.POST.get('location_area')
         if area_id:
             participation.location_area = TableArea.objects.filter(pk=area_id).first()
+        event_id = request.POST.get('event')
+        if event_id:
+            participation.event = Event.objects.filter(pk=event_id).first()
         participation.save()
         return redirect('staff_vendor_detail', vendor_id=vendor.id)
-    return render(request, 'staff/vendor_participation_form.html', {'vendor': vendor, 'areas': areas, 'statuses': VendorParticipation.Status.choices})
+    return render(request, 'staff/vendor_participation_form.html', {'vendor': vendor, 'areas': areas, 'events': events, 'statuses': VendorParticipation.Status.choices})
 
 
 @login_required
