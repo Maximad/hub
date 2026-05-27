@@ -1,21 +1,24 @@
 {% extends "base.html" %}
 {% block title %}صفحة الفريق{% endblock %}
 {% block content %}
-<h2>عمليات الفريق</h2>
-<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:0.75rem;">
-  <a href="{% url 'staff_orders' %}" style="display:block; text-align:center; padding:1rem; border:1px solid #ddd; border-radius:10px; text-decoration:none; font-size:1.2rem;">لوحة الطلبات</a>
-  <a href="{% url 'staff_cashier' %}" style="display:block; text-align:center; padding:1rem; border:1px solid #ddd; border-radius:10px; text-decoration:none; font-size:1.2rem;">الكاشير</a>
-  <a href="{% url 'menu_public' %}" style="display:block; text-align:center; padding:1rem; border:1px solid #ddd; border-radius:10px; text-decoration:none; font-size:1.2rem;">القائمة العامة</a>
-  <a href="{% url 'staff_qr_links' %}" style="display:block; text-align:center; padding:1rem; border:1px solid #ddd; border-radius:10px; text-decoration:none; font-size:1.2rem;">روابط الطاولات / QR</a>
-  <a href="/admin/" style="display:block; text-align:center; padding:1rem; border:1px solid #ddd; border-radius:10px; text-decoration:none; font-size:1.2rem;">الإدارة</a>
-  <a href="{% url 'staff_menu_tools' %}" style="display:block; text-align:center; padding:1rem; border:1px solid #ddd; border-radius:10px; text-decoration:none; font-size:1.2rem;">أدوات القائمة</a>
-  <a href="{% url 'staff_reports_home' %}" style="display:block; text-align:center; padding:1rem; border:1px solid #ddd; border-radius:10px; text-decoration:none; font-size:1.2rem;">التقارير</a>
-  <a href="{% url 'staff_close_day' %}" style="display:block; text-align:center; padding:1rem; border:1px solid #ddd; border-radius:10px; text-decoration:none; font-size:1.2rem;">إغلاق اليوم</a>
-  <a href="{% url 'staff_members' %}" style="display:block; text-align:center; padding:1rem; border:1px solid #ddd; border-radius:10px; text-decoration:none; font-size:1.2rem;">الأعضاء</a>
-  <a href="{% url 'staff_internet' %}" style="display:block; text-align:center; padding:1rem; border:1px solid #ddd; border-radius:10px; text-decoration:none; font-size:1.2rem;">الإنترنت والعمل</a>
-  <a href="{% url 'staff_wifi' %}" style="display:block; text-align:center; padding:1rem; border:1px solid #ddd; border-radius:10px; text-decoration:none; font-size:1.2rem;">شبكة الواي فاي</a>
-  <a href="{% url 'staff_events' %}" style="display:block; text-align:center; padding:1rem; border:1px solid #ddd; border-radius:10px; text-decoration:none; font-size:1.2rem;">الفعاليات</a>
-  <a href="{% url 'staff_reservations' %}" style="display:block; text-align:center; padding:1rem; border:1px solid #ddd; border-radius:10px; text-decoration:none; font-size:1.2rem;">الحجوزات</a>
-  <a href="{% url 'staff_food_lab' %}" style="display:block; text-align:center; padding:1rem; border:1px solid #ddd; border-radius:10px; text-decoration:none; font-size:1.2rem;">Food Lab / الشركاء</a>
-</div>
+<section class="hub-section">
+  <h2 class="hub-section-title">عمليات الفريق</h2>
+  <div class="hub-grid hub-grid-3">
+    {% for title,desc,url in actions %}{% endfor %}
+    <a class="hub-action-card" href="{% url 'staff_orders' %}"><div class="hub-media"></div><strong>لوحة الطلبات</strong><p>متابعة الطلبات وتعديل الحالة.</p></a>
+    <a class="hub-action-card" href="{% url 'staff_cashier' %}"><div class="hub-media"></div><strong>الكاشير</strong><p>فتح الطلبات واستلام الدفعات.</p></a>
+    <a class="hub-action-card" href="{% url 'staff_reports_home' %}"><div class="hub-media"></div><strong>التقارير</strong><p>مؤشرات اليوم والتصدير.</p></a>
+    <a class="hub-action-card" href="{% url 'staff_close_day' %}"><div class="hub-media"></div><strong>إغلاق اليوم</strong><p>ملخص الإغلاق والطباعة.</p></a>
+    <a class="hub-action-card" href="{% url 'menu_public' %}"><div class="hub-media"></div><strong>القائمة العامة</strong><p>واجهة الطلب للزبائن.</p></a>
+    <a class="hub-action-card" href="{% url 'staff_menu_tools' %}"><div class="hub-media"></div><strong>أدوات القائمة</strong><p>تفعيل وتحديث عناصر المنيو.</p></a>
+    <a class="hub-action-card" href="{% url 'staff_qr_links' %}"><div class="hub-media"></div><strong>روابط الطاولات / QR</strong><p>روابط الطاولات والطباعة.</p></a>
+    <a class="hub-action-card" href="{% url 'staff_members' %}"><div class="hub-media"></div><strong>الأعضاء</strong><p>إدارة العضويات والرصيد.</p></a>
+    <a class="hub-action-card" href="{% url 'staff_internet' %}"><div class="hub-media"></div><strong>الإنترنت والعمل</strong><p>بدء وإنهاء جلسات الاستخدام.</p></a>
+    <a class="hub-action-card" href="{% url 'staff_wifi' %}"><div class="hub-media"></div><strong>شبكة الواي فاي</strong><p>شبكات متاحة ومعلوماتها.</p></a>
+    <a class="hub-action-card" href="{% url 'staff_events' %}"><div class="hub-media"></div><strong>الفعاليات</strong><p>إنشاء ومتابعة الفعاليات.</p></a>
+    <a class="hub-action-card" href="{% url 'staff_reservations' %}"><div class="hub-media"></div><strong>الحجوزات</strong><p>مواعيد وحالات الحجز.</p></a>
+    <a class="hub-action-card" href="{% url 'staff_vendors' %}"><div class="hub-media"></div><strong>الشركاء</strong><p>موردون ومشاركات.</p></a>
+    <a class="hub-action-card" href="{% url 'staff_food_lab' %}"><div class="hub-media"></div><strong>Food Lab / الشركاء</strong><p>المبادرات المشتركة.</p></a>
+  </div>
+</section>
 {% endblock %}

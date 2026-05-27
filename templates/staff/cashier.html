@@ -1,18 +1,4 @@
-{% extends "base.html" %}
-{% block title %}الكاشير{% endblock %}
-{% block content %}
-<h2>شاشة الكاشير</h2>
-<div style="margin-bottom:1rem;display:flex;gap:.6rem;flex-wrap:wrap;">
-  <a href="{% url 'staff_orders' %}">لوحة الطلبات</a>
-  <a href="{% url 'menu_public' %}">القائمة العامة</a>
-</div>
-<form method="get" style="margin-bottom:1rem;"><label>بحث برقم الطلب (UUID): <input type="text" name="q" value="{{ query }}" style="width:420px;max-width:100%;"></label><button type="submit">بحث</button></form>
-{% for row in rows %}{% with order=row.order %}
-<article style="margin-bottom:1rem;border:1px solid #ddd;border-radius:10px;padding:.75rem;">
-<div><strong>رقم الطلب:</strong> <a href="{% url 'staff_cashier_order' order.public_code %}">{{ order.public_code }}</a></div>
-<div><strong>الطاولة:</strong> {% if order.table %}{{ order.table.name_ar }}{% else %}طلب عام / تيك أواي{% endif %}</div>
-<ul>{% for item in order.items.all %}<li>{{ item.product_name_ar_snapshot }} × {{ item.quantity }}</li>{% endfor %}</ul>
-<div><strong>المجموع:</strong> {{ row.total }} ل.س</div><div><strong>المدفوع:</strong> {{ row.paid }} ل.س</div><div><strong>المتبقي:</strong> {{ row.remaining }} ل.س</div><div><strong>حالة الدفع:</strong> {{ row.payment_label }}</div>
-</article>
-{% endwith %}{% empty %}<p>لا توجد طلبات مطابقة.</p>{% endfor %}
-{% endblock %}
+{% extends "base.html" %}{% block title %}الكاشير{% endblock %}{% block content %}
+<h2 class="hub-section-title">شاشة الكاشير</h2><div class="hub-toolbar"><a class="hub-button" href="{% url 'staff_orders' %}">لوحة الطلبات</a><a class="hub-button" href="{% url 'menu_public' %}">القائمة العامة</a></div>
+<form method="get" class="hub-card hub-toolbar"><label>بحث برقم الطلب</label><input class="hub-input" type="text" name="q" value="{{ query }}"><button class="hub-button hub-button-primary" type="submit">بحث</button></form>
+<div class="hub-grid hub-grid-2">{% for row in rows %}{% with order=row.order %}<article class="hub-card"><div><strong>{{ order.public_code }}</strong></div><div>{% if order.table %}{{ order.table.name_ar }}{% else %}طلب عام / تيك أواي{% endif %}</div><div>المجموع {{ row.total }} | المدفوع {{ row.paid }} | المتبقي {{ row.remaining }}</div><div><span class="hub-badge hub-badge-info">{{ row.payment_label }}</span></div><a class="hub-button hub-button-primary" href="{% url 'staff_cashier_order' order.public_code %}">فتح</a></article>{% endwith %}{% empty %}<p class="hub-empty-state">لا توجد طلبات مطابقة.</p>{% endfor %}</div>{% endblock %}

@@ -131,3 +131,9 @@ Bootstrap updates structural/reference data with `update_or_create` and does not
 - `/staff/vendors/<vendor_id>/`
 - `/staff/vendors/<vendor_id>/participation/new/`
 - `/staff/food-lab/`
+
+## Phase 8 – Hub / Masharib UI redesign
+- Added shared design system stylesheet at `static/css/hub.css` with reusable tokens and components.
+- Updated base template and key staff/public templates to use responsive card-based RTL layout.
+- CSS variables allow future theme customization (colors, fonts, radius, shadows) from one place.
+- No schema/model changes, no migrations added, and existing routes preserved.

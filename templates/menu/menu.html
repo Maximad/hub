@@ -1,35 +1,38 @@
 {% extends "base.html" %}
 {% block title %}المنيو{% endblock %}
 {% block content %}
-<h2>منيو مشاريب</h2>
-{% if table %}<p style="font-size:1.15rem; background:#f0fdfa; border:1px solid #99f6e4; padding:0.5rem; border-radius:8px;"><strong>الطلب مرتبط بالطاولة:</strong> {{ table.name_ar }}</p>{% endif %}
-{% if error %}<p style="color:#b91c1c;">{{ error }}</p>{% endif %}
-<form method="post">
+<h2 class="hub-section-title">منيو مشاريب</h2>
+{% if table %}<div class="hub-card"><strong>الطلب مرتبط بالطاولة:</strong> {{ table.name_ar }}</div>{% endif %}
+{% if error %}<p class="hub-badge hub-badge-danger">{{ error }}</p>{% endif %}
+<form method="post" class="hub-form">
   {% csrf_token %}
   {% if section_products %}
-  {% for section, products in section_products %}
-  <section style="margin-bottom:1rem; border:1px solid #ddd; border-radius:10px; padding:0.75rem;">
-    <h3>{{ section.name_ar }}</h3>
-    {% for p in products %}
-      <div style="padding:0.5rem 0; border-top:1px solid #eee;">
-        <div><strong>{{ p.name_ar }}</strong> - {{ p.price_syp }} ل.س</div>
-        {% if p.is_alcoholic %}<small>يحتوي على كحول</small><br>{% endif %}
-        {% if p.age_restricted %}<small>للبالغين فقط</small><br>{% endif %}
-        {% if p.requires_staff_confirmation %}<small>يحتاج تأكيد من الفريق</small><br>{% endif %}
-        <label>الكمية: <input type="number" min="0" name="qty_{{ p.id }}" style="width:80px;"></label>
-        <label>ملاحظة العنصر: <input type="text" name="note_{{ p.id }}"></label>
+    {% for section, products in section_products %}
+    <section class="hub-card hub-section" id="section-{{ section.id }}">
+      <h3 class="hub-section-title">{{ section.name_ar }}</h3>
+      <div class="hub-grid hub-grid-2">
+      {% for p in products %}
+        <div class="hub-list-card">
+          <div class="hub-media"></div>
+          <div><strong>{{ p.name_ar }}</strong> - {{ p.price_syp }} ل.س</div>
+          {% if p.is_alcoholic %}<span class="hub-badge hub-badge-warning">يحتوي على كحول</span>{% endif %}
+          {% if p.age_restricted %}<span class="hub-badge hub-badge-danger">للبالغين فقط</span>{% endif %}
+          {% if p.requires_staff_confirmation %}<span class="hub-badge hub-badge-info">يحتاج تأكيد من الفريق</span>{% endif %}
+          <label>الكمية</label><input class="hub-input" type="number" min="0" name="qty_{{ p.id }}">
+          <label>ملاحظة العنصر</label><input class="hub-input" type="text" name="note_{{ p.id }}">
+        </div>
+      {% endfor %}
       </div>
+    </section>
     {% endfor %}
-  </section>
-    {% endfor %}
-{% else %}
-  <p style="background:#fff7ed; border:1px solid #fed7aa; padding:0.75rem; border-radius:8px;">لا توجد منتجات ظاهرة حالياً على المنيو. يمكن للفريق تفعيل المنتجات من لوحة الإدارة أو أدوات القائمة.</p>
-{% endif %}
+  {% else %}<p class="hub-empty-state">لا توجد منتجات ظاهرة حالياً على المنيو.</p>{% endif %}
 
-  <h3>بيانات اختيارية</h3>
-  <label>الاسم <input type="text" name="customer_name"></label><br>
-  <label>الهاتف <input type="text" name="customer_phone"></label><br>
-  <label>ملاحظة عامة<br><textarea name="general_note" rows="3" style="width:100%;"></textarea></label><br>
-  <button type="submit" style="font-size:1.1rem; padding:0.7rem 1rem;">إرسال الطلب</button>
+  <section class="hub-card">
+    <h3>بيانات اختيارية</h3>
+    <label>الاسم</label><input class="hub-input" type="text" name="customer_name">
+    <label>الهاتف</label><input class="hub-input" type="text" name="customer_phone">
+    <label>ملاحظة عامة</label><textarea class="hub-input" name="general_note" rows="3"></textarea>
+  </section>
+  <div class="hub-sticky-actions"><button class="hub-button hub-button-primary" type="submit">إرسال الطلب</button></div>
 </form>
 {% endblock %}
