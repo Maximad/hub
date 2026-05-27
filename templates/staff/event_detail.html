@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block content %}<h2>{{ event.title_ar }}</h2><p>{{ event.description_ar }}</p>
+<p>البداية: {{ event.starts_at }} | النهاية: {{ event.ends_at|default:'-' }}</p>
+<p><a href="{% url 'staff_reservation_new' %}?event={{ event.id }}">حجز مرتبط</a></p>
+<h3>الحجوزات</h3><ul>{% for r in reservations %}<li><a href="{% url 'staff_reservation_detail' r.id %}">{{ r.name }} - {{ r.reservation_date }}</a></li>{% empty %}<li>لا يوجد</li>{% endfor %}</ul>
+<h3>المشاركات</h3><ul>{% for p in participations %}<li>{{ p.vendor.name_ar }} - {{ p.title_ar }}</li>{% empty %}<li>لا يوجد</li>{% endfor %}</ul>{% endblock %}

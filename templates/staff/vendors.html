@@ -1,0 +1,3 @@
+{% extends "base.html" %}
+{% block content %}<h2>الشركاء / Vendors</h2><a href="{% url 'staff_vendor_new' %}">شريك جديد</a>
+<ul>{% for v in vendors %}<li><a href="{% url 'staff_vendor_detail' v.id %}">{{ v.name_ar }}</a> - {{ v.phone|default:'-' }} - {% if v.is_active %}نشط{% else %}غير نشط{% endif %}</li>{% empty %}<li>لا يوجد</li>{% endfor %}</ul>{% endblock %}

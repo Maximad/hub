@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block content %}<h2>الحجوزات</h2><a href="{% url 'staff_reservation_new' %}">حجز جديد</a>
+<h3>اليوم</h3><ul>{% for r in today_rows %}<li><a href="{% url 'staff_reservation_detail' r.id %}">{{ r.name }} - {{ r.reservation_date }} {{ r.start_time }} - {{ r.get_status_display }}</a></li>{% empty %}<li>لا يوجد</li>{% endfor %}</ul>
+<h3>القادمة</h3><ul>{% for r in upcoming_rows %}<li><a href="{% url 'staff_reservation_detail' r.id %}">{{ r.name }} - {{ r.reservation_date }}</a></li>{% empty %}<li>لا يوجد</li>{% endfor %}</ul>
+<h3>السابقة/الملغاة</h3><ul>{% for r in past_cancelled_rows %}<li><a href="{% url 'staff_reservation_detail' r.id %}">{{ r.name }} - {{ r.reservation_date }} - {{ r.get_status_display }}</a></li>{% empty %}<li>لا يوجد</li>{% endfor %}</ul>{% endblock %}

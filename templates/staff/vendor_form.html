@@ -1,0 +1,3 @@
+{% extends "base.html" %}
+{% block content %}<h2>شريك جديد</h2>{% if error %}<p>{{ error }}</p>{% endif %}
+<form method="post">{% csrf_token %}<input name="name_ar" required placeholder="الاسم"><input name="name_en" placeholder="EN"><input name="contact_person" placeholder="جهة الاتصال"><input name="phone" placeholder="الهاتف"><select name="vendor_type">{% for v,l in types %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select><textarea name="settlement_notes"></textarea><label><input type="checkbox" name="is_active" checked>نشط</label><button>حفظ</button></form>{% endblock %}
