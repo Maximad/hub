@@ -102,3 +102,10 @@ Bootstrap updates structural/reference data with `update_or_create` and does not
 - `/staff/qr/`
 - `/staff/qr/print/`
 - `/staff/menu-tools/`
+
+## Phase 5 Operational Safety & Reports
+اختبار روابط التشغيل اليومية:
+- `/staff/reports/`
+- `/staff/reports/day/`
+- `/staff/close-day/`
+- `/staff/reports/day.csv`

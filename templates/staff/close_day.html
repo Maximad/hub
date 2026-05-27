@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}إغلاق اليوم{% endblock %}
+{% block content %}
+<style>@media print { a,button,form,header { display:none !important; } main { box-shadow:none; } }</style>
+<h2>إغلاق يوم التشغيل</h2>
+<p>التاريخ: {{ report_date|date:'Y-m-d' }}</p>
+<p><a href="{% url 'staff_home' %}">العودة لصفحة الفريق</a> | <a href="javascript:window.print()">طباعة</a></p>
+<ul>
+  <li>النقد المتوقع: {{ sums.cash_total }} ل.س</li>
+  <li>التحويل اليدوي: {{ sums.manual_transfer_total }} ل.س</li>
+  <li>غير المدفوع: {{ sums.remaining_total }} ل.س</li>
+  <li>عدد الطلبات: {{ sums.orders_count }}</li>
+  <li>الطلبات الملغاة: {{ sums.cancelled_count }}</li>
+  <li>الطلبات المقدمة/المدفوعة: {{ sums.served_or_paid_count }}</li>
+</ul>
+{% endblock %}

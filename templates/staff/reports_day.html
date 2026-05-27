@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}تقرير يومي{% endblock %}
+{% block content %}
+<h2>التقرير اليومي</h2>
+<form method="get" style="margin-bottom:1rem;">
+  <label>التاريخ: <input type="date" name="date" value="{{ report_date|date:'Y-m-d' }}"></label>
+  <button type="submit">عرض</button>
+  <a href="{% url 'staff_reports_day_csv' %}?date={{ report_date|date:'Y-m-d' }}">تصدير CSV</a>
+</form>
+<ul>
+  <li>التاريخ: {{ report_date|date:'Y-m-d' }}</li>
+  <li>إجمالي الطلبات: {{ sums.orders_count }}</li>
+  <li>إجمالي الطلبات (القيمة): {{ sums.order_total }} ل.س</li>
+  <li>إجمالي المدفوع: {{ sums.paid_total }} ل.س</li>
+  <li>إجمالي المتبقي: {{ sums.remaining_total }} ل.س</li>
+  <li>النقدي: {{ sums.cash_total }} ل.س</li>
+  <li>التحويل اليدوي: {{ sums.manual_transfer_total }} ل.س</li>
+  <li>الضيافة: {{ sums.free_total }} ل.س</li>
+  <li>خصم الأعضاء: {{ sums.discount_total }} ل.س</li>
+  <li>الطلبات الملغاة: {{ sums.cancelled_count }}</li>
+</ul>
+<table style="width:100%; border-collapse:collapse;">
+<tr><th>رقم الطلب</th><th>الوقت</th><th>الطاولة</th><th>الحالة</th><th>المجموع</th><th>المدفوع</th><th>المتبقي</th></tr>
+{% for row in rows %}
+<tr>
+  <td>{{ row.order.public_code }}</td>
+  <td>{{ row.order.created_at|date:'Y-m-d H:i' }}</td>
+  <td>{% if row.order.table %}{{ row.order.table.name_ar }}{% else %}طلب عام / تيك أواي{% endif %}</td>
+  <td>{{ row.order.get_status_display }}</td>
+  <td>{{ row.total }}</td><td>{{ row.paid }}</td><td>{{ row.remaining }}</td>
+</tr>
+{% empty %}
+<tr><td colspan="7">لا توجد طلبات في هذا اليوم.</td></tr>
+{% endfor %}
+</table>
+{% endblock %}
