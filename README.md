@@ -63,19 +63,3 @@ Your existing gateway/proxy should route to:
 
 ## Apps
 - `core`, `accounts`, `catalog`, `locations`, `orders`, `payments`, `members`, `internet`, `reports`, `audit`
-
-## Phase 1.5 Flex Model
-- Public `MenuSection` display is intentionally separate from internal `Product` operational logic.
-- Products can be classified with `item_type`, subtypes, tags, stations, availability, and vendor/event/member rules without forcing customer menu layout.
-
-### Run bootstrap (idempotent)
-```bash
-docker compose -f docker-compose.prod.yml --env-file .env exec web python manage.py bootstrap_masharib
-```
-
-### Optional staff password
-```bash
-docker compose -f docker-compose.prod.yml --env-file .env exec web python manage.py bootstrap_masharib --default-password "CHANGE_ME"
-```
-
-Bootstrap updates structural/reference data with `update_or_create` and does not delete real orders, payments, or manual production data.

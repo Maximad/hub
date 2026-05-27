@@ -24,6 +24,6 @@ class Command(BaseCommand):
 
         member, _ = Member.objects.get_or_create(name_ar='عميل تجريبي', phone='0999999999', defaults={'balance_syp': 100000})
         now = timezone.now()
-        InternetSession.objects.get_or_create(member=member, package=pkg1, start_time=now, end_time=now + timedelta(minutes=60))
+        InternetSession.objects.get_or_create(member=member, package=pkg1, starts_at=now, ends_at=now + timedelta(minutes=60))
 
         self.stdout.write(self.style.SUCCESS('تمت إضافة البيانات التجريبية بنجاح.'))
