@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}الإنترنت والعمل{% endblock %}
+{% block content %}
+<h2>الإنترنت والعمل</h2>
+<h3>بدء جلسة</h3>
+<form method="post" action="{% url 'staff_internet_start' %}">{% csrf_token %}
+<select name="member"><option value="">بدون عضو</option>{% for m in members %}<option value="{{ m.id }}">{{ m.name_ar }} - {{ m.phone }}</option>{% endfor %}</select>
+<input name="customer_name" placeholder="اسم الزبون">
+<input name="customer_phone" placeholder="هاتف الزبون">
+<select name="package" required>{% for p in packages %}<option value="{{ p.id }}">{{ p.name_ar }} ({{ p.duration_minutes }} دقيقة)</option>{% endfor %}</select>
+<select name="session_type"><option value="internet">إنترنت</option><option value="workspace">مساحة عمل</option></select>
+<input type="datetime-local" name="start_time">
+<input name="notes" placeholder="ملاحظات">
+<button type="submit">بدء</button>
+</form>
+<h3>جلسات فعالة</h3>
+<table style="width:100%"><tr><th>#</th><th>العضو/الزبون</th><th>الباقة</th><th>البدء</th><th>الحالة</th><th></th></tr>
+{% for s in active_sessions %}<tr><td><a href="{% url 'staff_internet_session' s.id %}">{{ s.id }}</a></td><td>{% if s.member %}{{ s.member.name_ar }}{% else %}{{ s.customer_name }}{% endif %}</td><td>{{ s.package.name_ar }}</td><td>{{ s.start_time }}</td><td>{{ s.status }}</td><td><form method="post" action="{% url 'staff_internet_end' s.id %}">{% csrf_token %}<button type="submit">إنهاء</button></form></td></tr>{% empty %}<tr><td colspan="6">لا يوجد.</td></tr>{% endfor %}</table>
+<h3>جلسات منتهية حديثاً</h3>
+<table style="width:100%">{% for s in recent_sessions %}<tr><td><a href="{% url 'staff_internet_session' s.id %}">جلسة {{ s.id }}</a></td><td>{{ s.end_time }}</td></tr>{% empty %}<tr><td>لا يوجد.</td></tr>{% endfor %}</table>
+{% endblock %}

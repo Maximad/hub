@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}تفاصيل عضو{% endblock %}
+{% block content %}
+<h2>{{ member.name_ar }}</h2>
+<p>الهاتف: {{ member.phone }} | الرصيد: {{ member.balance_syp }}</p>
+<a href="{% url 'staff_member_subscribe' member.public_code %}">إضافة اشتراك</a> | <a href="{% url 'staff_internet' %}">بدء جلسة إنترنت/عمل</a>
+<h3>الاشتراكات</h3>
+<table style="width:100%"><tr><th>الخطة</th><th>الحالة</th><th>الدقائق</th><th>الرصيد</th></tr>
+{% for s in subscriptions %}<tr><td>{{ s.plan.name_ar }}</td><td>{{ s.get_status_display }}</td><td>{{ s.remaining_internet_minutes }}</td><td>{{ s.remaining_credit_syp }}</td></tr>{% empty %}<tr><td colspan="4">لا يوجد.</td></tr>{% endfor %}</table>
+<h3>حركات الرصيد/الدقائق</h3>
+<table style="width:100%"><tr><th>النوع</th><th>الدقائق</th><th>الرصيد</th><th>التاريخ</th><th>ملاحظات</th></tr>
+{% for l in ledger %}<tr><td>{{ l.get_change_type_display }}</td><td>{{ l.minutes_delta }}</td><td>{{ l.credit_delta_syp }}</td><td>{{ l.created_at }}</td><td>{{ l.notes }}</td></tr>{% empty %}<tr><td colspan="5">لا يوجد.</td></tr>{% endfor %}</table>
+<h3>جلسات الإنترنت</h3>
+<table style="width:100%"><tr><th>#</th><th>الباقة</th><th>البدء</th><th>الانتهاء</th><th>الحالة</th></tr>
+{% for sess in sessions %}<tr><td><a href="{% url 'staff_internet_session' sess.id %}">{{ sess.id }}</a></td><td>{{ sess.package.name_ar }}</td><td>{{ sess.start_time }}</td><td>{{ sess.end_time }}</td><td>{{ sess.status }}</td></tr>{% empty %}<tr><td colspan="5">لا يوجد.</td></tr>{% endfor %}</table>
+{% endblock %}

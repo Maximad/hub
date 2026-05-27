@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}إضافة اشتراك{% endblock %}
+{% block content %}
+<h2>إضافة اشتراك للعضو {{ member.name_ar }}</h2>
+<form method="post">{% csrf_token %}
+<label>الخطة</label><select name="plan" required style="display:block; width:100%; margin-bottom:.5rem;">{% for p in plans %}<option value="{{ p.id }}">{{ p.name_ar }} ({{ p.code }})</option>{% endfor %}</select>
+<label>يبدأ في</label><input type="datetime-local" name="starts_at" style="display:block; width:100%; margin-bottom:.5rem;">
+<label>ينتهي في</label><input type="datetime-local" name="ends_at" style="display:block; width:100%; margin-bottom:.5rem;">
+<label>الدقائق المتبقية</label><input type="number" name="remaining_internet_minutes" style="display:block; width:100%; margin-bottom:.5rem;">
+<label>الرصيد المتبقي</label><input type="number" name="remaining_credit_syp" style="display:block; width:100%; margin-bottom:.5rem;">
+<label>ملاحظات</label><textarea name="notes" style="display:block; width:100%; margin-bottom:.5rem;"></textarea>
+<button type="submit">إنشاء الاشتراك</button>
+</form>
+{% endblock %}

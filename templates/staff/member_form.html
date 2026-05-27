@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}عضو جديد{% endblock %}
+{% block content %}
+<h2>تسجيل عضو جديد</h2>
+{% if error %}<p style="color:#b91c1c;">{{ error }}</p>{% endif %}
+<form method="post">{% csrf_token %}
+  <label>الاسم</label><input name="name_ar" required style="display:block; width:100%; margin-bottom:.5rem;">
+  <label>الهاتف</label><input name="phone" required style="display:block; width:100%; margin-bottom:.5rem;">
+  <label>الخطة الافتراضية</label>
+  <select name="default_plan" style="display:block; width:100%; margin-bottom:.5rem;"><option value="">---</option>{% for p in plans %}<option value="{{ p.id }}">{{ p.name_ar }}</option>{% endfor %}</select>
+  <label>ملاحظات</label><textarea name="notes" style="display:block; width:100%; margin-bottom:.5rem;"></textarea>
+  <button type="submit">حفظ</button>
+</form>
+{% endblock %}
