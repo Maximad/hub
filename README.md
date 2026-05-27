@@ -94,3 +94,11 @@ Bootstrap updates structural/reference data with `update_or_create` and does not
 اختبار روابط الفريق:
 - `/staff/orders/`
 - `/staff/cashier/`
+
+
+## Phase 4 Menu & QR Operations
+اختبار روابط الفريق الجديدة:
+- `/staff/`
+- `/staff/qr/`
+- `/staff/qr/print/`
+- `/staff/menu-tools/`

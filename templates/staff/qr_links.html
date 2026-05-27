@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}روابط الطاولات{% endblock %}
+{% block content %}
+<h2>روابط الطاولات / QR</h2>
+<p><a href="{% url 'staff_qr_print' %}" target="_blank">نسخة طباعة</a> | <a href="{% url 'staff_home' %}">العودة لصفحة الفريق</a></p>
+{% if rows %}
+  {% for row in rows %}
+  <section style="border:1px solid #ddd; border-radius:10px; padding:0.8rem; margin-bottom:0.8rem;">
+    <div><strong>الاسم:</strong> {{ row.table.name_ar }}</div>
+    <div><strong>الغرفة:</strong> {{ row.table.room.name_ar|default:"—" }}</div>
+    <div><strong>الكود:</strong> {{ row.table.public_code }}</div>
+    <div><strong>المسار:</strong> <code>{{ row.path }}</code></div>
+    <div><strong>الرابط الكامل:</strong> <input type="text" readonly value="{{ row.full_url }}" style="width:100%; direction:ltr;"></div>
+    <div style="margin-top:0.5rem;">
+      <a href="{{ row.path }}" target="_blank">فتح الرابط</a>
+      <button type="button" onclick="window.print()">طباعة</button>
+    </div>
+  </section>
+  {% endfor %}
+{% else %}
+<p>لا توجد طاولات/مساحات مفعّلة حالياً.</p>
+{% endif %}
+{% endblock %}

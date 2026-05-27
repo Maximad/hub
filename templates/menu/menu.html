@@ -2,10 +2,11 @@
 {% block title %}المنيو{% endblock %}
 {% block content %}
 <h2>منيو مشاريب</h2>
-{% if table %}<p><strong>الطاولة:</strong> {{ table.name_ar }}</p>{% endif %}
+{% if table %}<p style="font-size:1.15rem; background:#f0fdfa; border:1px solid #99f6e4; padding:0.5rem; border-radius:8px;"><strong>الطلب مرتبط بالطاولة:</strong> {{ table.name_ar }}</p>{% endif %}
 {% if error %}<p style="color:#b91c1c;">{{ error }}</p>{% endif %}
 <form method="post">
   {% csrf_token %}
+  {% if section_products %}
   {% for section, products in section_products %}
   <section style="margin-bottom:1rem; border:1px solid #ddd; border-radius:10px; padding:0.75rem;">
     <h3>{{ section.name_ar }}</h3>
@@ -20,7 +21,10 @@
       </div>
     {% endfor %}
   </section>
-  {% endfor %}
+    {% endfor %}
+{% else %}
+  <p style="background:#fff7ed; border:1px solid #fed7aa; padding:0.75rem; border-radius:8px;">لا توجد منتجات ظاهرة حالياً على المنيو. يمكن للفريق تفعيل المنتجات من لوحة الإدارة أو أدوات القائمة.</p>
+{% endif %}
 
   <h3>بيانات اختيارية</h3>
   <label>الاسم <input type="text" name="customer_name"></label><br>

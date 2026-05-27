@@ -126,6 +126,63 @@ def _order_financials(order):
 
 
 @login_required
+def staff_home(request):
+    _assert_staff_access(request)
+    return render(request, 'staff/home.html')
+
+
+@login_required
+def staff_qr_links(request):
+    _assert_staff_access(request)
+    tables = TableArea.objects.select_related('room').order_by('room__name_ar', 'name_ar')
+    rows = []
+    for table in tables:
+        path = reverse('menu_table', kwargs={'qr_token': table.qr_token})
+        rows.append({'table': table, 'path': path, 'full_url': request.build_absolute_uri(path)})
+    return render(request, 'staff/qr_links.html', {'rows': rows})
+
+
+@login_required
+def staff_qr_print(request):
+    _assert_staff_access(request)
+    tables = TableArea.objects.select_related('room').order_by('room__name_ar', 'name_ar')
+    rows = []
+    for table in tables:
+        path = reverse('menu_table', kwargs={'qr_token': table.qr_token})
+        rows.append({'table': table, 'full_url': request.build_absolute_uri(path)})
+    return render(request, 'staff/qr_print.html', {'rows': rows})
+
+
+@login_required
+def staff_menu_tools(request):
+    _assert_staff_access(request)
+    if request.method == 'POST':
+        product = get_object_or_404(Product, public_code=request.POST.get('product_code'))
+        action = request.POST.get('action')
+        allowed = {'is_available', 'visible_on_qr', 'orderable_on_qr'}
+        if action in allowed:
+            setattr(product, action, not getattr(product, action))
+            product.save(update_fields=[action, 'updated_at'])
+        return redirect('staff_menu_tools')
+
+    sections = MenuSection.objects.filter(is_active=True).prefetch_related(
+        Prefetch('products', queryset=Product.objects.order_by('sort_order', 'name_ar'))
+    ).order_by('sort_order', 'name_ar')
+    products_in_sections = set()
+    grouped = []
+    for section in sections:
+        products = list(section.products.all())
+        products_in_sections.update(p.pk for p in products)
+        grouped.append((section.name_ar, products))
+
+    ungrouped = list(Product.objects.exclude(pk__in=products_in_sections).order_by('sort_order', 'name_ar'))
+    if ungrouped:
+        grouped.append(('بدون قسم في المنيو', ungrouped))
+
+    return render(request, 'staff/menu_tools.html', {'grouped': grouped})
+
+
+@login_required
 def staff_orders(request):
     _assert_staff_access(request)
     statuses = [choice[0] for choice in Order.Status.choices]

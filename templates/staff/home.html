@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}صفحة الفريق{% endblock %}
+{% block content %}
+<h2>عمليات الفريق</h2>
+<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:0.75rem;">
+  <a href="{% url 'staff_orders' %}" style="display:block; text-align:center; padding:1rem; border:1px solid #ddd; border-radius:10px; text-decoration:none; font-size:1.2rem;">لوحة الطلبات</a>
+  <a href="{% url 'staff_cashier' %}" style="display:block; text-align:center; padding:1rem; border:1px solid #ddd; border-radius:10px; text-decoration:none; font-size:1.2rem;">الكاشير</a>
+  <a href="{% url 'menu_public' %}" style="display:block; text-align:center; padding:1rem; border:1px solid #ddd; border-radius:10px; text-decoration:none; font-size:1.2rem;">القائمة العامة</a>
+  <a href="{% url 'staff_qr_links' %}" style="display:block; text-align:center; padding:1rem; border:1px solid #ddd; border-radius:10px; text-decoration:none; font-size:1.2rem;">روابط الطاولات / QR</a>
+  <a href="/admin/" style="display:block; text-align:center; padding:1rem; border:1px solid #ddd; border-radius:10px; text-decoration:none; font-size:1.2rem;">الإدارة</a>
+  <a href="{% url 'staff_menu_tools' %}" style="display:block; text-align:center; padding:1rem; border:1px solid #ddd; border-radius:10px; text-decoration:none; font-size:1.2rem;">أدوات القائمة</a>
+</div>
+{% endblock %}
