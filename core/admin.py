@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.utils.html import format_html
 from .models import Room, TableArea, Category, Product, Order, OrderItem, Payment, Member, InternetPackage, InternetSession, Shift, ActivityLog
 
 
@@ -9,4 +10,14 @@ class ProductAdmin(admin.ModelAdmin):
     search_fields = ('name_ar', 'name_en', 'description_ar')
 
 
-admin.site.register([Room, TableArea, Category, Order, OrderItem, Payment, Member, InternetPackage, InternetSession, Shift, ActivityLog])
+@admin.register(TableArea)
+class TableAreaAdmin(admin.ModelAdmin):
+    list_display = ('name_ar', 'room', 'qr_token', 'qr_menu_link')
+    readonly_fields = ('qr_token', 'qr_menu_link')
+
+    @admin.display(description='رابط منيو QR')
+    def qr_menu_link(self, obj):
+        return format_html('/menu/table/{}/', obj.qr_token)
+
+
+admin.site.register([Room, Category, Order, OrderItem, Payment, Member, InternetPackage, InternetSession, Shift, ActivityLog])

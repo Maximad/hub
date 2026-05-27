@@ -79,3 +79,9 @@ docker compose -f docker-compose.prod.yml --env-file .env exec web python manage
 ```
 
 Bootstrap updates structural/reference data with `update_or_create` and does not delete real orders, payments, or manual production data.
+
+## Phase 2 Public QR Menu
+اختبار روابط الزبائن:
+- `/menu/`
+- `/menu/table/<qr_token>/`
+- `/order/<public_code>/`
