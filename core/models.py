@@ -44,7 +44,47 @@ class Product(TimeStampedModel, PublicCodeModel):
     description_ar = models.TextField(blank=True)
     description_en = models.TextField(blank=True)
     price_syp = models.PositiveIntegerField()
-    is_active = models.BooleanField(default=True)
+    is_available = models.BooleanField(default=True)
+    sort_order = models.IntegerField(default=0)
+
+    menu_sections = models.ManyToManyField('catalog.MenuSection', blank=True, related_name='products')
+    tags = models.ManyToManyField('catalog.Tag', blank=True, related_name='products')
+
+    class ItemType(models.TextChoices):
+        BEVERAGE = 'beverage', 'Beverage'
+        FOOD = 'food', 'Food'
+        SERVICE = 'service', 'Service'
+        EVENT_TICKET = 'event_ticket', 'Event Ticket'
+        RESERVATION = 'reservation', 'Reservation'
+        MEMBERSHIP = 'membership', 'Membership'
+        RETAIL = 'retail', 'Retail'
+        ADDON = 'addon', 'Addon'
+
+    class BeverageType(models.TextChoices):
+        COFFEE='coffee','Coffee'; TEA='tea','Tea'; MATE='mate','Mate'; JUICE='juice','Juice'; ZHOURAT='zhourat','Zhourat'; LOCAL='local','Local'; ARAK='arak','Arak'; WINE='wine','Wine'; BEER='beer','Beer'; COCKTAIL='cocktail','Cocktail'; OTHER='other','Other'
+
+    class FoodType(models.TextChoices):
+        HUB_FOOD='hub_food','Hub Food'; VENDOR_FOOD='vendor_food','Vendor Food'; GUEST_CHEF='guest_chef','Guest Chef'; SNACK='snack','Snack'; DAILY_DISH='daily_dish','Daily Dish'; OTHER='other','Other'
+
+    class ServiceType(models.TextChoices):
+        INTERNET='internet','Internet'; WORKSPACE='workspace','Workspace'; TABLE_RESERVATION='table_reservation','Table Reservation'; ROOM_BOOKING='room_booking','Room Booking'; WORKSHOP='workshop','Workshop'; OTHER='other','Other'
+
+    item_type = models.CharField(max_length=30, choices=ItemType.choices, default=ItemType.BEVERAGE)
+    beverage_type = models.CharField(max_length=30, choices=BeverageType.choices, blank=True)
+    food_type = models.CharField(max_length=30, choices=FoodType.choices, blank=True)
+    service_type = models.CharField(max_length=30, choices=ServiceType.choices, blank=True)
+    prep_station_ref = models.ForeignKey('catalog.PrepStation', on_delete=models.SET_NULL, null=True, blank=True)
+    vendor = models.ForeignKey('vendors.Vendor', on_delete=models.SET_NULL, null=True, blank=True)
+    is_alcoholic = models.BooleanField(default=False)
+    age_restricted = models.BooleanField(default=False)
+    visible_on_qr = models.BooleanField(default=True)
+    orderable_on_qr = models.BooleanField(default=True)
+    requires_staff_confirmation = models.BooleanField(default=False)
+    available_for_events = models.BooleanField(default=True)
+    available_for_takeaway = models.BooleanField(default=False)
+    not_discountable = models.BooleanField(default=False)
+    cost_syp = models.PositiveIntegerField(null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
 
 
 class Order(TimeStampedModel, PublicCodeModel):
@@ -88,6 +128,7 @@ class Member(TimeStampedModel, PublicCodeModel):
     name_en = models.CharField(max_length=120, blank=True)
     phone = models.CharField(max_length=30, unique=True)
     balance_syp = models.IntegerField(default=0)
+    default_plan = models.ForeignKey('members.MembershipPlan', on_delete=models.SET_NULL, null=True, blank=True)
 
 
 class InternetPackage(TimeStampedModel, PublicCodeModel):
@@ -100,10 +141,15 @@ class InternetPackage(TimeStampedModel, PublicCodeModel):
 
 
 class InternetSession(TimeStampedModel, PublicCodeModel):
-    member = models.ForeignKey(Member, on_delete=models.PROTECT, related_name='internet_sessions')
+    member = models.ForeignKey(Member, on_delete=models.PROTECT, related_name='internet_sessions', null=True, blank=True)
     package = models.ForeignKey(InternetPackage, on_delete=models.PROTECT, related_name='sessions')
-    starts_at = models.DateTimeField()
-    ends_at = models.DateTimeField()
+    customer_name = models.CharField(max_length=120, blank=True)
+    customer_phone = models.CharField(max_length=30, blank=True)
+    start_time = models.DateTimeField()
+    end_time = models.DateTimeField()
+    actual_duration_minutes = models.PositiveIntegerField(null=True, blank=True)
+    status = models.CharField(max_length=20, default='active')
+    notes = models.TextField(blank=True)
     consumed = models.BooleanField(default=False)
 
 

@@ -24,6 +24,9 @@ INSTALLED_APPS = [
     'internet',
     'reports',
     'audit',
+    'reservations',
+    'events',
+    'vendors',
 ]
 
 MIDDLEWARE = [
