@@ -3,12 +3,13 @@
 {% block content %}
 <h2>تسجيل عضو جديد</h2>
 {% if error %}<p style="color:#b91c1c;">{{ error }}</p>{% endif %}
+{% if errors %}{% for msg in errors.values %}<p style="color:#b91c1c;">{{ msg }}</p>{% endfor %}{% endif %}
 <form method="post">{% csrf_token %}
-  <label>الاسم</label><input name="name_ar" required style="display:block; width:100%; margin-bottom:.5rem;">
-  <label>الهاتف</label><input name="phone" required style="display:block; width:100%; margin-bottom:.5rem;">
+  <label>الاسم</label><input name="name_ar" value="{{ form_values.name_ar|default:'' }}" required style="display:block; width:100%; margin-bottom:.5rem;">
+  <label>الهاتف</label><input name="phone" value="{{ form_values.phone|default:'' }}" required style="display:block; width:100%; margin-bottom:.5rem;">
   <label>الخطة الافتراضية</label>
-  <select name="default_plan" style="display:block; width:100%; margin-bottom:.5rem;"><option value="">---</option>{% for p in plans %}<option value="{{ p.id }}">{{ p.name_ar }}</option>{% endfor %}</select>
-  <label>ملاحظات</label><textarea name="notes" style="display:block; width:100%; margin-bottom:.5rem;"></textarea>
+  <select name="default_plan" style="display:block; width:100%; margin-bottom:.5rem;"><option value="">---</option>{% for p in plans %}<option value="{{ p.id }}" {% if form_values.default_plan == p.id|stringformat:'s' %}selected{% endif %}>{{ p.name_ar }}</option>{% endfor %}</select>
+  <label>ملاحظات</label><textarea name="notes" style="display:block; width:100%; margin-bottom:.5rem;">{{ form_values.notes|default:'' }}</textarea>
   <button type="submit">حفظ</button>
 </form>
 {% endblock %}

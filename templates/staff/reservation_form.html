@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block content %}<h2>حجز جديد</h2>{% if error %}<p>{{ error }}</p>{% endif %}
+{% block content %}<h2>حجز جديد</h2>{% if error %}<p>{{ error }}</p>{% endif %}{% if errors %}{% for msg in errors.values %}<p style="color:#b91c1c;">{{ msg }}</p>{% endfor %}{% endif %}
 <form method="post">{% csrf_token %}
-<input name="name" required placeholder="الاسم"><input name="phone" required placeholder="الهاتف">
-<input type="date" name="reservation_date" required><input type="time" name="start_time" required><input type="time" name="end_time">
-<select name="reservation_type">{% for v,l in types %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select>
-<select name="status">{% for v,l in statuses %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select>
-<input type="number" name="party_size" value="1">
-<select name="table_area"><option value="">الطاولة/المساحة</option>{% for a in table_areas %}<option value="{{ a.id }}">{{ a.name_ar }}</option>{% endfor %}</select>
-<select name="event"><option value="">فعالية (اختياري)</option>{% for e in events %}<option value="{{ e.id }}">{{ e.title_ar }}</option>{% endfor %}</select>
-<textarea name="notes" placeholder="ملاحظات"></textarea><button>حفظ</button></form>{% endblock %}
+<input name="name" value="{{ form_values.name|default:'' }}" required placeholder="الاسم"><input name="phone" value="{{ form_values.phone|default:'' }}" required placeholder="الهاتف">
+<input type="date" name="reservation_date" value="{{ form_values.reservation_date|default:'' }}" required><input type="time" name="start_time" value="{{ form_values.start_time|default:'' }}" required><input type="time" name="end_time" value="{{ form_values.end_time|default:'' }}">
+<select name="reservation_type">{% for v,l in types %}<option value="{{ v }}" {% if form_values.reservation_type == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+<select name="status">{% for v,l in statuses %}<option value="{{ v }}" {% if form_values.status == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+<input type="number" name="party_size" value="{{ form_values.party_size|default:'1' }}">
+<select name="table_area"><option value="">الطاولة/المساحة</option>{% for a in table_areas %}<option value="{{ a.id }}" {% if form_values.table_area == a.id|stringformat:'s' %}selected{% endif %}>{{ a.name_ar }}</option>{% endfor %}</select>
+<select name="event"><option value="">فعالية (اختياري)</option>{% for e in events %}<option value="{{ e.id }}" {% if form_values.event == e.id|stringformat:'s' %}selected{% endif %}>{{ e.title_ar }}</option>{% endfor %}</select>
+<textarea name="notes" placeholder="ملاحظات">{{ form_values.notes|default:'' }}</textarea><button>حفظ</button></form>{% endblock %}

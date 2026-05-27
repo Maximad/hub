@@ -29,9 +29,9 @@
 
   <section class="hub-card">
     <h3>بيانات اختيارية</h3>
-    <label>الاسم</label><input class="hub-input" type="text" name="customer_name">
-    <label>الهاتف</label><input class="hub-input" type="text" name="customer_phone">
-    <label>ملاحظة عامة</label><textarea class="hub-input" name="general_note" rows="3"></textarea>
+    <label>الاسم</label><input class="hub-input" type="text" name="customer_name" value="{{ form_values.customer_name|default:'' }}">
+    <label>الهاتف</label><input class="hub-input" type="text" name="customer_phone" value="{{ form_values.customer_phone|default:'' }}">
+    <label>ملاحظة عامة</label><textarea class="hub-input" name="general_note" rows="3">{{ form_values.general_note|default:'' }}</textarea>
   </section>
   <div class="hub-sticky-actions"><button class="hub-button hub-button-primary" type="submit">إرسال الطلب</button></div>
 </form>

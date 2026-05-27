@@ -2,15 +2,16 @@
 {% block title %}الإنترنت والعمل{% endblock %}
 {% block content %}
 <h2>الإنترنت والعمل</h2>
+{% if errors %}{% for msg in errors.values %}<p style="color:#b91c1c;">{{ msg }}</p>{% endfor %}{% endif %}
 <h3>بدء جلسة</h3>
 <form method="post" action="{% url 'staff_internet_start' %}">{% csrf_token %}
-<select name="member"><option value="">بدون عضو</option>{% for m in members %}<option value="{{ m.id }}">{{ m.name_ar }} - {{ m.phone }}</option>{% endfor %}</select>
-<input name="customer_name" placeholder="اسم الزبون">
-<input name="customer_phone" placeholder="هاتف الزبون">
-<select name="package" required>{% for p in packages %}<option value="{{ p.id }}">{{ p.name_ar }} ({{ p.duration_minutes }} دقيقة)</option>{% endfor %}</select>
-<select name="session_type"><option value="internet">إنترنت</option><option value="workspace">مساحة عمل</option></select>
-<input type="datetime-local" name="start_time">
-<input name="notes" placeholder="ملاحظات">
+<select name="member"><option value="">بدون عضو</option>{% for m in members %}<option value="{{ m.id }}" {% if form_values.member == m.id|stringformat:'s' %}selected{% endif %}>{{ m.name_ar }} - {{ m.phone }}</option>{% endfor %}</select>
+<input name="customer_name" value="{{ form_values.customer_name|default:'' }}" placeholder="اسم الزبون">
+<input name="customer_phone" value="{{ form_values.customer_phone|default:'' }}" placeholder="هاتف الزبون">
+<select name="package" required>{% for p in packages %}<option value="{{ p.id }}" {% if form_values.package == p.id|stringformat:'s' %}selected{% endif %}>{{ p.name_ar }} ({{ p.duration_minutes }} دقيقة)</option>{% endfor %}</select>
+<select name="session_type"><option value="internet" {% if form_values.session_type == 'internet' %}selected{% endif %}>إنترنت</option><option value="workspace" {% if form_values.session_type == 'workspace' %}selected{% endif %}>مساحة عمل</option></select>
+<input type="datetime-local" name="start_time" value="{{ form_values.start_time|default:'' }}">
+<input name="notes" value="{{ form_values.notes|default:'' }}" placeholder="ملاحظات">
 <button type="submit">بدء</button>
 </form>
 <h3>جلسات فعالة</h3>
