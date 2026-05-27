@@ -3,4 +3,9 @@
 {% block content %}
 <h2>مرحباً بكم في لوحة مشاريب</h2>
 <p>هذا هو الأساس للمرحلة الأولى.</p>
+<ul>
+  <li><a href="{% url 'staff_orders' %}">لوحة الطلبات</a></li>
+  <li><a href="{% url 'staff_cashier' %}">الكاشير</a></li>
+  <li><a href="{% url 'menu_public' %}">القائمة العامة</a></li>
+</ul>
 {% endblock %}
