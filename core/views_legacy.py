@@ -10,6 +10,7 @@ from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+import re
 
 from members.models import MembershipBenefitRule, MembershipPlan, MembershipSubscription, MemberCreditLedger
 from internet.models import WifiNetwork
@@ -21,6 +22,7 @@ from vendors.models import Vendor, VendorParticipation
 
 
 DAMASCUS_TZ = ZoneInfo('Asia/Damascus')
+PHONE_ALLOWED_PATTERN = re.compile(r'^[\d\s\-\+\(\)]+$')
 
 
 def _parse_report_date(raw_date):
@@ -30,6 +32,17 @@ def _parse_report_date(raw_date):
         except ValueError:
             pass
     return datetime.now(DAMASCUS_TZ).date()
+
+
+def _validate_phone_input(raw_value, field_label, errors, required=False):
+    value = (raw_value or '').strip()
+    if not value:
+        if required:
+            errors[field_label] = f'{field_label} مطلوب.'
+        return value
+    if not PHONE_ALLOWED_PATTERN.match(value):
+        errors[field_label] = f'{field_label} يجب أن يحتوي على أرقام فقط مع السماح بـ + والمسافات والشرطات والأقواس.'
+    return value
 
 
 def _day_range_utc(report_date):
@@ -208,7 +221,13 @@ def _create_order_from_menu(request, table=None):
         return render(request, 'menu/menu.html', context)
 
     customer_name = request.POST.get('customer_name', '').strip()
-    customer_phone = request.POST.get('customer_phone', '').strip()
+    errors = {}
+    customer_phone = _validate_phone_input(request.POST.get('customer_phone', ''), 'رقم الهاتف', errors, required=False)
+    if errors:
+        context = _menu_context(table)
+        context['error'] = errors['رقم الهاتف']
+        context['form_values'] = request.POST
+        return render(request, 'menu/menu.html', context)
     general_note = request.POST.get('general_note', '').strip()
     table_label = table.name_ar if table else 'طلب عام / تيك أواي'
     note_parts = [f'الاسم: {customer_name}' if customer_name else '', f'الهاتف: {customer_phone}' if customer_phone else '', f'المكان: {table_label}', general_note]
@@ -558,9 +577,12 @@ def staff_member_new(request):
     plans = MembershipPlan.objects.filter(is_active=True).order_by('name_ar')
     if request.method == 'POST':
         name_ar = request.POST.get('name_ar', '').strip()
-        phone = request.POST.get('phone', '').strip()
+        errors = {}
+        phone = _validate_phone_input(request.POST.get('phone', ''), 'رقم الهاتف', errors, required=True)
         if not name_ar or not phone:
             return render(request, 'staff/member_form.html', {'plans': plans, 'error': 'الاسم ورقم الهاتف مطلوبان.'})
+        if errors:
+            return render(request, 'staff/member_form.html', {'plans': plans, 'errors': errors, 'form_values': request.POST})
         member = Member(name_ar=name_ar, phone=phone)
         default_plan_id = request.POST.get('default_plan')
         if default_plan_id:
@@ -631,6 +653,7 @@ def staff_internet_start(request):
         member = Member.objects.filter(pk=member_id).first()
     package = get_object_or_404(InternetPackage, pk=request.POST.get('package'))
     errors = {}
+    customer_phone = _validate_phone_input(request.POST.get('customer_phone', ''), 'هاتف الزبون', errors, required=False)
     start_time = _parse_local_dt_or_error(request.POST.get('start_time', ''), 'وقت البدء', errors, default=timezone.now())
     if errors:
         active_sessions = InternetSession.objects.select_related('member', 'package').filter(status='active').order_by('-start_time')
@@ -638,7 +661,7 @@ def staff_internet_start(request):
         packages = InternetPackage.objects.order_by('name_ar')
         members = Member.objects.order_by('-created_at')[:200]
         return render(request, 'staff/internet.html', {'active_sessions': active_sessions, 'recent_sessions': recent_sessions, 'packages': packages, 'members': members, 'now': timezone.now(), 'errors': errors, 'form_values': request.POST})
-    InternetSession.objects.create(member=member, package=package, customer_name=request.POST.get('customer_name', '').strip(), customer_phone=request.POST.get('customer_phone', '').strip(), start_time=start_time, end_time=start_time, notes=(request.POST.get('session_type', '').strip() + ' ' + request.POST.get('notes', '').strip()).strip(), status='active')
+    InternetSession.objects.create(member=member, package=package, customer_name=request.POST.get('customer_name', '').strip(), customer_phone=customer_phone, start_time=start_time, end_time=start_time, notes=(request.POST.get('session_type', '').strip() + ' ' + request.POST.get('notes', '').strip()).strip(), status='active')
     return redirect('staff_internet')
 
 
@@ -749,12 +772,12 @@ def staff_reservation_new(request):
     table_areas = TableArea.objects.order_by('name_ar')
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
-        phone = request.POST.get('phone', '').strip()
+        errors = {}
+        phone = _validate_phone_input(request.POST.get('phone', ''), 'رقم الهاتف', errors, required=True)
         reservation_date_raw = request.POST.get('reservation_date', '').strip()
         start_time_raw = request.POST.get('start_time', '').strip()
         if not (name and phone and reservation_date_raw and start_time_raw):
             return render(request, 'staff/reservation_form.html', {'events': events, 'table_areas': table_areas, 'types': Reservation.ReservationType.choices, 'error': 'الاسم والهاتف والتاريخ ووقت البداية مطلوبة.'})
-        errors = {}
         party_size = _parse_int_or_error(request.POST.get('party_size') or 1, 'عدد الأشخاص', errors, default=1, min_value=1)
         if errors:
             return render(request, 'staff/reservation_form.html', {'events': events, 'table_areas': table_areas, 'types': Reservation.ReservationType.choices, 'statuses': Reservation.Status.choices, 'errors': errors, 'form_values': request.POST})
@@ -815,12 +838,16 @@ def staff_vendor_new(request):
         name_ar = request.POST.get('name_ar', '').strip()
         if not name_ar:
             return render(request, 'staff/vendor_form.html', {'types': Vendor.VendorType.choices, 'error': 'اسم الشريك مطلوب.'})
+        errors = {}
+        phone = _validate_phone_input(request.POST.get('phone', ''), 'رقم الهاتف', errors, required=False)
+        if errors:
+            return render(request, 'staff/vendor_form.html', {'types': Vendor.VendorType.choices, 'errors': errors, 'form_values': request.POST})
         vendor = Vendor.objects.create(
             name_ar=name_ar,
             name_en=request.POST.get('name_en', '').strip(),
             vendor_type=request.POST.get('vendor_type') or Vendor.VendorType.OTHER,
             contact_person=request.POST.get('contact_person', '').strip(),
-            phone=request.POST.get('phone', '').strip(),
+            phone=phone,
             settlement_notes=request.POST.get('settlement_notes', '').strip(),
             is_active=bool(request.POST.get('is_active')),
         )
