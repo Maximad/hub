@@ -7,7 +7,17 @@
 <p><strong>المكان / الطاولة:</strong> {% if order.table %}{{ order.table.name_ar }}{% else %}طلب عام / تيك أواي{% endif %}</p>
 <ul>
   {% for item in order.items.all %}
-  <li>{{ item.product_name_ar_snapshot }} × {{ item.quantity }} = {% widthratio item.quantity 1 item.unit_price_syp_snapshot %} ل.س</li>
+  <li>
+    {{ item.product_name_ar_snapshot }} × {{ item.quantity }} = {% widthratio item.quantity 1 item.unit_price_syp_snapshot %} ل.س
+    {% if item.selected_options_snapshot %}
+      <ul>
+        {% for group in item.selected_options_snapshot %}
+          {% for option in group.options %}<li>{{ option.name_ar }}{% if option.price_delta_syp %} ({% if option.price_delta_syp > 0 %}+{% endif %}{{ option.price_delta_syp }} ل.س){% endif %}</li>{% endfor %}
+        {% endfor %}
+      </ul>
+    {% endif %}
+    {% if item.item_note %}<br><small>ملاحظة: {{ item.item_note }}</small>{% endif %}
+  </li>
   {% endfor %}
 </ul>
 <p><strong>المجموع:</strong> {{ total }} ل.س</p>

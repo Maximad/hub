@@ -55,3 +55,64 @@ class ProductAvailability(CatalogTimeStampedModel):
     vendor_participation = models.ForeignKey('vendors.VendorParticipation', on_delete=models.SET_NULL, null=True, blank=True)
     is_active = models.BooleanField(default=True)
     notes = models.TextField(blank=True)
+
+
+class ProductOptionGroup(CatalogTimeStampedModel):
+    class SelectionType(models.TextChoices):
+        SINGLE = 'single', 'Single'
+        MULTIPLE = 'multiple', 'Multiple'
+
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    code = models.SlugField(unique=True)
+    name_ar = models.CharField(max_length=120)
+    name_en = models.CharField(max_length=120, blank=True)
+    selection_type = models.CharField(max_length=20, choices=SelectionType.choices, default=SelectionType.SINGLE)
+    is_required = models.BooleanField(default=False)
+    min_selected = models.PositiveIntegerField(default=0)
+    max_selected = models.PositiveIntegerField(null=True, blank=True)
+    sort_order = models.IntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['sort_order', 'name_ar']
+
+    def __str__(self):
+        return self.name_ar
+
+
+class ProductOption(CatalogTimeStampedModel):
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    group = models.ForeignKey(ProductOptionGroup, on_delete=models.CASCADE, related_name='options')
+    code = models.SlugField()
+    name_ar = models.CharField(max_length=120)
+    name_en = models.CharField(max_length=120, blank=True)
+    price_delta_syp = models.IntegerField(default=0)
+    is_default = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ['sort_order', 'name_ar']
+        constraints = [
+            models.UniqueConstraint(fields=['group', 'code'], name='unique_option_code_per_group'),
+        ]
+
+    def __str__(self):
+        return self.name_ar
+
+
+class ProductOptionGroupAssignment(CatalogTimeStampedModel):
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    product = models.ForeignKey('core.Product', on_delete=models.CASCADE, related_name='option_group_assignments')
+    group = models.ForeignKey(ProductOptionGroup, on_delete=models.CASCADE, related_name='product_assignments')
+    sort_order = models.IntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['sort_order', 'group__sort_order', 'group__name_ar']
+        constraints = [
+            models.UniqueConstraint(fields=['product', 'group'], name='unique_option_group_per_product'),
+        ]
+
+    def __str__(self):
+        return f'{self.product} - {self.group}'
