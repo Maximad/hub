@@ -184,6 +184,20 @@ def _option_assignment_prefetch():
     )
 
 
+def _valid_option_assignments_for_product(product):
+    return [
+        assignment
+        for assignment in getattr(product, 'active_option_assignments', [])
+        if assignment.group.applies_to_product(product) and list(assignment.group.options.all())
+    ]
+
+
+def _attach_valid_option_assignments(products):
+    for product in products:
+        product.valid_option_assignments = _valid_option_assignments_for_product(product)
+    return products
+
+
 def _menu_context(table=None):
     products_qs = Product.objects.filter(is_available=True, visible_on_qr=True).prefetch_related(_option_assignment_prefetch()).order_by('sort_order', 'name_ar')
     sections = (
@@ -193,7 +207,7 @@ def _menu_context(table=None):
     )
     section_products = []
     for section in sections:
-        products = list(section.products.all())
+        products = _attach_valid_option_assignments(list(section.products.all()))
         if products:
             section_products.append((section, products))
     return {'table': table, 'section_products': section_products}
@@ -217,11 +231,27 @@ def _selected_option_values(request, product_id, group_id):
     return [value for value in request.POST.getlist(base_name) + request.POST.getlist(f'{base_name}[]') if value]
 
 
+def _posted_option_group_ids(request, product_id):
+    prefix = f'option_{product_id}_'
+    group_ids = set()
+    for key in request.POST.keys():
+        if not key.startswith(prefix):
+            continue
+        raw_group_id = key.removeprefix(prefix).removesuffix('[]')
+        if raw_group_id.isdigit() and any(request.POST.getlist(key)):
+            group_ids.add(raw_group_id)
+    return group_ids
+
+
 def _validate_product_options(request, product):
-    assignments = getattr(product, 'active_option_assignments', [])
+    assignments = _valid_option_assignments_for_product(product)
     selected_snapshot = []
     total_delta = 0
     errors = []
+    allowed_group_ids = {str(assignment.group_id) for assignment in assignments}
+    invalid_posted_group_ids = _posted_option_group_ids(request, product.id) - allowed_group_ids
+    if invalid_posted_group_ids:
+        errors.append(f'تم إرسال خيارات غير صالحة للعنصر {product.name_ar}.')
 
     for assignment in assignments:
         group = assignment.group
@@ -283,7 +313,7 @@ def _validate_product_options(request, product):
 
 
 def _create_order_from_menu(request, table=None):
-    products = Product.objects.filter(is_available=True, visible_on_qr=True, orderable_on_qr=True).prefetch_related(_option_assignment_prefetch())
+    products = _attach_valid_option_assignments(list(Product.objects.filter(is_available=True, visible_on_qr=True, orderable_on_qr=True).prefetch_related(_option_assignment_prefetch())))
     selected = []
     validation_errors = []
     for p in products:
@@ -400,6 +430,26 @@ def _order_financials(order):
 def staff_home(request):
     _assert_staff_capability(request.user, 'operations')
     return render(request, 'staff/home.html')
+
+
+@login_required
+def staff_modifiers(request):
+    _assert_staff_capability(request.user, 'operations')
+    groups = ProductOptionGroup.objects.prefetch_related(
+        'options',
+        Prefetch(
+            'product_assignments',
+            queryset=ProductOptionGroupAssignment.objects.select_related('product').order_by('product__name_ar', 'sort_order'),
+        ),
+    ).order_by('sort_order', 'name_ar')
+    rows = []
+    invalid_assignments = []
+    for group in groups:
+        assignments = list(group.product_assignments.all())
+        invalid_for_group = [assignment for assignment in assignments if not group.applies_to_product(assignment.product)]
+        invalid_assignments.extend(invalid_for_group)
+        rows.append({'group': group, 'assignments': assignments, 'invalid_assignments': invalid_for_group})
+    return render(request, 'staff/modifiers.html', {'rows': rows, 'invalid_assignments': invalid_assignments})
 
 
 @login_required

@@ -19,6 +19,7 @@ urlpatterns = [
     path('staff/qr/', menu.staff_qr_links, name='staff_qr_links'),
     path('staff/qr/print/', menu.staff_qr_print, name='staff_qr_print'),
     path('staff/menu-tools/', menu.staff_menu_tools, name='staff_menu_tools'),
+    path('staff/modifiers/', menu.staff_modifiers, name='staff_modifiers'),
     path('staff/orders/', menu.staff_orders, name='staff_orders'),
     path('staff/orders/partial/', menu.staff_orders, name='staff_orders_partial'),
     path('staff/orders/<uuid:public_code>/status/', menu.staff_order_status, name='staff_order_status'),

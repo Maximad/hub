@@ -86,6 +86,9 @@ class Product(TimeStampedModel, PublicCodeModel):
     cost_syp = models.PositiveIntegerField(null=True, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
 
+    def __str__(self):
+        return self.name_ar
+
 
 class Order(TimeStampedModel, PublicCodeModel):
     class Status(models.TextChoices):
