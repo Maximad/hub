@@ -57,22 +57,34 @@ class Command(BaseCommand):
         p.tags.set([tags['alcoholic']])
         upsert_product('طبق سناك', 35000, snack, item_type='food', food_type='snack', prep_station_ref=stations['kitchen'])
         upsert_product('ساعة إنترنت', 15000, internet_section, item_type='service', service_type='internet', prep_station_ref=stations['internet'])
-        upsert_product('حجز طاولة', 0, reservations_section, item_type='reservation', service_type='table_reservation', prep_station_ref=stations['cashier'])
+        upsert_product('حجز طاولة', 0, reservations_section, item_type='reservation', prep_station_ref=stations['cashier'])
         upsert_product('تذكرة فعالية', 50000, events_section, item_type='event_ticket', prep_station_ref=stations['event'])
         upsert_product('ثلج إضافي', 5000, addons_section, item_type='addon', prep_station_ref=stations['bar'])
 
 
         option_groups = {}
         option_defs = [
-            ('sugar', 'السكر', 'single', [('no_sugar', 'بدون سكر'), ('light_sugar', 'سكر خفيف'), ('normal_sugar', 'عادي'), ('extra_sugar', 'زيادة سكر')]),
-            ('temperature', 'الحرارة', 'single', [('hot', 'ساخن'), ('cold', 'بارد')]),
-            ('additions', 'إضافات', 'multiple', [('lemon', 'ليمون'), ('mint', 'نعنع'), ('milk', 'حليب')]),
-            ('remove_ingredients', 'إزالة مكونات', 'multiple', [('no_onion', 'بدون بصل'), ('no_garlic', 'بدون ثوم'), ('no_sauce', 'بدون صوص')]),
+            ('sugar', 'السكر', 'single', 'beverage', [('no_sugar', 'بدون سكر'), ('light_sugar', 'سكر خفيف'), ('normal_sugar', 'عادي'), ('extra_sugar', 'زيادة سكر')]),
+            ('temperature', 'الحرارة', 'single', 'beverage', [('hot', 'ساخن'), ('cold', 'بارد')]),
+            ('drink_additions', 'إضافات المشروبات', 'multiple', 'beverage', [('lemon', 'ليمون'), ('mint', 'نعنع'), ('milk', 'حليب')]),
+            ('ice', 'الثلج', 'single', 'beverage', [('no_ice', 'بدون ثلج'), ('normal_ice', 'ثلج عادي'), ('extra_ice', 'ثلج إضافي')]),
+            ('remove_ingredients', 'إزالة مكونات', 'multiple', 'food', [('no_onion', 'بدون بصل'), ('no_garlic', 'بدون ثوم'), ('no_sauce', 'بدون صوص')]),
+            ('food_additions', 'إضافات الأكل', 'multiple', 'food', [('extra_cheese', 'زيادة جبنة'), ('extra_sauce', 'زيادة صوص'), ('extra_bread', 'زيادة خبز')]),
+            ('spice_level', 'درجة الحر', 'single', 'food', [('mild', 'خفيف'), ('medium', 'وسط'), ('hot', 'حر')]),
         ]
-        for group_order, (code, name_ar, selection_type, options) in enumerate(option_defs, start=1):
+        for group_order, (code, name_ar, selection_type, item_type, options) in enumerate(option_defs, start=1):
             group, _ = ProductOptionGroup.objects.update_or_create(
                 code=code,
-                defaults={'name_ar': name_ar, 'selection_type': selection_type, 'sort_order': group_order, 'is_active': True},
+                defaults={
+                    'name_ar': name_ar,
+                    'selection_type': selection_type,
+                    'sort_order': group_order,
+                    'is_active': True,
+                    'applies_to_item_type': item_type,
+                    'applies_to_beverage_type': '',
+                    'applies_to_food_type': '',
+                    'applies_to_service_type': '',
+                },
             )
             option_groups[code] = group
             for option_order, (option_code, option_name_ar) in enumerate(options, start=1):
@@ -82,10 +94,18 @@ class Command(BaseCommand):
                     defaults={'name_ar': option_name_ar, 'sort_order': option_order, 'is_active': True},
                 )
 
+        ProductOptionGroup.objects.filter(code='additions').update(
+            name_ar='إضافات المشروبات',
+            applies_to_item_type='beverage',
+            applies_to_beverage_type='',
+            applies_to_food_type='',
+            applies_to_service_type='',
+        )
+
         for product_name, group_codes in {
             'قهوة عربية': ['sugar'],
             'شاي': ['sugar'],
-            'متّة': ['sugar', 'additions'],
+            'متّة': ['sugar', 'drink_additions'],
             'طبق سناك': ['remove_ingredients'],
         }.items():
             try:
@@ -98,6 +118,11 @@ class Command(BaseCommand):
                     group=option_groups[group_code],
                     defaults={'sort_order': assignment_order, 'is_active': True},
                 )
+
+        for assignment in ProductOptionGroupAssignment.objects.select_related('product', 'group').filter(is_active=True):
+            if not assignment.group.applies_to_product(assignment.product):
+                assignment.is_active = False
+                assignment.save(update_fields=['is_active', 'updated_at'])
 
         WifiNetwork.objects.update_or_create(ssid='Masharib', defaults={'name_ar':'شبكة مشاريب','password':'CHANGE_ME_WIFI_PASSWORD','visible_on_qr':True,'show_password_on_qr':False,'is_active':True})
 

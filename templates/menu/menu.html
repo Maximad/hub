@@ -48,11 +48,11 @@
                 <button class="hub-button hub-button-secondary menu-stepper-btn" type="button" data-action="minus" data-target="qty_{{ p.id }}" aria-label="تقليل {{ p.name_ar }}">-</button>
               </div>
 
-              {% if p.active_option_assignments %}
+              {% if p.valid_option_assignments %}
                 <details class="menu-options-details" data-options-panel>
                   <summary class="hub-button hub-button-secondary">تخصيص</summary>
                   <div class="menu-options-wrap">
-                    {% for assignment in p.active_option_assignments %}
+                    {% for assignment in p.valid_option_assignments %}
                       {% with group=assignment.group %}
                         <fieldset class="menu-option-group" data-option-group data-selection-type="{{ group.selection_type }}" data-required="{% if group.is_required %}true{% else %}false{% endif %}" data-min-selected="{{ group.min_selected }}" data-max-selected="{{ group.max_selected|default:'' }}">
                           <legend>

@@ -7,7 +7,14 @@ from .models import Room, TableArea, Category, Product, Order, OrderItem, Paymen
 class ProductOptionGroupAssignmentInline(admin.TabularInline):
     model = ProductOptionGroupAssignment
     extra = 1
-    fields = ('group', 'is_active', 'sort_order')
+    fields = ('group', 'applicability_hint', 'is_active', 'sort_order')
+    readonly_fields = ('applicability_hint',)
+
+    @admin.display(description='ملخص الانطباق')
+    def applicability_hint(self, obj):
+        if not obj or not obj.group_id:
+            return 'اختر مجموعة لعرض الانطباق.'
+        return obj.group.applicability_summary
 
 
 @admin.register(Product)
