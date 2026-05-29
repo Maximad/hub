@@ -119,6 +119,22 @@ class ProductOptionGroup(CatalogTimeStampedModel):
     def __str__(self):
         return self.name_ar
 
+    def clean(self):
+        super().clean()
+        errors = {}
+        if self.applies_to_beverage_type and self.applies_to_item_type != 'beverage':
+            errors['applies_to_beverage_type'] = 'اختر نوع المنتج مشروب قبل تقييد نوع المشروب.'
+        if self.applies_to_food_type and self.applies_to_item_type != 'food':
+            errors['applies_to_food_type'] = 'اختر نوع المنتج طعام قبل تقييد نوع الطعام.'
+        if self.applies_to_service_type and self.applies_to_item_type != 'service':
+            errors['applies_to_service_type'] = 'اختر نوع المنتج خدمة قبل تقييد نوع الخدمة.'
+        if self.max_selected is not None and self.max_selected < self.min_selected:
+            errors['max_selected'] = 'الحد الأقصى يجب أن يكون أكبر من أو يساوي الحد الأدنى.'
+        if self.selection_type == self.SelectionType.SINGLE and self.max_selected and self.max_selected > 1:
+            errors['max_selected'] = 'مجموعة الاختيار الواحد لا يمكن أن تسمح بأكثر من خيار.'
+        if errors:
+            raise ValidationError(errors)
+
     def applies_to_product(self, product):
         checks = (
             ('applies_to_item_type', 'item_type'),
@@ -186,5 +202,5 @@ class ProductOptionGroupAssignment(CatalogTimeStampedModel):
 
     def clean(self):
         super().clean()
-        if self.product_id and self.group_id and not self.group.applies_to_product(self.product):
+        if self.is_active and self.product_id and self.group_id and not self.group.applies_to_product(self.product):
             raise ValidationError({'group': 'مجموعة الخيارات لا تنطبق على تصنيف هذا المنتج.'})

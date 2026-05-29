@@ -102,16 +102,13 @@ class Command(BaseCommand):
             applies_to_service_type='',
         )
 
-        for product_name, group_codes in {
-            'قهوة عربية': ['sugar'],
-            'شاي': ['sugar'],
-            'متّة': ['sugar', 'drink_additions'],
-            'طبق سناك': ['remove_ingredients'],
-        }.items():
-            try:
-                demo_product = Product.objects.get(name_ar=product_name)
-            except Product.DoesNotExist:
-                continue
+        group_codes_by_item_type = {
+            'beverage': ['sugar', 'temperature', 'drink_additions', 'ice'],
+            'food': ['remove_ingredients', 'food_additions', 'spice_level'],
+        }
+        assignable_products = Product.objects.filter(item_type__in=group_codes_by_item_type).order_by('name_ar')
+        for demo_product in assignable_products:
+            group_codes = group_codes_by_item_type.get(demo_product.item_type, [])
             for assignment_order, group_code in enumerate(group_codes, start=1):
                 ProductOptionGroupAssignment.objects.update_or_create(
                     product=demo_product,
