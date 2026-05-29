@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}تعديل الطلب{% endblock %}
+{% block content %}
+<div class="staff-order-edit" dir="rtl">
+  <header class="hub-card hub-section">
+    <div class="hub-toolbar">
+      <a class="hub-button hub-button-secondary" href="{% url 'staff_orders' %}">← لوحة الطلبات</a>
+      <a class="hub-button hub-button-secondary" href="{% url 'staff_cashier_order' order.public_code %}">الكاشير</a>
+    </div>
+    <p class="menu-public__brand">Staff order editing</p>
+    <h2 class="hub-section-title">تعديل طلب مفتوح</h2>
+    <div><strong>رقم الطلب:</strong> {{ order.public_code }}</div>
+    <div><strong>المكان:</strong> {% if order.table %}{{ order.table.name_ar }}{% else %}طلب عام / تيك أواي{% endif %}</div>
+    <div><strong>الحالة:</strong> {{ order.get_status_display }}</div>
+    {% if order.notes %}<p>{{ order.notes|linebreaksbr }}</p>{% endif %}
+    <div class="hub-toolbar">
+      <span class="hub-badge hub-badge-info">المجموع: {{ total }} ل.س</span>
+      <span class="hub-badge hub-badge-info">المدفوع: {{ paid }} ل.س</span>
+      <span class="hub-badge hub-badge-info">المتبقي: {{ remaining }} ل.س</span>
+      <span class="hub-badge">{{ payment_label }}</span>
+    </div>
+    {% if error %}<p class="hub-badge hub-badge-danger">{{ error }}</p>{% endif %}
+    {% if messages %}
+      <div class="staff-order-edit__messages">
+        {% for message in messages %}<p class="hub-badge {% if message.tags == 'error' %}hub-badge-danger{% else %}hub-badge-info{% endif %}">{{ message }}</p>{% endfor %}
+      </div>
+    {% endif %}
+  </header>
+
+  <section class="hub-card hub-section">
+    <h3 class="hub-section-title">العناصر الحالية</h3>
+    {% if item_rows %}
+      {% for row in item_rows %}{% with item=row.item product=row.product %}
+        <article class="hub-list-card">
+          <h4>{{ item.product_name_ar_snapshot }} × {{ item.quantity }}</h4>
+          <p>سعر الوحدة المحفوظ: {{ item.unit_price_syp_snapshot }} ل.س — الإجمالي: {{ row.line_total }} ل.س</p>
+          {% if item.selected_options_snapshot %}
+            <ul>
+              {% for group in item.selected_options_snapshot %}
+                {% for option in group.options %}<li>{{ group.group_name_ar }}: {{ option.name_ar }}{% if option.price_delta_syp %} ({% if option.price_delta_syp > 0 %}+{% endif %}{{ option.price_delta_syp }} ل.س){% endif %}</li>{% endfor %}
+              {% endfor %}
+            </ul>
+          {% endif %}
+          {% if can_edit %}
+            <form method="post" action="{% url 'staff_order_edit_update_item' order.public_code item.id %}" class="hub-form">
+              {% csrf_token %}
+              <div class="hub-form-grid">
+                <label>الكمية
+                  <input class="hub-input" type="number" name="quantity" min="1" value="{{ item.quantity }}" required>
+                </label>
+                <label>ملاحظة العنصر
+                  <input class="hub-input" type="text" name="item_note" value="{{ item.item_note }}" placeholder="ملاحظة خاصة بالعنصر">
+                </label>
+              </div>
+              {% if product.valid_option_assignments %}
+                <details class="menu-note-details">
+                  <summary class="hub-button hub-button-secondary">تعديل الإضافات / الخيارات</summary>
+                  {% for assignment in product.valid_option_assignments %}{% with group=assignment.group %}
+                    <fieldset class="menu-option-group">
+                      <legend>{{ group.name_ar }}{% if group.is_required %} *{% endif %}</legend>
+                      {% for option in group.options.all %}
+                        <label class="menu-option-chip">
+                          <input type="{% if group.selection_type == 'multiple' %}checkbox{% else %}radio{% endif %}" name="option_{{ product.id }}_{{ group.id }}{% if group.selection_type == 'multiple' %}[]{% endif %}" value="{{ option.id }}" {% if option.id|stringformat:'s' in row.selected_option_ids %}checked{% endif %}>
+                          {{ option.name_ar }}{% if option.price_delta_syp %} ({% if option.price_delta_syp > 0 %}+{% endif %}{{ option.price_delta_syp }} ل.س){% endif %}
+                        </label>
+                      {% endfor %}
+                    </fieldset>
+                  {% endwith %}{% endfor %}
+                  <button class="hub-button" type="submit" name="edit_scope" value="options">تحديث الكمية والملاحظة والخيارات</button>
+                </details>
+              {% endif %}
+              <div class="hub-toolbar">
+                <button class="hub-button hub-button-primary" type="submit" name="edit_scope" value="basic">حفظ الكمية والملاحظة</button>
+              </div>
+            </form>
+            <form method="post" action="{% url 'staff_order_edit_remove_item' order.public_code item.id %}">
+              {% csrf_token %}
+              <button class="hub-button hub-button-danger" type="submit">حذف العنصر</button>
+            </form>
+          {% endif %}
+        </article>
+      {% endwith %}{% endfor %}
+    {% else %}
+      <p class="hub-empty-state">لا توجد عناصر في الطلب.</p>
+    {% endif %}
+  </section>
+
+  {% if can_edit %}
+    <section class="hub-card hub-section">
+      <h3 class="hub-section-title">إضافة منتجات</h3>
+      <div class="menu-product-grid staff-pos__grid">
+        {% for product in products %}
+          <article class="hub-list-card menu-product-card">
+            <h4>{{ product.name_ar }}</h4>
+            {% if product.name_en %}<small>{{ product.name_en }}</small>{% endif %}
+            <p><strong>{{ product.price_syp }} ل.س</strong></p>
+            <form method="post" action="{% url 'staff_order_edit_add_item' order.public_code %}" class="hub-form">
+              {% csrf_token %}
+              <input type="hidden" name="product_id" value="{{ product.id }}">
+              <label>الكمية
+                <input class="hub-input" type="number" name="quantity" min="1" value="1" required>
+              </label>
+              {% if product.valid_option_assignments %}
+                <details class="menu-note-details">
+                  <summary class="hub-button hub-button-secondary">خيارات المنتج</summary>
+                  {% for assignment in product.valid_option_assignments %}{% with group=assignment.group %}
+                    <fieldset class="menu-option-group">
+                      <legend>{{ group.name_ar }}{% if group.is_required %} *{% endif %}</legend>
+                      {% for option in group.options.all %}
+                        <label class="menu-option-chip">
+                          <input type="{% if group.selection_type == 'multiple' %}checkbox{% else %}radio{% endif %}" name="option_{{ product.id }}_{{ group.id }}{% if group.selection_type == 'multiple' %}[]{% endif %}" value="{{ option.id }}" {% if option.is_default %}checked{% endif %}>
+                          {{ option.name_ar }}{% if option.price_delta_syp %} ({% if option.price_delta_syp > 0 %}+{% endif %}{{ option.price_delta_syp }} ل.س){% endif %}
+                        </label>
+                      {% endfor %}
+                    </fieldset>
+                  {% endwith %}{% endfor %}
+                </details>
+              {% endif %}
+              <label>ملاحظة العنصر
+                <input class="hub-input" type="text" name="item_note" placeholder="بدون سكر، سفري...">
+              </label>
+              <button class="hub-button hub-button-primary" type="submit">إضافة إلى الطلب</button>
+            </form>
+          </article>
+        {% empty %}
+          <p class="hub-empty-state">لا توجد منتجات متاحة للإضافة.</p>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+</div>
+{% endblock %}

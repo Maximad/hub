@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 from django.db.models import Case, F, IntegerField, Prefetch, Q, Sum, Value, When
 from django.db.models.functions import Coalesce, Greatest
 from django.http import Http404, HttpResponse
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404, redirect, render
@@ -453,6 +454,84 @@ def _order_financials(order):
     return total, paid, remaining, payment_label
 
 
+def _order_edit_block_reason(order):
+    total, paid, remaining, _payment_label = _order_financials(order)
+    if order.status == Order.Status.CANCELLED:
+        return 'لا يمكن تعديل طلب ملغى.', total, paid, remaining
+    if total > 0 and remaining == 0:
+        return 'لا يمكن تعديل طلب مدفوع بالكامل.', total, paid, remaining
+    return '', total, paid, remaining
+
+
+def _snapshot_option_delta(selected_options_snapshot):
+    total = 0
+    for group in selected_options_snapshot or []:
+        for option in group.get('options', []):
+            try:
+                total += int(option.get('price_delta_syp') or 0)
+            except (TypeError, ValueError):
+                continue
+    return total
+
+
+def _selected_snapshot_option_ids(selected_options_snapshot):
+    ids = set()
+    for group in selected_options_snapshot or []:
+        for option in group.get('options', []):
+            option_id = option.get('option_id')
+            if option_id is not None:
+                ids.add(str(option_id))
+    return ids
+
+
+def _order_edit_context(order, error=''):
+    items = list(order.items.select_related('product').all())
+    products = _attach_valid_option_assignments(
+        list(Product.objects.filter(is_available=True).prefetch_related(_option_assignment_prefetch()).order_by('sort_order', 'name_ar'))
+    )
+    product_map = {product.id: product for product in products}
+    item_rows = []
+    for item in items:
+        product = product_map.get(item.product_id)
+        if product is None and item.product_id:
+            product = Product.objects.filter(pk=item.product_id).prefetch_related(_option_assignment_prefetch()).first()
+            if product:
+                _attach_valid_option_assignments([product])
+        item_rows.append({
+            'item': item,
+            'line_total': item.quantity * item.unit_price_syp_snapshot,
+            'product': product,
+            'selected_option_ids': _selected_snapshot_option_ids(item.selected_options_snapshot),
+        })
+    total, paid, remaining, payment_label = _order_financials(order)
+    return {
+        'order': order,
+        'item_rows': item_rows,
+        'products': products,
+        'total': total,
+        'paid': paid,
+        'remaining': remaining,
+        'payment_label': payment_label,
+        'error': error,
+        'can_edit': not error,
+    }
+
+
+def _log_order_edit(user, action, order, details=None):
+    payload = {'order_public_code': str(order.public_code)}
+    if details:
+        payload.update(details)
+    ActivityLog.objects.create(actor=user, action=action, details=payload)
+
+
+def _redirect_if_order_edit_blocked(request, order):
+    reason, _total, _paid, _remaining = _order_edit_block_reason(order)
+    if reason:
+        messages.error(request, reason)
+        return redirect('staff_order_edit', public_code=order.public_code)
+    return None
+
+
 @login_required
 def staff_home(request):
     _assert_staff_capability(request.user, 'operations')
@@ -637,6 +716,146 @@ def staff_order_status(request, public_code):
             details={'order_public_code': str(order.public_code), 'old_status': old_status, 'new_status': new_status},
         )
     return redirect('staff_orders')
+
+
+@login_required
+def staff_order_edit(request, public_code):
+    _assert_staff_capability(request.user, 'operations')
+    order = get_object_or_404(
+        Order.objects.select_related('table').prefetch_related('items__product', 'payments'),
+        public_code=public_code,
+    )
+    block_reason, _total, _paid, _remaining = _order_edit_block_reason(order)
+    return render(request, 'staff/order_edit.html', _order_edit_context(order, error=block_reason))
+
+
+@login_required
+def staff_order_edit_add_item(request, public_code):
+    _assert_staff_capability(request.user, 'operations')
+    if request.method != 'POST':
+        raise Http404()
+    order = get_object_or_404(Order.objects.prefetch_related('items', 'payments'), public_code=public_code)
+    blocked = _redirect_if_order_edit_blocked(request, order)
+    if blocked:
+        return blocked
+
+    product = get_object_or_404(
+        Product.objects.filter(is_available=True).prefetch_related(_option_assignment_prefetch()),
+        pk=request.POST.get('product_id'),
+    )
+    _attach_valid_option_assignments([product])
+    try:
+        qty = int((request.POST.get('quantity') or '1').strip())
+    except ValueError:
+        qty = 1
+    qty = max(qty, 1)
+    item_note = request.POST.get('item_note', '').strip()
+    selected_options_snapshot, option_delta, option_errors = _validate_product_options(request, product)
+    if option_errors:
+        messages.error(request, ' '.join(option_errors))
+        return redirect('staff_order_edit', public_code=order.public_code)
+
+    unit_price = product.price_syp + option_delta
+    with transaction.atomic():
+        item = OrderItem.objects.create(
+            order=order,
+            product=product,
+            quantity=qty,
+            product_name_ar_snapshot=product.name_ar,
+            product_name_en_snapshot=product.name_en,
+            unit_price_syp_snapshot=unit_price,
+            selected_options_snapshot=selected_options_snapshot,
+            item_note=item_note,
+            line_total_syp_snapshot=qty * unit_price,
+        )
+        _log_order_edit(request.user, 'order_item_added', order, {'item_id': item.id, 'product_id': product.id, 'quantity': qty})
+    messages.success(request, 'تمت إضافة العنصر إلى الطلب.')
+    return redirect('staff_order_edit', public_code=order.public_code)
+
+
+@login_required
+def staff_order_edit_update_item(request, public_code, item_id):
+    _assert_staff_capability(request.user, 'operations')
+    if request.method != 'POST':
+        raise Http404()
+    order = get_object_or_404(Order.objects.prefetch_related('items', 'payments'), public_code=public_code)
+    blocked = _redirect_if_order_edit_blocked(request, order)
+    if blocked:
+        return blocked
+    item = get_object_or_404(OrderItem.objects.select_related('product'), pk=item_id, order=order)
+
+    try:
+        qty = int((request.POST.get('quantity') or '1').strip())
+    except ValueError:
+        qty = item.quantity
+    qty = max(qty, 1)
+    item_note = request.POST.get('item_note', '').strip()
+    old_values = {
+        'quantity': item.quantity,
+        'item_note': item.item_note,
+        'unit_price_syp_snapshot': item.unit_price_syp_snapshot,
+        'selected_options_snapshot': item.selected_options_snapshot,
+    }
+    changed_fields = []
+    if item.quantity != qty:
+        item.quantity = qty
+        changed_fields.append('quantity')
+    if item.item_note != item_note:
+        item.item_note = item_note
+        changed_fields.append('item_note')
+
+    if request.POST.get('edit_scope') == 'options':
+        product = Product.objects.filter(pk=item.product_id).prefetch_related(_option_assignment_prefetch()).first()
+        if not product:
+            messages.error(request, 'لا يمكن تعديل خيارات عنصر غير مرتبط بمنتج.')
+            return redirect('staff_order_edit', public_code=order.public_code)
+        _attach_valid_option_assignments([product])
+        selected_options_snapshot, option_delta, option_errors = _validate_product_options(request, product)
+        if option_errors:
+            messages.error(request, ' '.join(option_errors))
+            return redirect('staff_order_edit', public_code=order.public_code)
+        base_price_snapshot = item.unit_price_syp_snapshot - _snapshot_option_delta(item.selected_options_snapshot)
+        item.selected_options_snapshot = selected_options_snapshot
+        item.unit_price_syp_snapshot = max(base_price_snapshot + option_delta, 0)
+        changed_fields.extend(['selected_options_snapshot', 'unit_price_syp_snapshot'])
+
+    item.line_total_syp_snapshot = item.quantity * item.unit_price_syp_snapshot
+    changed_fields.append('line_total_syp_snapshot')
+    item.save(update_fields=sorted(set(changed_fields + ['updated_at'])))
+    _log_order_edit(
+        request.user,
+        'order_item_updated',
+        order,
+        {'item_id': item.id, 'old': old_values, 'new_quantity': item.quantity, 'new_unit_price_syp_snapshot': item.unit_price_syp_snapshot},
+    )
+    messages.success(request, 'تم تحديث العنصر.')
+    return redirect('staff_order_edit', public_code=order.public_code)
+
+
+@login_required
+def staff_order_edit_remove_item(request, public_code, item_id):
+    _assert_staff_capability(request.user, 'operations')
+    if request.method != 'POST':
+        raise Http404()
+    order = get_object_or_404(Order.objects.prefetch_related('items', 'payments'), public_code=public_code)
+    blocked = _redirect_if_order_edit_blocked(request, order)
+    if blocked:
+        return blocked
+    item = get_object_or_404(OrderItem, pk=item_id, order=order)
+    snapshot = {
+        'item_id': item.id,
+        'product_id': item.product_id,
+        'quantity': item.quantity,
+        'product_name_ar_snapshot': item.product_name_ar_snapshot,
+        'unit_price_syp_snapshot': item.unit_price_syp_snapshot,
+        'selected_options_snapshot': item.selected_options_snapshot,
+        'item_note': item.item_note,
+    }
+    with transaction.atomic():
+        item.delete()
+        _log_order_edit(request.user, 'order_item_removed', order, snapshot)
+    messages.success(request, 'تم حذف العنصر من الطلب.')
+    return redirect('staff_order_edit', public_code=order.public_code)
 
 
 @login_required
