@@ -5,6 +5,7 @@
   <h2 class="hub-section-title">عمليات الفريق</h2>
   <div class="hub-grid hub-grid-3">
     {% for title,desc,url in actions %}{% endfor %}
+    <a class="hub-action-card" href="{% url 'staff_pos' %}"><div class="hub-media"></div><strong>نقطة البيع / POS</strong><p>إدخال طلبات سريع باللمس للفريق.</p></a>
     <a class="hub-action-card" href="{% url 'staff_orders' %}"><div class="hub-media"></div><strong>لوحة الطلبات</strong><p>متابعة الطلبات وتعديل الحالة.</p></a>
     <a class="hub-action-card" href="{% url 'staff_cashier' %}"><div class="hub-media"></div><strong>الكاشير</strong><p>فتح الطلبات واستلام الدفعات.</p></a>
     <a class="hub-action-card" href="{% url 'staff_reports_home' %}"><div class="hub-media"></div><strong>التقارير</strong><p>مؤشرات اليوم والتصدير.</p></a>

@@ -7,8 +7,9 @@
   const cartTotal = form.querySelector('[data-cart-total]');
   const cartHelper = form.querySelector('[data-cart-helper]');
   const stickyCart = form.querySelector('[data-sticky-cart]');
-  const itemCountNode = form.querySelector('[data-item-count]');
-  const stickyTotalNode = form.querySelector('[data-sticky-total]');
+  const itemCountNodes = Array.from(form.querySelectorAll('[data-item-count]'));
+  const stickyTotalNodes = Array.from(form.querySelectorAll('[data-sticky-total]'));
+  const posSearch = form.querySelector('[data-pos-search]');
   const submitBtn = form.querySelector('[data-submit-btn]');
 
   function parsePrice(text) {
@@ -69,8 +70,8 @@
 
     const totalText = `${totalPrice.toLocaleString('ar-SY')} ل.س`;
     cartTotal.textContent = totalText;
-    stickyTotalNode.textContent = totalText;
-    itemCountNode.textContent = totalQty.toLocaleString('ar-SY');
+    stickyTotalNodes.forEach((node) => { node.textContent = totalText; });
+    itemCountNodes.forEach((node) => { node.textContent = totalQty.toLocaleString('ar-SY'); });
 
     const hasItems = totalQty > 0;
     cartHelper.hidden = hasItems;
@@ -89,12 +90,23 @@
     update();
   });
 
+  function filterProducts() {
+    if (!posSearch) return;
+    const query = posSearch.value.trim().toLowerCase();
+    cards.forEach((card) => {
+      const haystack = (card.dataset.searchText || card.textContent || '').toLowerCase();
+      card.hidden = Boolean(query) && !haystack.includes(query);
+    });
+  }
+
   form.addEventListener('input', (event) => {
+    if (event.target === posSearch) filterProducts();
     if (event.target.matches('input, textarea')) update();
   });
   form.addEventListener('change', (event) => {
     if (event.target.matches('input, textarea, select')) update();
   });
 
+  filterProducts();
   update();
 })();
