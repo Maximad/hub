@@ -16,6 +16,7 @@ urlpatterns = [
     path('menu/table/<uuid:qr_token>/', menu.menu_table, name='menu_table'),
     path('order/<uuid:public_code>/', menu.order_public, name='order_public'),
     path('staff/', menu.staff_home, name='staff_home'),
+    path('staff/pos/', menu.staff_pos, name='staff_pos'),
     path('staff/qr/', menu.staff_qr_links, name='staff_qr_links'),
     path('staff/qr/print/', menu.staff_qr_print, name='staff_qr_print'),
     path('staff/menu-tools/', menu.staff_menu_tools, name='staff_menu_tools'),

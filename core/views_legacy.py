@@ -198,18 +198,36 @@ def _attach_valid_option_assignments(products):
     return products
 
 
-def _menu_context(table=None):
-    products_qs = Product.objects.filter(is_available=True, visible_on_qr=True).prefetch_related(_option_assignment_prefetch()).order_by('sort_order', 'name_ar')
+def _section_products_for_ordering(product_filter=None, section_filter=None, include_unsectioned=False):
+    if product_filter is None:
+        product_filter = {}
+    if section_filter is None:
+        section_filter = {}
+    products_qs = Product.objects.filter(**product_filter).prefetch_related(_option_assignment_prefetch()).order_by('sort_order', 'name_ar')
     sections = (
-        MenuSection.objects.filter(is_active=True, visible_on_qr=True)
+        MenuSection.objects.filter(is_active=True, **section_filter)
         .prefetch_related(Prefetch('products', queryset=products_qs))
         .order_by('sort_order', 'name_ar')
     )
     section_products = []
+    product_ids_in_sections = set()
     for section in sections:
         products = _attach_valid_option_assignments(list(section.products.all()))
         if products:
+            product_ids_in_sections.update(product.id for product in products)
             section_products.append((section, products))
+    if include_unsectioned:
+        unsectioned_products = _attach_valid_option_assignments(list(products_qs.exclude(pk__in=product_ids_in_sections)))
+        if unsectioned_products:
+            section_products.append((None, unsectioned_products))
+    return section_products
+
+
+def _menu_context(table=None):
+    section_products = _section_products_for_ordering(
+        product_filter={'is_available': True, 'visible_on_qr': True},
+        section_filter={'visible_on_qr': True},
+    )
     return {'table': table, 'section_products': section_products}
 
 
@@ -312,12 +330,11 @@ def _validate_product_options(request, product):
     return selected_snapshot, total_delta, errors
 
 
-def _create_order_from_menu(request, table=None):
-    products = _attach_valid_option_assignments(list(Product.objects.filter(is_available=True, visible_on_qr=True, orderable_on_qr=True).prefetch_related(_option_assignment_prefetch())))
+def _selected_order_items_from_post(request, products):
     selected = []
     validation_errors = []
-    for p in products:
-        qty_raw = request.POST.get(f'qty_{p.id}', '').strip()
+    for product in products:
+        qty_raw = request.POST.get(f'qty_{product.id}', '').strip()
         if not qty_raw:
             continue
         try:
@@ -326,10 +343,36 @@ def _create_order_from_menu(request, table=None):
             continue
         if qty <= 0:
             continue
-        item_note = request.POST.get(f'note_{p.id}', '').strip()
-        selected_options_snapshot, option_delta, option_errors = _validate_product_options(request, p)
+        item_note = request.POST.get(f'note_{product.id}', '').strip()
+        selected_options_snapshot, option_delta, option_errors = _validate_product_options(request, product)
         validation_errors.extend(option_errors)
-        selected.append((p, qty, item_note, selected_options_snapshot, option_delta))
+        selected.append((product, qty, item_note, selected_options_snapshot, option_delta))
+    return selected, validation_errors
+
+
+def _create_order_from_selected_items(table, selected, note_parts, status=None):
+    note = '\n'.join([part for part in note_parts if part])
+    with transaction.atomic():
+        order = Order.objects.create(table=table, status=status or Order.Status.NEW, notes=note)
+        for product, qty, item_note, selected_options_snapshot, option_delta in selected:
+            unit_price = product.price_syp + option_delta
+            OrderItem.objects.create(
+                order=order,
+                product=product,
+                quantity=qty,
+                product_name_ar_snapshot=product.name_ar,
+                product_name_en_snapshot=product.name_en,
+                unit_price_syp_snapshot=unit_price,
+                selected_options_snapshot=selected_options_snapshot,
+                item_note=item_note,
+                line_total_syp_snapshot=qty * unit_price,
+            )
+    return order
+
+
+def _create_order_from_menu(request, table=None):
+    products = _attach_valid_option_assignments(list(Product.objects.filter(is_available=True, visible_on_qr=True, orderable_on_qr=True).prefetch_related(_option_assignment_prefetch())))
+    selected, validation_errors = _selected_order_items_from_post(request, products)
 
     if not selected:
         context = _menu_context(table)
@@ -350,23 +393,7 @@ def _create_order_from_menu(request, table=None):
     general_note = request.POST.get('general_note', '').strip()
     table_label = table.name_ar if table else 'طلب عام / تيك أواي'
     note_parts = [f'الاسم: {customer_name}' if customer_name else '', f'الهاتف: {customer_phone}' if customer_phone else '', f'المكان: {table_label}', general_note]
-    note = '\n'.join([n for n in note_parts if n])
-
-    with transaction.atomic():
-        order = Order.objects.create(table=table, status=Order.Status.NEW, notes=note)
-        for product, qty, item_note, selected_options_snapshot, option_delta in selected:
-            unit_price = product.price_syp + option_delta
-            OrderItem.objects.create(
-                order=order,
-                product=product,
-                quantity=qty,
-                product_name_ar_snapshot=product.name_ar,
-                product_name_en_snapshot=product.name_en,
-                unit_price_syp_snapshot=unit_price,
-                selected_options_snapshot=selected_options_snapshot,
-                item_note=item_note,
-                line_total_syp_snapshot=qty * unit_price,
-            )
+    order = _create_order_from_selected_items(table, selected, note_parts)
     return redirect(reverse('order_public', kwargs={'public_code': order.public_code}))
 
 def order_public(request, public_code):
@@ -430,6 +457,70 @@ def _order_financials(order):
 def staff_home(request):
     _assert_staff_capability(request.user, 'operations')
     return render(request, 'staff/home.html')
+
+
+@login_required
+def staff_pos(request):
+    _assert_staff_capability(request.user, 'operations')
+    tables = TableArea.objects.select_related('room').order_by('room__name_ar', 'name_ar')
+    section_products = _section_products_for_ordering(product_filter={'is_available': True}, include_unsectioned=True)
+    products = [product for _section, products in section_products for product in products]
+    member_query = request.GET.get('member_q', '').strip()
+    member_rows = []
+    if member_query:
+        member_rows = list(
+            Member.objects.filter(Q(name_ar__icontains=member_query) | Q(phone__icontains=member_query))
+            .order_by('-created_at')[:8]
+        )
+
+    context = {
+        'section_products': section_products,
+        'tables': tables,
+        'member_query': member_query,
+        'member_rows': member_rows,
+    }
+    if request.method == 'POST':
+        selected, validation_errors = _selected_order_items_from_post(request, products)
+        table = None
+        table_id = request.POST.get('table_id', '').strip()
+        if table_id:
+            table = get_object_or_404(TableArea, pk=table_id)
+        if not selected:
+            context.update({'error': 'يرجى اختيار عنصر واحد على الأقل.', 'form_values': request.POST, 'selected_table_id': table_id})
+            return render(request, 'staff/pos.html', context)
+
+        errors = {}
+        customer_name = request.POST.get('customer_name', '').strip()
+        customer_phone = _validate_phone_input(request.POST.get('customer_phone', ''), 'رقم الهاتف', errors, required=False)
+        if errors:
+            validation_errors.append(errors['رقم الهاتف'])
+        member_id = request.POST.get('member_id', '').strip()
+        member = Member.objects.filter(pk=member_id).first() if member_id else None
+        if member_id and not member:
+            validation_errors.append('العضو المحدد غير صالح.')
+        if validation_errors:
+            context.update({'error': ' '.join(validation_errors), 'form_values': request.POST, 'selected_table_id': table_id})
+            return render(request, 'staff/pos.html', context)
+
+        general_note = request.POST.get('general_note', '').strip()
+        table_label = table.name_ar if table else 'طلب عام / POS'
+        note_parts = [
+            'Source: staff/pos',
+            f'المكان: {table_label}',
+            f'الاسم: {customer_name}' if customer_name else '',
+            f'الهاتف: {customer_phone}' if customer_phone else '',
+            f'العضو: {member.name_ar} / {member.phone}' if member else '',
+            general_note,
+        ]
+        order = _create_order_from_selected_items(table, selected, note_parts, status=Order.Status.NEW)
+        ActivityLog.objects.create(
+            actor=request.user,
+            action='staff_pos_order_created',
+            details={'order_public_code': str(order.public_code), 'table_id': table.id if table else None},
+        )
+        return redirect('staff_cashier_order', public_code=order.public_code)
+
+    return render(request, 'staff/pos.html', context)
 
 
 @login_required
