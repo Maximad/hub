@@ -1,6 +1,13 @@
 from django.contrib import admin
 from django.utils.html import format_html
+from catalog.models import ProductOptionGroupAssignment
 from .models import Room, TableArea, Category, Product, Order, OrderItem, Payment, Member, InternetPackage, InternetSession, Shift, ActivityLog
+
+
+class ProductOptionGroupAssignmentInline(admin.TabularInline):
+    model = ProductOptionGroupAssignment
+    extra = 1
+    fields = ('group', 'is_active', 'sort_order')
 
 
 @admin.register(Product)
@@ -8,6 +15,7 @@ class ProductAdmin(admin.ModelAdmin):
     list_display = ('name_ar', 'item_type', 'beverage_type', 'food_type', 'service_type', 'price_syp', 'is_alcoholic', 'visible_on_qr', 'orderable_on_qr', 'requires_staff_confirmation', 'vendor', 'is_available')
     list_filter = ('is_available', 'visible_on_qr', 'orderable_on_qr', 'item_type', 'is_alcoholic', 'requires_staff_confirmation', 'beverage_type', 'food_type', 'service_type', 'vendor', 'menu_sections', 'tags')
     search_fields = ('name_ar', 'name_en', 'description_ar')
+    inlines = (ProductOptionGroupAssignmentInline,)
 
 
 @admin.register(TableArea)

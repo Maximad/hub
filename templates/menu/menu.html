@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load static %}
+{% load static menu_form %}
 {% block title %}المنيو{% endblock %}
 {% block content %}
 <div class="menu-public" dir="rtl">
@@ -32,7 +32,7 @@
               <div class="hub-media menu-product-media" aria-hidden="true"></div>
               <div class="menu-product-main">
                 <h4 class="menu-product-name">{{ p.name_ar }}</h4>
-                {% if p.description %}<p class="menu-product-desc">{{ p.description }}</p>{% endif %}
+                {% if p.description_ar %}<p class="menu-product-desc">{{ p.description_ar }}</p>{% endif %}
                 <p class="menu-product-price" data-role="price">{{ p.price_syp }} ل.س</p>
               </div>
               <div class="menu-product-badges">
@@ -43,14 +43,44 @@
 
               <div class="menu-qty-controls">
                 <button class="hub-button hub-button-secondary menu-stepper-btn" type="button" data-action="plus" data-target="qty_{{ p.id }}" aria-label="زيادة {{ p.name_ar }}">+</button>
-                <input class="hub-input menu-qty-input" type="number" min="0" step="1" value="0" name="qty_{{ p.id }}" id="qty_{{ p.id }}" inputmode="numeric">
+                {% form_value form_values 'qty_' p.id '0' as qty_value %}
+                <input class="hub-input menu-qty-input" type="number" min="0" step="1" value="{{ qty_value }}" name="qty_{{ p.id }}" id="qty_{{ p.id }}" inputmode="numeric">
                 <button class="hub-button hub-button-secondary menu-stepper-btn" type="button" data-action="minus" data-target="qty_{{ p.id }}" aria-label="تقليل {{ p.name_ar }}">-</button>
               </div>
+
+              {% if p.active_option_assignments %}
+                <details class="menu-options-details" data-options-panel>
+                  <summary class="hub-button hub-button-secondary">تخصيص</summary>
+                  <div class="menu-options-wrap">
+                    {% for assignment in p.active_option_assignments %}
+                      {% with group=assignment.group %}
+                        <fieldset class="menu-option-group" data-option-group data-selection-type="{{ group.selection_type }}" data-required="{% if group.is_required %}true{% else %}false{% endif %}" data-min-selected="{{ group.min_selected }}" data-max-selected="{{ group.max_selected|default:'' }}">
+                          <legend>
+                            {{ group.name_ar }}
+                            {% if group.is_required %}<span class="hub-badge hub-badge-warning">مطلوب</span>{% endif %}
+                          </legend>
+                          <div class="menu-option-chips">
+                            {% for option in group.options.all %}
+                              {% option_selected form_values p.id group.id option.id option.is_default as checked %}
+                              <label class="menu-option-chip">
+                                <input type="{% if group.selection_type == 'single' %}radio{% else %}checkbox{% endif %}" name="option_{{ p.id }}_{{ group.id }}{% if group.selection_type == 'multiple' %}[]{% endif %}" value="{{ option.id }}" data-option-input data-option-name="{{ option.name_ar }}" data-price-delta="{{ option.price_delta_syp }}" {% if checked %}checked{% endif %}>
+                                <span>{{ option.name_ar }}</span>
+                                {% if option.price_delta_syp %}<small>{% if option.price_delta_syp > 0 %}+{% endif %}{{ option.price_delta_syp }} ل.س</small>{% endif %}
+                              </label>
+                            {% endfor %}
+                          </div>
+                        </fieldset>
+                      {% endwith %}
+                    {% endfor %}
+                  </div>
+                </details>
+              {% endif %}
 
               <details class="menu-note-details">
                 <summary class="hub-button hub-button-secondary">ملاحظة</summary>
                 <label for="note_{{ p.id }}">ملاحظة على هذا العنصر</label>
-                <input class="hub-input" type="text" name="note_{{ p.id }}" id="note_{{ p.id }}" placeholder="مثلاً: بدون سكر، سكر خفيف، بدون بصل">
+                {% form_value form_values 'note_' p.id '' as note_value %}
+                <input class="hub-input" type="text" name="note_{{ p.id }}" id="note_{{ p.id }}" value="{{ note_value }}" placeholder="مثلاً: بدون سكر، سكر خفيف، بدون بصل">
               </details>
             </article>
           {% endfor %}
@@ -72,7 +102,7 @@
       <label>ملاحظة عامة</label><textarea class="hub-input" name="general_note" rows="3">{{ form_values.general_note|default:'' }}</textarea>
 
       <div class="hub-sticky-actions menu-submit-wrap">
-        <button class="hub-button hub-button-primary" type="submit" data-submit-btn disabled>إرسال الطلب</button>
+        <button class="hub-button hub-button-primary" type="submit" data-submit-btn>إرسال الطلب</button>
       </div>
     </section>
 

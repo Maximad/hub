@@ -108,6 +108,9 @@ class OrderItem(TimeStampedModel):
     product_name_ar_snapshot = models.CharField(max_length=120)
     product_name_en_snapshot = models.CharField(max_length=120, blank=True)
     unit_price_syp_snapshot = models.PositiveIntegerField()
+    selected_options_snapshot = models.JSONField(default=list, blank=True)
+    item_note = models.TextField(blank=True)
+    line_total_syp_snapshot = models.IntegerField(null=True, blank=True)
 
 
 class Payment(TimeStampedModel, PublicCodeModel):

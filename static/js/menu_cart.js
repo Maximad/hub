@@ -12,8 +12,25 @@
   const submitBtn = form.querySelector('[data-submit-btn]');
 
   function parsePrice(text) {
-    const raw = String(text || '0').replace(/[^0-9.]/g, '');
+    const raw = String(text || '0').replace(/[^0-9.-]/g, '');
     return Number(raw) || 0;
+  }
+
+  function escapeHtml(value) {
+    return String(value || '').replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }[char]));
+  }
+
+  function selectedOptions(card) {
+    return Array.from(card.querySelectorAll('[data-option-input]:checked')).map((input) => ({
+      name: input.dataset.optionName || input.closest('label')?.textContent?.trim() || '',
+      delta: parsePrice(input.dataset.priceDelta),
+    }));
   }
 
   function update() {
@@ -29,16 +46,25 @@
       card.classList.toggle('is-selected', qty > 0);
       if (qty < 1) return;
       const name = card.querySelector('.menu-product-name')?.textContent?.trim() || '';
-      const price = parsePrice(card.dataset.price || card.querySelector('[data-role="price"]')?.textContent);
+      const basePrice = parsePrice(card.dataset.price || card.querySelector('[data-role="price"]')?.textContent);
+      const options = selectedOptions(card);
+      const optionDelta = options.reduce((sum, option) => sum + option.delta, 0);
+      const unitPrice = basePrice + optionDelta;
       const note = form.querySelector('#note_' + id)?.value?.trim();
-      const lineTotal = qty * price;
+      const lineTotal = qty * unitPrice;
       totalQty += qty;
       totalPrice += lineTotal;
-      lines.push({ name, qty, price, lineTotal, note });
+      lines.push({ name, qty, unitPrice, lineTotal, note, options });
     });
 
     cartList.innerHTML = lines
-      .map((line) => `<li>${line.name} × ${line.qty} — ${line.lineTotal.toLocaleString('ar-SY')} ل.س ${line.note ? `<br><small>ملاحظة: ${line.note}</small>` : ''}</li>`)
+      .map((line) => {
+        const optionHtml = line.options.length
+          ? `<ul class="menu-cart-options">${line.options.map((option) => `<li>${escapeHtml(option.name)}</li>`).join('')}</ul>`
+          : '';
+        const noteHtml = line.note ? `<small>ملاحظة: ${escapeHtml(line.note)}</small>` : '';
+        return `<li><strong>${escapeHtml(line.name)}</strong> × ${line.qty} — ${line.lineTotal.toLocaleString('ar-SY')} ل.س ${optionHtml}${noteHtml}</li>`;
+      })
       .join('');
 
     const totalText = `${totalPrice.toLocaleString('ar-SY')} ل.س`;
@@ -65,6 +91,9 @@
 
   form.addEventListener('input', (event) => {
     if (event.target.matches('input, textarea')) update();
+  });
+  form.addEventListener('change', (event) => {
+    if (event.target.matches('input, textarea, select')) update();
   });
 
   update();

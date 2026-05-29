@@ -14,7 +14,7 @@ import re
 
 from members.models import MembershipBenefitRule, MembershipPlan, MembershipSubscription, MemberCreditLedger
 from internet.models import WifiNetwork
-from catalog.models import MenuSection
+from catalog.models import MenuSection, ProductOption, ProductOptionGroup, ProductOptionGroupAssignment
 from core.models import ActivityLog, InternetPackage, InternetSession, Member, Order, OrderItem, Payment, Product, TableArea
 from events.models import Event
 from reservations.models import Reservation
@@ -171,8 +171,21 @@ def dashboard(request):
     return render(request, 'core/dashboard.html')
 
 
+def _option_assignment_prefetch():
+    return Prefetch(
+        'option_group_assignments',
+        queryset=ProductOptionGroupAssignment.objects.filter(
+            is_active=True,
+            group__is_active=True,
+        ).select_related('group').prefetch_related(
+            Prefetch('group__options', queryset=ProductOption.objects.filter(is_active=True).order_by('sort_order', 'name_ar'))
+        ).order_by('sort_order', 'group__sort_order', 'group__name_ar'),
+        to_attr='active_option_assignments',
+    )
+
+
 def _menu_context(table=None):
-    products_qs = Product.objects.filter(is_available=True, visible_on_qr=True).order_by('sort_order', 'name_ar')
+    products_qs = Product.objects.filter(is_available=True, visible_on_qr=True).prefetch_related(_option_assignment_prefetch()).order_by('sort_order', 'name_ar')
     sections = (
         MenuSection.objects.filter(is_active=True, visible_on_qr=True)
         .prefetch_related(Prefetch('products', queryset=products_qs))
@@ -199,9 +212,80 @@ def menu_table(request, qr_token):
     return render(request, 'menu/menu.html', _menu_context(table=table))
 
 
+def _selected_option_values(request, product_id, group_id):
+    base_name = f'option_{product_id}_{group_id}'
+    return [value for value in request.POST.getlist(base_name) + request.POST.getlist(f'{base_name}[]') if value]
+
+
+def _validate_product_options(request, product):
+    assignments = getattr(product, 'active_option_assignments', [])
+    selected_snapshot = []
+    total_delta = 0
+    errors = []
+
+    for assignment in assignments:
+        group = assignment.group
+        active_options = list(group.options.all())
+        option_by_id = {str(option.id): option for option in active_options}
+        raw_values = _selected_option_values(request, product.id, group.id)
+        if group.selection_type == ProductOptionGroup.SelectionType.SINGLE and len(raw_values) > 1:
+            errors.append(f'اختر خياراً واحداً فقط من {group.name_ar} للعنصر {product.name_ar}.')
+            continue
+
+        selected_options = []
+        invalid_selection = False
+        seen = set()
+        for raw_value in raw_values:
+            if raw_value in seen:
+                continue
+            seen.add(raw_value)
+            option = option_by_id.get(str(raw_value))
+            if not option:
+                invalid_selection = True
+                continue
+            selected_options.append(option)
+
+        if invalid_selection:
+            errors.append(f'تم اختيار خيار غير متاح للعنصر {product.name_ar}.')
+            continue
+
+        selected_count = len(selected_options)
+        min_required = max(group.min_selected or 0, 1 if group.is_required else 0)
+        if selected_count < min_required:
+            errors.append(f'يرجى اختيار {min_required} خيار على الأقل من {group.name_ar} للعنصر {product.name_ar}.')
+            continue
+        if group.max_selected is not None and selected_count > group.max_selected:
+            errors.append(f'يمكن اختيار {group.max_selected} خيار كحد أقصى من {group.name_ar} للعنصر {product.name_ar}.')
+            continue
+        if group.selection_type == ProductOptionGroup.SelectionType.SINGLE and selected_count > 1:
+            errors.append(f'اختر خياراً واحداً فقط من {group.name_ar} للعنصر {product.name_ar}.')
+            continue
+
+        if selected_options:
+            total_delta += sum(option.price_delta_syp for option in selected_options)
+            selected_snapshot.append({
+                'group_id': group.id,
+                'group_name_ar': group.name_ar,
+                'group_name_en': group.name_en,
+                'selection_type': group.selection_type,
+                'options': [
+                    {
+                        'option_id': option.id,
+                        'name_ar': option.name_ar,
+                        'name_en': option.name_en,
+                        'price_delta_syp': option.price_delta_syp,
+                    }
+                    for option in selected_options
+                ],
+            })
+
+    return selected_snapshot, total_delta, errors
+
+
 def _create_order_from_menu(request, table=None):
-    products = Product.objects.filter(is_available=True, visible_on_qr=True, orderable_on_qr=True)
+    products = Product.objects.filter(is_available=True, visible_on_qr=True, orderable_on_qr=True).prefetch_related(_option_assignment_prefetch())
     selected = []
+    validation_errors = []
     for p in products:
         qty_raw = request.POST.get(f'qty_{p.id}', '').strip()
         if not qty_raw:
@@ -213,19 +297,24 @@ def _create_order_from_menu(request, table=None):
         if qty <= 0:
             continue
         item_note = request.POST.get(f'note_{p.id}', '').strip()
-        selected.append((p, qty, item_note))
+        selected_options_snapshot, option_delta, option_errors = _validate_product_options(request, p)
+        validation_errors.extend(option_errors)
+        selected.append((p, qty, item_note, selected_options_snapshot, option_delta))
 
     if not selected:
         context = _menu_context(table)
         context['error'] = 'يرجى اختيار عنصر واحد على الأقل.'
+        context['form_values'] = request.POST
         return render(request, 'menu/menu.html', context)
 
     customer_name = request.POST.get('customer_name', '').strip()
     errors = {}
     customer_phone = _validate_phone_input(request.POST.get('customer_phone', ''), 'رقم الهاتف', errors, required=False)
     if errors:
+        validation_errors.append(errors['رقم الهاتف'])
+    if validation_errors:
         context = _menu_context(table)
-        context['error'] = errors['رقم الهاتف']
+        context['error'] = ' '.join(validation_errors)
         context['form_values'] = request.POST
         return render(request, 'menu/menu.html', context)
     general_note = request.POST.get('general_note', '').strip()
@@ -235,17 +324,20 @@ def _create_order_from_menu(request, table=None):
 
     with transaction.atomic():
         order = Order.objects.create(table=table, status=Order.Status.NEW, notes=note)
-        for product, qty, _item_note in selected:
+        for product, qty, item_note, selected_options_snapshot, option_delta in selected:
+            unit_price = product.price_syp + option_delta
             OrderItem.objects.create(
                 order=order,
                 product=product,
                 quantity=qty,
                 product_name_ar_snapshot=product.name_ar,
                 product_name_en_snapshot=product.name_en,
-                unit_price_syp_snapshot=product.price_syp,
+                unit_price_syp_snapshot=unit_price,
+                selected_options_snapshot=selected_options_snapshot,
+                item_note=item_note,
+                line_total_syp_snapshot=qty * unit_price,
             )
     return redirect(reverse('order_public', kwargs={'public_code': order.public_code}))
-
 
 def order_public(request, public_code):
     try:
