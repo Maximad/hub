@@ -53,6 +53,49 @@ class PrepStation(CatalogTimeStampedModel):
         return self.name_ar
 
 
+class ProductMedia(CatalogTimeStampedModel):
+    class MediaType(models.TextChoices):
+        IMAGE = 'image', 'Image'
+        VIDEO = 'video', 'Video'
+        GIF = 'gif', 'Animated GIF'
+        EXTERNAL_URL = 'external_url', 'External URL'
+
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    product = models.ForeignKey('core.Product', on_delete=models.CASCADE, related_name='media')
+    media_type = models.CharField(max_length=20, choices=MediaType.choices, default=MediaType.IMAGE)
+    url = models.URLField(max_length=500)
+    alt_text_ar = models.CharField(max_length=180, blank=True)
+    is_primary = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ['sort_order', '-is_primary', 'created_at']
+        indexes = [
+            models.Index(fields=['product', 'is_active', 'is_primary', 'sort_order']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['product'],
+                condition=models.Q(is_active=True, is_primary=True),
+                name='unique_active_primary_product_media',
+            ),
+        ]
+        verbose_name = 'وسائط المنتج'
+        verbose_name_plural = 'وسائط المنتجات'
+
+    def __str__(self):
+        return f'{self.product} - {self.get_media_type_display()}'
+
+    @property
+    def display_alt_text(self):
+        return self.alt_text_ar or self.product.name_ar
+
+    @property
+    def is_visual_media(self):
+        return self.media_type in {self.MediaType.IMAGE, self.MediaType.GIF}
+
+
 class ProductAvailability(CatalogTimeStampedModel):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     product = models.ForeignKey('core.Product', on_delete=models.CASCADE, related_name='availability_rules')

@@ -81,6 +81,19 @@
             <div class="menu-product-grid staff-pos__grid">
               {% for p in products %}
                 <article class="hub-list-card menu-product-card staff-pos__product" data-product-card data-product-id="{{ p.id }}" data-price="{{ p.price_syp|default:'0' }}" data-search-text="{{ p.name_ar }} {{ p.name_en }} {{ p.description_ar }}">
+                  <div class="hub-media menu-product-media staff-pos__media{% if not p.primary_media %} menu-product-media--placeholder{% endif %}">
+                    {% if p.primary_media %}
+                      {% if p.primary_media.is_visual_media %}
+                        <img src="{{ p.primary_media.url }}" alt="{{ p.primary_media.display_alt_text }}" loading="lazy">
+                      {% elif p.primary_media.media_type == 'video' %}
+                        <video src="{{ p.primary_media.url }}" aria-label="{{ p.primary_media.display_alt_text }}" muted playsinline preload="metadata"></video>
+                      {% else %}
+                        <span>{{ p.name_ar|slice:":1" }}</span>
+                      {% endif %}
+                    {% else %}
+                      <span>{{ p.name_ar|slice:":1" }}</span>
+                    {% endif %}
+                  </div>
                   <button class="staff-pos__tap-zone" type="button" data-action="plus" data-target="qty_{{ p.id }}" aria-label="إضافة {{ p.name_ar }}">
                     <span class="menu-product-name">{{ p.name_ar }}</span>
                     {% if p.name_en %}<small>{{ p.name_en }}</small>{% endif %}
