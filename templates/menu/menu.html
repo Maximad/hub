@@ -29,7 +29,19 @@
           <div class="menu-product-grid">
           {% for p in products %}
             <article class="hub-list-card menu-product-card" data-product-card data-product-id="{{ p.id }}" data-price="{{ p.price_syp|default:'0' }}">
-              <div class="hub-media menu-product-media" aria-hidden="true"></div>
+              <div class="hub-media menu-product-media{% if not p.primary_media %} menu-product-media--placeholder{% endif %}">
+                {% if p.primary_media %}
+                  {% if p.primary_media.is_visual_media %}
+                    <img src="{{ p.primary_media.url }}" alt="{{ p.primary_media.display_alt_text }}" loading="lazy">
+                  {% elif p.primary_media.media_type == 'video' %}
+                    <video src="{{ p.primary_media.url }}" aria-label="{{ p.primary_media.display_alt_text }}" muted playsinline controls preload="metadata"></video>
+                  {% else %}
+                    <span>{{ p.name_ar }}</span>
+                  {% endif %}
+                {% else %}
+                  <span>{{ p.name_ar|slice:":1" }}</span>
+                {% endif %}
+              </div>
               <div class="menu-product-main">
                 <h4 class="menu-product-name">{{ p.name_ar }}</h4>
                 {% if p.description_ar %}<p class="menu-product-desc">{{ p.description_ar }}</p>{% endif %}

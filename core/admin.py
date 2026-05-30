@@ -1,7 +1,20 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from catalog.models import ProductOptionGroupAssignment
+from catalog.models import ProductMedia, ProductOptionGroupAssignment
 from .models import Room, TableArea, Category, Product, Order, OrderItem, Payment, Member, InternetPackage, InternetSession, Shift, ActivityLog
+
+
+class ProductMediaInline(admin.TabularInline):
+    model = ProductMedia
+    extra = 1
+    fields = ('media_type', 'url', 'alt_text_ar', 'is_primary', 'is_active', 'sort_order', 'media_preview')
+    readonly_fields = ('media_preview',)
+
+    @admin.display(description='معاينة')
+    def media_preview(self, obj):
+        if obj and obj.url and obj.media_type in {ProductMedia.MediaType.IMAGE, ProductMedia.MediaType.GIF}:
+            return format_html('<img src="{}" alt="{}" style="max-width: 80px; max-height: 60px; border-radius: 8px; object-fit: cover;" />', obj.url, obj.display_alt_text)
+        return '—'
 
 
 class ProductOptionGroupAssignmentInline(admin.TabularInline):
@@ -22,7 +35,7 @@ class ProductAdmin(admin.ModelAdmin):
     list_display = ('name_ar', 'item_type', 'beverage_type', 'food_type', 'service_type', 'price_syp', 'is_alcoholic', 'visible_on_qr', 'orderable_on_qr', 'requires_staff_confirmation', 'vendor', 'is_available')
     list_filter = ('is_available', 'visible_on_qr', 'orderable_on_qr', 'item_type', 'is_alcoholic', 'requires_staff_confirmation', 'beverage_type', 'food_type', 'service_type', 'vendor', 'menu_sections', 'tags')
     search_fields = ('name_ar', 'name_en', 'description_ar')
-    inlines = (ProductOptionGroupAssignmentInline,)
+    inlines = (ProductMediaInline, ProductOptionGroupAssignmentInline)
 
 
 @admin.register(TableArea)

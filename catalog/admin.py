@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.utils.html import format_html
 from .models import (
     MenuSection,
     PrepStation,
@@ -6,6 +7,7 @@ from .models import (
     ProductOption,
     ProductOptionGroup,
     ProductOptionGroupAssignment,
+    ProductMedia,
     Tag,
 )
 
@@ -42,6 +44,27 @@ class ProductOptionGroupAdmin(admin.ModelAdmin):
     search_fields = ('code', 'name_ar', 'name_en')
     ordering = ('sort_order', 'name_ar')
     inlines = (ProductOptionInline,)
+
+
+@admin.register(ProductMedia)
+class ProductMediaAdmin(admin.ModelAdmin):
+    list_display = ('readable_product_name', 'media_type', 'is_primary', 'is_active', 'sort_order', 'media_preview', 'updated_at')
+    list_filter = ('media_type', 'is_primary', 'is_active')
+    search_fields = ('product__name_ar', 'product__name_en', 'alt_text_ar', 'url')
+    ordering = ('product__name_ar', 'sort_order', '-is_primary')
+    autocomplete_fields = ('product',)
+    readonly_fields = ('media_preview', 'uuid', 'created_at', 'updated_at')
+    fields = ('uuid', 'product', 'media_type', 'url', 'alt_text_ar', 'is_primary', 'is_active', 'sort_order', 'media_preview', 'created_at', 'updated_at')
+
+    @admin.display(description='المنتج', ordering='product__name_ar')
+    def readable_product_name(self, obj):
+        return obj.product.name_ar
+
+    @admin.display(description='معاينة')
+    def media_preview(self, obj):
+        if obj and obj.url and obj.media_type in {ProductMedia.MediaType.IMAGE, ProductMedia.MediaType.GIF}:
+            return format_html('<img src="{}" alt="{}" style="max-width: 96px; max-height: 72px; border-radius: 8px; object-fit: cover;" />', obj.url, obj.display_alt_text)
+        return '—'
 
 
 @admin.register(ProductOption)

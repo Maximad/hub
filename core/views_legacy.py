@@ -15,7 +15,7 @@ import re
 
 from members.models import MembershipBenefitRule, MembershipPlan, MembershipSubscription, MemberCreditLedger
 from internet.models import WifiNetwork
-from catalog.models import MenuSection, ProductOption, ProductOptionGroup, ProductOptionGroupAssignment
+from catalog.models import MenuSection, ProductMedia, ProductOption, ProductOptionGroup, ProductOptionGroupAssignment
 from core.models import ActivityLog, InternetPackage, InternetSession, Member, Order, OrderItem, Payment, Product, TableArea
 from events.models import Event
 from reservations.models import Reservation
@@ -193,10 +193,28 @@ def _valid_option_assignments_for_product(product):
     ]
 
 
-def _attach_valid_option_assignments(products):
+def _active_media_prefetch():
+    return Prefetch(
+        'media',
+        queryset=ProductMedia.objects.filter(is_active=True).order_by('-is_primary', 'sort_order', 'created_at'),
+        to_attr='active_media',
+    )
+
+
+def _primary_media_for_product(product):
+    active_media = getattr(product, 'active_media', [])
+    return active_media[0] if active_media else None
+
+
+def _attach_product_card_data(products):
     for product in products:
         product.valid_option_assignments = _valid_option_assignments_for_product(product)
+        product.primary_media = _primary_media_for_product(product)
     return products
+
+
+def _attach_valid_option_assignments(products):
+    return _attach_product_card_data(products)
 
 
 def _section_products_for_ordering(product_filter=None, section_filter=None, include_unsectioned=False):
@@ -204,7 +222,7 @@ def _section_products_for_ordering(product_filter=None, section_filter=None, inc
         product_filter = {}
     if section_filter is None:
         section_filter = {}
-    products_qs = Product.objects.filter(**product_filter).prefetch_related(_option_assignment_prefetch()).order_by('sort_order', 'name_ar')
+    products_qs = Product.objects.filter(**product_filter).prefetch_related(_option_assignment_prefetch(), _active_media_prefetch()).order_by('sort_order', 'name_ar')
     sections = (
         MenuSection.objects.filter(is_active=True, **section_filter)
         .prefetch_related(Prefetch('products', queryset=products_qs))
