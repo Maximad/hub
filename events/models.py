@@ -22,6 +22,9 @@ class Event(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def __str__(self):
+        return self.title_ar or self.title_en or str(self.uuid)[:8]
+
 
 class EventTicketType(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
@@ -33,3 +36,7 @@ class EventTicketType(models.Model):
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        event_title = self.event.title_ar if self.event_id else ''
+        return f'{self.name_ar} — {event_title}' if event_title else self.name_ar

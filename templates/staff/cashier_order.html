@@ -2,17 +2,39 @@
 {% block title %}تفاصيل الدفع{% endblock %}
 {% block content %}
 <h2>تفاصيل طلب للكاشير</h2>
-<p><a href="{% url 'staff_cashier' %}">← العودة إلى الكاشير</a></p>
-<div><strong>رقم الطلب:</strong> {{ order.public_code }}</div>
-<div><strong>الطاولة:</strong> {% if order.table %}{{ order.table.name_ar }}{% else %}طلب عام / تيك أواي{% endif %}</div>
-<ul>{% for item in order.items.all %}<li>{{ item.product_name_ar_snapshot }} × {{ item.quantity }} = {% widthratio item.quantity 1 item.unit_price_syp_snapshot %} ل.س</li>{% endfor %}</ul>
+<p><a href="{% url 'staff_cashier' %}">← العودة إلى الكاشير</a> | <a href="{% url 'staff_order_edit' order.public_code %}">تعديل الطلب</a></p>
+{% if messages %}{% for message in messages %}<p class="hub-badge hub-badge-danger">{{ message }}</p>{% endfor %}{% endif %}
+<div class="hub-card hub-section">
+  <div><strong>رقم الطلب:</strong> {{ order.display_number }}</div>
+  {% if system_settings.show_internal_order_uuid %}<div><small>الرمز الداخلي: {{ order.public_code }}</small></div>{% endif %}
+  <div><strong>المكان:</strong> {{ order.location_label }}</div>
+  {% if order.location_detail %}<div class="hub-location-detail">{{ order.location_detail }}</div>{% endif %}
+  <img class="hub-qr" src="{{ qr_url }}" alt="QR رابط الطلب {{ order.display_number }}">
+</div>
+<ul>{% for item in order.items.all %}<li>{{ item.product_name_ar_snapshot }} × {{ item.quantity }} = {% widthratio item.quantity 1 item.unit_price_syp_snapshot %} ل.س{% if item.selected_options_snapshot %}<ul>{% for group in item.selected_options_snapshot %}{% for option in group.options %}<li>{{ option.name_ar }}{% if option.price_delta_syp %} ({% if option.price_delta_syp > 0 %}+{% endif %}{{ option.price_delta_syp }} ل.س){% endif %}</li>{% endfor %}{% endfor %}</ul>{% endif %}{% if item.item_note %}<br><small>ملاحظة: {{ item.item_note }}</small>{% endif %}</li>{% endfor %}</ul>
 <p><strong>المجموع:</strong> {{ total }} ل.س</p><p><strong>المدفوع:</strong> {{ paid }} ل.س</p><p><strong>المتبقي:</strong> {{ remaining }} ل.س</p><p><strong>حالة الدفع:</strong> {{ payment_label }}</p>
 <h3>إضافة دفعة</h3>
-<form method="post" action="{% url 'staff_cashier_pay' order.public_code %}">{% csrf_token %}
-<label>المبلغ (ل.س): <input type="number" min="0" name="amount_syp" value="0" required></label><br>
-<label>طريقة الدفع:<select name="method">{% for value, label in methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label><br>
-<button type="submit">حفظ الدفعة</button>
+<form method="post" action="{% url 'staff_cashier_pay' order.public_code %}" class="hub-form" id="cashier-payment-form">{% csrf_token %}
+<label>المبلغ (ل.س): <input class="hub-input" type="number" min="1" max="{{ remaining }}" name="amount_syp" id="payment-amount" value="{{ payment_amount_default }}" required data-remaining="{{ remaining }}"></label>
+<p class="hub-help-text">الحقل مملوء تلقائياً بالمبلغ المتبقي. لتسجيل دفعة جزئية، أدخل مبلغاً أقل مع موافقة المدير.</p>
+<div class="hub-manager-approval" id="manager-approval" hidden>
+  <label>اسم المدير<input class="hub-input" type="text" name="manager_username" autocomplete="username"></label>
+  <label>كلمة المرور<input class="hub-input" type="password" name="manager_password" autocomplete="current-password"></label>
+</div>
+<label>طريقة الدفع:<select class="hub-input" name="method">{% for value, label in methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+<button class="hub-button hub-button-primary" type="submit">حفظ الدفعة</button>
 </form>
+<script>
+(function(){
+  const amount = document.getElementById('payment-amount');
+  const approval = document.getElementById('manager-approval');
+  if (!amount || !approval) return;
+  const remaining = Number(amount.dataset.remaining || '0');
+  function toggleApproval(){ approval.hidden = !(Number(amount.value || '0') > 0 && Number(amount.value || '0') < remaining); }
+  amount.addEventListener('input', toggleApproval);
+  toggleApproval();
+})();
+</script>
 <h3>سجل الدفعات</h3>
 <ul>{% for p in order.payments.all %}<li>{{ p.get_method_display }} - {{ p.amount_syp }} ل.س - {{ p.created_at }}</li>{% empty %}<li>لا توجد دفعات بعد.</li>{% endfor %}</ul>
 {% endblock %}

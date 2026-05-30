@@ -16,6 +16,9 @@ class MembershipPlan(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def __str__(self):
+        return self.name_ar or self.name_en or self.code
+
 
 class MembershipSubscription(models.Model):
     STATUS = [('active','Active'),('paused','Paused'),('expired','Expired'),('cancelled','Cancelled')]
@@ -30,6 +33,9 @@ class MembershipSubscription(models.Model):
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.member} — {self.plan} — {self.get_status_display()}'
 
 
 class MembershipBenefitRule(models.Model):
@@ -55,6 +61,10 @@ class MembershipBenefitRule(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def __str__(self):
+        target = self.product or self.category or self.menu_section or self.tag or self.item_type or 'قاعدة عامة'
+        return f'{self.plan} — {target}'
+
 
 class MemberCreditLedger(models.Model):
     CHANGE_TYPES = [('add_minutes','Add Minutes'),('use_minutes','Use Minutes'),('add_credit','Add Credit'),('use_credit','Use Credit'),('manual_adjustment','Manual Adjustment')]
@@ -68,3 +78,7 @@ class MemberCreditLedger(models.Model):
     notes = models.TextField(blank=True)
     created_by = models.ForeignKey('accounts.User', on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        delta = self.minutes_delta if self.minutes_delta is not None else self.credit_delta_syp
+        return f'{self.member} — {self.change_type} — {delta}'

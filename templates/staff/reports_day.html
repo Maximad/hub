@@ -23,9 +23,9 @@
 <tr><th>رقم الطلب</th><th>الوقت</th><th>الطاولة</th><th>الحالة</th><th>المجموع</th><th>المدفوع</th><th>المتبقي</th></tr>
 {% for row in rows %}
 <tr>
-  <td>{{ row.order.public_code }}</td>
+  <td>{{ row.order.display_number }}</td>
   <td>{{ row.order.created_at|date:'Y-m-d H:i' }}</td>
-  <td>{% if row.order.table %}{{ row.order.table.name_ar }}{% else %}طلب عام / تيك أواي{% endif %}</td>
+  <td>{{ row.order.location_label }}{% if row.order.location_detail %}<div class="hub-location-detail">{{ row.order.location_detail }}</div>{% endif %}</td>
   <td>{{ row.order.get_status_display }}</td>
   <td>{{ row.total }}</td><td>{{ row.paid }}</td><td>{{ row.remaining }}</td>
 </tr>

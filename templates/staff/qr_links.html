@@ -5,15 +5,15 @@
 <p><a href="{% url 'staff_qr_print' %}" target="_blank">نسخة طباعة</a> | <a href="{% url 'staff_home' %}">العودة لصفحة الفريق</a></p>
 {% if rows %}
   {% for row in rows %}
-  <section style="border:1px solid #ddd; border-radius:10px; padding:0.8rem; margin-bottom:0.8rem;">
+  <section class="hub-card hub-section">
     <div><strong>الاسم:</strong> {{ row.table.name_ar }}</div>
     <div><strong>الغرفة:</strong> {{ row.table.room.name_ar|default:"—" }}</div>
-    <div><strong>الكود:</strong> {{ row.table.public_code }}</div>
+    <img class="hub-qr" src="{{ row.qr_svg_url }}" alt="QR {{ row.table.name_ar }}">
     <div><strong>المسار:</strong> <code>{{ row.path }}</code></div>
     <div><strong>الرابط الكامل:</strong> <input type="text" readonly value="{{ row.full_url }}" style="width:100%; direction:ltr;"></div>
-    <div style="margin-top:0.5rem;">
-      <a href="{{ row.path }}" target="_blank">فتح الرابط</a>
-      <button type="button" onclick="window.print()">طباعة</button>
+    <div class="hub-toolbar" style="margin-top:0.5rem;">
+      <a class="hub-button" href="{{ row.path }}" target="_blank">فتح الرابط</a>
+      <button class="hub-button" type="button" onclick="window.print()">طباعة</button>
     </div>
   </section>
   {% endfor %}

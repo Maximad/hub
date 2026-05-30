@@ -1,38 +1,131 @@
 {% extends "base.html" %}
+{% load static menu_form %}
 {% block title %}المنيو{% endblock %}
 {% block content %}
-<h2 class="hub-section-title">منيو مشاريب</h2>
-{% if table %}<div class="hub-card"><strong>الطلب مرتبط بالطاولة:</strong> {{ table.name_ar }}</div>{% endif %}
-{% if error %}<p class="hub-badge hub-badge-danger">{{ error }}</p>{% endif %}
-<form method="post" class="hub-form">
-  {% csrf_token %}
-  {% if section_products %}
-    {% for section, products in section_products %}
-    <section class="hub-card hub-section" id="section-{{ section.id }}">
-      <h3 class="hub-section-title">{{ section.name_ar }}</h3>
-      <div class="hub-grid hub-grid-2">
-      {% for p in products %}
-        <div class="hub-list-card">
-          <div class="hub-media"></div>
-          <div><strong>{{ p.name_ar }}</strong> - {{ p.price_syp }} ل.س</div>
-          {% if p.is_alcoholic %}<span class="hub-badge hub-badge-warning">يحتوي على كحول</span>{% endif %}
-          {% if p.age_restricted %}<span class="hub-badge hub-badge-danger">للبالغين فقط</span>{% endif %}
-          {% if p.requires_staff_confirmation %}<span class="hub-badge hub-badge-info">يحتاج تأكيد من الفريق</span>{% endif %}
-          <label>الكمية</label><input class="hub-input" type="number" min="0" name="qty_{{ p.id }}">
-          <label>ملاحظة العنصر</label><input class="hub-input" type="text" name="note_{{ p.id }}">
-        </div>
+<div class="menu-public" dir="rtl">
+  <header class="menu-public__header hub-card">
+    <p class="menu-public__brand">{% if system_settings %}{{ system_settings.public_brand_title }}{% else %}مشاريب{% endif %}</p>
+    <h2 class="hub-section-title">{{ page_setting.title|default:"منيو مشاريب" }}</h2>
+    {% if page_setting.subtitle %}<p>{{ page_setting.subtitle }}</p>{% endif %}
+    {% if not table %}<p class="menu-public__table-banner">المكان: <strong>طلب عام داخل المكان</strong></p>{% endif %}
+    {% if table %}
+      <p class="menu-public__table-banner">الطلب مرتبط بالطاولة: <strong>{{ table.name_ar }}</strong>{% if table.room %} — المساحة: {{ table.room.name_ar }}{% endif %}</p>
+    {% endif %}
+    {% if error %}<p class="hub-badge hub-badge-danger">{{ error }}</p>{% endif %}
+  </header>
+
+  <form method="post" class="hub-form" id="menu-order-form">
+    {% csrf_token %}
+
+    {% if section_products %}
+      <nav class="menu-sections-nav" aria-label="أقسام المنيو">
+        {% for section, products in section_products %}
+          <a class="menu-section-chip" href="#section-{{ section.id }}">{{ section.name_ar }}</a>
+        {% endfor %}
+      </nav>
+
+      <div class="menu-sections-wrap">
+      {% for section, products in section_products %}
+        <section class="hub-card hub-section" id="section-{{ section.id }}">
+          <h3 class="hub-section-title">{{ section.name_ar }}</h3>
+          <div class="menu-product-grid">
+          {% for p in products %}
+            <article class="hub-list-card menu-product-card" data-product-card data-product-id="{{ p.id }}" data-price="{{ p.price_syp|default:'0' }}">
+              <div class="hub-media menu-product-media{% if not p.primary_media %} menu-product-media--placeholder{% endif %}">
+                {% if p.primary_media %}
+                  {% if p.primary_media.is_visual_media %}
+                    <img src="{{ p.primary_media.url }}" alt="{{ p.primary_media.display_alt_text }}" loading="lazy">
+                  {% elif p.primary_media.media_type == 'video' %}
+                    <video src="{{ p.primary_media.url }}" aria-label="{{ p.primary_media.display_alt_text }}" muted playsinline controls preload="metadata"></video>
+                  {% else %}
+                    <span>{{ p.name_ar }}</span>
+                  {% endif %}
+                {% else %}
+                  <span>{{ p.name_ar|slice:":1" }}</span>
+                {% endif %}
+              </div>
+              <div class="menu-product-main">
+                <h4 class="menu-product-name">{{ p.name_ar }}</h4>
+                {% if p.description_ar %}<p class="menu-product-desc">{{ p.description_ar }}</p>{% endif %}
+                <p class="menu-product-price" data-role="price">{{ p.price_syp }} ل.س</p>
+              </div>
+              <div class="menu-product-badges">
+                {% if p.is_alcoholic %}<span class="hub-badge hub-badge-warning">يحتوي على كحول</span>{% endif %}
+                {% if p.age_restricted %}<span class="hub-badge hub-badge-danger">للبالغين فقط</span>{% endif %}
+                {% if p.requires_staff_confirmation %}<span class="hub-badge hub-badge-info">يحتاج تأكيد من الفريق</span>{% endif %}
+              </div>
+
+              <div class="menu-qty-controls">
+                <button class="hub-button hub-button-secondary menu-stepper-btn" type="button" data-action="plus" data-target="qty_{{ p.id }}" aria-label="زيادة {{ p.name_ar }}">+</button>
+                {% form_value form_values 'qty_' p.id '0' as qty_value %}
+                <input class="hub-input menu-qty-input" type="number" min="0" step="1" value="{{ qty_value }}" name="qty_{{ p.id }}" id="qty_{{ p.id }}" inputmode="numeric">
+                <button class="hub-button hub-button-secondary menu-stepper-btn" type="button" data-action="minus" data-target="qty_{{ p.id }}" aria-label="تقليل {{ p.name_ar }}">-</button>
+              </div>
+
+              {% if p.valid_option_assignments %}
+                <details class="menu-options-details" data-options-panel>
+                  <summary class="hub-button hub-button-secondary">تخصيص</summary>
+                  <div class="menu-options-wrap">
+                    {% for assignment in p.valid_option_assignments %}
+                      {% with group=assignment.group %}
+                        <fieldset class="menu-option-group" data-option-group data-selection-type="{{ group.selection_type }}" data-required="{% if group.is_required %}true{% else %}false{% endif %}" data-min-selected="{{ group.min_selected }}" data-max-selected="{{ group.max_selected|default:'' }}">
+                          <legend>
+                            {{ group.name_ar }}
+                            {% if group.is_required %}<span class="hub-badge hub-badge-warning">مطلوب</span>{% endif %}
+                          </legend>
+                          <div class="menu-option-chips">
+                            {% for option in group.options.all %}
+                              {% option_selected form_values p.id group.id option.id option.is_default as checked %}
+                              <label class="menu-option-chip">
+                                <input type="{% if group.selection_type == 'single' %}radio{% else %}checkbox{% endif %}" name="option_{{ p.id }}_{{ group.id }}{% if group.selection_type == 'multiple' %}[]{% endif %}" value="{{ option.id }}" data-option-input data-option-name="{{ option.name_ar }}" data-price-delta="{{ option.price_delta_syp }}" {% if checked %}checked{% endif %}>
+                                <span>{{ option.name_ar }}</span>
+                                {% if option.price_delta_syp %}<small>{% if option.price_delta_syp > 0 %}+{% endif %}{{ option.price_delta_syp }} ل.س</small>{% endif %}
+                              </label>
+                            {% endfor %}
+                          </div>
+                        </fieldset>
+                      {% endwith %}
+                    {% endfor %}
+                  </div>
+                </details>
+              {% endif %}
+
+              <details class="menu-note-details">
+                <summary class="hub-button hub-button-secondary">ملاحظة</summary>
+                <label for="note_{{ p.id }}">ملاحظة على هذا العنصر</label>
+                {% form_value form_values 'note_' p.id '' as note_value %}
+                <input class="hub-input" type="text" name="note_{{ p.id }}" id="note_{{ p.id }}" value="{{ note_value }}" placeholder="مثلاً: بدون سكر، سكر خفيف، بدون بصل">
+              </details>
+            </article>
+          {% endfor %}
+          </div>
+        </section>
       {% endfor %}
       </div>
-    </section>
-    {% endfor %}
-  {% else %}<p class="hub-empty-state">لا توجد منتجات ظاهرة حالياً على المنيو.</p>{% endif %}
+    {% else %}<p class="hub-empty-state">لا توجد منتجات ظاهرة حالياً على المنيو.</p>{% endif %}
 
-  <section class="hub-card">
-    <h3>بيانات اختيارية</h3>
-    <label>الاسم</label><input class="hub-input" type="text" name="customer_name" value="{{ form_values.customer_name|default:'' }}">
-    <label>الهاتف</label><input class="hub-input" type="text" name="customer_phone" value="{{ form_values.customer_phone|default:'' }}">
-    <label>ملاحظة عامة</label><textarea class="hub-input" name="general_note" rows="3">{{ form_values.general_note|default:'' }}</textarea>
-  </section>
-  <div class="hub-sticky-actions"><button class="hub-button hub-button-primary" type="submit">إرسال الطلب</button></div>
-</form>
+    <section class="hub-card menu-cart-review" id="cart-review" aria-live="polite">
+      <h3>مراجعة الطلب</h3>
+      <p class="menu-cart-helper" data-cart-helper>اختر عناصر من القائمة</p>
+      <ul class="menu-cart-list" data-cart-list></ul>
+      <p class="menu-cart-total">المجموع التقديري: <strong data-cart-total>0 ل.س</strong></p>
+
+      <h4>بيانات اختيارية</h4>
+      <label>الاسم</label><input class="hub-input" type="text" name="customer_name" value="{{ form_values.customer_name|default:'' }}">
+      <label>الهاتف</label><input class="hub-input" type="tel" name="customer_phone" value="{{ form_values.customer_phone|default:'' }}">
+      <label>ملاحظة عامة</label><textarea class="hub-input" name="general_note" rows="3">{{ form_values.general_note|default:'' }}</textarea>
+
+      <div class="hub-sticky-actions menu-submit-wrap">
+        <button class="hub-button hub-button-primary" type="submit" data-submit-btn>إرسال الطلب</button>
+      </div>
+    </section>
+
+    <aside class="menu-sticky-cart" data-sticky-cart hidden>
+      <p><strong data-item-count>0</strong> عناصر</p>
+      <p data-sticky-total>0 ل.س</p>
+      <a href="#cart-review" class="hub-button hub-button-primary">مراجعة الطلب</a>
+    </aside>
+  </form>
+</div>
+<script src="{% static 'js/menu_cart.js' %}"></script>
 {% endblock %}

@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% load static menu_form %}
+{% block title %}نقطة البيع / POS{% endblock %}
+{% block content %}
+<div class="staff-pos" dir="rtl">
+  <header class="hub-card staff-pos__header">
+    <div>
+      <p class="menu-public__brand">Staff POS / نقطة البيع</p>
+      <h2 class="hub-section-title">{{ page_setting.title|default:"إدخال طلب سريع باللمس" }}</h2>
+      {% if page_setting.subtitle %}<p>{{ page_setting.subtitle }}</p>{% else %}<p>اختر الطاولة أو طلب عام داخل المكان، اضغط المنتجات بسرعة، ثم أرسل الطلب إلى لوحة الطلبات والكاشير.</p>{% endif %}
+    </div>
+    <div class="hub-toolbar">
+      <a class="hub-button" href="{% url 'staff_orders' %}">لوحة الطلبات</a>
+      <a class="hub-button" href="{% url 'staff_cashier' %}">الكاشير</a>
+    </div>
+    {% if error %}<p class="hub-badge hub-badge-danger">{{ error }}</p>{% endif %}
+  </header>
+
+  <form method="post" class="hub-form staff-pos__form" id="menu-order-form">
+    {% csrf_token %}
+    <section class="hub-card staff-pos__setup" aria-label="بيانات الطلب">
+      <div>
+        <label for="table_id"><strong>الطاولة</strong></label>
+        <select class="hub-input" name="table_id" id="table_id">
+          <option value="">طلب عام داخل المكان / بدون طاولة</option>
+          {% for table in tables %}
+            <option value="{{ table.id }}" {% if form_values.table_id == table.id|stringformat:'s' or selected_table_id == table.id|stringformat:'s' %}selected{% endif %}>{{ table.name_ar }}{% if table.room %} — {{ table.room.name_ar }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="customer_name"><strong>اسم اختياري</strong></label>
+        <input class="hub-input" type="text" name="customer_name" id="customer_name" value="{{ form_values.customer_name|default:'' }}" autocomplete="off">
+      </div>
+      <div>
+        <label for="customer_phone"><strong>هاتف اختياري</strong></label>
+        <input class="hub-input" type="tel" name="customer_phone" id="customer_phone" value="{{ form_values.customer_phone|default:'' }}" inputmode="tel" autocomplete="off">
+      </div>
+    </section>
+
+    <section class="hub-card staff-pos__member-search" aria-label="بحث عضو اختياري">
+      <div class="staff-pos__member-head">
+        <h3>بحث عضو اختياري</h3>
+        <a class="hub-button hub-button-secondary" href="{% url 'staff_pos' %}">مسح البحث</a>
+      </div>
+      <div class="staff-pos__member-query">
+        <input class="hub-input" type="search" name="member_q" value="{{ member_query }}" placeholder="اسم العضو أو الهاتف" form="staff-pos-member-search">
+        <button class="hub-button" type="submit" form="staff-pos-member-search">بحث</button>
+      </div>
+      {% if member_rows %}
+        <div class="staff-pos__member-results">
+          <label class="menu-option-chip"><input type="radio" name="member_id" value="" checked> بدون عضو</label>
+          {% for member in member_rows %}
+            <label class="menu-option-chip"><input type="radio" name="member_id" value="{{ member.id }}" {% if form_values.member_id == member.id|stringformat:'s' %}checked{% endif %}> {{ member.name_ar }} — {{ member.phone }}</label>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="menu-cart-helper">استخدم البحث فقط إذا احتجت ربط اسم/هاتف عضو في ملاحظات الطلب.</p>
+      {% endif %}
+    </section>
+
+    <section class="staff-pos__catalog" aria-label="كتالوج المنتجات">
+      <div class="hub-card staff-pos__catalog-tools">
+        <div>
+          <label for="staff-pos-search"><strong>بحث سريع</strong></label>
+          <input class="hub-input" type="search" id="staff-pos-search" placeholder="ابحث باسم المنتج" data-pos-search autocomplete="off">
+        </div>
+        {% if section_products %}
+          <nav class="menu-sections-nav staff-pos__chips" aria-label="أقسام المنتجات">
+            {% for section, products in section_products %}
+              <a class="menu-section-chip" href="#pos-section-{% if section %}{{ section.id }}{% else %}other{% endif %}">{% if section %}{{ section.name_ar }}{% else %}بدون قسم{% endif %}</a>
+            {% endfor %}
+          </nav>
+        {% endif %}
+      </div>
+
+      {% if section_products %}
+        {% for section, products in section_products %}
+          <section class="hub-card hub-section staff-pos__section" id="pos-section-{% if section %}{{ section.id }}{% else %}other{% endif %}">
+            <h3 class="hub-section-title">{% if section %}{{ section.name_ar }}{% else %}بدون قسم{% endif %}</h3>
+            <div class="menu-product-grid staff-pos__grid">
+              {% for p in products %}
+                <article class="hub-list-card menu-product-card staff-pos__product" data-product-card data-product-id="{{ p.id }}" data-price="{{ p.price_syp|default:'0' }}" data-search-text="{{ p.name_ar }} {{ p.name_en }} {{ p.description_ar }}">
+                  <div class="hub-media menu-product-media staff-pos__media{% if not p.primary_media %} menu-product-media--placeholder{% endif %}">
+                    {% if p.primary_media %}
+                      {% if p.primary_media.is_visual_media %}
+                        <img src="{{ p.primary_media.url }}" alt="{{ p.primary_media.display_alt_text }}" loading="lazy">
+                      {% elif p.primary_media.media_type == 'video' %}
+                        <video src="{{ p.primary_media.url }}" aria-label="{{ p.primary_media.display_alt_text }}" muted playsinline preload="metadata"></video>
+                      {% else %}
+                        <span>{{ p.name_ar|slice:":1" }}</span>
+                      {% endif %}
+                    {% else %}
+                      <span>{{ p.name_ar|slice:":1" }}</span>
+                    {% endif %}
+                  </div>
+                  <button class="staff-pos__tap-zone" type="button" data-action="plus" data-target="qty_{{ p.id }}" aria-label="إضافة {{ p.name_ar }}">
+                    <span class="menu-product-name">{{ p.name_ar }}</span>
+                    {% if p.name_en %}<small>{{ p.name_en }}</small>{% endif %}
+                    <strong data-role="price">{{ p.price_syp }} ل.س</strong>
+                  </button>
+                  <div class="menu-qty-controls staff-pos__qty">
+                    <button class="hub-button hub-button-secondary menu-stepper-btn" type="button" data-action="minus" data-target="qty_{{ p.id }}" aria-label="تقليل {{ p.name_ar }}">-</button>
+                    {% form_value form_values 'qty_' p.id '0' as qty_value %}
+                    <input class="hub-input menu-qty-input" type="number" min="0" step="1" value="{{ qty_value }}" name="qty_{{ p.id }}" id="qty_{{ p.id }}" inputmode="numeric" aria-label="كمية {{ p.name_ar }}">
+                    <button class="hub-button hub-button-secondary menu-stepper-btn" type="button" data-action="plus" data-target="qty_{{ p.id }}" aria-label="زيادة {{ p.name_ar }}">+</button>
+                  </div>
+
+                  {% if p.valid_option_assignments %}
+                    <details class="menu-options-details staff-pos__details" data-options-panel>
+                      <summary class="hub-button hub-button-secondary">خيارات / Modifiers</summary>
+                      <div class="menu-options-wrap">
+                        {% for assignment in p.valid_option_assignments %}
+                          {% with group=assignment.group %}
+                            <fieldset class="menu-option-group" data-option-group data-selection-type="{{ group.selection_type }}" data-required="{% if group.is_required %}true{% else %}false{% endif %}" data-min-selected="{{ group.min_selected }}" data-max-selected="{{ group.max_selected|default:'' }}">
+                              <legend>{{ group.name_ar }}{% if group.is_required %} <span class="hub-badge hub-badge-warning">مطلوب</span>{% endif %}</legend>
+                              <div class="menu-option-chips">
+                                {% for option in group.options.all %}
+                                  {% option_selected form_values p.id group.id option.id option.is_default as checked %}
+                                  <label class="menu-option-chip">
+                                    <input type="{% if group.selection_type == 'single' %}radio{% else %}checkbox{% endif %}" name="option_{{ p.id }}_{{ group.id }}{% if group.selection_type == 'multiple' %}[]{% endif %}" value="{{ option.id }}" data-option-input data-option-name="{{ option.name_ar }}" data-price-delta="{{ option.price_delta_syp }}" {% if checked %}checked{% endif %}>
+                                    <span>{{ option.name_ar }}</span>
+                                    {% if option.price_delta_syp %}<small>{% if option.price_delta_syp > 0 %}+{% endif %}{{ option.price_delta_syp }} ل.س</small>{% endif %}
+                                  </label>
+                                {% endfor %}
+                              </div>
+                            </fieldset>
+                          {% endwith %}
+                        {% endfor %}
+                      </div>
+                    </details>
+                  {% endif %}
+
+                  <details class="menu-note-details staff-pos__details">
+                    <summary class="hub-button hub-button-secondary">ملاحظة عنصر</summary>
+                    <label for="note_{{ p.id }}">ملاحظة على {{ p.name_ar }}</label>
+                    {% form_value form_values 'note_' p.id '' as note_value %}
+                    <input class="hub-input" type="text" name="note_{{ p.id }}" id="note_{{ p.id }}" value="{{ note_value }}" placeholder="بدون سكر، حار، سفري...">
+                  </details>
+                </article>
+              {% endfor %}
+            </div>
+          </section>
+        {% endfor %}
+      {% else %}
+        <p class="hub-empty-state">لا توجد منتجات متاحة حالياً.</p>
+      {% endif %}
+    </section>
+
+    <aside class="hub-card staff-pos__cart" id="cart-review" aria-live="polite">
+      <div class="staff-pos__cart-head">
+        <h3>السلة</h3>
+        <span class="hub-badge hub-badge-info"><strong data-item-count>0</strong> عنصر</span>
+      </div>
+      <p class="menu-cart-helper" data-cart-helper>اضغط على منتج لإضافته.</p>
+      <ul class="menu-cart-list" data-cart-list></ul>
+      <p class="menu-cart-total">المجموع: <strong data-cart-total>0 ل.س</strong></p>
+      <label for="general_note"><strong>ملاحظة عامة</strong></label>
+      <textarea class="hub-input" name="general_note" id="general_note" rows="3" placeholder="تعليمات عامة للطلب">{{ form_values.general_note|default:'' }}</textarea>
+      <div class="hub-sticky-actions staff-pos__submit">
+        <button class="hub-button hub-button-primary" type="submit" data-submit-btn>إرسال الطلب</button>
+      </div>
+    </aside>
+
+    <aside class="menu-sticky-cart staff-pos__floating-cart" data-sticky-cart hidden>
+      <p><strong data-item-count>0</strong> عناصر</p>
+      <p data-sticky-total>0 ل.س</p>
+      <a href="#cart-review" class="hub-button hub-button-primary">فتح السلة</a>
+    </aside>
+  </form>
+</div>
+<form method="get" id="staff-pos-member-search" action="{% url 'staff_pos' %}"></form>
+<script src="{% static 'js/menu_cart.js' %}"></script>
+{% endblock %}

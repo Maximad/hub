@@ -1,3 +1,5 @@
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path
 from core.views import menu
@@ -15,13 +17,21 @@ urlpatterns = [
     path('menu/', menu.menu_public, name='menu_public'),
     path('menu/table/<uuid:qr_token>/', menu.menu_table, name='menu_table'),
     path('order/<uuid:public_code>/', menu.order_public, name='order_public'),
+    path('order/<uuid:public_code>/qr.svg', menu.order_qr, name='order_qr'),
+    path('table/<uuid:qr_token>/qr.svg', menu.table_qr, name='table_qr'),
     path('staff/', menu.staff_home, name='staff_home'),
+    path('staff/pos/', menu.staff_pos, name='staff_pos'),
     path('staff/qr/', menu.staff_qr_links, name='staff_qr_links'),
     path('staff/qr/print/', menu.staff_qr_print, name='staff_qr_print'),
     path('staff/menu-tools/', menu.staff_menu_tools, name='staff_menu_tools'),
+    path('staff/modifiers/', menu.staff_modifiers, name='staff_modifiers'),
     path('staff/orders/', menu.staff_orders, name='staff_orders'),
     path('staff/orders/partial/', menu.staff_orders, name='staff_orders_partial'),
     path('staff/orders/<uuid:public_code>/status/', menu.staff_order_status, name='staff_order_status'),
+    path('staff/orders/<uuid:public_code>/edit/', menu.staff_order_edit, name='staff_order_edit'),
+    path('staff/orders/<uuid:public_code>/edit/add/', menu.staff_order_edit_add_item, name='staff_order_edit_add_item'),
+    path('staff/orders/<uuid:public_code>/edit/items/<int:item_id>/update/', menu.staff_order_edit_update_item, name='staff_order_edit_update_item'),
+    path('staff/orders/<uuid:public_code>/edit/items/<int:item_id>/remove/', menu.staff_order_edit_remove_item, name='staff_order_edit_remove_item'),
     path('staff/cashier/', menu.staff_cashier, name='staff_cashier'),
     path('staff/cashier/<uuid:public_code>/', menu.staff_cashier_order, name='staff_cashier_order'),
     path('staff/cashier/<uuid:public_code>/pay/', menu.staff_cashier_pay, name='staff_cashier_pay'),
@@ -51,3 +61,6 @@ urlpatterns = [
     path('staff/vendors/<int:vendor_id>/participation/new/', staff_vendor_participation_new, name='staff_vendor_participation_new'),
     path('staff/food-lab/', menu.staff_food_lab, name='staff_food_lab'),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

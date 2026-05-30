@@ -5,12 +5,14 @@
   <h2 class="hub-section-title">عمليات الفريق</h2>
   <div class="hub-grid hub-grid-3">
     {% for title,desc,url in actions %}{% endfor %}
+    <a class="hub-action-card" href="{% url 'staff_pos' %}"><div class="hub-media"></div><strong>نقطة البيع / POS</strong><p>إدخال طلبات سريع باللمس للفريق.</p></a>
     <a class="hub-action-card" href="{% url 'staff_orders' %}"><div class="hub-media"></div><strong>لوحة الطلبات</strong><p>متابعة الطلبات وتعديل الحالة.</p></a>
     <a class="hub-action-card" href="{% url 'staff_cashier' %}"><div class="hub-media"></div><strong>الكاشير</strong><p>فتح الطلبات واستلام الدفعات.</p></a>
     <a class="hub-action-card" href="{% url 'staff_reports_home' %}"><div class="hub-media"></div><strong>التقارير</strong><p>مؤشرات اليوم والتصدير.</p></a>
     <a class="hub-action-card" href="{% url 'staff_close_day' %}"><div class="hub-media"></div><strong>إغلاق اليوم</strong><p>ملخص الإغلاق والطباعة.</p></a>
     <a class="hub-action-card" href="{% url 'menu_public' %}"><div class="hub-media"></div><strong>القائمة العامة</strong><p>واجهة الطلب للزبائن.</p></a>
     <a class="hub-action-card" href="{% url 'staff_menu_tools' %}"><div class="hub-media"></div><strong>أدوات القائمة</strong><p>تفعيل وتحديث عناصر المنيو.</p></a>
+    <a class="hub-action-card" href="{% url 'staff_modifiers' %}"><div class="hub-media"></div><strong>خيارات المنتجات</strong><p>مراجعة خيارات المنتجات وتحذيرات الربط.</p></a>
     <a class="hub-action-card" href="{% url 'staff_qr_links' %}"><div class="hub-media"></div><strong>روابط الطاولات / QR</strong><p>روابط الطاولات والطباعة.</p></a>
     <a class="hub-action-card" href="{% url 'staff_members' %}"><div class="hub-media"></div><strong>الأعضاء</strong><p>إدارة العضويات والرصيد.</p></a>
     <a class="hub-action-card" href="{% url 'staff_internet' %}"><div class="hub-media"></div><strong>الإنترنت والعمل</strong><p>بدء وإنهاء جلسات الاستخدام.</p></a>

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}خيارات المنتجات{% endblock %}
+{% block content %}
+<section class="hub-card" dir="rtl">
+  <h2 class="hub-section-title">خيارات المنتجات</h2>
+  <p><a class="hub-button hub-button-secondary" href="{% url 'staff_home' %}">العودة لصفحة الفريق</a> <a class="hub-button" href="{% url 'admin:catalog_productoptiongroup_changelist' %}">إدارة المجموعات في Django admin</a> <a class="hub-button" href="{% url 'admin:catalog_productoptiongroupassignment_changelist' %}">إدارة الربط في Django admin</a></p>
+  {% if invalid_assignments %}
+    <div class="hub-badge hub-badge-danger">يوجد {{ invalid_assignments|length }} ربط غير صالح. هذه الخيارات لن تظهر للزبائن حتى يتم تصحيحها.</div>
+  {% else %}
+    <div class="hub-badge hub-badge-info">لا توجد روابط غير صالحة حالياً.</div>
+  {% endif %}
+</section>
+
+{% for row in rows %}
+  <section class="hub-card hub-section" dir="rtl">
+    <h3 class="hub-section-title">{{ row.group.name_ar }}</h3>
+    <p><strong>الكود:</strong> {{ row.group.code }} | <strong>الحالة:</strong> {% if row.group.is_active %}نشطة{% else %}متوقفة{% endif %} | <strong>نوع الاختيار:</strong> {{ row.group.get_selection_type_display }}</p>
+    <p><strong>الانطباق:</strong> {{ row.group.applicability_summary }}</p>
+    <p><a href="{% url 'admin:catalog_productoptiongroup_change' row.group.id %}">تعديل المجموعة</a></p>
+
+    <h4>الخيارات</h4>
+    <ul>
+      {% for option in row.group.options.all %}
+        <li>{{ option.name_ar }}{% if option.price_delta_syp %} ({% if option.price_delta_syp > 0 %}+{% endif %}{{ option.price_delta_syp }} ل.س){% endif %}{% if not option.is_active %} - متوقف{% endif %}</li>
+      {% empty %}
+        <li>لا توجد خيارات داخل هذه المجموعة.</li>
+      {% endfor %}
+    </ul>
+
+    <h4>المنتجات المرتبطة</h4>
+    <table style="width:100%">
+      <thead><tr><th>المنتج</th><th>تصنيف المنتج</th><th>الحالة</th><th>تحذير</th><th>الإدارة</th></tr></thead>
+      <tbody>
+        {% for assignment in row.assignments %}
+          <tr>
+            <td>{{ assignment.product.name_ar }}</td>
+            <td>{{ assignment.product.item_type }}{% if assignment.product.beverage_type %} / {{ assignment.product.beverage_type }}{% endif %}{% if assignment.product.food_type %} / {{ assignment.product.food_type }}{% endif %}{% if assignment.product.service_type %} / {{ assignment.product.service_type }}{% endif %}</td>
+            <td>{% if assignment.is_active %}نشط{% else %}متوقف{% endif %}</td>
+            <td>{% if assignment in row.invalid_assignments %}<span class="hub-badge hub-badge-danger">غير صالح ولن يظهر</span>{% else %}<span class="hub-badge hub-badge-info">صالح</span>{% endif %}</td>
+            <td><a href="{% url 'admin:catalog_productoptiongroupassignment_change' assignment.id %}">تعديل الربط</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5">لا توجد منتجات مرتبطة.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% empty %}
+  <p class="hub-empty-state">لا توجد مجموعات خيارات.</p>
+{% endfor %}
+{% endblock %}
