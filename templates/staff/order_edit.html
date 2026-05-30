@@ -9,8 +9,8 @@
     </div>
     <p class="menu-public__brand">Staff order editing</p>
     <h2 class="hub-section-title">تعديل طلب مفتوح</h2>
-    <div><strong>رقم الطلب:</strong> {{ order.public_code }}</div>
-    <div><strong>المكان:</strong> {% if order.table %}{{ order.table.name_ar }}{% else %}طلب عام / تيك أواي{% endif %}</div>
+    <div><strong>رقم الطلب:</strong> {{ order.display_number }}</div>
+    <div><strong>المكان:</strong> {{ order.location_label }}{% if order.location_detail %}<div class="hub-location-detail">{{ order.location_detail }}</div>{% endif %}</div>
     <div><strong>الحالة:</strong> {{ order.get_status_display }}</div>
     {% if order.notes %}<p>{{ order.notes|linebreaksbr }}</p>{% endif %}
     <div class="hub-toolbar">

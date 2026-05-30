@@ -4,10 +4,12 @@
 {% block content %}
 <div class="menu-public" dir="rtl">
   <header class="menu-public__header hub-card">
-    <p class="menu-public__brand">Masharib / مشاريب</p>
-    <h2 class="hub-section-title">منيو مشاريب</h2>
+    <p class="menu-public__brand">{% if system_settings %}{{ system_settings.public_brand_title }}{% else %}مشاريب{% endif %}</p>
+    <h2 class="hub-section-title">{{ page_setting.title|default:"منيو مشاريب" }}</h2>
+    {% if page_setting.subtitle %}<p>{{ page_setting.subtitle }}</p>{% endif %}
+    {% if not table %}<p class="menu-public__table-banner">المكان: <strong>طلب عام داخل المكان</strong></p>{% endif %}
     {% if table %}
-      <p class="menu-public__table-banner">الطلب مرتبط بالطاولة: <strong>{{ table.name_ar }}</strong></p>
+      <p class="menu-public__table-banner">الطلب مرتبط بالطاولة: <strong>{{ table.name_ar }}</strong>{% if table.room %} — المساحة: {{ table.room.name_ar }}{% endif %}</p>
     {% endif %}
     {% if error %}<p class="hub-badge hub-badge-danger">{{ error }}</p>{% endif %}
   </header>

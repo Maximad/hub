@@ -33,3 +33,6 @@ class Reservation(models.Model):
     created_by = models.ForeignKey('accounts.User', on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.name} — {self.reservation_date} {self.start_time} — {self.phone}'

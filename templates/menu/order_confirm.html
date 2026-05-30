@@ -2,9 +2,12 @@
 {% block title %}تأكيد الطلب{% endblock %}
 {% block content %}
 <h2>تم استلام طلبك</h2>
-<p><strong>رقم الطلب:</strong> {{ order.public_code }}</p>
+<p><strong>رقم الطلب:</strong> {{ order.display_number }}</p>
+{% if system_settings.show_internal_order_uuid %}<p><small>الرمز الداخلي: {{ order.public_code }}</small></p>{% endif %}
 <p><strong>الحالة:</strong> {{ order.get_status_display }}</p>
-<p><strong>المكان / الطاولة:</strong> {% if order.table %}{{ order.table.name_ar }}{% else %}طلب عام / تيك أواي{% endif %}</p>
+<p><strong>المكان:</strong> {{ order.location_label }}</p>
+{% if order.location_detail %}<p class="hub-location-detail">{{ order.location_detail }}</p>{% endif %}
+<img class="hub-qr" src="{{ qr_url }}" alt="QR رابط الطلب {{ order.display_number }}">
 <ul>
   {% for item in order.items.all %}
   <li>

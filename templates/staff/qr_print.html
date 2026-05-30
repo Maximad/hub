@@ -2,12 +2,10 @@
 {% block title %}طباعة روابط الطاولات{% endblock %}
 {% block content %}
 <style>
-@media print {
-  header { display: none; }
-  main { max-width: 100%; box-shadow: none; }
-}
+@media print { header { display: none; } main { max-width: 100%; box-shadow: none; } }
 .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem; }
-.card { border:1px solid #444; border-radius:8px; padding:0.75rem; }
+.card { border:1px solid #444; border-radius:8px; padding:0.75rem; break-inside:avoid; background:#fff; }
+.card .hub-qr { inline-size:180px; }
 </style>
 <h2>نسخة طباعة روابط الطاولات</h2>
 <p><button type="button" onclick="window.print()">طباعة الآن</button></p>
@@ -16,6 +14,7 @@
   <div class="card">
     <div><strong>{{ row.table.name_ar }}</strong></div>
     <div>الغرفة: {{ row.table.room.name_ar|default:"—" }}</div>
+    <img class="hub-qr" src="{{ row.qr_svg_url }}" alt="QR {{ row.table.name_ar }}">
     <div style="font-size:0.9rem; word-break:break-all; direction:ltr;">{{ row.full_url }}</div>
   </div>
   {% endfor %}

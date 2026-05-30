@@ -41,7 +41,7 @@ class Command(BaseCommand):
             stations[code], _ = PrepStation.objects.update_or_create(code=code, defaults={'name_ar': name})
 
         room, _ = Room.objects.update_or_create(name_ar='مشاريب', defaults={})
-        for t in ['T01 طاولة 1','T02 طاولة 2','T03 طاولة 3','T04 طاولة 4','BAR البار','TAKEAWAY تيك أواي','WORK01 مكتب 1','WORK02 مكتب 2','EVENT فعالية عامة']:
+        for t in ['T01 طاولة 1','T02 طاولة 2','T03 طاولة 3','T04 طاولة 4','BAR البار','GENERAL طلب عام داخل المكان','WORK01 مكتب 1','WORK02 مكتب 2','EVENT فعالية عامة']:
             TableArea.objects.update_or_create(room=room, name_ar=t)
 
         cat, _ = Category.objects.update_or_create(name_ar='عام', defaults={})

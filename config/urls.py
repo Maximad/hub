@@ -1,3 +1,5 @@
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path
 from core.views import menu
@@ -15,6 +17,8 @@ urlpatterns = [
     path('menu/', menu.menu_public, name='menu_public'),
     path('menu/table/<uuid:qr_token>/', menu.menu_table, name='menu_table'),
     path('order/<uuid:public_code>/', menu.order_public, name='order_public'),
+    path('order/<uuid:public_code>/qr.svg', menu.order_qr, name='order_qr'),
+    path('table/<uuid:qr_token>/qr.svg', menu.table_qr, name='table_qr'),
     path('staff/', menu.staff_home, name='staff_home'),
     path('staff/pos/', menu.staff_pos, name='staff_pos'),
     path('staff/qr/', menu.staff_qr_links, name='staff_qr_links'),
@@ -57,3 +61,6 @@ urlpatterns = [
     path('staff/vendors/<int:vendor_id>/participation/new/', staff_vendor_participation_new, name='staff_vendor_participation_new'),
     path('staff/food-lab/', menu.staff_food_lab, name='staff_food_lab'),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

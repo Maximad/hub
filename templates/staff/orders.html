@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}لوحة الطلبات{% endblock %}
 {% block content %}
-<h2 class="hub-section-title">لوحة الطلبات</h2>
+<h2 class="hub-section-title">{{ page_setting.title|default:"لوحة الطلبات" }}</h2>{% if page_setting.subtitle %}<p>{{ page_setting.subtitle }}</p>{% endif %}
 <div class="hub-toolbar"><a class="hub-button" href="{% url 'staff_cashier' %}">الكاشير</a><a class="hub-button" href="{% url 'staff_pos' %}">نقطة البيع / POS</a><a class="hub-button" href="{% url 'menu_public' %}">القائمة العامة</a></div>
 <div id="orders-board" hx-get="{% url 'staff_orders_partial' %}" hx-trigger="load, every 5s" hx-target="#orders-board" hx-swap="innerHTML">{% include "staff/orders_partial.html" %}</div>
 {% endblock %}

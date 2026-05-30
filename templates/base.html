@@ -1,18 +1,40 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="{% if system_settings %}{{ system_settings.default_language }}{% else %}ar{% endif %}" dir="rtl">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}مشاريب{% endblock %}</title>
+  <title>{% block title %}{% if system_settings %}{{ system_settings.public_brand_title }}{% else %}مشاريب{% endif %}{% endblock %}</title>
+  {% if system_settings %}
+  <style>
+    {% if system_settings.custom_font_file %}
+    @font-face{font-family:"{{ system_settings.custom_font_name|default:'HubCustomFont'|escapejs }}";src:url("{{ system_settings.custom_font_file.url }}") format("{{ system_settings.custom_font_format }}");font-display:swap;}
+    {% endif %}
+    :root{
+      --hub-primary:{{ system_settings.primary_color }};
+      --hub-header:{{ system_settings.header_color }};
+      --hub-button:{{ system_settings.button_color }};
+      --hub-accent:{{ system_settings.accent_color }};
+      --hub-bg:{{ system_settings.background_color }};
+      --hub-card:{{ system_settings.card_background_color }};
+      --hub-surface:{{ system_settings.card_background_color }};
+      --hub-text:{{ system_settings.text_color }};
+      --hub-border:{{ system_settings.border_color }};
+      --hub-font-size:{{ system_settings.base_font_size_px }}px;
+      --hub-heading-font-size:{% if system_settings.heading_font_size_px %}{{ system_settings.heading_font_size_px }}px{% else %}1.9rem{% endif %};
+      --hub-radius:{{ system_settings.border_radius_px }}px;
+      {% if system_settings.custom_font_file %}--hub-font-body:"{{ system_settings.custom_font_name|default:'HubCustomFont' }}","Tahoma","Noto Naskh Arabic","Segoe UI",Arial,sans-serif;{% endif %}
+    }
+  </style>
+  {% endif %}
   <link rel="stylesheet" href="{% static 'css/hub.css' %}">
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 </head>
 <body class="hub-page">
   <header class="hub-header">
     <div class="hub-container">
-      <h1 class="hub-title">نظام مشاريب</h1>
-      <div class="hub-subtitle">Hub Sueda • تشغيل يومي مرن</div>
+      <h1 class="hub-title">{% if system_settings %}{{ system_settings.system_title }}{% else %}نظام مشاريب{% endif %}</h1>
+      <div class="hub-subtitle">{% if system_settings %}{{ system_settings.header_subtitle }}{% else %}Hub Sueda • تشغيل يومي مرن{% endif %}</div>
     </div>
   </header>
   <main class="hub-container">{% block content %}{% endblock %}</main>

@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 from django.db.models import Prefetch, Q
 from django.http import Http404, HttpResponse
 from django.contrib import messages
+from django.contrib.auth import authenticate
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404, redirect, render
@@ -15,7 +16,8 @@ import re
 from members.models import MembershipBenefitRule, MembershipPlan, MembershipSubscription, MemberCreditLedger
 from internet.models import WifiNetwork
 from catalog.models import MenuSection, ProductMedia, ProductOption, ProductOptionGroup, ProductOptionGroupAssignment
-from core.models import ActivityLog, InternetPackage, InternetSession, Member, Order, OrderItem, Payment, Product, TableArea
+from core.settings_helpers import get_page_setting, get_system_settings
+from core.models import ActivityLog, InternetPackage, InternetSession, Member, Order, OrderItem, Payment, Product, SystemSetting, TableArea
 from events.models import Event
 from reservations.models import Reservation
 from vendors.models import Vendor, VendorParticipation
@@ -23,6 +25,33 @@ from vendors.models import Vendor, VendorParticipation
 
 DAMASCUS_TZ = ZoneInfo('Asia/Damascus')
 PHONE_ALLOWED_PATTERN = re.compile(r'^[\d\s\-\+\(\)]+$')
+
+
+def _qr_svg_response(data):
+    try:
+        import qrcode
+        import qrcode.image.svg
+    except ImportError as exc:
+        return HttpResponse('qrcode package is required to render QR SVG.', status=503, content_type='text/plain; charset=utf-8')
+    factory = qrcode.image.svg.SvgPathImage
+    image = qrcode.make(data, image_factory=factory, border=2, box_size=10)
+    response = HttpResponse(content_type='image/svg+xml')
+    image.save(response)
+    return response
+
+
+def _order_location_note(table, service_mode=Order.ServiceMode.DINE_IN):
+    if table:
+        return f'الطاولة: {table.name_ar}' + (f' — المساحة: {table.room.name_ar}' if table.room_id else '')
+    if service_mode == Order.ServiceMode.TAKEAWAY:
+        return 'تيك أواي'
+    return 'طلب عام داخل المكان'
+
+
+def _can_approve_partial_payment(user):
+    if not user or not user.is_authenticated:
+        return False
+    return user.is_superuser or getattr(user, 'role', '') in {'admin', 'owner'}
 
 
 def _parse_report_date(raw_date):
@@ -196,11 +225,13 @@ def _section_products_for_ordering(product_filter=None, section_filter=None, inc
 
 
 def _menu_context(table=None):
+    settings = get_system_settings()
     section_products = _section_products_for_ordering(
         product_filter={'is_available': True, 'visible_on_qr': True},
         section_filter={'visible_on_qr': True},
     )
-    return {'table': table, 'section_products': section_products}
+    page = get_page_setting('public_menu', 'القائمة العامة', 'Public menu', 'اختر طلبك داخل المكان.', 'Choose your in-space order.')
+    return {'table': table, 'section_products': section_products, 'settings': settings, 'page_setting': page}
 
 
 def menu_public(request):
@@ -322,10 +353,13 @@ def _selected_order_items_from_post(request, products):
     return selected, validation_errors
 
 
-def _create_order_from_selected_items(table, selected, note_parts, status=None):
+def _create_order_from_selected_items(table, selected, note_parts, status=None, service_mode=None):
     note = '\n'.join([part for part in note_parts if part])
+    if table and service_mode is None:
+        service_mode = Order.ServiceMode.TABLE
+    service_mode = service_mode or Order.ServiceMode.DINE_IN
     with transaction.atomic():
-        order = Order.objects.create(table=table, status=status or Order.Status.NEW, notes=note)
+        order = Order.objects.create(table=table, service_mode=service_mode, status=status or Order.Status.NEW, notes=note)
         for product, qty, item_note, selected_options_snapshot, option_delta in selected:
             unit_price = max(product.price_syp + option_delta, 0)
             OrderItem.objects.create(
@@ -363,9 +397,9 @@ def _create_order_from_menu(request, table=None):
         context['form_values'] = request.POST
         return render(request, 'menu/menu.html', context)
     general_note = request.POST.get('general_note', '').strip()
-    table_label = table.name_ar if table else 'طلب عام / تيك أواي'
-    note_parts = [f'الاسم: {customer_name}' if customer_name else '', f'الهاتف: {customer_phone}' if customer_phone else '', f'المكان: {table_label}', general_note]
-    order = _create_order_from_selected_items(table, selected, note_parts)
+    service_mode = Order.ServiceMode.TABLE if table else Order.ServiceMode.DINE_IN
+    note_parts = [f'الاسم: {customer_name}' if customer_name else '', f'الهاتف: {customer_phone}' if customer_phone else '', f'المكان: {_order_location_note(table, service_mode)}', general_note]
+    order = _create_order_from_selected_items(table, selected, note_parts, service_mode=service_mode)
     return redirect(reverse('order_public', kwargs={'public_code': order.public_code}))
 
 def order_public(request, public_code):
@@ -375,7 +409,14 @@ def order_public(request, public_code):
         raise Http404('الطلب غير موجود') from exc
     total = _items_total(order.items.all())
     needs_confirmation = any(item.product.requires_staff_confirmation for item in order.items.all() if item.product_id)
-    return render(request, 'menu/order_confirm.html', {'order': order, 'total': total, 'needs_confirmation': needs_confirmation})
+    qr_url = reverse('order_qr', kwargs={'public_code': order.public_code})
+    return render(request, 'menu/order_confirm.html', {'order': order, 'total': total, 'needs_confirmation': needs_confirmation, 'qr_url': qr_url})
+
+
+def order_qr(request, public_code):
+    order = get_object_or_404(Order, public_code=public_code)
+    path = reverse('order_public', kwargs={'public_code': order.public_code})
+    return _qr_svg_response(request.build_absolute_uri(path))
 
 
 STAFF_CAPABILITIES = {
@@ -523,11 +564,14 @@ def staff_pos(request):
             .order_by('-created_at')[:8]
         )
 
+    settings = get_system_settings()
     context = {
         'section_products': section_products,
         'tables': tables,
         'member_query': member_query,
         'member_rows': member_rows,
+        'settings': settings,
+        'page_setting': get_page_setting('staff_pos', 'نقطة البيع', 'POS', 'إدخال طلبات داخل المكان أو على الطاولات.', 'Create table or in-space orders.'),
     }
     if request.method == 'POST':
         selected, validation_errors = _selected_order_items_from_post(request, products)
@@ -559,7 +603,8 @@ def staff_pos(request):
             return render(request, 'staff/pos.html', context)
 
         general_note = request.POST.get('general_note', '').strip()
-        table_label = table.name_ar if table else 'طلب عام / POS'
+        service_mode = Order.ServiceMode.TABLE if table else Order.ServiceMode.DINE_IN
+        table_label = _order_location_note(table, service_mode)
         note_parts = [
             'Source: staff/pos',
             f'المكان: {table_label}',
@@ -568,7 +613,7 @@ def staff_pos(request):
             f'العضو: {member.name_ar} / {member.phone}' if member else '',
             general_note,
         ]
-        order = _create_order_from_selected_items(table, selected, note_parts, status=Order.Status.NEW)
+        order = _create_order_from_selected_items(table, selected, note_parts, status=Order.Status.NEW, service_mode=service_mode)
         ActivityLog.objects.create(
             actor=request.user,
             action='staff_pos_order_created',
@@ -606,7 +651,7 @@ def staff_qr_links(request):
     rows = []
     for table in tables:
         path = reverse('menu_table', kwargs={'qr_token': table.qr_token})
-        rows.append({'table': table, 'path': path, 'full_url': request.build_absolute_uri(path)})
+        rows.append({'table': table, 'path': path, 'full_url': request.build_absolute_uri(path), 'qr_svg_url': reverse('table_qr', kwargs={'qr_token': table.qr_token})})
     return render(request, 'staff/qr_links.html', {'rows': rows})
 
 
@@ -617,11 +662,17 @@ def staff_qr_print(request):
     rows = []
     for table in tables:
         path = reverse('menu_table', kwargs={'qr_token': table.qr_token})
-        rows.append({'table': table, 'full_url': request.build_absolute_uri(path)})
+        rows.append({'table': table, 'full_url': request.build_absolute_uri(path), 'qr_svg_url': reverse('table_qr', kwargs={'qr_token': table.qr_token})})
     return render(request, 'staff/qr_print.html', {'rows': rows})
 
 
 @login_required
+def table_qr(request, qr_token):
+    table = get_object_or_404(TableArea, qr_token=qr_token)
+    path = reverse('menu_table', kwargs={'qr_token': table.qr_token})
+    return _qr_svg_response(request.build_absolute_uri(path))
+
+
 def staff_menu_tools(request):
     _assert_staff_capability(request.user, 'operations')
     if request.method == 'POST':
@@ -675,7 +726,7 @@ def staff_orders(request):
         grouped.append((status, Order.Status(status).label, rows))
     is_htmx = request.headers.get("HX-Request") == "true"
     template = 'staff/orders_partial.html' if is_htmx else 'staff/orders.html'
-    return render(request, template, {'grouped': grouped})
+    return render(request, template, {'grouped': grouped, 'page_setting': get_page_setting('staff_orders', 'لوحة الطلبات', 'Orders')})
 
 
 @login_required
@@ -842,15 +893,19 @@ def staff_cashier(request):
     query = request.GET.get('q', '').strip()
     orders = Order.objects.select_related('table').prefetch_related('items', 'payments').order_by('-created_at')
     if query:
-        try:
-            orders = orders.filter(public_code=uuid.UUID(query))
-        except ValueError:
-            orders = orders.none()
+        normalized = query.strip().lstrip('#')
+        if normalized.isdigit():
+            orders = orders.filter(pk=int(normalized))
+        else:
+            try:
+                orders = orders.filter(public_code=uuid.UUID(query))
+            except ValueError:
+                orders = orders.none()
     rows = []
     for order in orders[:100]:
         total, paid, remaining, payment_label = _order_financials(order)
         rows.append({'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label})
-    return render(request, 'staff/cashier.html', {'rows': rows, 'query': query})
+    return render(request, 'staff/cashier.html', {'rows': rows, 'query': query, 'page_setting': get_page_setting('staff_cashier', 'الكاشير', 'Cashier')})
 
 
 @login_required
@@ -859,7 +914,7 @@ def staff_cashier_order(request, public_code):
     order = get_object_or_404(Order.objects.select_related('table').prefetch_related('items', 'payments'), public_code=public_code)
     total, paid, remaining, payment_label = _order_financials(order)
     methods = Payment.Method.choices
-    return render(request, 'staff/cashier_order.html', {'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods})
+    return render(request, 'staff/cashier_order.html', {'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods, 'payment_amount_default': remaining, 'qr_url': reverse('order_qr', kwargs={'public_code': order.public_code})})
 
 
 @login_required
@@ -875,7 +930,39 @@ def staff_cashier_pay(request, public_code):
     _total, _paid, remaining, _payment_label = _order_financials(
         Order.objects.prefetch_related('items', 'payments').get(pk=order.pk)
     )
-    amount_val = _parse_nonnegative_int(request.POST.get('amount_syp'), default=0, maximum=remaining)
+    try:
+        amount_val = int((request.POST.get('amount_syp') or '').strip())
+    except (TypeError, ValueError):
+        amount_val = 0
+    if amount_val <= 0:
+        messages.error(request, 'المبلغ يجب أن يكون أكبر من صفر.')
+        return redirect('staff_cashier_order', public_code=order.public_code)
+    if amount_val > remaining:
+        messages.error(request, 'المبلغ لا يجوز أن يتجاوز المتبقي.')
+        return redirect('staff_cashier_order', public_code=order.public_code)
+    if amount_val < remaining:
+        approving_manager = request.user if _can_approve_partial_payment(request.user) else None
+        if approving_manager is None:
+            manager_username = request.POST.get('manager_username', '').strip()
+            manager_password = request.POST.get('manager_password', '')
+            manager = authenticate(request, username=manager_username, password=manager_password)
+            if manager and _can_approve_partial_payment(manager):
+                approving_manager = manager
+        if approving_manager is None:
+            messages.error(request, 'الدفع الجزئي يحتاج موافقة المدير أو صاحب المحل.')
+            return redirect('staff_cashier_order', public_code=order.public_code)
+        ActivityLog.objects.create(
+            actor=request.user,
+            action='partial_payment_approved',
+            details={
+                'order_display_number': order.display_number,
+                'order_public_code': str(order.public_code),
+                'payment_amount': amount_val,
+                'remaining_before_payment': remaining,
+                'approving_manager_username': approving_manager.username,
+                'cashier_username': request.user.username,
+            },
+        )
     Payment.objects.create(order=order, amount_syp=amount_val, method=method)
     return redirect('staff_cashier_order', public_code=order.public_code)
 
@@ -903,12 +990,12 @@ def staff_reports_day_csv(request):
     rows, _sums = _build_day_report(report_date)
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = f'attachment; filename="report-{report_date.isoformat()}.csv"'
-    response.write('public_code,created_at,table,status,total,paid,remaining,payment_methods\n')
+    response.write('display_number,created_at,location,status,total,paid,remaining,payment_methods\n')
     for row in rows:
         order = row['order']
         methods_txt = '; '.join(f'{k}:{v}' for k, v in row['methods'].items())
-        table_name = order.table.name_ar if order.table_id else 'طلب عام / تيك أواي'
-        response.write(f'{order.public_code},{order.created_at.isoformat()},{table_name},{order.get_status_display()},{row["total"]},{row["paid"]},{row["remaining"]},"{methods_txt}"\n')
+        table_name = order.location_label
+        response.write(f'{order.display_number},{order.created_at.isoformat()},{table_name},{order.get_status_display()},{row["total"]},{row["paid"]},{row["remaining"]},"{methods_txt}"\n')
     return response
 
 
