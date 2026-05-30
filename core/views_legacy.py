@@ -2,8 +2,7 @@ from django.db import transaction
 import uuid
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
-from django.db.models import Case, F, IntegerField, Prefetch, Q, Sum, Value, When
-from django.db.models.functions import Coalesce, Greatest
+from django.db.models import Prefetch, Q
 from django.http import Http404, HttpResponse
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -52,84 +51,40 @@ def _day_range_utc(report_date):
     return local_start.astimezone(ZoneInfo('UTC')), local_end.astimezone(ZoneInfo('UTC'))
 
 
+def _line_total_for_item(item):
+    if item.line_total_syp_snapshot is not None:
+        return item.line_total_syp_snapshot
+    return item.quantity * item.unit_price_syp_snapshot
+
+
+def _items_total(items):
+    return sum(_line_total_for_item(item) for item in items)
+
+
+def _paid_total(payments):
+    return sum(payment.amount_syp for payment in payments if payment.method != Payment.Method.UNPAID)
+
+
+def _parse_positive_int(raw_value, default=1, maximum=99):
+    try:
+        value = int((raw_value or str(default)).strip())
+    except (TypeError, ValueError):
+        return default
+    return min(max(value, 1), maximum)
+
+
+def _parse_nonnegative_int(raw_value, default=0, maximum=None):
+    try:
+        value = int((raw_value or str(default)).strip())
+    except (TypeError, ValueError):
+        return default
+    value = max(value, 0)
+    if maximum is not None:
+        value = min(value, maximum)
+    return value
+
+
 def _build_day_report(report_date):
-    start_utc, end_utc = _day_range_utc(report_date)
-    base_orders = Order.objects.filter(created_at__gte=start_utc, created_at__lt=end_utc)
-    aggregated_orders = base_orders.annotate(
-        total=Coalesce(Sum(F('items__quantity') * F('items__unit_price_syp_snapshot')), 0),
-        paid=Coalesce(
-            Sum(
-                'payments__amount_syp',
-                filter=~Q(payments__method=Payment.Method.UNPAID),
-            ),
-            0,
-        ),
-    ).annotate(
-        remaining=Greatest(F('total') - F('paid'), 0),
-    )
-    summary = aggregated_orders.aggregate(
-        orders_count=Coalesce(Sum(Value(1), output_field=IntegerField()), 0),
-        order_total=Coalesce(Sum('total'), 0),
-        paid_total=Coalesce(Sum('paid'), 0),
-        remaining_total=Coalesce(Sum('remaining'), 0),
-        cancelled_count=Coalesce(Sum(Case(When(status=Order.Status.CANCELLED, then=1), default=0, output_field=IntegerField())), 0),
-        served_or_paid_count=Coalesce(
-            Sum(
-                Case(
-                    When(Q(status=Order.Status.SERVED) | Q(remaining=0), then=1),
-                    default=0,
-                    output_field=IntegerField(),
-                )
-            ),
-            0,
-        ),
-        unpaid_orders_count=Coalesce(Sum(Case(When(remaining__gt=0, then=1), default=0, output_field=IntegerField())), 0),
-    )
-    payment_totals = {
-        row['method']: row['total']
-        for row in Payment.objects.filter(
-            order__created_at__gte=start_utc,
-            order__created_at__lt=end_utc,
-        )
-        .values('method')
-        .annotate(total=Coalesce(Sum('amount_syp'), 0))
-    }
-    sums = {
-        'orders_count': summary['orders_count'],
-        'order_total': summary['order_total'],
-        'paid_total': summary['paid_total'],
-        'remaining_total': summary['remaining_total'],
-        'cash_total': payment_totals.get(Payment.Method.CASH, 0),
-        'manual_transfer_total': payment_totals.get(Payment.Method.MANUAL_TRANSFER, 0),
-        'free_total': payment_totals.get(Payment.Method.FREE, 0),
-        'discount_total': payment_totals.get(Payment.Method.MEMBER_DISCOUNT, 0),
-        'cancelled_count': summary['cancelled_count'],
-        'served_or_paid_count': summary['served_or_paid_count'],
-        'unpaid_orders_count': summary['unpaid_orders_count'],
-    }
-    detail_orders = (
-        aggregated_orders.select_related('table')
-        .only('id', 'public_code', 'status', 'created_at', 'table__id', 'table__name_ar')
-        .prefetch_related(
-            Prefetch(
-                'payments',
-                queryset=Payment.objects.only('id', 'order_id', 'method', 'amount_syp'),
-            )
-        )
-        .order_by('-created_at')
-    )
-    rows = []
-    for order in detail_orders:
-        total, paid, remaining, payment_label = _order_financials(order)
-        methods = {}
-        for p in order.payments.all():
-            methods[p.method] = methods.get(p.method, 0) + p.amount_syp
-        rows.append({'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods})
-    sums['avg_order_value'] = int(sums['order_total'] / sums['orders_count']) if sums['orders_count'] else 0
-    return rows, sums
-
-
-def _build_day_report_python_legacy(report_date):
     start_utc, end_utc = _day_range_utc(report_date)
     orders = (
         Order.objects.select_related('table')
@@ -146,12 +101,11 @@ def _build_day_report_python_legacy(report_date):
     for order in orders:
         total, paid, remaining, payment_label = _order_financials(order)
         methods = {}
-        for p in order.payments.all():
-            methods[p.method] = methods.get(p.method, 0) + p.amount_syp
-        is_paid = remaining == 0
+        for payment in order.payments.all():
+            methods[payment.method] = methods.get(payment.method, 0) + payment.amount_syp
         if order.status == Order.Status.CANCELLED:
             sums['cancelled_count'] += 1
-        if order.status == Order.Status.SERVED or is_paid:
+        if order.status == Order.Status.SERVED or remaining == 0:
             sums['served_or_paid_count'] += 1
         if remaining > 0:
             sums['unpaid_orders_count'] += 1
@@ -166,7 +120,6 @@ def _build_day_report_python_legacy(report_date):
         rows.append({'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods})
     sums['avg_order_value'] = int(sums['order_total'] / sums['orders_count']) if sums['orders_count'] else 0
     return rows, sums
-
 
 def dashboard(request):
     return render(request, 'core/dashboard.html')
@@ -374,7 +327,7 @@ def _create_order_from_selected_items(table, selected, note_parts, status=None):
     with transaction.atomic():
         order = Order.objects.create(table=table, status=status or Order.Status.NEW, notes=note)
         for product, qty, item_note, selected_options_snapshot, option_delta in selected:
-            unit_price = product.price_syp + option_delta
+            unit_price = max(product.price_syp + option_delta, 0)
             OrderItem.objects.create(
                 order=order,
                 product=product,
@@ -420,7 +373,7 @@ def order_public(request, public_code):
         order = Order.objects.select_related('table').prefetch_related('items__product').get(public_code=public_code)
     except Order.DoesNotExist as exc:
         raise Http404('الطلب غير موجود') from exc
-    total = sum(item.quantity * item.unit_price_syp_snapshot for item in order.items.all())
+    total = _items_total(order.items.all())
     needs_confirmation = any(item.product.requires_staff_confirmation for item in order.items.all() if item.product_id)
     return render(request, 'menu/order_confirm.html', {'order': order, 'total': total, 'needs_confirmation': needs_confirmation})
 
@@ -454,10 +407,10 @@ def _assert_staff_capability(user, capability_name):
 def _order_financials(order):
     total = getattr(order, 'total', None)
     if total is None:
-        total = sum(item.quantity * item.unit_price_syp_snapshot for item in order.items.all())
+        total = _items_total(order.items.all())
     paid = getattr(order, 'paid', None)
     if paid is None:
-        paid = sum(p.amount_syp for p in order.payments.exclude(method=Payment.Method.UNPAID))
+        paid = _paid_total(order.payments.all())
     remaining = max(total - paid, 0)
     if order.status == Order.Status.CANCELLED:
         payment_label = 'ملغى'
@@ -517,7 +470,7 @@ def _order_edit_context(order, error=''):
                 _attach_valid_option_assignments([product])
         item_rows.append({
             'item': item,
-            'line_total': item.quantity * item.unit_price_syp_snapshot,
+            'line_total': _line_total_for_item(item),
             'product': product,
             'selected_option_ids': _selected_snapshot_option_ids(item.selected_options_snapshot),
         })
@@ -580,8 +533,12 @@ def staff_pos(request):
         selected, validation_errors = _selected_order_items_from_post(request, products)
         table = None
         table_id = request.POST.get('table_id', '').strip()
-        if table_id:
-            table = get_object_or_404(TableArea, pk=table_id)
+        if table_id and not table_id.isdigit():
+            validation_errors.append('الطاولة المحددة غير صالحة.')
+        elif table_id:
+            table = TableArea.objects.filter(pk=int(table_id)).first()
+            if table is None:
+                validation_errors.append('الطاولة المحددة غير صالحة.')
         if not selected:
             context.update({'error': 'يرجى اختيار عنصر واحد على الأقل.', 'form_values': request.POST, 'selected_table_id': table_id})
             return render(request, 'staff/pos.html', context)
@@ -592,7 +549,9 @@ def staff_pos(request):
         if errors:
             validation_errors.append(errors['رقم الهاتف'])
         member_id = request.POST.get('member_id', '').strip()
-        member = Member.objects.filter(pk=member_id).first() if member_id else None
+        member = None
+        if member_id and member_id.isdigit():
+            member = Member.objects.filter(pk=int(member_id)).first()
         if member_id and not member:
             validation_errors.append('العضو المحدد غير صالح.')
         if validation_errors:
@@ -666,7 +625,12 @@ def staff_qr_print(request):
 def staff_menu_tools(request):
     _assert_staff_capability(request.user, 'operations')
     if request.method == 'POST':
-        product = get_object_or_404(Product, public_code=request.POST.get('product_code'))
+        try:
+            product_code = uuid.UUID(request.POST.get('product_code', ''))
+        except (TypeError, ValueError):
+            messages.error(request, 'المنتج المحدد غير صالح.')
+            return redirect('staff_menu_tools')
+        product = get_object_or_404(Product, public_code=product_code)
         action = request.POST.get('action')
         allowed = {'is_available', 'visible_on_qr', 'orderable_on_qr'}
         if action in allowed:
@@ -757,23 +721,23 @@ def staff_order_edit_add_item(request, public_code):
     if blocked:
         return blocked
 
+    product_id = request.POST.get('product_id', '').strip()
+    if not product_id.isdigit():
+        messages.error(request, 'المنتج المحدد غير صالح.')
+        return redirect('staff_order_edit', public_code=order.public_code)
     product = get_object_or_404(
         Product.objects.filter(is_available=True).prefetch_related(_option_assignment_prefetch()),
-        pk=request.POST.get('product_id'),
+        pk=int(product_id),
     )
     _attach_valid_option_assignments([product])
-    try:
-        qty = int((request.POST.get('quantity') or '1').strip())
-    except ValueError:
-        qty = 1
-    qty = max(qty, 1)
+    qty = _parse_positive_int(request.POST.get('quantity'), default=1)
     item_note = request.POST.get('item_note', '').strip()
     selected_options_snapshot, option_delta, option_errors = _validate_product_options(request, product)
     if option_errors:
         messages.error(request, ' '.join(option_errors))
         return redirect('staff_order_edit', public_code=order.public_code)
 
-    unit_price = product.price_syp + option_delta
+    unit_price = max(product.price_syp + option_delta, 0)
     with transaction.atomic():
         item = OrderItem.objects.create(
             order=order,
@@ -802,11 +766,7 @@ def staff_order_edit_update_item(request, public_code, item_id):
         return blocked
     item = get_object_or_404(OrderItem.objects.select_related('product'), pk=item_id, order=order)
 
-    try:
-        qty = int((request.POST.get('quantity') or '1').strip())
-    except ValueError:
-        qty = item.quantity
-    qty = max(qty, 1)
+    qty = _parse_positive_int(request.POST.get('quantity'), default=item.quantity)
     item_note = request.POST.get('item_note', '').strip()
     old_values = {
         'quantity': item.quantity,
@@ -912,13 +872,10 @@ def staff_cashier_pay(request, public_code):
     valid_methods = {m[0] for m in Payment.Method.choices}
     if method not in valid_methods:
         method = Payment.Method.CASH
-    amount = request.POST.get('amount_syp', '0').strip()
-    try:
-        amount_val = int(amount)
-    except ValueError:
-        amount_val = 0
-    if amount_val < 0:
-        amount_val = 0
+    _total, _paid, remaining, _payment_label = _order_financials(
+        Order.objects.prefetch_related('items', 'payments').get(pk=order.pk)
+    )
+    amount_val = _parse_nonnegative_int(request.POST.get('amount_syp'), default=0, maximum=remaining)
     Payment.objects.create(order=order, amount_syp=amount_val, method=method)
     return redirect('staff_cashier_order', public_code=order.public_code)
 
