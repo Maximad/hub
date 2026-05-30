@@ -21,6 +21,23 @@ services:
       - db
     ports:
       - "127.0.0.1:8899:8000"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.hub.rule=Host(`hubsweida.jwtalenthouse.com`)"
+      - "traefik.http.routers.hub.entrypoints=web"
+      - "traefik.http.services.hub.loadbalancer.server.port=8000"
+      - "traefik.http.routers.hub-secure.rule=Host(`hubsweida.jwtalenthouse.com`)"
+      - "traefik.http.routers.hub-secure.entrypoints=websecure"
+      - "traefik.http.routers.hub-secure.tls=true"
+      - "traefik.http.routers.hub-secure.tls.certresolver=letsencrypt"
+    networks:
+      - default
+      - proxy
 
 volumes:
   hub_db_data:
+
+networks:
+  proxy:
+    external: true
