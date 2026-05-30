@@ -26,6 +26,9 @@ class Vendor(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def __str__(self):
+        return self.name_ar or self.name_en or self.phone or str(self.uuid)[:8]
+
 
 class VendorParticipation(models.Model):
     class Status(models.TextChoices):
@@ -45,3 +48,7 @@ class VendorParticipation(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PLANNED)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        vendor_name = self.vendor.name_ar if self.vendor_id else ''
+        return f'{self.title_ar} — {vendor_name}' if vendor_name else self.title_ar

@@ -109,6 +109,10 @@ class ProductAvailability(CatalogTimeStampedModel):
     is_active = models.BooleanField(default=True)
     notes = models.TextField(blank=True)
 
+    def __str__(self):
+        label = self.starts_at or self.available_from_time or 'قاعدة إتاحة'
+        return f'{self.product} — {label}'
+
 
 class ProductOptionGroup(CatalogTimeStampedModel):
     class SelectionType(models.TextChoices):

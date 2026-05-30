@@ -6,8 +6,8 @@
   <header class="hub-card staff-pos__header">
     <div>
       <p class="menu-public__brand">Staff POS / نقطة البيع</p>
-      <h2 class="hub-section-title">إدخال طلب سريع باللمس</h2>
-      <p>اختر الطاولة أو طلب عام، اضغط المنتجات بسرعة، ثم أرسل الطلب إلى لوحة الطلبات والكاشير.</p>
+      <h2 class="hub-section-title">{{ page_setting.title|default:"إدخال طلب سريع باللمس" }}</h2>
+      {% if page_setting.subtitle %}<p>{{ page_setting.subtitle }}</p>{% else %}<p>اختر الطاولة أو طلب عام داخل المكان، اضغط المنتجات بسرعة، ثم أرسل الطلب إلى لوحة الطلبات والكاشير.</p>{% endif %}
     </div>
     <div class="hub-toolbar">
       <a class="hub-button" href="{% url 'staff_orders' %}">لوحة الطلبات</a>
@@ -22,7 +22,7 @@
       <div>
         <label for="table_id"><strong>الطاولة</strong></label>
         <select class="hub-input" name="table_id" id="table_id">
-          <option value="">طلب عام / بدون طاولة</option>
+          <option value="">طلب عام داخل المكان / بدون طاولة</option>
           {% for table in tables %}
             <option value="{{ table.id }}" {% if form_values.table_id == table.id|stringformat:'s' or selected_table_id == table.id|stringformat:'s' %}selected{% endif %}>{{ table.name_ar }}{% if table.room %} — {{ table.room.name_ar }}{% endif %}</option>
           {% endfor %}
