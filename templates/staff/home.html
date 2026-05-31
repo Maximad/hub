@@ -7,6 +7,7 @@
     {% for title,desc,url in actions %}{% endfor %}
     {% if staff_caps.pos %}<a class="hub-action-card" href="{% url 'staff_pos' %}"><div class="hub-media"></div><strong>نقطة البيع / POS</strong><p>إدخال طلبات سريع باللمس للفريق.</p></a>{% endif %}
     {% if staff_caps.orders %}<a class="hub-action-card" href="{% url 'staff_orders' %}"><div class="hub-media"></div><strong>لوحة الطلبات</strong><p>متابعة الطلبات وتعديل الحالة.</p></a>{% endif %}
+    {% if staff_caps.kitchen_board %}<a class="hub-action-card" href="{% url 'staff_kitchen' %}"><div class="hub-media"></div><strong>المطبخ / التحضير</strong><p>لوحة عناصر التحضير حسب المحطة والحالة.</p></a>{% endif %}
     {% if staff_caps.cashier %}<a class="hub-action-card" href="{% url 'staff_cashier' %}"><div class="hub-media"></div><strong>الكاشير</strong><p>فتح الطلبات واستلام الدفعات.</p></a>{% endif %}
     {% if staff_caps.reports %}<a class="hub-action-card" href="{% url 'staff_reports_home' %}"><div class="hub-media"></div><strong>التقارير</strong><p>مؤشرات اليوم والتصدير.</p></a>{% endif %}
     {% if staff_caps.reports %}<a class="hub-action-card" href="{% url 'staff_close_day' %}"><div class="hub-media"></div><strong>إغلاق اليوم</strong><p>ملخص الإغلاق والطباعة.</p></a>{% endif %}

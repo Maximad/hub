@@ -233,6 +233,14 @@ class Order(TimeStampedModel, PublicCodeModel):
 
 
 class OrderItem(TimeStampedModel):
+    class PrepStatus(models.TextChoices):
+        PENDING = 'pending', 'جديد'
+        ACCEPTED = 'accepted', 'تم الاستلام'
+        PREPARING = 'preparing', 'قيد التحضير'
+        READY = 'ready', 'جاهز'
+        SERVED = 'served', 'تم التسليم'
+        CANCELLED = 'cancelled', 'ملغي'
+
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
     product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name='order_items')
     quantity = models.PositiveIntegerField(default=1)
@@ -242,6 +250,7 @@ class OrderItem(TimeStampedModel):
     selected_options_snapshot = models.JSONField(default=list, blank=True)
     item_note = models.TextField(blank=True)
     line_total_syp_snapshot = models.IntegerField(null=True, blank=True)
+    prep_status = models.CharField(max_length=20, choices=PrepStatus.choices, default=PrepStatus.PENDING)
 
     def __str__(self):
         return f'{self.product_name_ar_snapshot} × {self.quantity} — {self.order.display_number}'
