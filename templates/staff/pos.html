@@ -2,7 +2,7 @@
 {% load static menu_form %}
 {% block title %}نقطة البيع / POS{% endblock %}
 {% block content %}
-<div class="staff-pos" dir="rtl">
+<div class="staff-pos pos-layout-{{ system_settings.pos_layout_preset|default:'fast_touch' }} pos-cart-{{ system_settings.pos_cart_position|default:'side' }} {{ system_settings.pos_mobile_layout_class|default:'layout-grid-2' }} {{ system_settings.pos_tablet_layout_class|default:'layout-tablet-3' }} {{ system_settings.pos_desktop_layout_class|default:'layout-grid-4' }}" dir="rtl">
   <header class="hub-card staff-pos__header">
     <div>
       <p class="menu-public__brand">Staff POS / نقطة البيع</p>
@@ -16,7 +16,7 @@
     {% if error %}<p class="hub-badge hub-badge-danger">{{ error }}</p>{% endif %}
   </header>
 
-  <form method="post" class="hub-form staff-pos__form" id="menu-order-form">
+  <form method="post" class="hub-form staff-pos__form" id="menu-order-form" data-show-modifier-summary="{% if not system_settings or system_settings.show_modifier_summary %}true{% else %}false{% endif %}">
     {% csrf_token %}
     <section class="hub-card staff-pos__setup" aria-label="بيانات الطلب">
       <div>
@@ -61,11 +61,11 @@
 
     <section class="staff-pos__catalog" aria-label="كتالوج المنتجات">
       <div class="hub-card staff-pos__catalog-tools">
-        <div>
+        {% if not system_settings or system_settings.pos_enable_search_bar %}<div>
           <label for="staff-pos-search"><strong>بحث سريع</strong></label>
           <input class="hub-input" type="search" id="staff-pos-search" placeholder="ابحث باسم المنتج" data-pos-search autocomplete="off">
-        </div>
-        {% if section_products %}
+        </div>{% endif %}
+        {% if not system_settings or system_settings.pos_show_section_chips and section_products %}
           <nav class="menu-sections-nav staff-pos__chips" aria-label="أقسام المنتجات">
             {% for section, products in section_products %}
               <a class="menu-section-chip" href="#pos-section-{% if section %}{{ section.id }}{% else %}other{% endif %}">{% if section %}{{ section.name_ar }}{% else %}بدون قسم{% endif %}</a>
@@ -78,10 +78,10 @@
         {% for section, products in section_products %}
           <section class="hub-card hub-section staff-pos__section" id="pos-section-{% if section %}{{ section.id }}{% else %}other{% endif %}">
             <h3 class="hub-section-title">{% if section %}{{ section.name_ar }}{% else %}بدون قسم{% endif %}</h3>
-            <div class="menu-product-grid staff-pos__grid">
+            <div class="menu-product-grid staff-pos__grid {{ system_settings.pos_mobile_layout_class|default:'layout-grid-2' }} {{ system_settings.pos_tablet_layout_class|default:'layout-tablet-3' }} {{ system_settings.pos_desktop_layout_class|default:'layout-grid-4' }}">
               {% for p in products %}
                 <article class="hub-list-card menu-product-card staff-pos__product" data-product-card data-product-id="{{ p.id }}" data-price="{{ p.price_syp|default:'0' }}" data-search-text="{{ p.name_ar }} {{ p.name_en }} {{ p.description_ar }}">
-                  <div class="hub-media menu-product-media staff-pos__media{% if not p.primary_media %} menu-product-media--placeholder{% endif %}">
+                  {% if not system_settings or system_settings.pos_show_product_images %}<div class="hub-media menu-product-media staff-pos__media{% if not p.primary_media %} menu-product-media--placeholder{% endif %}">
                     {% if p.primary_media %}
                       {% if p.primary_media.is_visual_media %}
                         <img src="{{ p.primary_media.url }}" alt="{{ p.primary_media.display_alt_text }}" loading="lazy">
@@ -93,11 +93,11 @@
                     {% else %}
                       <span>{{ p.name_ar|slice:":1" }}</span>
                     {% endif %}
-                  </div>
+                  </div>{% endif %}
                   <button class="staff-pos__tap-zone" type="button" data-action="plus" data-target="qty_{{ p.id }}" aria-label="إضافة {{ p.name_ar }}">
                     <span class="menu-product-name">{{ p.name_ar }}</span>
                     {% if p.name_en %}<small>{{ p.name_en }}</small>{% endif %}
-                    <strong data-role="price">{{ p.price_syp }} ل.س</strong>
+                    {% if not system_settings or system_settings.pos_show_prices %}<strong data-role="price">{{ p.price_syp }} ل.س</strong>{% endif %}
                   </button>
                   <div class="menu-qty-controls staff-pos__qty">
                     <button class="hub-button hub-button-secondary menu-stepper-btn" type="button" data-action="minus" data-target="qty_{{ p.id }}" aria-label="تقليل {{ p.name_ar }}">-</button>
@@ -107,7 +107,7 @@
                   </div>
 
                   {% if p.valid_option_assignments %}
-                    <details class="menu-options-details staff-pos__details" data-options-panel>
+                    <details class="menu-options-details staff-pos__details" data-options-panel{% if not system_settings.collapse_modifiers_by_default %} open{% endif %}>
                       <summary class="hub-button hub-button-secondary">خيارات / Modifiers</summary>
                       <div class="menu-options-wrap">
                         {% for assignment in p.valid_option_assignments %}
@@ -162,11 +162,11 @@
       </div>
     </aside>
 
-    <aside class="menu-sticky-cart staff-pos__floating-cart" data-sticky-cart hidden>
+    {% if not system_settings or system_settings.show_sticky_cart %}<aside class="menu-sticky-cart staff-pos__floating-cart" data-sticky-cart hidden>
       <p><strong data-item-count>0</strong> عناصر</p>
       <p data-sticky-total>0 ل.س</p>
       <a href="#cart-review" class="hub-button hub-button-primary">فتح السلة</a>
-    </aside>
+    </aside>{% endif %}
   </form>
 </div>
 <form method="get" id="staff-pos-member-search" action="{% url 'staff_pos' %}"></form>

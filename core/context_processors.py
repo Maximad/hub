@@ -6,4 +6,4 @@ def system_settings(request):
         settings = get_system_settings()
     except Exception:
         settings = None
-    return {'system_settings': settings}
+    return {'system_settings': settings, 'appearance_settings': settings}
