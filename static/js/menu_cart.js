@@ -12,6 +12,13 @@
   const posSearch = form.querySelector('[data-pos-search]');
   const submitBtn = form.querySelector('[data-submit-btn]');
   const showModifierSummary = form.dataset.showModifierSummary !== 'false';
+  const deliveryFields = form.querySelector('[data-delivery-fields]');
+  const deliveryFeeRow = form.querySelector('[data-delivery-fee-row]');
+  const deliveryFeeNode = form.querySelector('[data-delivery-fee]');
+  const totalWithDeliveryRow = form.querySelector('[data-total-with-delivery-row]');
+  const totalWithDeliveryNode = form.querySelector('[data-total-with-delivery]');
+  const deliveryMinimum = form.querySelector('[data-delivery-minimum]');
+  const deliverySettings = window.HUB_DELIVERY_SETTINGS || { feeMode: 'none', fixedFee: 0, minimum: 0 };
 
   function parsePrice(text) {
     const raw = String(text || '0').replace(/[^0-9.-]/g, '');
@@ -33,6 +40,10 @@
       name: input.dataset.optionName || input.closest('label')?.textContent?.trim() || '',
       delta: parsePrice(input.dataset.priceDelta),
     }));
+  }
+
+  function currentFulfillmentMode() {
+    return form.querySelector('input[name="fulfillment_mode"]:checked')?.value || 'inside_space';
   }
 
   function update() {
@@ -69,6 +80,14 @@
       })
       .join('');
 
+    const isDelivery = currentFulfillmentMode() === 'delivery';
+    const deliveryFee = isDelivery && deliverySettings.feeMode === 'fixed' ? Math.max(Number(deliverySettings.fixedFee || 0), 0) : 0;
+    if (deliveryFields) deliveryFields.hidden = !isDelivery;
+    if (deliveryFeeRow) deliveryFeeRow.hidden = !isDelivery || deliveryFee <= 0;
+    if (deliveryFeeNode) deliveryFeeNode.textContent = `${deliveryFee.toLocaleString('ar-SY')} ل.س`;
+    if (totalWithDeliveryRow) totalWithDeliveryRow.hidden = !isDelivery || deliveryFee <= 0;
+    if (totalWithDeliveryNode) totalWithDeliveryNode.textContent = `${(totalPrice + deliveryFee).toLocaleString('ar-SY')} ل.س`;
+    if (deliveryMinimum) deliveryMinimum.hidden = !(isDelivery && Number(deliverySettings.minimum || 0) > 0 && totalPrice < Number(deliverySettings.minimum || 0));
     const totalText = `${totalPrice.toLocaleString('ar-SY')} ل.س`;
     cartTotal.textContent = totalText;
     stickyTotalNodes.forEach((node) => { node.textContent = totalText; });

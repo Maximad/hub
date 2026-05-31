@@ -19,6 +19,16 @@
   <form method="post" class="hub-form staff-pos__form" id="menu-order-form" data-show-modifier-summary="{% if not system_settings or system_settings.show_modifier_summary %}true{% else %}false{% endif %}">
     {% csrf_token %}
     <section class="hub-card staff-pos__setup" aria-label="بيانات الطلب">
+
+      <div>
+        <strong>طريقة الطلب</strong>
+        <div class="menu-option-chips" data-fulfillment-selector>
+          <label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="inside_space" {% if form_values.fulfillment_mode != 'delivery' and form_values.fulfillment_mode != 'takeaway' and form_values.fulfillment_mode != 'table' %}checked{% endif %}> داخل المكان</label>
+          <label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="table" {% if form_values.fulfillment_mode == 'table' %}checked{% endif %}> طاولة</label>
+          {% if settings.enable_delivery %}<label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="delivery" {% if form_values.fulfillment_mode == 'delivery' %}checked{% endif %}> توصيل</label>{% endif %}
+          {% if settings.enable_takeaway %}<label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="takeaway" {% if form_values.fulfillment_mode == 'takeaway' %}checked{% endif %}> تيك أواي</label>{% endif %}
+        </div>
+      </div>
       <div>
         <label for="table_id"><strong>الطاولة</strong></label>
         <select class="hub-input" name="table_id" id="table_id">
@@ -35,6 +45,13 @@
       <div>
         <label for="customer_phone"><strong>هاتف اختياري</strong></label>
         <input class="hub-input" type="tel" name="customer_phone" id="customer_phone" value="{{ form_values.customer_phone|default:'' }}" inputmode="tel" autocomplete="off">
+      </div>
+      <div class="hub-card" data-delivery-fields hidden>
+        <h3>بيانات التوصيل</h3>
+        <label>منطقة التوصيل<input class="hub-input" type="text" name="delivery_area" value="{{ form_values.delivery_area|default:'' }}"></label>
+        <label>عنوان التوصيل<textarea class="hub-input" name="delivery_address" rows="3">{{ form_values.delivery_address|default:'' }}</textarea></label>
+        <label>ملاحظات التوصيل<textarea class="hub-input" name="delivery_notes" rows="2">{{ form_values.delivery_notes|default:'' }}</textarea></label>
+        {% if settings.delivery_fee_mode == 'manual' %}<label>رسوم التوصيل اليدوية<input class="hub-input" type="number" min="0" name="delivery_fee_syp" value="{{ form_values.delivery_fee_syp|default:'0' }}"></label>{% endif %}
       </div>
     </section>
 
@@ -170,5 +187,6 @@
   </form>
 </div>
 <form method="get" id="staff-pos-member-search" action="{% url 'staff_pos' %}"></form>
+<script>window.HUB_DELIVERY_SETTINGS = {feeMode: '{{ settings.delivery_fee_mode|default:'none' }}', fixedFee: {{ settings.fixed_delivery_fee_syp|default:0 }}, minimum: {{ settings.minimum_delivery_order_syp|default:0 }}};</script>
 <script src="{% static 'js/menu_cart.js' %}"></script>
 {% endblock %}
