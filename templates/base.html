@@ -45,6 +45,11 @@
       <div class="hub-subtitle">{% if system_settings %}{{ system_settings.header_subtitle }}{% else %}Hub Sueda • تشغيل يومي مرن{% endif %}</div>
     </div>
   </header>
-  <main class="hub-container">{% block content %}{% endblock %}</main>
+  <main class="hub-container">
+    {% if messages %}
+      <div class="hub-messages">{% for message in messages %}<div class="hub-message hub-message-{{ message.tags|default:'info' }}">{{ message }}</div>{% endfor %}</div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
 </body>
 </html>

@@ -12,6 +12,9 @@ from core.views.staff_vendors import staff_vendors, staff_vendor_new, staff_vend
 from core.views.staff_import import (
     staff_import_home, staff_import_upload, staff_import_template, staff_import_preview, staff_import_confirm,
 )
+from accounts.views_staff import (
+    staff_users_list, staff_user_new, staff_user_detail, staff_user_edit, staff_user_password, staff_user_toggle_active,
+)
 
 
 urlpatterns = [
@@ -27,6 +30,12 @@ urlpatterns = [
     path('staff/qr/', menu.staff_qr_links, name='staff_qr_links'),
     path('staff/qr/print/', menu.staff_qr_print, name='staff_qr_print'),
     path('staff/menu-tools/', menu.staff_menu_tools, name='staff_menu_tools'),
+    path('staff/users/', staff_users_list, name='staff_users_list'),
+    path('staff/users/new/', staff_user_new, name='staff_user_new'),
+    path('staff/users/<int:user_id>/', staff_user_detail, name='staff_user_detail'),
+    path('staff/users/<int:user_id>/edit/', staff_user_edit, name='staff_user_edit'),
+    path('staff/users/<int:user_id>/password/', staff_user_password, name='staff_user_password'),
+    path('staff/users/<int:user_id>/toggle-active/', staff_user_toggle_active, name='staff_user_toggle_active'),
     path('staff/import/', staff_import_home, name='staff_import_home'),
     path('staff/import/<str:import_type>/', staff_import_upload, name='staff_import_upload'),
     path('staff/import/<str:import_type>/template.csv', staff_import_template, name='staff_import_template'),

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}{{ target_user.username }}{% endblock %}
+{% block content %}
+<section class="hub-section hub-card">
+  <div class="hub-toolbar">
+    <a class="hub-button hub-button-secondary" href="{% url 'staff_users_list' %}">العودة للمستخدمين</a>
+    <a class="hub-button" href="{% url 'staff_user_edit' target_user.id %}">تعديل</a>
+    <a class="hub-button" href="{% url 'staff_user_password' target_user.id %}">تعيين كلمة المرور</a>
+  </div>
+  <h2>{{ target_user.get_full_name|default:target_user.username }}</h2>
+  <div class="hub-grid hub-grid-2">
+    <p><strong>اسم المستخدم:</strong> {{ target_user.username }}</p><p><strong>البريد:</strong> {{ target_user.email|default:'-' }}</p>
+    <p><strong>الهاتف:</strong> {{ target_user.phone|default:'-' }}</p><p><strong>الدور:</strong> {{ target_user.get_role_display }}</p>
+    <p><strong>نشط:</strong> {{ target_user.is_active|yesno:'نعم,لا' }}</p><p><strong>is_staff:</strong> {{ target_user.is_staff|yesno:'نعم,لا' }}</p>
+    <p><strong>is_superuser:</strong> {{ target_user.is_superuser|yesno:'نعم,لا' }}</p><p><strong>آخر دخول:</strong> {{ target_user.last_login|date:'Y-m-d H:i'|default:'-' }}</p>
+  </div>
+  <form method="post" action="{% url 'staff_user_toggle_active' target_user.id %}">{% csrf_token %}
+    <button class="hub-button {% if target_user.is_active %}hub-button-secondary{% else %}hub-button-primary{% endif %}" type="submit">{% if target_user.is_active %}تعطيل المستخدم{% else %}تفعيل المستخدم{% endif %}</button>
+  </form>
+</section>
+{% endblock %}
