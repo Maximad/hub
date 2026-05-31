@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}معاينة {{ importer.title }}{% endblock %}
+{% block content %}
+<section class="hub-section" dir="rtl">
+  <div class="hub-section-header">
+    <div>
+      <h2 class="hub-section-title">معاينة {{ importer.title }}</h2>
+      <p class="hub-muted">وضع الاستيراد: {{ mode }}</p>
+    </div>
+    <a class="hub-button hub-button-secondary" href="{% url 'staff_import_upload' importer.slug %}">رفع ملف آخر</a>
+  </div>
+  {% if file_errors %}
+    <div class="hub-card hub-alert hub-alert-error">
+      <h3>أخطاء في الملف</h3>
+      <ul>{% for error in file_errors %}<li>{{ error }}</li>{% endfor %}</ul>
+    </div>
+  {% endif %}
+  <div class="hub-card">
+    <h3>نتيجة التحقق</h3>
+    <div class="hub-table-wrap">
+      <table class="hub-table">
+        <thead><tr><th>السطر</th><th>الإجراء</th><th>الاسم/المفتاح</th><th>الأخطاء</th><th>التحذيرات</th></tr></thead>
+        <tbody>
+          {% for row in results %}
+            <tr>
+              <td>{{ row.row_number }}</td>
+              <td>{{ row.action }}</td>
+              <td>{{ row.key_label }}</td>
+              <td>{% if row.errors %}<ul>{% for error in row.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% else %}—{% endif %}</td>
+              <td>{% if row.warnings %}<ul>{% for warning in row.warnings %}<li>{{ warning }}</li>{% endfor %}</ul>{% else %}—{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5">لا توجد صفوف قابلة للمعاينة.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <form method="post" action="{% url 'staff_import_confirm' importer.slug %}" class="hub-form" style="margin-top:1rem;">
+      {% csrf_token %}
+      {% if has_warnings and not has_errors %}
+        <label><input type="checkbox" name="confirm_warnings" value="yes"> أؤكد المتابعة رغم التحذيرات الظاهرة.</label>
+      {% endif %}
+      <button class="hub-button" type="submit" {% if has_errors %}disabled{% endif %}>تأكيد الاستيراد</button>
+      {% if has_errors %}<p class="hub-muted">لا يمكن الحفظ قبل إصلاح الأخطاء.</p>{% endif %}
+    </form>
+  </div>
+</section>
+{% endblock %}

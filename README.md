@@ -137,3 +137,37 @@ Bootstrap updates structural/reference data with `update_or_create` and does not
 - Updated base template and key staff/public templates to use responsive card-based RTL layout.
 - CSS variables allow future theme customization (colors, fonts, radius, shadows) from one place.
 - No schema/model changes, no migrations added, and existing routes preserved.
+
+## Phase 11A — Staff bulk import tools
+
+Bulk import tools are available for managers at `/staff/import/`. Access is restricted to superusers and users with `role=admin`; other staff are redirected back to the staff dashboard with an Arabic permission message.
+
+### Routes
+
+* `/staff/import/` — import dashboard.
+* `/staff/import/<import_type>/` — upload page.
+* `/staff/import/<import_type>/template.csv` — UTF-8 CSV template download.
+* `/staff/import/<import_type>/preview/` — POST upload preview and row validation.
+* `/staff/import/<import_type>/confirm/` — POST confirmation and save.
+
+### Supported import types
+
+* `products` — products, sections, tags, modifier group assignments, prep station lookup, and primary media URL. The CSV `product_type` maps to the existing `Product.item_type` field; `code` is matched against a UUID `public_code` when possible and is otherwise stored as `metadata.import_code` for future product imports. Missing tags are warnings and are not created automatically. Missing sections are created only when a product is saved in a create/update mode.
+* `events` — events with safe date parsing. The current event model has no direct price field, so `price_syp` creates or updates a default `EventTicketType` named `تذكرة أساسية`.
+* `vendors` — vendor partners. The current vendor model stores `name` as `name_ar`, `contact_name` as `contact_person`, `category` as `vendor_type`, and `notes` as `settlement_notes`; email is validated as a warning because the model has no email field.
+* `members` — members and optional opening ledger entries. The current member model has no email or notes fields, so those columns are accepted without crashing and shown as warnings. `membership_plan` matches `MembershipPlan` by code or name. Opening minutes/credit create `MemberCreditLedger` entries when provided.
+* `internet-packages` — maps directly to the existing `InternetPackage` model (`minutes` maps to `duration_minutes`). The current model has no `is_active` field, so false values are warnings.
+* `tables` — table/QR areas. `qr_token` may be supplied as a UUID or left empty so the existing `TableArea` default generates a safe token. `room_or_area` creates or reuses a `Room`; numeric database IDs are not exposed.
+
+### CSV notes
+
+* Use CSV encoded as UTF-8 (templates are emitted with a UTF-8 BOM for Excel compatibility).
+* Boolean columns accept `true/false`, `yes/no`, `1/0`, and `نعم/لا`.
+* Whitespace is stripped from all cells.
+* Missing columns, malformed dates, invalid prices, invalid booleans, and invalid numbers are reported as row-level or file-level Arabic errors instead of crashing.
+* Import modes are `dry_run`, `create_only`, `update_only`, and `create_and_update`.
+* Nothing is saved if validation errors exist. Warnings can be saved only after explicit confirmation.
+
+### Deployment note
+
+No schema migrations are required for Phase 11A. Run and test imports on staging before using them in production, especially for duplicate matching and product modifier applicability.
