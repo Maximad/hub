@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ importer.title }}{% endblock %}
+{% block content %}
+<section class="hub-section" dir="rtl">
+  <div class="hub-section-header">
+    <div>
+      <h2 class="hub-section-title">{{ importer.title }}</h2>
+      <p class="hub-muted">{{ importer.description }}</p>
+    </div>
+    <a class="hub-button hub-button-secondary" href="{% url 'staff_import_home' %}">كل أدوات الاستيراد</a>
+  </div>
+  <div class="hub-card">
+    <h3>1) حمّل القالب ثم ارفع الملف</h3>
+    <p>يجب أن يكون الملف CSV بترميز UTF-8. لا يتم حفظ أي شيء قبل صفحة التأكيد.</p>
+    <a class="hub-button hub-button-secondary" href="{% url 'staff_import_template' importer.slug %}">تحميل قالب CSV</a>
+    <form method="post" enctype="multipart/form-data" action="{% url 'staff_import_preview' importer.slug %}" class="hub-form" style="margin-top:1rem;">
+      {% csrf_token %}
+      <label>وضع الاستيراد</label>
+      <select name="mode">
+        {% for value,label in modes.items %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+      </select>
+      <label>ملف CSV</label>
+      <input type="file" name="csv_file" accept=".csv,text/csv" required>
+      <button class="hub-button" type="submit">معاينة وتحقق</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

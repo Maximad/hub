@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}الاستيراد الجماعي{% endblock %}
+{% block content %}
+<section class="hub-section" dir="rtl">
+  <div class="hub-section-header">
+    <div>
+      <h2 class="hub-section-title">الاستيراد الجماعي</h2>
+      <p class="hub-muted">أدوات آمنة للمدير لإضافة أو تحديث البيانات من ملفات CSV بترميز UTF-8.</p>
+    </div>
+    <a class="hub-button hub-button-secondary" href="{% url 'staff_home' %}">العودة للفريق</a>
+  </div>
+  <div class="hub-grid hub-grid-3">
+    {% for importer in importers %}
+      <article class="hub-card">
+        <h3>{{ importer.title }}</h3>
+        <p>{{ importer.description }}</p>
+        <div class="hub-actions">
+          <a class="hub-button" href="{% url 'staff_import_upload' importer.slug %}">رفع CSV</a>
+          <a class="hub-button hub-button-secondary" href="{% url 'staff_import_template' importer.slug %}">تحميل القالب</a>
+        </div>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

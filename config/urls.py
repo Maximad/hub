@@ -9,6 +9,9 @@ from core.views.staff_members import staff_members, staff_member_new, staff_memb
 from core.views.staff_events import staff_events, staff_event_new, staff_event_detail
 from core.views.staff_reservations import staff_reservations, staff_reservation_new, staff_reservation_detail, staff_reservation_status
 from core.views.staff_vendors import staff_vendors, staff_vendor_new, staff_vendor_detail, staff_vendor_participation_new
+from core.views.staff_import import (
+    staff_import_home, staff_import_upload, staff_import_template, staff_import_preview, staff_import_confirm,
+)
 
 
 urlpatterns = [
@@ -24,6 +27,11 @@ urlpatterns = [
     path('staff/qr/', menu.staff_qr_links, name='staff_qr_links'),
     path('staff/qr/print/', menu.staff_qr_print, name='staff_qr_print'),
     path('staff/menu-tools/', menu.staff_menu_tools, name='staff_menu_tools'),
+    path('staff/import/', staff_import_home, name='staff_import_home'),
+    path('staff/import/<str:import_type>/', staff_import_upload, name='staff_import_upload'),
+    path('staff/import/<str:import_type>/template.csv', staff_import_template, name='staff_import_template'),
+    path('staff/import/<str:import_type>/preview/', staff_import_preview, name='staff_import_preview'),
+    path('staff/import/<str:import_type>/confirm/', staff_import_confirm, name='staff_import_confirm'),
     path('staff/modifiers/', menu.staff_modifiers, name='staff_modifiers'),
     path('staff/orders/', menu.staff_orders, name='staff_orders'),
     path('staff/orders/partial/', menu.staff_orders, name='staff_orders_partial'),
