@@ -197,3 +197,57 @@ When order conversion is used, configure **Internet service product** to an exis
 ### Current permissions note
 
 The existing staff capability map keeps internet/member operations limited to `admin` and `cashier` roles (plus superusers). Waiter access can be widened in a later role-policy pass without changing the billing data model; kitchen users remain excluded from internet billing management.
+
+## Phase 11E — Kitchen / prep-station workflow
+
+### Routes
+
+* `/staff/kitchen/` — dedicated Arabic RTL kitchen/prep board.
+* `/staff/kitchen/partial/` — HTMX polling partial used by the board every ~7 seconds.
+* `/staff/kitchen/order/<public_code>/` — lightweight prep-focused order detail.
+* `/staff/kitchen/item/<item_id>/status/` — CSRF-protected POST endpoint for item preparation status changes.
+
+### Role access
+
+* Superusers and `admin` users have full kitchen access.
+* `kitchen` users can access the kitchen/prep board from `/staff/` and update preparation statuses only; they are not given cashier, reports, imports, settings, or user-management access.
+* `cashier` and `waiter` users can view the board; serving is available to cashier/waiter/admin where permitted, while cancellation is limited to admin/cashier.
+* Anonymous users are redirected through the normal login-required staff flow.
+
+### Item preparation status workflow
+
+Order items now track an item-level preparation status:
+
+1. `pending` — جديد
+2. `accepted` — تم الاستلام
+3. `preparing` — قيد التحضير
+4. `ready` — جاهز
+5. `served` — تم التسليم
+6. `cancelled` — ملغي
+
+Kitchen users can move items through `pending → accepted → preparing → ready`. Cashier/waiter/admin users may mark ready items as served where their role allows, and admin/cashier users may cancel an active item. Invalid transitions return an Arabic message instead of a server error. Order-level status remains manual/conservative so the existing staff order board and cashier workflow are not changed unexpectedly.
+
+### Prep-station grouping
+
+The board uses the existing `catalog.PrepStation` model and the existing `Product.prep_station_ref` field. Items are grouped by their product prep station; products with no prep station appear under `غير محدد / عام`. Prep stations are manageable in Django admin with Arabic/English names, active flag, and sort order.
+
+### Manual testing checklist
+
+1. Admin can access `/staff/kitchen/`.
+2. Kitchen user can access `/staff/kitchen/`.
+3. Kitchen user cannot access cashier/reports/users/imports/settings.
+4. Waiter creates order from POS.
+5. New order appears on kitchen board.
+6. Item modifiers appear clearly.
+7. Item notes appear clearly.
+8. Kitchen changes item status `pending → accepted`.
+9. Kitchen changes `accepted → preparing`.
+10. Kitchen changes `preparing → ready`.
+11. Ready item appears under the ready filter and is hidden from the default active filter.
+12. Cancelled orders do not appear as active prep.
+13. Delivery orders show a delivery badge/note context but no payment information.
+14. Table orders show the table label.
+15. No long UUIDs are used as primary kitchen order labels.
+16. Staff orders/cashier still work.
+17. Public menu still works.
+18. No 500s in logs.

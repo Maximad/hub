@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}المطبخ / التحضير{% endblock %}
+{% block content %}
+<section class="hub-section kitchen-board" aria-labelledby="kitchen-title">
+  <div class="kitchen-board__header">
+    <div>
+      <h2 id="kitchen-title" class="hub-section-title">{{ page_setting.title|default:"المطبخ / التحضير" }}</h2>
+      {% if page_setting.subtitle %}<p class="hub-muted-text">{{ page_setting.subtitle }}</p>{% endif %}
+    </div>
+    <div class="kitchen-board__alert{% if pending_count %} kitchen-board__alert--active{% endif %}">
+      <span class="hub-badge hub-badge-warning">جديد</span>
+      <strong>{{ pending_count }}</strong>
+      <span>عنصر بانتظار الاستلام</span>
+    </div>
+  </div>
+
+  <form class="hub-card kitchen-filters" method="get" action="{% url 'staff_kitchen' %}">
+    <div class="kitchen-tabs" role="tablist" aria-label="تصفية الحالة">
+      {% for value,label in status_filters %}
+        <a class="hub-button {% if status_filter == value %}hub-button-secondary kitchen-filter-active{% else %}hub-button-secondary{% endif %}" href="{% url 'staff_kitchen' %}?status={{ value }}{% if station_filter %}&station={{ station_filter }}{% endif %}{% if fulfillment_filter %}&fulfillment={{ fulfillment_filter }}{% endif %}">{{ label }}</a>
+      {% endfor %}
+    </div>
+    <label>حسب محطة التحضير
+      <select class="hub-input" name="station">
+        <option value="" {% if not station_filter %}selected{% endif %}>كل المحطات</option>
+        {% for value,label in station_choices %}<option value="{{ value }}" {% if station_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>حسب نوع الطلب
+      <select class="hub-input" name="fulfillment">
+        <option value="" {% if not fulfillment_filter %}selected{% endif %}>كل الأنواع</option>
+        {% for value,label in fulfillment_filters %}<option value="{{ value }}" {% if fulfillment_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    <input type="hidden" name="status" value="{{ status_filter }}">
+    <button class="hub-button" type="submit">تطبيق التصفية</button>
+  </form>
+
+  <div id="kitchen-board" hx-get="{% url 'staff_kitchen_partial' %}?{{ request.GET.urlencode }}" hx-trigger="load, every 7s" hx-target="#kitchen-board" hx-swap="innerHTML">
+    {% include "staff/kitchen_partial.html" %}
+  </div>
+</section>
+{% endblock %}

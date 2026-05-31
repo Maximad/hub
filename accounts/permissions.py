@@ -38,7 +38,7 @@ def can_access_staff_home(user):
 
 
 def can_access_orders(user):
-    return can_access_staff_home(user)
+    return is_owner_or_admin(user) or is_cashier(user) or is_waiter(user)
 
 
 def can_access_pos(user):

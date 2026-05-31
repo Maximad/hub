@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}تفاصيل تحضير الطلب{% endblock %}
+{% block content %}
+<section class="hub-section hub-card kitchen-order-detail">
+  <h2 class="hub-section-title">تفاصيل تحضير الطلب {{ order.display_number }}</h2>
+  <p><strong>طريقة الطلب:</strong> {{ order.get_fulfillment_label }}</p>
+  <p><strong>وقت الإنشاء:</strong> {{ order.created_at }}</p>
+  <div class="kitchen-items-grid">
+    {% for item in order.items.all %}
+    <article class="hub-list-card kitchen-item-card kitchen-status-{{ item.prep_status }}">
+      <h3>{{ item.product_name_ar_snapshot }} × {{ item.quantity }}</h3>
+      <p><strong>الحالة:</strong> {{ item.get_prep_status_display }}</p>
+      {% if item.item_note %}<p><strong>ملاحظة:</strong> {{ item.item_note }}</p>{% endif %}
+    </article>
+    {% empty %}<p>لا توجد عناصر في هذا الطلب.</p>{% endfor %}
+  </div>
+</section>
+{% endblock %}

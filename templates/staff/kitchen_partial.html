@@ -1,0 +1,52 @@
+{% for group in groups %}
+<section class="hub-card hub-section kitchen-station">
+  <div class="kitchen-station__title">
+    <h3>{{ group.label }}</h3>
+    <span class="hub-badge hub-badge-info">{{ group.items|length }} عنصر</span>
+  </div>
+  <div class="kitchen-items-grid">
+  {% for row in group.items %}{% with item=row.item order=row.item.order %}
+    <article class="hub-list-card kitchen-item-card kitchen-status-{{ item.prep_status }}{% if item.prep_status == 'pending' %} kitchen-item-card--new{% endif %}">
+      <div class="kitchen-card-topline">
+        <strong class="kitchen-order-number">{{ order.display_number }}</strong>
+        <span class="hub-badge kitchen-fulfillment-badge">{{ order.get_fulfillment_label }}</span>
+        <span class="hub-badge kitchen-status-badge">{{ item.get_prep_status_display }}</span>
+      </div>
+      <div class="kitchen-card-meta">
+        <span>منذ {{ order.created_at|timesince }}</span>
+        {% if order.location_detail %}<span>{{ order.location_detail }}</span>{% endif %}
+      </div>
+      <h4 class="kitchen-item-name">{{ item.product_name_ar_snapshot }}</h4>
+      <div class="kitchen-qty">الكمية: <strong>{{ item.quantity }}</strong></div>
+
+      {% if item.selected_options_snapshot %}
+      <div class="kitchen-options">
+        <strong>الخيارات:</strong>
+        <ul>
+          {% for group_snapshot in item.selected_options_snapshot %}
+            {% for option in group_snapshot.options %}<li>{{ group_snapshot.group_name_ar }}: {{ option.name_ar }}</li>{% endfor %}
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      {% if item.item_note %}<div class="kitchen-note"><strong>ملاحظة العنصر:</strong> {{ item.item_note|linebreaksbr }}</div>{% endif %}
+      {% if row.order_notes %}<div class="kitchen-note kitchen-note--order"><strong>ملاحظة الطلب:</strong> {{ row.order_notes|linebreaksbr }}</div>{% endif %}
+      {% if order.is_delivery and order.delivery_notes %}<div class="kitchen-note kitchen-note--delivery"><strong>ملاحظة التوصيل:</strong> {{ order.delivery_notes|linebreaksbr }}</div>{% endif %}
+
+      <div class="kitchen-actions">
+        {% for action,label,css_class in row.actions %}
+          <form method="post" action="{% url 'staff_kitchen_item_status' item.id %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="{{ action }}">
+            <button class="{{ css_class }} kitchen-action-button" type="submit">{{ label }}</button>
+          </form>
+        {% empty %}<span class="hub-muted-text">لا يوجد إجراء متاح الآن.</span>{% endfor %}
+      </div>
+    </article>
+  {% endwith %}{% endfor %}
+  </div>
+</section>
+{% empty %}
+<section class="hub-card hub-section"><p class="hub-empty-state">لا توجد عناصر تحضير مطابقة للتصفية الحالية.</p></section>
+{% endfor %}

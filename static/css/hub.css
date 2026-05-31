@@ -77,3 +77,38 @@ a{color:var(--hub-primary-strong)}
 .orders-board-density-compact .order-board-card{padding:var(--space-2);font-size:.92rem}.orders-board-density-large_touch .order-board-card{padding:var(--space-5);font-size:1.08rem}.orders-board-density-large_touch .hub-button{min-height:52px}
 .cashier-layout-summary_sidebar{align-items:start}.cashier-layout-large_payment .hub-card{padding:var(--space-5);font-size:1.08rem}.cashier-layout-large_payment .hub-button{min-height:56px;font-weight:800}@media(min-width:1024px){.cashier-layout-summary_sidebar{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
 @media(max-width:420px){.hub-container{padding:var(--space-3)}.staff-pos__grid.layout-grid-2{gap:var(--space-2)}.staff-pos__product{padding:var(--space-2)}.staff-pos__tap-zone{padding:var(--space-2)}.menu-sticky-cart{inset-inline:var(--space-2);bottom:var(--space-2)}}
+
+/* Phase 11E: Kitchen / prep-station board */
+.kitchen-board__header{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-4);flex-wrap:wrap;margin-bottom:var(--space-4)}
+.kitchen-board__alert{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-3);border:1px solid var(--hub-border);border-radius:var(--hub-radius);background:var(--hub-surface)}
+.kitchen-board__alert--active{border-color:var(--hub-warning);background:color-mix(in oklab,var(--hub-warning),#fff 86%)}
+.kitchen-filters{display:grid;grid-template-columns:1fr;gap:var(--space-3);margin-bottom:var(--space-4)}
+.kitchen-tabs,.kitchen-actions{display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center}
+.kitchen-filter-active{outline:3px solid color-mix(in oklab,var(--hub-primary),#fff 65%)}
+.kitchen-station__title{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);margin-bottom:var(--space-3)}
+.kitchen-station__title h3{margin:0;font-size:1.35rem}
+.kitchen-items-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:var(--space-3)}
+.kitchen-item-card{display:flex;flex-direction:column;gap:var(--space-3);border-inline-start:8px solid var(--hub-info);font-size:1.02rem}
+.kitchen-item-card--new{background:color-mix(in oklab,var(--hub-warning),#fff 90%)}
+.kitchen-card-topline,.kitchen-card-meta{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap}
+.kitchen-card-meta{color:var(--hub-muted);font-size:.95rem}
+.kitchen-order-number{font-size:1.25rem;color:var(--hub-primary-strong)}
+.kitchen-item-name{font-size:1.35rem;margin:0;color:var(--hub-text)}
+.kitchen-qty strong{font-size:1.35rem}
+.kitchen-options,.kitchen-note{padding:var(--space-2);border-radius:var(--hub-radius);background:var(--hub-surface-alt);border:1px solid var(--hub-border)}
+.kitchen-options ul{margin:.4rem 0 0;padding-inline-start:1.2rem}
+.kitchen-note--delivery{border-color:var(--hub-info)}
+.kitchen-action-button{min-height:52px;min-width:118px;font-size:1.05rem;font-weight:800}
+.hub-button-success{background:var(--hub-success);border-color:var(--hub-success);color:#fff}
+.kitchen-status-pending{border-inline-start-color:var(--hub-warning)}
+.kitchen-status-accepted{border-inline-start-color:var(--hub-info)}
+.kitchen-status-preparing{border-inline-start-color:var(--hub-accent)}
+.kitchen-status-ready{border-inline-start-color:var(--hub-success)}
+.kitchen-status-served{border-inline-start-color:var(--hub-muted)}
+.kitchen-status-cancelled{border-inline-start-color:var(--hub-danger);opacity:.78}
+.kitchen-status-badge{background:var(--hub-primary);color:#fff}
+.kitchen-status-pending .kitchen-status-badge{background:var(--hub-warning)}
+.kitchen-status-ready .kitchen-status-badge{background:var(--hub-success)}
+.kitchen-status-cancelled .kitchen-status-badge{background:var(--hub-danger)}
+@media(min-width:860px){.kitchen-filters{grid-template-columns:2fr 1fr 1fr auto;align-items:end}.kitchen-tabs{grid-column:1 / -1}}
+@media(max-width:520px){.kitchen-action-button{width:100%}.kitchen-actions form{width:100%}.kitchen-items-grid{grid-template-columns:1fr}}

@@ -134,10 +134,10 @@ class PageSettingAdmin(admin.ModelAdmin):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ('name_ar', 'name_en', 'category', 'item_type', 'price_syp', 'visible_on_qr', 'orderable_on_qr', 'requires_staff_confirmation', 'vendor', 'is_available')
-    list_filter = ('is_available', 'visible_on_qr', 'orderable_on_qr', 'item_type', 'is_alcoholic', 'requires_staff_confirmation', 'beverage_type', 'food_type', 'service_type', 'vendor', 'menu_sections', 'tags')
+    list_display = ('name_ar', 'name_en', 'category', 'item_type', 'price_syp', 'prep_station_ref', 'visible_on_qr', 'orderable_on_qr', 'requires_staff_confirmation', 'vendor', 'is_available')
+    list_filter = ('is_available', 'visible_on_qr', 'orderable_on_qr', 'item_type', 'prep_station_ref', 'is_alcoholic', 'requires_staff_confirmation', 'beverage_type', 'food_type', 'service_type', 'vendor', 'menu_sections', 'tags')
     search_fields = ('name_ar', 'name_en', 'description_ar', 'category__name_ar')
-    autocomplete_fields = ('category', 'vendor')
+    autocomplete_fields = ('category', 'vendor', 'prep_station_ref')
     inlines = (ProductMediaInline, ProductOptionGroupAssignmentInline)
 
 
@@ -170,6 +170,7 @@ class OrderItemInline(admin.TabularInline):
     model = OrderItem
     extra = 0
     readonly_fields = ('product_name_ar_snapshot', 'unit_price_syp_snapshot', 'line_total_syp_snapshot')
+    fields = ('product', 'quantity', 'prep_status', 'product_name_ar_snapshot', 'unit_price_syp_snapshot', 'line_total_syp_snapshot', 'item_note')
     autocomplete_fields = ('product',)
 
 
@@ -211,8 +212,9 @@ class OrderAdmin(admin.ModelAdmin):
 
 @admin.register(OrderItem)
 class OrderItemAdmin(admin.ModelAdmin):
-    list_display = ('order', 'product_name_ar_snapshot', 'quantity', 'unit_price_syp_snapshot', 'line_total_syp_snapshot')
+    list_display = ('order', 'product_name_ar_snapshot', 'quantity', 'prep_status', 'unit_price_syp_snapshot', 'line_total_syp_snapshot')
     search_fields = ('order__public_code', 'product_name_ar_snapshot', 'product__name_ar')
+    list_filter = ('prep_status',)
     autocomplete_fields = ('order', 'product')
 
 
