@@ -11,6 +11,7 @@
   const stickyTotalNodes = Array.from(form.querySelectorAll('[data-sticky-total]'));
   const posSearch = form.querySelector('[data-pos-search]');
   const submitBtn = form.querySelector('[data-submit-btn]');
+  const showModifierSummary = form.dataset.showModifierSummary !== 'false';
 
   function parsePrice(text) {
     const raw = String(text || '0').replace(/[^0-9.-]/g, '');
@@ -60,7 +61,7 @@
 
     cartList.innerHTML = lines
       .map((line) => {
-        const optionHtml = line.options.length
+        const optionHtml = showModifierSummary && line.options.length
           ? `<ul class="menu-cart-options">${line.options.map((option) => `<li>${escapeHtml(option.name)}</li>`).join('')}</ul>`
           : '';
         const noteHtml = line.note ? `<small>ملاحظة: ${escapeHtml(line.note)}</small>` : '';
@@ -75,8 +76,8 @@
 
     const hasItems = totalQty > 0;
     cartHelper.hidden = hasItems;
-    stickyCart.hidden = !hasItems;
-    submitBtn.disabled = !hasItems;
+    if (stickyCart) stickyCart.hidden = !hasItems;
+    if (submitBtn) submitBtn.disabled = !hasItems;
   }
 
   form.addEventListener('click', (event) => {

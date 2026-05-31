@@ -19,10 +19,18 @@
       --hub-card:{{ system_settings.card_background_color }};
       --hub-surface:{{ system_settings.card_background_color }};
       --hub-text:{{ system_settings.text_color }};
+      --hub-muted:{{ system_settings.muted_text_color }};
       --hub-border:{{ system_settings.border_color }};
       --hub-font-size:{{ system_settings.base_font_size_px }}px;
-      --hub-heading-font-size:{% if system_settings.heading_font_size_px %}{{ system_settings.heading_font_size_px }}px{% else %}1.9rem{% endif %};
+      --hub-heading-font-size:{{ system_settings.heading_font_size_px }}px;
+      --hub-small-font-size:{{ system_settings.small_font_size_px }}px;
+      --hub-button-font-size:{{ system_settings.button_font_size_px }}px;
       --hub-radius:{{ system_settings.border_radius_px }}px;
+      --hub-page-max-width:{{ system_settings.page_max_width_px }}px;
+      --hub-card-shadow-level:{{ system_settings.card_shadow_level }};
+      {% if system_settings.button_padding_scale == 'compact' %}--hub-button-padding-y:.4rem;--hub-button-padding-x:.7rem;{% elif system_settings.button_padding_scale == 'large' %}--hub-button-padding-y:.75rem;--hub-button-padding-x:1.15rem;{% else %}--hub-button-padding-y:.55rem;--hub-button-padding-x:.9rem;{% endif %}
+      {% if system_settings.input_size == 'compact' %}--hub-input-padding-y:.42rem;--hub-input-padding-x:.55rem;--hub-input-min-height:40px;{% elif system_settings.input_size == 'large' %}--hub-input-padding-y:.75rem;--hub-input-padding-x:.85rem;--hub-input-min-height:52px;{% else %}--hub-input-padding-y:.55rem;--hub-input-padding-x:.65rem;--hub-input-min-height:44px;{% endif %}
+      {% if system_settings.card_shadow_level == 'none' %}--hub-card-shadow:none;{% elif system_settings.card_shadow_level == 'medium' %}--hub-card-shadow:0 14px 34px rgba(0,0,0,.14);{% else %}--hub-card-shadow:0 1px 2px rgba(0,0,0,.06);{% endif %}
       {% if system_settings.custom_font_file %}--hub-font-body:"{{ system_settings.custom_font_name|default:'HubCustomFont' }}","Tahoma","Noto Naskh Arabic","Segoe UI",Arial,sans-serif;{% endif %}
     }
   </style>
@@ -30,7 +38,7 @@
   <link rel="stylesheet" href="{% static 'css/hub.css' %}">
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 </head>
-<body class="hub-page">
+<body class="hub-page{% if system_settings %} density-{{ system_settings.ui_density }} button-scale-{{ system_settings.button_padding_scale }} input-size-{{ system_settings.input_size }} shadow-{{ system_settings.card_shadow_level }}{% endif %}">
   <header class="hub-header">
     <div class="hub-container">
       <h1 class="hub-title">{% if system_settings %}{{ system_settings.system_title }}{% else %}نظام مشاريب{% endif %}</h1>

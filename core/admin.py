@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from catalog.models import ProductMedia, ProductOptionGroupAssignment
+from .settings_helpers import get_system_settings
 from .models import (
     ActivityLog,
     Category,
@@ -48,15 +49,62 @@ class ProductOptionGroupAssignmentInline(admin.TabularInline):
 @admin.register(SystemSetting)
 class SystemSettingAdmin(admin.ModelAdmin):
     fieldsets = (
-        ('العناوين واللغة', {'fields': ('system_title_ar', 'system_title_en', 'public_brand_title_ar', 'public_brand_title_en', 'header_subtitle_ar', 'header_subtitle_en', 'default_language')}),
-        ('الطلبات', {'fields': ('enable_takeaway', 'enable_table_orders', 'enable_general_in_space_orders', 'show_internal_order_uuid', 'default_order_mode')}),
-        ('الثيم والألوان', {'fields': ('primary_color', 'header_color', 'button_color', 'accent_color', 'background_color', 'card_background_color', 'text_color', 'border_color', 'base_font_size_px', 'heading_font_size_px', 'border_radius_px')}),
-        ('الخط', {'fields': ('custom_font_name', 'custom_font_file')}),
+        ('الهوية العامة', {
+            'fields': (
+                'system_title_ar', 'system_title_en', 'public_brand_title_ar', 'public_brand_title_en',
+                'header_subtitle_ar', 'header_subtitle_en', 'default_language', 'custom_font_name', 'custom_font_file',
+            ),
+            'description': 'إعدادات الهوية التي تظهر في واجهات مشاريب العامة وواجهات الفريق.',
+        }),
+        ('الطلبات', {
+            'fields': ('enable_takeaway', 'enable_table_orders', 'enable_general_in_space_orders', 'show_internal_order_uuid', 'default_order_mode'),
+        }),
+        ('الألوان', {
+            'fields': (
+                'primary_color', 'header_color', 'background_color', 'card_background_color',
+                'text_color', 'muted_text_color', 'border_color', 'button_color', 'accent_color',
+            ),
+            'description': 'استخدم ألوان HEX آمنة مثل #0f5f57. لا حاجة لمعرفة CSS.',
+        }),
+        ('الخطوط والأحجام', {
+            'fields': (
+                'base_font_size_px', 'heading_font_size_px', 'small_font_size_px', 'button_font_size_px',
+                'button_padding_scale', 'input_size', 'border_radius_px', 'card_shadow_level',
+                'page_max_width_px', 'ui_density',
+            ),
+            'description': 'القيم محددة بنطاقات آمنة حتى لا تنكسر الواجهة على الجوال أو التابلت.',
+        }),
+        ('تخطيط المنيو', {
+            'fields': (
+                'menu_layout_preset', 'menu_mobile_layout', 'menu_tablet_columns', 'menu_desktop_columns',
+                'product_card_style', 'sticky_cart_style', 'cart_review_position',
+            ),
+            'description': 'تحكم بطريقة عرض المنيو العام دون تغيير حقول إرسال الطلب.',
+        }),
+        ('تخطيط نقطة البيع', {
+            'fields': (
+                'staff_home_layout', 'pos_layout_preset', 'pos_mobile_columns', 'pos_tablet_columns',
+                'pos_desktop_columns', 'pos_cart_position', 'order_board_density', 'cashier_layout',
+            ),
+        }),
+        ('عناصر الإظهار والإخفاء', {
+            'fields': (
+                'show_public_header', 'show_brand_name', 'show_header_subtitle', 'show_table_banner',
+                'show_section_chips', 'show_product_images', 'show_product_descriptions', 'show_product_prices',
+                'show_product_badges', 'show_modifier_summary', 'collapse_modifiers_by_default', 'show_item_notes',
+                'show_customer_name_field', 'show_customer_phone_field', 'show_general_note_field', 'show_sticky_cart',
+                'pos_show_product_images', 'pos_show_prices', 'pos_show_section_chips', 'pos_enable_search_bar',
+            ),
+        }),
     )
-    list_display = ('system_title_ar', 'default_language', 'enable_takeaway', 'updated_at')
+    list_display = ('system_title_ar', 'default_language', 'menu_layout_preset', 'pos_layout_preset', 'ui_density', 'updated_at')
 
     def has_add_permission(self, request):
         return not SystemSetting.objects.exists()
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        get_system_settings.cache_clear()
 
 
 @admin.register(PageSetting)

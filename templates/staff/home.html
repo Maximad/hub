@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% block title %}صفحة الفريق{% endblock %}
 {% block content %}
-<section class="hub-section">
+<section class="hub-section staff-home staff-home-{{ system_settings.staff_home_layout|default:'grouped_cards' }}">
   <h2 class="hub-section-title">عمليات الفريق</h2>
-  <div class="hub-grid hub-grid-3">
+  <div class="hub-grid hub-grid-3 staff-home__grid">
     {% for title,desc,url in actions %}{% endfor %}
     <a class="hub-action-card" href="{% url 'staff_pos' %}"><div class="hub-media"></div><strong>نقطة البيع / POS</strong><p>إدخال طلبات سريع باللمس للفريق.</p></a>
     <a class="hub-action-card" href="{% url 'staff_orders' %}"><div class="hub-media"></div><strong>لوحة الطلبات</strong><p>متابعة الطلبات وتعديل الحالة.</p></a>
