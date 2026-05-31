@@ -18,6 +18,10 @@ from internet.models import WifiNetwork
 from catalog.models import MenuSection, ProductMedia, ProductOption, ProductOptionGroup, ProductOptionGroupAssignment
 from core.settings_helpers import get_page_setting, get_system_settings
 from core.internet_billing import calculate_billable_minutes, calculate_metered_session_total, calculate_session_duration_minutes, can_override_session_total, finalize_internet_session
+from accounts.permissions import (
+    ACCESS_DENIED_MESSAGE, can_approve_partial_payment,
+    require_staff_capability, user_has_capability,
+)
 from core.models import ActivityLog, InternetPackage, InternetSession, Member, Order, OrderItem, Payment, Product, SystemSetting, TableArea
 from events.models import Event
 from reservations.models import Reservation
@@ -52,11 +56,6 @@ def _order_location_note(table, service_mode=Order.ServiceMode.DINE_IN, fulfillm
         return 'تيك أواي'
     return 'طلب داخل المكان'
 
-
-def _can_approve_partial_payment(user):
-    if not user or not user.is_authenticated:
-        return False
-    return user.is_superuser or getattr(user, 'role', '') in {'admin', 'owner'}
 
 
 def _parse_report_date(raw_date):
@@ -505,20 +504,39 @@ STAFF_CAPABILITIES = {
 }
 
 
+LEGACY_CAPABILITY_MAP = {
+    'reporting/close-day': 'reports',
+    'cashier/payments': 'cashier',
+    'operations': 'staff_home',
+    'pos': 'pos',
+    'orders': 'orders',
+    'order_edit': 'order_edit',
+    'modifiers': 'modifiers',
+}
+
+
+def _can_approve_partial_payment(user):
+    return can_approve_partial_payment(user)
+
+
 def _assert_staff_capability(user, capability_name):
-    if not user.is_authenticated:
-        raise PermissionDenied("غير مصرح")
-    if user.is_superuser:
-        return
-
-    allowed_roles = STAFF_CAPABILITIES.get(capability_name, set())
-    if getattr(user, 'role', '') not in allowed_roles:
-        ActivityLog.objects.create(
-            action='staff_access_denied',
-            details=f'capability={capability_name}; user={user.pk}; role={getattr(user, "role", "")}',
+    capability = LEGACY_CAPABILITY_MAP.get(capability_name)
+    if capability:
+        allowed = user_has_capability(user, capability)
+    else:
+        allowed = bool(
+            user
+            and user.is_authenticated
+            and user.is_active
+            and (user.is_superuser or getattr(user, 'role', '') in STAFF_CAPABILITIES.get(capability_name, set()))
         )
-        raise PermissionDenied("غير مصرح")
-
+    if allowed:
+        return
+    ActivityLog.objects.create(
+        action='staff_access_denied',
+        details=f'capability={capability or capability_name}; user={getattr(user, "pk", None)}; role={getattr(user, "role", "")}',
+    )
+    raise PermissionDenied(ACCESS_DENIED_MESSAGE)
 
 def _order_financials(order):
     total = getattr(order, 'total', None)
@@ -619,15 +637,13 @@ def _redirect_if_order_edit_blocked(request, order):
     return None
 
 
-@login_required
+@require_staff_capability('staff_home')
 def staff_home(request):
-    _assert_staff_capability(request.user, 'operations')
     return render(request, 'staff/home.html')
 
 
-@login_required
+@require_staff_capability('pos')
 def staff_pos(request):
-    _assert_staff_capability(request.user, 'operations')
     tables = TableArea.objects.select_related('room').order_by('room__name_ar', 'name_ar')
     section_products = _section_products_for_ordering(product_filter={'is_available': True}, include_unsectioned=True)
     products = [product for _section, products in section_products for product in products]
@@ -709,9 +725,8 @@ def staff_pos(request):
     return render(request, 'staff/pos.html', context)
 
 
-@login_required
+@require_staff_capability('modifiers')
 def staff_modifiers(request):
-    _assert_staff_capability(request.user, 'operations')
     groups = ProductOptionGroup.objects.prefetch_related(
         'options',
         Prefetch(
@@ -791,9 +806,8 @@ def staff_menu_tools(request):
     return render(request, 'staff/menu_tools.html', {'grouped': grouped})
 
 
-@login_required
+@require_staff_capability('orders')
 def staff_orders(request):
-    _assert_staff_capability(request.user, 'operations')
     statuses = [choice[0] for choice in Order.Status.choices]
     orders = (
         Order.objects.select_related('table')
@@ -814,14 +828,16 @@ def staff_orders(request):
     return render(request, template, {'grouped': grouped, 'page_setting': get_page_setting('staff_orders', 'لوحة الطلبات', 'Orders')})
 
 
-@login_required
+@require_staff_capability('orders')
 def staff_order_status(request, public_code):
-    _assert_staff_capability(request.user, 'operations')
     if request.method != 'POST':
         raise Http404()
     order = get_object_or_404(Order, public_code=public_code)
     new_delivery_status = request.POST.get('delivery_status')
     if new_delivery_status:
+        if not user_has_capability(request.user, 'delivery_management'):
+            messages.error(request, ACCESS_DENIED_MESSAGE)
+            return redirect('staff_orders')
         valid_delivery = {choice[0] for choice in Order.DeliveryStatus.choices}
         if order.is_delivery and new_delivery_status in valid_delivery:
             old_delivery_status = order.delivery_status
@@ -846,9 +862,8 @@ def staff_order_status(request, public_code):
     return redirect('staff_orders')
 
 
-@login_required
+@require_staff_capability('order_edit')
 def staff_order_edit(request, public_code):
-    _assert_staff_capability(request.user, 'operations')
     order = get_object_or_404(
         Order.objects.select_related('table').prefetch_related('items__product', 'payments'),
         public_code=public_code,
@@ -857,9 +872,8 @@ def staff_order_edit(request, public_code):
     return render(request, 'staff/order_edit.html', _order_edit_context(order, error=block_reason))
 
 
-@login_required
+@require_staff_capability('order_edit')
 def staff_order_edit_add_item(request, public_code):
-    _assert_staff_capability(request.user, 'operations')
     if request.method != 'POST':
         raise Http404()
     order = get_object_or_404(Order.objects.prefetch_related('items', 'payments'), public_code=public_code)
@@ -901,9 +915,8 @@ def staff_order_edit_add_item(request, public_code):
     return redirect('staff_order_edit', public_code=order.public_code)
 
 
-@login_required
+@require_staff_capability('order_edit')
 def staff_order_edit_update_item(request, public_code, item_id):
-    _assert_staff_capability(request.user, 'operations')
     if request.method != 'POST':
         raise Http404()
     order = get_object_or_404(Order.objects.prefetch_related('items', 'payments'), public_code=public_code)
@@ -956,9 +969,8 @@ def staff_order_edit_update_item(request, public_code, item_id):
     return redirect('staff_order_edit', public_code=order.public_code)
 
 
-@login_required
+@require_staff_capability('order_edit')
 def staff_order_edit_remove_item(request, public_code, item_id):
-    _assert_staff_capability(request.user, 'operations')
     if request.method != 'POST':
         raise Http404()
     order = get_object_or_404(Order.objects.prefetch_related('items', 'payments'), public_code=public_code)
@@ -982,9 +994,8 @@ def staff_order_edit_remove_item(request, public_code, item_id):
     return redirect('staff_order_edit', public_code=order.public_code)
 
 
-@login_required
+@require_staff_capability('cashier')
 def staff_cashier(request):
-    _assert_staff_capability(request.user, 'cashier/payments')
     query = request.GET.get('q', '').strip()
     orders = Order.objects.select_related('table').prefetch_related('items', 'payments').order_by('-created_at')
     if query:
@@ -1003,18 +1014,16 @@ def staff_cashier(request):
     return render(request, 'staff/cashier.html', {'rows': rows, 'query': query, 'page_setting': get_page_setting('staff_cashier', 'الكاشير', 'Cashier')})
 
 
-@login_required
+@require_staff_capability('cashier')
 def staff_cashier_order(request, public_code):
-    _assert_staff_capability(request.user, 'cashier/payments')
     order = get_object_or_404(Order.objects.select_related('table').prefetch_related('items', 'payments'), public_code=public_code)
     total, paid, remaining, payment_label = _order_financials(order)
     methods = Payment.Method.choices
     return render(request, 'staff/cashier_order.html', {'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods, 'payment_amount_default': remaining, 'qr_url': reverse('order_qr', kwargs={'public_code': order.public_code})})
 
 
-@login_required
+@require_staff_capability('cashier')
 def staff_cashier_pay(request, public_code):
-    _assert_staff_capability(request.user, 'cashier/payments')
     if request.method != 'POST':
         raise Http404()
     order = get_object_or_404(Order, public_code=public_code)
@@ -1062,25 +1071,22 @@ def staff_cashier_pay(request, public_code):
     return redirect('staff_cashier_order', public_code=order.public_code)
 
 
-@login_required
+@require_staff_capability('reports')
 def staff_reports_home(request):
-    _assert_staff_capability(request.user, 'reporting/close-day')
     today = datetime.now(DAMASCUS_TZ).date()
     _rows, sums = _build_day_report(today)
     return render(request, 'staff/reports_home.html', {'report_date': today, 'sums': sums})
 
 
-@login_required
+@require_staff_capability('reports')
 def staff_reports_day(request):
-    _assert_staff_capability(request.user, 'reporting/close-day')
     report_date = _parse_report_date(request.GET.get('date', '').strip())
     rows, sums = _build_day_report(report_date)
     return render(request, 'staff/reports_day.html', {'report_date': report_date, 'rows': rows, 'sums': sums})
 
 
-@login_required
+@require_staff_capability('reports')
 def staff_reports_day_csv(request):
-    _assert_staff_capability(request.user, 'reporting/close-day')
     report_date = _parse_report_date(request.GET.get('date', '').strip())
     rows, _sums = _build_day_report(report_date)
     response = HttpResponse(content_type='text/csv; charset=utf-8')
@@ -1094,9 +1100,8 @@ def staff_reports_day_csv(request):
     return response
 
 
-@login_required
+@require_staff_capability('reports')
 def staff_close_day(request):
-    _assert_staff_capability(request.user, 'reporting/close-day')
     today = datetime.now(DAMASCUS_TZ).date()
     _rows, sums = _build_day_report(today)
     return render(request, 'staff/close_day.html', {'report_date': today, 'sums': sums})

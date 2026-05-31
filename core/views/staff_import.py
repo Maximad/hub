@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
+from accounts.permissions import require_staff_capability
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import transaction
@@ -646,15 +646,6 @@ class TableImporter(BaseImporter):
 IMPORTERS = {cls.slug: cls for cls in [ProductImporter, EventImporter, VendorImporter, MemberImporter, InternetPackageImporter, TableImporter]}
 
 
-def admin_required(request):
-    user = request.user
-    if not (user.is_superuser or getattr(user, 'role', '') == 'admin'):
-        ActivityLog.objects.create(actor=user if user.is_authenticated else None, action='staff_import_access_denied', details={'user_id': getattr(user, 'pk', None), 'role': getattr(user, 'role', '')})
-        messages.error(request, 'هذه الصفحة مخصصة للمدير فقط. لا تملك صلاحية الاستيراد الجماعي.')
-        return False
-    return True
-
-
 def get_importer_or_404(import_type, mode='dry_run'):
     importer_cls = IMPORTERS.get(import_type)
     if not importer_cls:
@@ -666,32 +657,24 @@ def session_key(import_type):
     return f'bulk_import_{import_type}'
 
 
-@login_required
+@require_staff_capability('imports')
 def staff_import_home(request):
-    if not admin_required(request):
-        return redirect('staff_home')
     return render(request, 'staff/import_home.html', {'importers': [cls() for cls in IMPORTERS.values()]})
 
 
-@login_required
+@require_staff_capability('imports')
 def staff_import_upload(request, import_type):
-    if not admin_required(request):
-        return redirect('staff_home')
     importer = get_importer_or_404(import_type)
     return render(request, 'staff/import_upload.html', {'importer': importer, 'modes': IMPORT_MODES})
 
 
-@login_required
+@require_staff_capability('imports')
 def staff_import_template(request, import_type):
-    if not admin_required(request):
-        return redirect('staff_home')
     return get_importer_or_404(import_type).template_response()
 
 
-@login_required
+@require_staff_capability('imports')
 def staff_import_preview(request, import_type):
-    if not admin_required(request):
-        return redirect('staff_home')
     if request.method != 'POST':
         return redirect('staff_import_upload', import_type=import_type)
     mode = request.POST.get('mode', 'dry_run')
@@ -717,10 +700,8 @@ def staff_import_preview(request, import_type):
     return render(request, 'staff/import_preview.html', {'importer': importer, 'modes': IMPORT_MODES, 'results': results, 'file_errors': file_errors, 'has_errors': has_errors, 'has_warnings': has_warnings, 'mode': mode})
 
 
-@login_required
+@require_staff_capability('imports')
 def staff_import_confirm(request, import_type):
-    if not admin_required(request):
-        return redirect('staff_home')
     if request.method != 'POST':
         return redirect('staff_import_upload', import_type=import_type)
     stored = request.session.get(session_key(import_type))

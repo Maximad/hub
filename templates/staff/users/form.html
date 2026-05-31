@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}{% if mode == 'create' %}مستخدم جديد{% else %}تعديل مستخدم{% endif %}{% endblock %}
+{% block content %}
+<section class="hub-section hub-card">
+  <div class="hub-toolbar"><a class="hub-button hub-button-secondary" href="{% url 'staff_users_list' %}">العودة للمستخدمين</a></div>
+  <h2>{% if mode == 'create' %}إنشاء مستخدم جديد{% else %}تعديل {{ target_user.username }}{% endif %}</h2>
+  <form method="post" class="hub-form">{% csrf_token %}
+    {{ form.non_field_errors }}
+    {% for field in form %}
+      <label>{{ field.label }}{{ field }}{% if field.help_text %}<small class="hub-help-text">{{ field.help_text }}</small>{% endif %}{% for error in field.errors %}<small class="hub-error">{{ error }}</small>{% endfor %}</label>
+    {% endfor %}
+    <button class="hub-button hub-button-primary" type="submit">حفظ</button>
+  </form>
+</section>
+{% endblock %}
