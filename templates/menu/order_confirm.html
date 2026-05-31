@@ -5,7 +5,7 @@
 <p><strong>رقم الطلب:</strong> {{ order.display_number }}</p>
 {% if system_settings.show_internal_order_uuid %}<p><small>الرمز الداخلي: {{ order.public_code }}</small></p>{% endif %}
 <p><strong>الحالة:</strong> {{ order.get_status_display }}</p>
-<p><strong>المكان:</strong> {{ order.location_label }}</p>
+<p><strong>طريقة الطلب:</strong> {{ order.get_fulfillment_label }}</p>
 {% if order.location_detail %}<p class="hub-location-detail">{{ order.location_detail }}</p>{% endif %}
 <img class="hub-qr" src="{{ qr_url }}" alt="QR رابط الطلب {{ order.display_number }}">
 <ul>
@@ -23,7 +23,7 @@
   </li>
   {% endfor %}
 </ul>
-<p><strong>المجموع:</strong> {{ total }} ل.س</p>
+<p><strong>مجموع العناصر:</strong> {{ subtotal }} ل.س</p>{% if order.delivery_fee_syp %}<p><strong>رسوم التوصيل:</strong> {{ order.delivery_fee_syp }} ل.س</p>{% endif %}<p><strong>المجموع:</strong> {{ total }} ل.س</p>{% if order.is_delivery %}<div class="hub-card"><strong>بيانات التوصيل:</strong><br>الحالة: {{ order.get_delivery_status_display }}{% if order.delivery_area %}<br>المنطقة: {{ order.delivery_area }}{% endif %}{% if order.delivery_address %}<br>العنوان: {{ order.delivery_address }}{% endif %}</div>{% endif %}
 <p>ملاحظة: الطلب بانتظار تأكيد الفريق</p>
 {% if needs_confirmation %}<p><strong>بعض العناصر تحتاج تأكيد من الفريق</strong></p>{% endif %}
 {% endblock %}

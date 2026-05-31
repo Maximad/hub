@@ -57,7 +57,16 @@ class SystemSettingAdmin(admin.ModelAdmin):
             'description': 'إعدادات الهوية التي تظهر في واجهات مشاريب العامة وواجهات الفريق.',
         }),
         ('الطلبات', {
-            'fields': ('enable_takeaway', 'enable_table_orders', 'enable_general_in_space_orders', 'show_internal_order_uuid', 'default_order_mode'),
+            'fields': ('enable_table_orders', 'enable_general_in_space_orders', 'show_internal_order_uuid', 'default_order_mode'),
+        }),
+        ('خيارات الطلب والتوصيل', {
+            'fields': (
+                'enable_delivery', 'enable_takeaway', 'default_fulfillment_mode',
+                'require_phone_for_delivery', 'require_address_for_delivery',
+                'delivery_fee_mode', 'fixed_delivery_fee_syp', 'minimum_delivery_order_syp',
+                'delivery_working_hours_text', 'delivery_contact_phone', 'delivery_contact_whatsapp', 'delivery_notes',
+            ),
+            'description': 'التوصيل والتيك أواي يبقيان مخفيين عن المنيو العام ونقطة البيع ما لم يتم تفعيلهما هنا. إذا كان الوضع الافتراضي غير متاح فسيعود النظام إلى طلب داخل المكان.',
         }),
         ('الألوان', {
             'fields': (
@@ -157,16 +166,38 @@ class OrderItemInline(admin.TabularInline):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ('display_number', 'status', 'service_mode', 'table', 'created_at', 'public_code')
-    list_filter = ('status', 'service_mode', 'table')
-    search_fields = ('public_code', 'notes', 'table__name_ar')
+    list_display = ('display_number', 'fulfillment_mode', 'delivery_status', 'customer_summary', 'total_amount', 'paid_amount', 'remaining_amount', 'status', 'created_at', 'public_code')
+    list_filter = ('fulfillment_mode', 'delivery_status', 'status', 'created_at')
+    search_fields = ('public_code', 'notes', 'table__name_ar', 'delivery_address', 'delivery_area', 'assigned_driver_name', 'assigned_driver_phone')
     readonly_fields = ('public_code', 'display_number', 'created_at', 'updated_at')
+    fieldsets = (
+        ('بيانات الطلب', {'fields': ('public_code', 'display_number', 'status', 'table', 'service_mode', 'fulfillment_mode', 'notes')}),
+        ('بيانات التوصيل', {'fields': ('delivery_status', 'delivery_area', 'delivery_address', 'delivery_notes', 'delivery_fee_syp', 'delivery_eta_minutes', 'assigned_driver_name', 'assigned_driver_phone')}),
+        ('التواريخ', {'fields': ('created_at', 'updated_at')}),
+    )
     autocomplete_fields = ('table',)
     inlines = (OrderItemInline,)
 
     @admin.display(description='رقم العرض')
     def display_number(self, obj):
         return obj.display_number
+
+    @admin.display(description='الزبون')
+    def customer_summary(self, obj):
+        lines = [line.strip() for line in (obj.notes or '').splitlines() if line.startswith('الاسم:') or line.startswith('الهاتف:')]
+        return ' / '.join(lines) or '—'
+
+    @admin.display(description='المجموع')
+    def total_amount(self, obj):
+        return obj.total_with_delivery_syp
+
+    @admin.display(description='المدفوع')
+    def paid_amount(self, obj):
+        return sum(payment.amount_syp for payment in obj.payments.all() if payment.method != Payment.Method.UNPAID)
+
+    @admin.display(description='المتبقي')
+    def remaining_amount(self, obj):
+        return max(obj.total_with_delivery_syp - self.paid_amount(obj), 0)
 
 
 @admin.register(OrderItem)

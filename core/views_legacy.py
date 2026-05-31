@@ -40,12 +40,16 @@ def _qr_svg_response(data):
     return response
 
 
-def _order_location_note(table, service_mode=Order.ServiceMode.DINE_IN):
-    if table:
-        return f'الطاولة: {table.name_ar}' + (f' — المساحة: {table.room.name_ar}' if table.room_id else '')
-    if service_mode == Order.ServiceMode.TAKEAWAY:
+def _order_location_note(table, service_mode=Order.ServiceMode.DINE_IN, fulfillment_mode=None):
+    if table or fulfillment_mode == Order.FulfillmentMode.TABLE:
+        if table:
+            return f'الطاولة: {table.name_ar}' + (f' — المساحة: {table.room.name_ar}' if table.room_id else '')
+        return 'طاولة'
+    if fulfillment_mode == Order.FulfillmentMode.DELIVERY:
+        return 'توصيل'
+    if fulfillment_mode == Order.FulfillmentMode.TAKEAWAY or service_mode == Order.ServiceMode.TAKEAWAY:
         return 'تيك أواي'
-    return 'طلب عام داخل المكان'
+    return 'طلب داخل المكان'
 
 
 def _can_approve_partial_payment(user):
@@ -90,6 +94,64 @@ def _items_total(items):
     return sum(_line_total_for_item(item) for item in items)
 
 
+def _subtotal_for_selected(selected):
+    return sum(qty * max(product.price_syp + option_delta, 0) for product, qty, _item_note, _snapshot, option_delta in selected)
+
+
+def _delivery_fee_for_settings(settings, fulfillment_mode, raw_manual_fee=None):
+    if fulfillment_mode != Order.FulfillmentMode.DELIVERY:
+        return 0
+    if not settings or not settings.enable_delivery:
+        return 0
+    if settings.delivery_fee_mode == SystemSetting.DeliveryFeeMode.FIXED:
+        return max(settings.fixed_delivery_fee_syp or 0, 0)
+    if settings.delivery_fee_mode == SystemSetting.DeliveryFeeMode.MANUAL:
+        return _parse_nonnegative_int(raw_manual_fee, default=0, maximum=10_000_000)
+    return 0
+
+
+def _validate_fulfillment_mode(request, settings, table=None, allow_table=True):
+    requested = (request.POST.get('fulfillment_mode') or '').strip()
+    if table:
+        default_mode = Order.FulfillmentMode.TABLE
+        mode = Order.FulfillmentMode.TABLE
+    else:
+        default_mode = getattr(settings, 'safe_default_fulfillment_mode', Order.FulfillmentMode.INSIDE_SPACE) or Order.FulfillmentMode.INSIDE_SPACE
+        mode = requested or default_mode
+    valid = set(Order.FulfillmentMode.values)
+    if mode not in valid:
+        return default_mode, 'وضع الطلب المحدد غير صالح.'
+    if mode == Order.FulfillmentMode.TABLE and not allow_table:
+        return default_mode, 'طلب الطاولة غير متاح من هذه الواجهة.'
+    if mode == Order.FulfillmentMode.TABLE and not table:
+        # Public menu without QR remains in-space unless a staff POS table is selected.
+        return Order.FulfillmentMode.INSIDE_SPACE, ''
+    if mode == Order.FulfillmentMode.DELIVERY and (not settings or not settings.enable_delivery):
+        return default_mode, 'خيار التوصيل غير مفعّل حالياً.'
+    if mode == Order.FulfillmentMode.TAKEAWAY and (not settings or not settings.enable_takeaway):
+        return default_mode, 'خيار التيك أواي غير مفعّل حالياً.'
+    return mode, ''
+
+
+def _validate_delivery_details(request, settings, fulfillment_mode, subtotal, manual_fee_name='delivery_fee_syp'):
+    errors = []
+    delivery_data = {
+        'delivery_area': request.POST.get('delivery_area', '').strip(),
+        'delivery_address': request.POST.get('delivery_address', '').strip(),
+        'delivery_notes': request.POST.get('delivery_notes', '').strip(),
+        'delivery_fee_syp': _delivery_fee_for_settings(settings, fulfillment_mode, request.POST.get(manual_fee_name)),
+        'delivery_status': Order.DeliveryStatus.NOT_DELIVERY,
+    }
+    if fulfillment_mode != Order.FulfillmentMode.DELIVERY:
+        return delivery_data, errors
+    delivery_data['delivery_status'] = Order.DeliveryStatus.DELIVERY_REQUESTED
+    if settings.minimum_delivery_order_syp and subtotal < settings.minimum_delivery_order_syp:
+        errors.append(f'الحد الأدنى لطلب التوصيل هو {settings.minimum_delivery_order_syp} ل.س.')
+    if settings.require_address_for_delivery and not delivery_data['delivery_address']:
+        errors.append('عنوان التوصيل مطلوب.')
+    return delivery_data, errors
+
+
 def _paid_total(payments):
     return sum(payment.amount_syp for payment in payments if payment.method != Payment.Method.UNPAID)
 
@@ -123,7 +185,7 @@ def _build_day_report(report_date):
     )
     rows = []
     sums = {
-        'orders_count': 0, 'order_total': 0, 'paid_total': 0, 'remaining_total': 0,
+        'orders_count': 0, 'order_total': 0, 'subtotal_total': 0, 'delivery_fee_total': 0, 'paid_total': 0, 'remaining_total': 0,
         'cash_total': 0, 'manual_transfer_total': 0, 'free_total': 0, 'discount_total': 0,
         'cancelled_count': 0, 'served_or_paid_count': 0, 'unpaid_orders_count': 0,
     }
@@ -140,6 +202,8 @@ def _build_day_report(report_date):
             sums['unpaid_orders_count'] += 1
         sums['orders_count'] += 1
         sums['order_total'] += total
+        sums['subtotal_total'] += order.subtotal_syp
+        sums['delivery_fee_total'] += max(order.delivery_fee_syp or 0, 0)
         sums['paid_total'] += paid
         sums['remaining_total'] += remaining
         sums['cash_total'] += methods.get(Payment.Method.CASH, 0)
@@ -231,7 +295,8 @@ def _menu_context(table=None):
         section_filter={'visible_on_qr': True},
     )
     page = get_page_setting('public_menu', 'القائمة العامة', 'Public menu', 'اختر طلبك داخل المكان.', 'Choose your in-space order.')
-    return {'table': table, 'section_products': section_products, 'settings': settings, 'page_setting': page}
+    default_fulfillment_mode = Order.FulfillmentMode.TABLE if table else Order.FulfillmentMode.INSIDE_SPACE
+    return {'table': table, 'section_products': section_products, 'settings': settings, 'page_setting': page, 'default_fulfillment_mode': default_fulfillment_mode, 'fulfillment_choices': settings.available_fulfillment_modes(include_table=False)}
 
 
 def menu_public(request):
@@ -353,13 +418,15 @@ def _selected_order_items_from_post(request, products):
     return selected, validation_errors
 
 
-def _create_order_from_selected_items(table, selected, note_parts, status=None, service_mode=None):
+def _create_order_from_selected_items(table, selected, note_parts, status=None, service_mode=None, fulfillment_mode=None, delivery_data=None):
     note = '\n'.join([part for part in note_parts if part])
     if table and service_mode is None:
         service_mode = Order.ServiceMode.TABLE
     service_mode = service_mode or Order.ServiceMode.DINE_IN
+    fulfillment_mode = fulfillment_mode or (Order.FulfillmentMode.TABLE if table else Order.FulfillmentMode.INSIDE_SPACE)
+    delivery_data = delivery_data or {}
     with transaction.atomic():
-        order = Order.objects.create(table=table, service_mode=service_mode, status=status or Order.Status.NEW, notes=note)
+        order = Order.objects.create(table=table, service_mode=service_mode, fulfillment_mode=fulfillment_mode, status=status or Order.Status.NEW, notes=note, **delivery_data)
         for product, qty, item_note, selected_options_snapshot, option_delta in selected:
             unit_price = max(product.price_syp + option_delta, 0)
             OrderItem.objects.create(
@@ -386,9 +453,16 @@ def _create_order_from_menu(request, table=None):
         context['form_values'] = request.POST
         return render(request, 'menu/menu.html', context)
 
+    settings = get_system_settings()
+    fulfillment_mode, fulfillment_error = _validate_fulfillment_mode(request, settings, table=table, allow_table=bool(table))
+    if fulfillment_error:
+        validation_errors.append(fulfillment_error)
+    subtotal = _subtotal_for_selected(selected)
+    delivery_data, delivery_errors = _validate_delivery_details(request, settings, fulfillment_mode, subtotal)
+    validation_errors.extend(delivery_errors)
     customer_name = request.POST.get('customer_name', '').strip()
     errors = {}
-    customer_phone = _validate_phone_input(request.POST.get('customer_phone', ''), 'رقم الهاتف', errors, required=False)
+    customer_phone = _validate_phone_input(request.POST.get('customer_phone', ''), 'رقم الهاتف', errors, required=fulfillment_mode == Order.FulfillmentMode.DELIVERY and settings.require_phone_for_delivery)
     if errors:
         validation_errors.append(errors['رقم الهاتف'])
     if validation_errors:
@@ -397,9 +471,9 @@ def _create_order_from_menu(request, table=None):
         context['form_values'] = request.POST
         return render(request, 'menu/menu.html', context)
     general_note = request.POST.get('general_note', '').strip()
-    service_mode = Order.ServiceMode.TABLE if table else Order.ServiceMode.DINE_IN
-    note_parts = [f'الاسم: {customer_name}' if customer_name else '', f'الهاتف: {customer_phone}' if customer_phone else '', f'المكان: {_order_location_note(table, service_mode)}', general_note]
-    order = _create_order_from_selected_items(table, selected, note_parts, service_mode=service_mode)
+    service_mode = Order.ServiceMode.TABLE if fulfillment_mode == Order.FulfillmentMode.TABLE else (Order.ServiceMode.TAKEAWAY if fulfillment_mode == Order.FulfillmentMode.TAKEAWAY else Order.ServiceMode.DINE_IN)
+    note_parts = [f'الاسم: {customer_name}' if customer_name else '', f'الهاتف: {customer_phone}' if customer_phone else '', f'المكان: {_order_location_note(table, service_mode, fulfillment_mode)}', general_note]
+    order = _create_order_from_selected_items(table, selected, note_parts, service_mode=service_mode, fulfillment_mode=fulfillment_mode, delivery_data=delivery_data)
     return redirect(reverse('order_public', kwargs={'public_code': order.public_code}))
 
 def order_public(request, public_code):
@@ -407,10 +481,10 @@ def order_public(request, public_code):
         order = Order.objects.select_related('table').prefetch_related('items__product').get(public_code=public_code)
     except Order.DoesNotExist as exc:
         raise Http404('الطلب غير موجود') from exc
-    total = _items_total(order.items.all())
+    total = order.total_with_delivery_syp
     needs_confirmation = any(item.product.requires_staff_confirmation for item in order.items.all() if item.product_id)
     qr_url = reverse('order_qr', kwargs={'public_code': order.public_code})
-    return render(request, 'menu/order_confirm.html', {'order': order, 'total': total, 'needs_confirmation': needs_confirmation, 'qr_url': qr_url})
+    return render(request, 'menu/order_confirm.html', {'order': order, 'subtotal': order.subtotal_syp, 'total': total, 'needs_confirmation': needs_confirmation, 'qr_url': qr_url})
 
 
 def order_qr(request, public_code):
@@ -448,7 +522,7 @@ def _assert_staff_capability(user, capability_name):
 def _order_financials(order):
     total = getattr(order, 'total', None)
     if total is None:
-        total = _items_total(order.items.all())
+        total = order.total_with_delivery_syp if hasattr(order, 'total_with_delivery_syp') else _items_total(order.items.all())
     paid = getattr(order, 'paid', None)
     if paid is None:
         paid = _paid_total(order.payments.all())
@@ -583,13 +657,23 @@ def staff_pos(request):
             table = TableArea.objects.filter(pk=int(table_id)).first()
             if table is None:
                 validation_errors.append('الطاولة المحددة غير صالحة.')
+        fulfillment_mode, fulfillment_error = _validate_fulfillment_mode(request, settings, table=table, allow_table=bool(table))
+        if table:
+            fulfillment_mode = Order.FulfillmentMode.TABLE
+        if fulfillment_error:
+            validation_errors.append(fulfillment_error)
+        if request.POST.get('fulfillment_mode') == Order.FulfillmentMode.TABLE and not table:
+            validation_errors.append('يرجى اختيار طاولة لهذا الطلب.')
         if not selected:
             context.update({'error': 'يرجى اختيار عنصر واحد على الأقل.', 'form_values': request.POST, 'selected_table_id': table_id})
             return render(request, 'staff/pos.html', context)
 
+        subtotal = _subtotal_for_selected(selected)
+        delivery_data, delivery_errors = _validate_delivery_details(request, settings, fulfillment_mode, subtotal)
+        validation_errors.extend(delivery_errors)
         errors = {}
         customer_name = request.POST.get('customer_name', '').strip()
-        customer_phone = _validate_phone_input(request.POST.get('customer_phone', ''), 'رقم الهاتف', errors, required=False)
+        customer_phone = _validate_phone_input(request.POST.get('customer_phone', ''), 'رقم الهاتف', errors, required=fulfillment_mode == Order.FulfillmentMode.DELIVERY and settings.require_phone_for_delivery)
         if errors:
             validation_errors.append(errors['رقم الهاتف'])
         member_id = request.POST.get('member_id', '').strip()
@@ -603,8 +687,8 @@ def staff_pos(request):
             return render(request, 'staff/pos.html', context)
 
         general_note = request.POST.get('general_note', '').strip()
-        service_mode = Order.ServiceMode.TABLE if table else Order.ServiceMode.DINE_IN
-        table_label = _order_location_note(table, service_mode)
+        service_mode = Order.ServiceMode.TABLE if fulfillment_mode == Order.FulfillmentMode.TABLE else (Order.ServiceMode.TAKEAWAY if fulfillment_mode == Order.FulfillmentMode.TAKEAWAY else Order.ServiceMode.DINE_IN)
+        table_label = _order_location_note(table, service_mode, fulfillment_mode)
         note_parts = [
             'Source: staff/pos',
             f'المكان: {table_label}',
@@ -613,11 +697,11 @@ def staff_pos(request):
             f'العضو: {member.name_ar} / {member.phone}' if member else '',
             general_note,
         ]
-        order = _create_order_from_selected_items(table, selected, note_parts, status=Order.Status.NEW, service_mode=service_mode)
+        order = _create_order_from_selected_items(table, selected, note_parts, status=Order.Status.NEW, service_mode=service_mode, fulfillment_mode=fulfillment_mode, delivery_data=delivery_data)
         ActivityLog.objects.create(
             actor=request.user,
             action='staff_pos_order_created',
-            details={'order_public_code': str(order.public_code), 'table_id': table.id if table else None},
+            details={'order_public_code': str(order.public_code), 'table_id': table.id if table else None, 'fulfillment_mode': fulfillment_mode},
         )
         return redirect('staff_cashier_order', public_code=order.public_code)
 
@@ -735,6 +819,16 @@ def staff_order_status(request, public_code):
     if request.method != 'POST':
         raise Http404()
     order = get_object_or_404(Order, public_code=public_code)
+    new_delivery_status = request.POST.get('delivery_status')
+    if new_delivery_status:
+        valid_delivery = {choice[0] for choice in Order.DeliveryStatus.choices}
+        if order.is_delivery and new_delivery_status in valid_delivery:
+            old_delivery_status = order.delivery_status
+            if old_delivery_status != new_delivery_status:
+                order.delivery_status = new_delivery_status
+                order.save(update_fields=['delivery_status', 'updated_at'])
+                ActivityLog.objects.create(actor=request.user, action='delivery_status_changed', details={'order_public_code': str(order.public_code), 'old_status': old_delivery_status, 'new_status': new_delivery_status})
+        return redirect('staff_orders')
     new_status = request.POST.get('status')
     valid = {choice[0] for choice in Order.Status.choices}
     if new_status not in valid:
@@ -990,12 +1084,12 @@ def staff_reports_day_csv(request):
     rows, _sums = _build_day_report(report_date)
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = f'attachment; filename="report-{report_date.isoformat()}.csv"'
-    response.write('display_number,created_at,location,status,total,paid,remaining,payment_methods\n')
+    response.write('display_number,created_at,fulfillment_mode,location,status,subtotal,delivery_fee,total,paid,remaining,payment_methods\n')
     for row in rows:
         order = row['order']
         methods_txt = '; '.join(f'{k}:{v}' for k, v in row['methods'].items())
         table_name = order.location_label
-        response.write(f'{order.display_number},{order.created_at.isoformat()},{table_name},{order.get_status_display()},{row["total"]},{row["paid"]},{row["remaining"]},"{methods_txt}"\n')
+        response.write(f'{order.display_number},{order.created_at.isoformat()},{order.get_fulfillment_label()},{table_name},{order.get_status_display()},{order.subtotal_syp},{order.delivery_fee_syp},{row["total"]},{row["paid"]},{row["remaining"]},"{methods_txt}"\n')
     return response
 
 

@@ -171,3 +171,49 @@ Bulk import tools are available for managers at `/staff/import/`. Access is rest
 ### Deployment note
 
 No schema migrations are required for Phase 11A. Run and test imports on staging before using them in production, especially for duplicate matching and product modifier applicability.
+
+## Phase 11B — fulfillment and delivery modes
+
+Hub/Masharib supports four order fulfillment modes across the public menu, table QR menu, staff POS, orders board, cashier, admin, and daily reports:
+
+- `inside_space` — طلب داخل المكان (default)
+- `table` — طاولة
+- `delivery` — توصيل
+- `takeaway` — تيك أواي
+
+The operational default remains **inside the space**. Takeaway stays disabled by default, and delivery is also disabled by default until enabled in system settings.
+
+### System settings
+
+Admin users can configure delivery and fulfillment from **إعدادات النظام → خيارات الطلب والتوصيل**:
+
+- Enable or hide delivery (`enable_delivery`).
+- Enable or hide takeaway (`enable_takeaway`).
+- Choose a default fulfillment mode; unavailable delivery/takeaway defaults safely back to inside-space.
+- Require phone and/or address for delivery orders.
+- Configure delivery fee mode: no fee, fixed fee, or manual POS fee.
+- Set fixed delivery fee, minimum delivery order, working-hours text, delivery contact phone/WhatsApp, and delivery notes.
+
+Delivery and takeaway options are hidden on `/menu/` and `/staff/pos/` unless explicitly enabled. Posting a disabled delivery/takeaway mode is rejected with an Arabic validation error rather than creating an invalid order.
+
+### Public menu behavior
+
+- `/menu/` defaults to طلب داخل المكان and shows delivery/takeaway choices only when enabled.
+- `/menu/table/<qr_token>/` defaults to table mode and keeps the table banner primary.
+- Delivery orders collect customer phone/address according to settings, include non-negative delivery fees, and enforce the configured minimum order before creation.
+
+### Staff, cashier, and reporting behavior
+
+- Staff POS can create inside-space, table, delivery, or takeaway orders according to enabled settings.
+- Staff orders show a clear fulfillment badge and delivery-only status controls.
+- Cashier screens show item subtotal, delivery fee, total, paid, and remaining; payment defaults to the remaining total including delivery fee.
+- Daily reports and CSV exports include fulfillment mode and delivery fee totals so fees are included once in gross totals.
+
+### Testing checklist
+
+1. Delivery disabled: `/menu/` hides delivery, manual delivery POST is rejected, inside-space and table QR orders still work.
+2. Delivery enabled: `/menu/` shows delivery, missing required phone/address blocks order, valid delivery order stores address/status/fee.
+3. Takeaway disabled: takeaway is hidden and manual takeaway POST is rejected.
+4. Staff POS: inside-space/table orders still work; delivery works when enabled; manual delivery fee works in manual fee mode.
+5. Cashier: subtotal + delivery fee = total; remaining amount defaults correctly; partial-payment approval is unchanged.
+6. Reports: delivery fees are included once and shown separately where available.
