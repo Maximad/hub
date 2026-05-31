@@ -6,6 +6,9 @@
 <p>التاريخ: {{ report_date|date:'Y-m-d' }}</p>
 <p><a href="{% url 'staff_home' %}">العودة لصفحة الفريق</a> | <a href="javascript:window.print()">طباعة</a></p>
 <ul>
+  <li>إجمالي العناصر: {{ sums.subtotal_total }} ل.س</li>
+  <li>إجمالي رسوم التوصيل: {{ sums.delivery_fee_total }} ل.س</li>
+  <li>إجمالي الطلبات: {{ sums.order_total }} ل.س</li>
   <li>النقد المتوقع: {{ sums.cash_total }} ل.س</li>
   <li>التحويل اليدوي: {{ sums.manual_transfer_total }} ل.س</li>
   <li>غير المدفوع: {{ sums.remaining_total }} ل.س</li>
