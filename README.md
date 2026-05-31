@@ -172,48 +172,28 @@ Bulk import tools are available for managers at `/staff/import/`. Access is rest
 
 No schema migrations are required for Phase 11A. Run and test imports on staging before using them in production, especially for duplicate matching and product modifier applicability.
 
-## Phase 11B — fulfillment and delivery modes
+## Phase 11C — Manual internet/workspace session billing
 
-Hub/Masharib supports four order fulfillment modes across the public menu, table QR menu, staff POS, orders board, cashier, admin, and daily reports:
+Staff internet/workspace billing is managed from `/staff/internet/`, with session details at `/staff/internet/session/<id>/`. This phase is **manual operational billing only**: staff starts and ends sessions in Hub/Masharib, and the system calculates duration and price. It does not call router APIs, disconnect devices, meter traffic, provision vouchers, or automate MikroTik/UniFi/RADIUS/captive-portal access.
 
-- `inside_space` — طلب داخل المكان (default)
-- `table` — طاولة
-- `delivery` — توصيل
-- `takeaway` — تيك أواي
+### Billing modes
 
-The operational default remains **inside the space**. Takeaway stays disabled by default, and delivery is also disabled by default until enabled in system settings.
+* **Prepaid/package sessions** (`prepaid`): use a configured member minute balance where available. Ending a prepaid member session deducts the actual duration from the active subscription and creates a member ledger entry. If the active member balance is missing or insufficient, finalization is blocked with an Arabic warning so balances never become negative.
+* **Open metered sessions** (`open_metered`): staff starts the session when the guest/member begins using internet or workspace time and ends it when they leave. The total is calculated from elapsed minutes, hourly rate, minimum billable minutes, grace minutes, and optional daily cap.
+* **Free/manual sessions** (`free`, `manual`): free sessions calculate zero. Manual overrides are available only to admins/superusers and require an override reason.
 
-### System settings
+### Internet/workspace settings
 
-Admin users can configure delivery and fulfillment from **إعدادات النظام → خيارات الطلب والتوصيل**:
+Admin settings include an Arabic fieldset named `إعدادات الإنترنت والعمل` for defaults such as billing mode, hourly rate, minimum minutes, grace minutes, daily cap, guest/member enable flags, automatic order creation, required guest phone, and the optional internet service product.
 
-- Enable or hide delivery (`enable_delivery`).
-- Enable or hide takeaway (`enable_takeaway`).
-- Choose a default fulfillment mode; unavailable delivery/takeaway defaults safely back to inside-space.
-- Require phone and/or address for delivery orders.
-- Configure delivery fee mode: no fee, fixed fee, or manual POS fee.
-- Set fixed delivery fee, minimum delivery order, working-hours text, delivery contact phone/WhatsApp, and delivery notes.
+When order conversion is used, configure **Internet service product** to an existing `Product` that represents internet/workspace billing. The session order uses that product, writes the session duration and customer/member name in the order note, stores the linked order on the session, and then appears normally in cashier. Payments are created only through an order so cashier totals remain consistent.
 
-Delivery and takeaway options are hidden on `/menu/` and `/staff/pos/` unless explicitly enabled. Posting a disabled delivery/takeaway mode is rejected with an Arabic validation error rather than creating an invalid order.
+### Automation roadmap
 
-### Public menu behavior
+1. **Manual start/end billing** — current Phase 11C behavior.
+2. **Voucher/access-code captive portal** — future phase for access-code workflows.
+3. **Router integration** — future MikroTik/UniFi/RADIUS integration. Placeholder fields such as provider, access code, network session ID, MAC, IP, bandwidth profile, and network status are optional and not required in the UI yet.
 
-- `/menu/` defaults to طلب داخل المكان and shows delivery/takeaway choices only when enabled.
-- `/menu/table/<qr_token>/` defaults to table mode and keeps the table banner primary.
-- Delivery orders collect customer phone/address according to settings, include non-negative delivery fees, and enforce the configured minimum order before creation.
+### Current permissions note
 
-### Staff, cashier, and reporting behavior
-
-- Staff POS can create inside-space, table, delivery, or takeaway orders according to enabled settings.
-- Staff orders show a clear fulfillment badge and delivery-only status controls.
-- Cashier screens show item subtotal, delivery fee, total, paid, and remaining; payment defaults to the remaining total including delivery fee.
-- Daily reports and CSV exports include fulfillment mode and delivery fee totals so fees are included once in gross totals.
-
-### Testing checklist
-
-1. Delivery disabled: `/menu/` hides delivery, manual delivery POST is rejected, inside-space and table QR orders still work.
-2. Delivery enabled: `/menu/` shows delivery, missing required phone/address blocks order, valid delivery order stores address/status/fee.
-3. Takeaway disabled: takeaway is hidden and manual takeaway POST is rejected.
-4. Staff POS: inside-space/table orders still work; delivery works when enabled; manual delivery fee works in manual fee mode.
-5. Cashier: subtotal + delivery fee = total; remaining amount defaults correctly; partial-payment approval is unchanged.
-6. Reports: delivery fees are included once and shown separately where available.
+The existing staff capability map keeps internet/member operations limited to `admin` and `cashier` roles (plus superusers). Waiter access can be widened in a later role-policy pass without changing the billing data model; kitchen users remain excluded from internet billing management.

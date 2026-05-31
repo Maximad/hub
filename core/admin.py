@@ -96,6 +96,15 @@ class SystemSettingAdmin(admin.ModelAdmin):
                 'pos_desktop_columns', 'pos_cart_position', 'order_board_density', 'cashier_layout',
             ),
         }),
+        ('إعدادات الإنترنت والعمل', {
+            'fields': (
+                'default_internet_billing_mode', 'default_rate_per_hour_syp', 'default_minimum_minutes',
+                'default_free_grace_minutes', 'default_daily_cap_syp', 'allow_guest_internet_sessions',
+                'allow_member_internet_sessions', 'auto_create_order_for_metered_sessions',
+                'internet_service_product', 'require_phone_for_guest_session',
+            ),
+            'description': 'هذه الإعدادات للفوترة اليدوية فقط. التحكم الآلي بالراوتر/الشبكة/الكابتف بورتال غير مفعّل في هذه المرحلة.',
+        }),
         ('عناصر الإظهار والإخفاء', {
             'fields': (
                 'show_public_header', 'show_brand_name', 'show_header_subtitle', 'show_table_banner',
@@ -231,10 +240,17 @@ class InternetPackageAdmin(admin.ModelAdmin):
 
 @admin.register(InternetSession)
 class InternetSessionAdmin(admin.ModelAdmin):
-    list_display = ('member', 'customer_name', 'package', 'start_time', 'end_time', 'actual_duration_minutes', 'status')
-    list_filter = ('status', 'package')
-    search_fields = ('member__name_ar', 'member__phone', 'customer_name', 'customer_phone')
-    autocomplete_fields = ('member', 'package')
+    list_display = ('id', 'customer_label', 'billing_mode', 'status', 'started_at', 'ended_at', 'duration_minutes', 'calculated_total_syp', 'linked_order')
+    list_filter = ('billing_mode', 'status', 'network_provider', 'started_at')
+    search_fields = ('guest_name', 'guest_phone', 'customer_name', 'customer_phone', 'member__name_ar', 'member__name_en', 'member__phone', 'access_code', 'network_session_id')
+    autocomplete_fields = ('member', 'package', 'linked_order', 'linked_payment', 'started_by', 'ended_by')
+    readonly_fields = ('created_at', 'updated_at')
+
+    @admin.display(description='العضو/الزائر')
+    def customer_label(self, obj):
+        if obj.member_id:
+            return obj.member
+        return obj.display_guest_name or obj.display_guest_phone or 'زائر'
 
 
 @admin.register(Shift)
