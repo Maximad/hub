@@ -3,6 +3,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
 
 
@@ -13,6 +14,13 @@ def _arabic_first(obj, *fields, fallback='—'):
             return str(value)
     return fallback
 
+
+
+
+validate_hex_color = RegexValidator(
+    regex=r'^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$',
+    message='أدخل لوناً بصيغة HEX مثل #0f5f57 أو #fff.',
+)
 
 def validate_font_upload(file_obj):
     ext = Path(file_obj.name).suffix.lower()
@@ -126,6 +134,23 @@ class Order(TimeStampedModel, PublicCodeModel):
         TABLE = 'table', 'طلب طاولة'
         TAKEAWAY = 'takeaway', 'تيك أواي'
 
+    class FulfillmentMode(models.TextChoices):
+        INSIDE_SPACE = 'inside_space', 'طلب داخل المكان'
+        TABLE = 'table', 'طاولة'
+        DELIVERY = 'delivery', 'توصيل'
+        TAKEAWAY = 'takeaway', 'تيك أواي'
+
+    class DeliveryStatus(models.TextChoices):
+        NOT_DELIVERY = 'not_delivery', 'ليس توصيل'
+        DELIVERY_REQUESTED = 'delivery_requested', 'طلب توصيل'
+        CONFIRMED = 'confirmed', 'مؤكد'
+        PREPARING = 'preparing', 'قيد التحضير'
+        READY_FOR_DISPATCH = 'ready_for_dispatch', 'جاهز للإرسال'
+        OUT_FOR_DELIVERY = 'out_for_delivery', 'خرج للتوصيل'
+        DELIVERED = 'delivered', 'تم التسليم'
+        FAILED = 'failed', 'فشل التوصيل'
+        CANCELLED = 'cancelled', 'ملغى'
+
     class Status(models.TextChoices):
         NEW = 'new', 'جديد'
         ACCEPTED = 'accepted', 'مقبول'
@@ -136,8 +161,17 @@ class Order(TimeStampedModel, PublicCodeModel):
 
     table = models.ForeignKey(TableArea, on_delete=models.PROTECT, related_name='orders', null=True, blank=True)
     service_mode = models.CharField(max_length=20, choices=ServiceMode.choices, default=ServiceMode.DINE_IN)
+    fulfillment_mode = models.CharField(max_length=20, choices=FulfillmentMode.choices, default=FulfillmentMode.INSIDE_SPACE, verbose_name='وضع الاستلام/التنفيذ')
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.NEW)
     notes = models.TextField(blank=True)
+    delivery_address = models.TextField(blank=True, verbose_name='عنوان التوصيل')
+    delivery_area = models.CharField(max_length=120, blank=True, verbose_name='منطقة التوصيل')
+    delivery_notes = models.TextField(blank=True, verbose_name='ملاحظات التوصيل')
+    delivery_fee_syp = models.PositiveIntegerField(default=0, verbose_name='رسوم التوصيل')
+    delivery_eta_minutes = models.PositiveIntegerField(null=True, blank=True, verbose_name='زمن التوصيل المتوقع بالدقائق')
+    delivery_status = models.CharField(max_length=30, choices=DeliveryStatus.choices, default=DeliveryStatus.NOT_DELIVERY, verbose_name='حالة التوصيل')
+    assigned_driver_name = models.CharField(max_length=120, blank=True, verbose_name='اسم السائق')
+    assigned_driver_phone = models.CharField(max_length=30, blank=True, verbose_name='هاتف السائق')
 
     @property
     def display_number(self):
@@ -147,23 +181,66 @@ class Order(TimeStampedModel, PublicCodeModel):
 
     @property
     def location_label(self):
-        if self.table_id:
-            return f'الطاولة: {self.table.name_ar}'
-        if self.service_mode == self.ServiceMode.TAKEAWAY:
+        if self.fulfillment_mode == self.FulfillmentMode.TABLE or self.table_id:
+            return f'الطاولة: {self.table.name_ar}' if self.table_id else 'طاولة'
+        if self.fulfillment_mode == self.FulfillmentMode.DELIVERY:
+            return 'توصيل'
+        if self.fulfillment_mode == self.FulfillmentMode.TAKEAWAY or self.service_mode == self.ServiceMode.TAKEAWAY:
             return 'تيك أواي'
-        return 'طلب عام داخل المكان'
+        return 'طلب داخل المكان'
 
     @property
     def location_detail(self):
         if self.table_id and self.table.room_id:
             return f'المساحة: {self.table.room.name_ar}'
+        if self.is_delivery and self.delivery_area:
+            return self.delivery_area
         return ''
+
+    def get_fulfillment_label(self):
+        if self.is_table_order and self.table_id:
+            return f'الطاولة: {self.table.name_ar}'
+        return self.FulfillmentMode(self.fulfillment_mode).label if self.fulfillment_mode in self.FulfillmentMode.values else 'طلب داخل المكان'
+
+    @property
+    def is_delivery(self):
+        return self.fulfillment_mode == self.FulfillmentMode.DELIVERY
+
+    @property
+    def is_table_order(self):
+        return self.fulfillment_mode == self.FulfillmentMode.TABLE or bool(self.table_id)
+
+    @property
+    def delivery_fee_display(self):
+        return f'{max(self.delivery_fee_syp or 0, 0)} ل.س'
+
+    @property
+    def subtotal_syp(self):
+        total = 0
+        for item in self.items.all():
+            line_total = item.line_total_syp_snapshot
+            if line_total is None:
+                line_total = item.quantity * item.unit_price_syp_snapshot
+            total += line_total
+        return max(total, 0)
+
+    @property
+    def total_with_delivery_syp(self):
+        return max(self.subtotal_syp + max(self.delivery_fee_syp or 0, 0), 0)
 
     def __str__(self):
         return self.display_number
 
 
 class OrderItem(TimeStampedModel):
+    class PrepStatus(models.TextChoices):
+        PENDING = 'pending', 'جديد'
+        ACCEPTED = 'accepted', 'تم الاستلام'
+        PREPARING = 'preparing', 'قيد التحضير'
+        READY = 'ready', 'جاهز'
+        SERVED = 'served', 'تم التسليم'
+        CANCELLED = 'cancelled', 'ملغي'
+
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
     product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name='order_items')
     quantity = models.PositiveIntegerField(default=1)
@@ -173,6 +250,7 @@ class OrderItem(TimeStampedModel):
     selected_options_snapshot = models.JSONField(default=list, blank=True)
     item_note = models.TextField(blank=True)
     line_total_syp_snapshot = models.IntegerField(null=True, blank=True)
+    prep_status = models.CharField(max_length=20, choices=PrepStatus.choices, default=PrepStatus.PENDING)
 
     def __str__(self):
         return f'{self.product_name_ar_snapshot} × {self.quantity} — {self.order.display_number}'
@@ -219,20 +297,105 @@ class InternetPackage(TimeStampedModel, PublicCodeModel):
 
 
 class InternetSession(TimeStampedModel, PublicCodeModel):
+    class BillingMode(models.TextChoices):
+        PREPAID = 'prepaid', 'مسبق الدفع'
+        OPEN_METERED = 'open_metered', 'مفتوح محسوب بالوقت'
+        FREE = 'free', 'مجاني'
+        MANUAL = 'manual', 'يدوي'
+
+    class Status(models.TextChoices):
+        ACTIVE = 'active', 'فعالة'
+        ENDED = 'ended', 'منتهية'
+        CANCELLED = 'cancelled', 'ملغاة'
+        UNPAID = 'unpaid', 'غير مدفوعة'
+        PAID = 'paid', 'مدفوعة'
+
+    class NetworkProvider(models.TextChoices):
+        MANUAL = 'manual', 'يدوي'
+        MIKROTIK = 'mikrotik', 'MikroTik'
+        UNIFI = 'unifi', 'UniFi'
+        RADIUS = 'radius', 'RADIUS'
+
     member = models.ForeignKey(Member, on_delete=models.PROTECT, related_name='internet_sessions', null=True, blank=True)
-    package = models.ForeignKey(InternetPackage, on_delete=models.PROTECT, related_name='sessions')
+    package = models.ForeignKey(InternetPackage, on_delete=models.PROTECT, related_name='sessions', null=True, blank=True)
     customer_name = models.CharField(max_length=120, blank=True)
     customer_phone = models.CharField(max_length=30, blank=True)
+    guest_name = models.CharField(max_length=120, blank=True)
+    guest_phone = models.CharField(max_length=30, blank=True)
+    billing_mode = models.CharField(max_length=20, choices=BillingMode.choices, default=BillingMode.OPEN_METERED)
     start_time = models.DateTimeField()
-    end_time = models.DateTimeField()
+    end_time = models.DateTimeField(null=True, blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
     actual_duration_minutes = models.PositiveIntegerField(null=True, blank=True)
-    status = models.CharField(max_length=20, default='active')
+    duration_minutes = models.PositiveIntegerField(null=True, blank=True)
+    rate_per_hour_syp = models.PositiveIntegerField(default=0)
+    minimum_minutes = models.PositiveIntegerField(default=0)
+    free_grace_minutes = models.PositiveIntegerField(default=0)
+    daily_cap_syp = models.PositiveIntegerField(null=True, blank=True)
+    calculated_total_syp = models.PositiveIntegerField(default=0)
+    manual_total_syp = models.PositiveIntegerField(null=True, blank=True)
+    override_reason = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
+    linked_order = models.ForeignKey(Order, on_delete=models.SET_NULL, related_name='internet_sessions', null=True, blank=True)
+    linked_payment = models.ForeignKey(Payment, on_delete=models.SET_NULL, related_name='internet_sessions', null=True, blank=True)
+    started_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, related_name='started_internet_sessions', null=True, blank=True)
+    ended_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, related_name='ended_internet_sessions', null=True, blank=True)
     notes = models.TextField(blank=True)
     consumed = models.BooleanField(default=False)
+    network_provider = models.CharField(max_length=20, choices=NetworkProvider.choices, default=NetworkProvider.MANUAL)
+    access_code = models.CharField(max_length=120, blank=True)
+    network_session_id = models.CharField(max_length=120, blank=True)
+    device_mac = models.CharField(max_length=64, blank=True)
+    ip_address = models.CharField(max_length=64, blank=True)
+    bandwidth_profile = models.CharField(max_length=120, blank=True)
+    network_status = models.CharField(max_length=120, blank=True)
+
+    @property
+    def display_guest_name(self):
+        return self.guest_name or self.customer_name
+
+    @property
+    def display_guest_phone(self):
+        return self.guest_phone or self.customer_phone
+
+    @property
+    def effective_started_at(self):
+        return self.started_at or self.start_time
+
+    @property
+    def effective_ended_at(self):
+        return self.ended_at or self.end_time
+
+    @property
+    def effective_duration_minutes(self):
+        return self.duration_minutes if self.duration_minutes is not None else self.actual_duration_minutes
+
+    @property
+    def payable_total_syp(self):
+        return self.manual_total_syp if self.manual_total_syp is not None else self.calculated_total_syp
+
+    def save(self, *args, **kwargs):
+        if self.started_at is None and self.start_time is not None:
+            self.started_at = self.start_time
+        if self.start_time is None and self.started_at is not None:
+            self.start_time = self.started_at
+        if not self.guest_name and self.customer_name:
+            self.guest_name = self.customer_name
+        if not self.customer_name and self.guest_name:
+            self.customer_name = self.guest_name
+        if not self.guest_phone and self.customer_phone:
+            self.guest_phone = self.customer_phone
+        if not self.customer_phone and self.guest_phone:
+            self.customer_phone = self.guest_phone
+        super().save(*args, **kwargs)
 
     def __str__(self):
-        customer = self.member or self.customer_name or self.customer_phone or 'زائر'
-        return f'{customer} — {self.package} — {self.start_time:%Y-%m-%d %H:%M}'
+        customer = self.member or self.display_guest_name or self.display_guest_phone or 'زائر'
+        package = self.package or self.get_billing_mode_display()
+        started = self.effective_started_at
+        stamp = started.strftime('%Y-%m-%d %H:%M') if started else 'بدون وقت'
+        return f'{customer} — {package} — {stamp}'
 
 
 class Shift(TimeStampedModel, PublicCodeModel):
@@ -266,31 +429,192 @@ class SystemSetting(TimeStampedModel):
         TABLE = 'table', 'طلب طاولة'
         TAKEAWAY = 'takeaway', 'تيك أواي'
 
-    system_title_ar = models.CharField(max_length=160, default='نظام مشاريب')
-    system_title_en = models.CharField(max_length=160, default='Masharib System')
-    public_brand_title_ar = models.CharField(max_length=160, default='مشاريب')
-    public_brand_title_en = models.CharField(max_length=160, default='Masharib')
-    header_subtitle_ar = models.CharField(max_length=220, default='Hub Sueda • تشغيل يومي مرن')
-    header_subtitle_en = models.CharField(max_length=220, default='Hub Sueda • flexible daily operations')
-    default_language = models.CharField(max_length=5, choices=Language.choices, default=Language.ARABIC)
-    enable_takeaway = models.BooleanField(default=False)
-    enable_table_orders = models.BooleanField(default=True)
-    enable_general_in_space_orders = models.BooleanField(default=True)
-    show_internal_order_uuid = models.BooleanField(default=False)
-    default_order_mode = models.CharField(max_length=20, choices=DefaultOrderMode.choices, default=DefaultOrderMode.DINE_IN)
-    primary_color = models.CharField(max_length=20, default='#0f5f57')
-    header_color = models.CharField(max_length=20, default='#0f5f57')
-    button_color = models.CharField(max_length=20, default='#0f5f57')
-    accent_color = models.CharField(max_length=20, default='#c88a2b')
-    background_color = models.CharField(max_length=20, default='#f6f1e8')
-    card_background_color = models.CharField(max_length=20, default='#fffaf1')
-    text_color = models.CharField(max_length=20, default='#262626')
-    border_color = models.CharField(max_length=20, default='#ddd2c0')
-    base_font_size_px = models.PositiveIntegerField(default=18)
-    heading_font_size_px = models.PositiveIntegerField(null=True, blank=True)
-    border_radius_px = models.PositiveIntegerField(default=18)
-    custom_font_name = models.CharField(max_length=120, blank=True)
-    custom_font_file = models.FileField(upload_to='system/fonts/', blank=True, validators=[validate_font_upload])
+    class DefaultFulfillmentMode(models.TextChoices):
+        INSIDE_SPACE = 'inside_space', 'طلب داخل المكان'
+        TABLE = 'table', 'طاولة'
+        DELIVERY = 'delivery', 'توصيل'
+        TAKEAWAY = 'takeaway', 'تيك أواي'
+
+    class DeliveryFeeMode(models.TextChoices):
+        NONE = 'none', 'بدون رسوم'
+        FIXED = 'fixed', 'رسوم ثابتة'
+        MANUAL = 'manual', 'إدخال يدوي'
+
+    class ButtonPaddingScale(models.TextChoices):
+        COMPACT = 'compact', 'مضغوط'
+        NORMAL = 'normal', 'عادي'
+        LARGE = 'large', 'كبير'
+
+    class InputSize(models.TextChoices):
+        COMPACT = 'compact', 'مضغوط'
+        NORMAL = 'normal', 'عادي'
+        LARGE = 'large', 'كبير'
+
+    class CardShadowLevel(models.TextChoices):
+        NONE = 'none', 'بدون ظل'
+        SOFT = 'soft', 'ظل خفيف'
+        MEDIUM = 'medium', 'ظل متوسط'
+
+    class UIDensity(models.TextChoices):
+        COMPACT = 'compact', 'مضغوط'
+        COMFORTABLE = 'comfortable', 'مريح'
+        LARGE_TOUCH = 'large_touch', 'لمس كبير'
+
+    class MenuLayoutPreset(models.TextChoices):
+        DEFAULT_MASHARIB = 'default_masharib', 'مشاريب الافتراضي'
+        MINIMAL_FAST = 'minimal_fast', 'سريع وبسيط'
+        VISUAL_CARDS = 'visual_cards', 'بطاقات بصرية'
+        COMPACT_LIST = 'compact_list', 'قائمة مضغوطة'
+        TABLET_GRID = 'tablet_grid', 'شبكة تابلت'
+
+    class MenuMobileLayout(models.TextChoices):
+        LIST = 'list', 'قائمة'
+        ONE_COLUMN_CARDS = 'one_column_cards', 'بطاقات عمود واحد'
+        LARGE_IMAGE_CARDS = 'large_image_cards', 'بطاقات صور كبيرة'
+
+    class ProductCardStyle(models.TextChoices):
+        MINIMAL = 'minimal', 'بسيط'
+        IMAGE_FIRST = 'image_first', 'الصورة أولاً'
+        TEXT_FIRST = 'text_first', 'النص أولاً'
+        COMPACT = 'compact', 'مضغوط'
+        STORY_CARD = 'story_card', 'بطاقة قصة'
+
+    class StickyCartStyle(models.TextChoices):
+        BOTTOM_BAR = 'bottom_bar', 'شريط سفلي'
+        FLOATING_BUTTON = 'floating_button', 'زر عائم'
+        SIDEBAR_ON_DESKTOP = 'sidebar_on_desktop', 'جانبياً على سطح المكتب'
+
+    class CartReviewPosition(models.TextChoices):
+        BOTTOM = 'bottom', 'أسفل الصفحة'
+        SIDEBAR_DESKTOP = 'sidebar_desktop', 'شريط جانبي على سطح المكتب'
+        MODAL_DRAWER = 'modal_drawer', 'درج/نافذة للمراجعة'
+
+    class StaffHomeLayout(models.TextChoices):
+        GROUPED_CARDS = 'grouped_cards', 'بطاقات مجمّعة'
+        COMPACT_GRID = 'compact_grid', 'شبكة مضغوطة'
+        LARGE_TOUCH = 'large_touch', 'لمس كبير'
+
+    class POSLayoutPreset(models.TextChoices):
+        FAST_TOUCH = 'fast_touch', 'لمس سريع'
+        IMAGE_GRID = 'image_grid', 'شبكة صور'
+        COMPACT_LIST = 'compact_list', 'قائمة مضغوطة'
+        TABLET_SPLIT = 'tablet_split', 'تقسيم تابلت'
+
+    class POSCartPosition(models.TextChoices):
+        BOTTOM = 'bottom', 'أسفل'
+        SIDE = 'side', 'جانب'
+        DRAWER = 'drawer', 'درج'
+
+    class OrderBoardDensity(models.TextChoices):
+        COMPACT = 'compact', 'مضغوط'
+        NORMAL = 'normal', 'عادي'
+        LARGE_TOUCH = 'large_touch', 'لمس كبير'
+
+    class CashierLayout(models.TextChoices):
+        SINGLE_COLUMN = 'single_column', 'عمود واحد'
+        SUMMARY_SIDEBAR = 'summary_sidebar', 'ملخص جانبي'
+        LARGE_PAYMENT = 'large_payment', 'دفع كبير'
+
+    class InternetBillingMode(models.TextChoices):
+        PREPAID = 'prepaid', 'مسبق الدفع'
+        OPEN_METERED = 'open_metered', 'مفتوح محسوب بالوقت'
+        FREE = 'free', 'مجاني'
+        MANUAL = 'manual', 'يدوي'
+
+    system_title_ar = models.CharField(max_length=160, default='نظام مشاريب', verbose_name='عنوان النظام بالعربية')
+    system_title_en = models.CharField(max_length=160, default='Masharib System', verbose_name='عنوان النظام بالإنجليزية')
+    public_brand_title_ar = models.CharField(max_length=160, default='مشاريب', verbose_name='اسم العلامة في المنيو')
+    public_brand_title_en = models.CharField(max_length=160, default='Masharib', verbose_name='اسم العلامة بالإنجليزية')
+    header_subtitle_ar = models.CharField(max_length=220, default='Hub Sueda • تشغيل يومي مرن', verbose_name='وصف الهيدر بالعربية')
+    header_subtitle_en = models.CharField(max_length=220, default='Hub Sueda • flexible daily operations', verbose_name='وصف الهيدر بالإنجليزية')
+    default_language = models.CharField(max_length=5, choices=Language.choices, default=Language.ARABIC, verbose_name='اللغة الافتراضية')
+    enable_delivery = models.BooleanField(default=False, verbose_name='تفعيل التوصيل', help_text='يبقى خيار التوصيل مخفياً في المنيو وPOS ما لم يتم تفعيله.')
+    enable_takeaway = models.BooleanField(default=False, verbose_name='تفعيل التيك أواي', help_text='يبقى خيار التيك أواي مخفياً في المنيو وPOS ما لم يتم تفعيله.')
+    enable_table_orders = models.BooleanField(default=True, verbose_name='تفعيل طلبات الطاولات')
+    enable_general_in_space_orders = models.BooleanField(default=True, verbose_name='تفعيل الطلب العام داخل المكان')
+    show_internal_order_uuid = models.BooleanField(default=False, verbose_name='إظهار رقم UUID الداخلي')
+    default_order_mode = models.CharField(max_length=20, choices=DefaultOrderMode.choices, default=DefaultOrderMode.DINE_IN, verbose_name='وضع الطلب الافتراضي')
+    default_fulfillment_mode = models.CharField(max_length=20, choices=DefaultFulfillmentMode.choices, default=DefaultFulfillmentMode.INSIDE_SPACE, verbose_name='وضع التنفيذ الافتراضي')
+    require_phone_for_delivery = models.BooleanField(default=True, verbose_name='طلب الهاتف للتوصيل')
+    require_address_for_delivery = models.BooleanField(default=True, verbose_name='طلب العنوان للتوصيل')
+    delivery_fee_mode = models.CharField(max_length=20, choices=DeliveryFeeMode.choices, default=DeliveryFeeMode.NONE, verbose_name='طريقة رسوم التوصيل')
+    fixed_delivery_fee_syp = models.PositiveIntegerField(default=0, verbose_name='رسوم التوصيل الثابتة')
+    minimum_delivery_order_syp = models.PositiveIntegerField(default=0, verbose_name='الحد الأدنى لطلب التوصيل')
+    delivery_working_hours_text = models.CharField(max_length=240, blank=True, verbose_name='ساعات عمل التوصيل')
+    delivery_contact_phone = models.CharField(max_length=40, blank=True, verbose_name='هاتف التواصل للتوصيل')
+    delivery_contact_whatsapp = models.CharField(max_length=40, blank=True, verbose_name='واتساب التوصيل')
+    delivery_notes = models.TextField(blank=True, verbose_name='ملاحظات التوصيل')
+
+    primary_color = models.CharField(max_length=20, default='#0f5f57', validators=[validate_hex_color], verbose_name='اللون الأساسي')
+    header_color = models.CharField(max_length=20, default='#0f5f57', validators=[validate_hex_color], verbose_name='لون الهيدر')
+    background_color = models.CharField(max_length=20, default='#f6f1e8', validators=[validate_hex_color], verbose_name='لون خلفية الصفحة')
+    card_background_color = models.CharField(max_length=20, default='#fffaf1', validators=[validate_hex_color], verbose_name='لون خلفية البطاقات')
+    text_color = models.CharField(max_length=20, default='#262626', validators=[validate_hex_color], verbose_name='لون النص')
+    muted_text_color = models.CharField(max_length=20, default='#6b6b6b', validators=[validate_hex_color], verbose_name='لون النص الثانوي')
+    border_color = models.CharField(max_length=20, default='#ddd2c0', validators=[validate_hex_color], verbose_name='لون الحدود')
+    button_color = models.CharField(max_length=20, default='#0f5f57', validators=[validate_hex_color], verbose_name='لون الأزرار')
+    accent_color = models.CharField(max_length=20, default='#c88a2b', validators=[validate_hex_color], verbose_name='لون التمييز')
+
+    base_font_size_px = models.PositiveIntegerField(default=18, validators=[MinValueValidator(13), MaxValueValidator(22)], verbose_name='حجم الخط الأساسي')
+    heading_font_size_px = models.PositiveIntegerField(default=34, validators=[MinValueValidator(18), MaxValueValidator(44)], verbose_name='حجم العناوين')
+    small_font_size_px = models.PositiveIntegerField(default=15, validators=[MinValueValidator(11), MaxValueValidator(20)], verbose_name='حجم الخط الصغير')
+    button_font_size_px = models.PositiveIntegerField(default=16, validators=[MinValueValidator(13), MaxValueValidator(24)], verbose_name='حجم خط الأزرار')
+    button_padding_scale = models.CharField(max_length=20, choices=ButtonPaddingScale.choices, default=ButtonPaddingScale.NORMAL, verbose_name='حجم حشوة الأزرار')
+    input_size = models.CharField(max_length=20, choices=InputSize.choices, default=InputSize.NORMAL, verbose_name='حجم حقول الإدخال')
+    border_radius_px = models.PositiveIntegerField(default=18, validators=[MinValueValidator(0), MaxValueValidator(32)], verbose_name='استدارة الزوايا')
+    card_shadow_level = models.CharField(max_length=20, choices=CardShadowLevel.choices, default=CardShadowLevel.SOFT, verbose_name='ظل البطاقات')
+    page_max_width_px = models.PositiveIntegerField(default=1200, validators=[MinValueValidator(360), MaxValueValidator(1600)], verbose_name='أقصى عرض للصفحة')
+    ui_density = models.CharField(max_length=20, choices=UIDensity.choices, default=UIDensity.COMFORTABLE, verbose_name='كثافة الواجهة')
+    custom_font_name = models.CharField(max_length=120, blank=True, verbose_name='اسم الخط المخصص')
+    custom_font_file = models.FileField(upload_to='system/fonts/', blank=True, validators=[validate_font_upload], verbose_name='ملف الخط المخصص')
+
+    menu_layout_preset = models.CharField(max_length=30, choices=MenuLayoutPreset.choices, default=MenuLayoutPreset.DEFAULT_MASHARIB, verbose_name='نمط تخطيط المنيو')
+    menu_mobile_layout = models.CharField(max_length=30, choices=MenuMobileLayout.choices, default=MenuMobileLayout.ONE_COLUMN_CARDS, verbose_name='تخطيط الجوال للمنيو')
+    menu_tablet_columns = models.PositiveSmallIntegerField(default=2, choices=[(1, '1'), (2, '2'), (3, '3')], verbose_name='أعمدة المنيو على التابلت')
+    menu_desktop_columns = models.PositiveSmallIntegerField(default=3, choices=[(1, '1'), (2, '2'), (3, '3'), (4, '4')], verbose_name='أعمدة المنيو على سطح المكتب')
+    product_card_style = models.CharField(max_length=30, choices=ProductCardStyle.choices, default=ProductCardStyle.IMAGE_FIRST, verbose_name='شكل بطاقة المنتج')
+    show_public_header = models.BooleanField(default=True, verbose_name='إظهار هيدر المنيو العام')
+    show_brand_name = models.BooleanField(default=True, verbose_name='إظهار اسم العلامة')
+    show_header_subtitle = models.BooleanField(default=True, verbose_name='إظهار وصف الهيدر')
+    show_table_banner = models.BooleanField(default=True, verbose_name='إظهار شريط الطاولة/المكان')
+    show_section_chips = models.BooleanField(default=True, verbose_name='إظهار شرائح الأقسام')
+    show_product_images = models.BooleanField(default=True, verbose_name='إظهار صور المنتجات')
+    show_product_descriptions = models.BooleanField(default=True, verbose_name='إظهار وصف المنتجات')
+    show_product_prices = models.BooleanField(default=True, verbose_name='إظهار الأسعار')
+    show_product_badges = models.BooleanField(default=True, verbose_name='إظهار شارات المنتجات')
+    show_modifier_summary = models.BooleanField(default=True, verbose_name='إظهار ملخص الخيارات')
+    collapse_modifiers_by_default = models.BooleanField(default=True, verbose_name='طي خيارات المنتجات افتراضياً')
+    show_item_notes = models.BooleanField(default=True, verbose_name='إظهار ملاحظات العناصر')
+    show_customer_name_field = models.BooleanField(default=True, verbose_name='إظهار حقل اسم الزبون')
+    show_customer_phone_field = models.BooleanField(default=True, verbose_name='إظهار حقل هاتف الزبون')
+    show_general_note_field = models.BooleanField(default=True, verbose_name='إظهار حقل الملاحظة العامة')
+    show_sticky_cart = models.BooleanField(default=True, verbose_name='إظهار السلة اللاصقة')
+    sticky_cart_style = models.CharField(max_length=30, choices=StickyCartStyle.choices, default=StickyCartStyle.BOTTOM_BAR, verbose_name='شكل السلة اللاصقة')
+    cart_review_position = models.CharField(max_length=30, choices=CartReviewPosition.choices, default=CartReviewPosition.BOTTOM, verbose_name='مكان مراجعة السلة')
+
+    staff_home_layout = models.CharField(max_length=30, choices=StaffHomeLayout.choices, default=StaffHomeLayout.GROUPED_CARDS, verbose_name='تخطيط صفحة الفريق')
+    pos_layout_preset = models.CharField(max_length=30, choices=POSLayoutPreset.choices, default=POSLayoutPreset.FAST_TOUCH, verbose_name='نمط نقطة البيع')
+    pos_mobile_columns = models.PositiveSmallIntegerField(default=2, choices=[(1, '1'), (2, '2')], verbose_name='أعمدة POS على الجوال')
+    pos_tablet_columns = models.PositiveSmallIntegerField(default=3, choices=[(1, '1'), (2, '2'), (3, '3')], verbose_name='أعمدة POS على التابلت')
+    pos_desktop_columns = models.PositiveSmallIntegerField(default=4, choices=[(1, '1'), (2, '2'), (3, '3'), (4, '4')], verbose_name='أعمدة POS على سطح المكتب')
+    pos_show_product_images = models.BooleanField(default=True, verbose_name='إظهار صور المنتجات في POS')
+    pos_show_prices = models.BooleanField(default=True, verbose_name='إظهار الأسعار في POS')
+    pos_show_section_chips = models.BooleanField(default=True, verbose_name='إظهار شرائح الأقسام في POS')
+    pos_enable_search_bar = models.BooleanField(default=True, verbose_name='تفعيل شريط البحث في POS')
+    pos_cart_position = models.CharField(max_length=20, choices=POSCartPosition.choices, default=POSCartPosition.SIDE, verbose_name='مكان سلة POS')
+    order_board_density = models.CharField(max_length=20, choices=OrderBoardDensity.choices, default=OrderBoardDensity.NORMAL, verbose_name='كثافة لوحة الطلبات')
+    cashier_layout = models.CharField(max_length=30, choices=CashierLayout.choices, default=CashierLayout.SINGLE_COLUMN, verbose_name='تخطيط الكاشير')
+
+    default_internet_billing_mode = models.CharField(max_length=20, choices=InternetBillingMode.choices, default=InternetBillingMode.OPEN_METERED, verbose_name='وضع فوترة الإنترنت الافتراضي')
+    default_rate_per_hour_syp = models.PositiveIntegerField(default=0, verbose_name='سعر الساعة الافتراضي للإنترنت/العمل')
+    default_minimum_minutes = models.PositiveIntegerField(default=30, verbose_name='الحد الأدنى الافتراضي للدقائق')
+    default_free_grace_minutes = models.PositiveIntegerField(default=0, verbose_name='دقائق السماح المجانية الافتراضية')
+    default_daily_cap_syp = models.PositiveIntegerField(null=True, blank=True, verbose_name='السقف اليومي الافتراضي')
+    allow_guest_internet_sessions = models.BooleanField(default=True, verbose_name='السماح بجلسات الزوار')
+    allow_member_internet_sessions = models.BooleanField(default=True, verbose_name='السماح بجلسات الأعضاء')
+    auto_create_order_for_metered_sessions = models.BooleanField(default=False, verbose_name='إنشاء طلب تلقائي للجلسات المحسوبة')
+    internet_service_product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True, related_name='internet_setting_profiles', verbose_name='منتج خدمة الإنترنت للطلبات')
+    require_phone_for_guest_session = models.BooleanField(default=False, verbose_name='طلب هاتف الزائر عند بدء الجلسة')
 
     class Meta:
         verbose_name = 'إعدادات النظام'
@@ -300,9 +624,34 @@ class SystemSetting(TimeStampedModel):
         return self.system_title_ar or self.system_title_en
 
     def save(self, *args, **kwargs):
+        if self.default_fulfillment_mode == self.DefaultFulfillmentMode.DELIVERY and not self.enable_delivery:
+            self.default_fulfillment_mode = self.DefaultFulfillmentMode.INSIDE_SPACE
+        if self.default_fulfillment_mode == self.DefaultFulfillmentMode.TAKEAWAY and not self.enable_takeaway:
+            self.default_fulfillment_mode = self.DefaultFulfillmentMode.INSIDE_SPACE
+        self.fixed_delivery_fee_syp = max(self.fixed_delivery_fee_syp or 0, 0)
+        self.minimum_delivery_order_syp = max(self.minimum_delivery_order_syp or 0, 0)
         if not self.pk and SystemSetting.objects.exists():
             self.pk = SystemSetting.objects.order_by('-updated_at', '-pk').first().pk
         super().save(*args, **kwargs)
+
+    def available_fulfillment_modes(self, include_table=True):
+        modes = [Order.FulfillmentMode.INSIDE_SPACE]
+        if include_table and self.enable_table_orders:
+            modes.append(Order.FulfillmentMode.TABLE)
+        if self.enable_delivery:
+            modes.append(Order.FulfillmentMode.DELIVERY)
+        if self.enable_takeaway:
+            modes.append(Order.FulfillmentMode.TAKEAWAY)
+        return modes
+
+    @property
+    def safe_default_fulfillment_mode(self):
+        mode = self.default_fulfillment_mode or self.DefaultFulfillmentMode.INSIDE_SPACE
+        if mode == self.DefaultFulfillmentMode.DELIVERY and not self.enable_delivery:
+            return Order.FulfillmentMode.INSIDE_SPACE
+        if mode == self.DefaultFulfillmentMode.TAKEAWAY and not self.enable_takeaway:
+            return Order.FulfillmentMode.INSIDE_SPACE
+        return mode
 
     @property
     def custom_font_format(self):
@@ -320,6 +669,36 @@ class SystemSetting(TimeStampedModel):
     @property
     def header_subtitle(self):
         return self.header_subtitle_ar if self.default_language == self.Language.ARABIC else (self.header_subtitle_en or self.header_subtitle_ar)
+
+    @property
+    def menu_mobile_layout_class(self):
+        if self.menu_mobile_layout == self.MenuMobileLayout.LIST:
+            return 'layout-list'
+        return 'layout-grid-1'
+
+    @property
+    def menu_tablet_layout_class(self):
+        return f'layout-tablet-{self.menu_tablet_columns}'
+
+    @property
+    def menu_desktop_layout_class(self):
+        return f'layout-grid-{self.menu_desktop_columns}'
+
+    @property
+    def product_card_style_class(self):
+        return f'card-{self.product_card_style.replace("_", "-")}'
+
+    @property
+    def pos_mobile_layout_class(self):
+        return f'layout-grid-{self.pos_mobile_columns}'
+
+    @property
+    def pos_tablet_layout_class(self):
+        return f'layout-tablet-{self.pos_tablet_columns}'
+
+    @property
+    def pos_desktop_layout_class(self):
+        return f'layout-grid-{self.pos_desktop_columns}'
 
 
 class PageSetting(TimeStampedModel):

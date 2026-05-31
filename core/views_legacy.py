@@ -7,7 +7,7 @@ from django.http import Http404, HttpResponse
 from django.contrib import messages
 from django.contrib.auth import authenticate
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -17,6 +17,11 @@ from members.models import MembershipBenefitRule, MembershipPlan, MembershipSubs
 from internet.models import WifiNetwork
 from catalog.models import MenuSection, ProductMedia, ProductOption, ProductOptionGroup, ProductOptionGroupAssignment
 from core.settings_helpers import get_page_setting, get_system_settings
+from core.internet_billing import calculate_billable_minutes, calculate_metered_session_total, calculate_session_duration_minutes, can_override_session_total, finalize_internet_session
+from accounts.permissions import (
+    ACCESS_DENIED_MESSAGE, can_approve_partial_payment,
+    require_staff_capability, user_has_capability,
+)
 from core.models import ActivityLog, InternetPackage, InternetSession, Member, Order, OrderItem, Payment, Product, SystemSetting, TableArea
 from events.models import Event
 from reservations.models import Reservation
@@ -40,18 +45,17 @@ def _qr_svg_response(data):
     return response
 
 
-def _order_location_note(table, service_mode=Order.ServiceMode.DINE_IN):
-    if table:
-        return f'الطاولة: {table.name_ar}' + (f' — المساحة: {table.room.name_ar}' if table.room_id else '')
-    if service_mode == Order.ServiceMode.TAKEAWAY:
+def _order_location_note(table, service_mode=Order.ServiceMode.DINE_IN, fulfillment_mode=None):
+    if table or fulfillment_mode == Order.FulfillmentMode.TABLE:
+        if table:
+            return f'الطاولة: {table.name_ar}' + (f' — المساحة: {table.room.name_ar}' if table.room_id else '')
+        return 'طاولة'
+    if fulfillment_mode == Order.FulfillmentMode.DELIVERY:
+        return 'توصيل'
+    if fulfillment_mode == Order.FulfillmentMode.TAKEAWAY or service_mode == Order.ServiceMode.TAKEAWAY:
         return 'تيك أواي'
-    return 'طلب عام داخل المكان'
+    return 'طلب داخل المكان'
 
-
-def _can_approve_partial_payment(user):
-    if not user or not user.is_authenticated:
-        return False
-    return user.is_superuser or getattr(user, 'role', '') in {'admin', 'owner'}
 
 
 def _parse_report_date(raw_date):
@@ -90,6 +94,64 @@ def _items_total(items):
     return sum(_line_total_for_item(item) for item in items)
 
 
+def _subtotal_for_selected(selected):
+    return sum(qty * max(product.price_syp + option_delta, 0) for product, qty, _item_note, _snapshot, option_delta in selected)
+
+
+def _delivery_fee_for_settings(settings, fulfillment_mode, raw_manual_fee=None):
+    if fulfillment_mode != Order.FulfillmentMode.DELIVERY:
+        return 0
+    if not settings or not settings.enable_delivery:
+        return 0
+    if settings.delivery_fee_mode == SystemSetting.DeliveryFeeMode.FIXED:
+        return max(settings.fixed_delivery_fee_syp or 0, 0)
+    if settings.delivery_fee_mode == SystemSetting.DeliveryFeeMode.MANUAL:
+        return _parse_nonnegative_int(raw_manual_fee, default=0, maximum=10_000_000)
+    return 0
+
+
+def _validate_fulfillment_mode(request, settings, table=None, allow_table=True):
+    requested = (request.POST.get('fulfillment_mode') or '').strip()
+    if table:
+        default_mode = Order.FulfillmentMode.TABLE
+        mode = Order.FulfillmentMode.TABLE
+    else:
+        default_mode = getattr(settings, 'safe_default_fulfillment_mode', Order.FulfillmentMode.INSIDE_SPACE) or Order.FulfillmentMode.INSIDE_SPACE
+        mode = requested or default_mode
+    valid = set(Order.FulfillmentMode.values)
+    if mode not in valid:
+        return default_mode, 'وضع الطلب المحدد غير صالح.'
+    if mode == Order.FulfillmentMode.TABLE and not allow_table:
+        return default_mode, 'طلب الطاولة غير متاح من هذه الواجهة.'
+    if mode == Order.FulfillmentMode.TABLE and not table:
+        # Public menu without QR remains in-space unless a staff POS table is selected.
+        return Order.FulfillmentMode.INSIDE_SPACE, ''
+    if mode == Order.FulfillmentMode.DELIVERY and (not settings or not settings.enable_delivery):
+        return default_mode, 'خيار التوصيل غير مفعّل حالياً.'
+    if mode == Order.FulfillmentMode.TAKEAWAY and (not settings or not settings.enable_takeaway):
+        return default_mode, 'خيار التيك أواي غير مفعّل حالياً.'
+    return mode, ''
+
+
+def _validate_delivery_details(request, settings, fulfillment_mode, subtotal, manual_fee_name='delivery_fee_syp'):
+    errors = []
+    delivery_data = {
+        'delivery_area': request.POST.get('delivery_area', '').strip(),
+        'delivery_address': request.POST.get('delivery_address', '').strip(),
+        'delivery_notes': request.POST.get('delivery_notes', '').strip(),
+        'delivery_fee_syp': _delivery_fee_for_settings(settings, fulfillment_mode, request.POST.get(manual_fee_name)),
+        'delivery_status': Order.DeliveryStatus.NOT_DELIVERY,
+    }
+    if fulfillment_mode != Order.FulfillmentMode.DELIVERY:
+        return delivery_data, errors
+    delivery_data['delivery_status'] = Order.DeliveryStatus.DELIVERY_REQUESTED
+    if settings.minimum_delivery_order_syp and subtotal < settings.minimum_delivery_order_syp:
+        errors.append(f'الحد الأدنى لطلب التوصيل هو {settings.minimum_delivery_order_syp} ل.س.')
+    if settings.require_address_for_delivery and not delivery_data['delivery_address']:
+        errors.append('عنوان التوصيل مطلوب.')
+    return delivery_data, errors
+
+
 def _paid_total(payments):
     return sum(payment.amount_syp for payment in payments if payment.method != Payment.Method.UNPAID)
 
@@ -123,7 +185,7 @@ def _build_day_report(report_date):
     )
     rows = []
     sums = {
-        'orders_count': 0, 'order_total': 0, 'paid_total': 0, 'remaining_total': 0,
+        'orders_count': 0, 'order_total': 0, 'subtotal_total': 0, 'delivery_fee_total': 0, 'paid_total': 0, 'remaining_total': 0,
         'cash_total': 0, 'manual_transfer_total': 0, 'free_total': 0, 'discount_total': 0,
         'cancelled_count': 0, 'served_or_paid_count': 0, 'unpaid_orders_count': 0,
     }
@@ -140,6 +202,8 @@ def _build_day_report(report_date):
             sums['unpaid_orders_count'] += 1
         sums['orders_count'] += 1
         sums['order_total'] += total
+        sums['subtotal_total'] += order.subtotal_syp
+        sums['delivery_fee_total'] += max(order.delivery_fee_syp or 0, 0)
         sums['paid_total'] += paid
         sums['remaining_total'] += remaining
         sums['cash_total'] += methods.get(Payment.Method.CASH, 0)
@@ -231,7 +295,8 @@ def _menu_context(table=None):
         section_filter={'visible_on_qr': True},
     )
     page = get_page_setting('public_menu', 'القائمة العامة', 'Public menu', 'اختر طلبك داخل المكان.', 'Choose your in-space order.')
-    return {'table': table, 'section_products': section_products, 'settings': settings, 'page_setting': page}
+    default_fulfillment_mode = Order.FulfillmentMode.TABLE if table else Order.FulfillmentMode.INSIDE_SPACE
+    return {'table': table, 'section_products': section_products, 'settings': settings, 'page_setting': page, 'default_fulfillment_mode': default_fulfillment_mode, 'fulfillment_choices': settings.available_fulfillment_modes(include_table=False)}
 
 
 def menu_public(request):
@@ -353,13 +418,15 @@ def _selected_order_items_from_post(request, products):
     return selected, validation_errors
 
 
-def _create_order_from_selected_items(table, selected, note_parts, status=None, service_mode=None):
+def _create_order_from_selected_items(table, selected, note_parts, status=None, service_mode=None, fulfillment_mode=None, delivery_data=None):
     note = '\n'.join([part for part in note_parts if part])
     if table and service_mode is None:
         service_mode = Order.ServiceMode.TABLE
     service_mode = service_mode or Order.ServiceMode.DINE_IN
+    fulfillment_mode = fulfillment_mode or (Order.FulfillmentMode.TABLE if table else Order.FulfillmentMode.INSIDE_SPACE)
+    delivery_data = delivery_data or {}
     with transaction.atomic():
-        order = Order.objects.create(table=table, service_mode=service_mode, status=status or Order.Status.NEW, notes=note)
+        order = Order.objects.create(table=table, service_mode=service_mode, fulfillment_mode=fulfillment_mode, status=status or Order.Status.NEW, notes=note, **delivery_data)
         for product, qty, item_note, selected_options_snapshot, option_delta in selected:
             unit_price = max(product.price_syp + option_delta, 0)
             OrderItem.objects.create(
@@ -386,9 +453,16 @@ def _create_order_from_menu(request, table=None):
         context['form_values'] = request.POST
         return render(request, 'menu/menu.html', context)
 
+    settings = get_system_settings()
+    fulfillment_mode, fulfillment_error = _validate_fulfillment_mode(request, settings, table=table, allow_table=bool(table))
+    if fulfillment_error:
+        validation_errors.append(fulfillment_error)
+    subtotal = _subtotal_for_selected(selected)
+    delivery_data, delivery_errors = _validate_delivery_details(request, settings, fulfillment_mode, subtotal)
+    validation_errors.extend(delivery_errors)
     customer_name = request.POST.get('customer_name', '').strip()
     errors = {}
-    customer_phone = _validate_phone_input(request.POST.get('customer_phone', ''), 'رقم الهاتف', errors, required=False)
+    customer_phone = _validate_phone_input(request.POST.get('customer_phone', ''), 'رقم الهاتف', errors, required=fulfillment_mode == Order.FulfillmentMode.DELIVERY and settings.require_phone_for_delivery)
     if errors:
         validation_errors.append(errors['رقم الهاتف'])
     if validation_errors:
@@ -397,9 +471,9 @@ def _create_order_from_menu(request, table=None):
         context['form_values'] = request.POST
         return render(request, 'menu/menu.html', context)
     general_note = request.POST.get('general_note', '').strip()
-    service_mode = Order.ServiceMode.TABLE if table else Order.ServiceMode.DINE_IN
-    note_parts = [f'الاسم: {customer_name}' if customer_name else '', f'الهاتف: {customer_phone}' if customer_phone else '', f'المكان: {_order_location_note(table, service_mode)}', general_note]
-    order = _create_order_from_selected_items(table, selected, note_parts, service_mode=service_mode)
+    service_mode = Order.ServiceMode.TABLE if fulfillment_mode == Order.FulfillmentMode.TABLE else (Order.ServiceMode.TAKEAWAY if fulfillment_mode == Order.FulfillmentMode.TAKEAWAY else Order.ServiceMode.DINE_IN)
+    note_parts = [f'الاسم: {customer_name}' if customer_name else '', f'الهاتف: {customer_phone}' if customer_phone else '', f'المكان: {_order_location_note(table, service_mode, fulfillment_mode)}', general_note]
+    order = _create_order_from_selected_items(table, selected, note_parts, service_mode=service_mode, fulfillment_mode=fulfillment_mode, delivery_data=delivery_data)
     return redirect(reverse('order_public', kwargs={'public_code': order.public_code}))
 
 def order_public(request, public_code):
@@ -407,10 +481,10 @@ def order_public(request, public_code):
         order = Order.objects.select_related('table').prefetch_related('items__product').get(public_code=public_code)
     except Order.DoesNotExist as exc:
         raise Http404('الطلب غير موجود') from exc
-    total = _items_total(order.items.all())
+    total = order.total_with_delivery_syp
     needs_confirmation = any(item.product.requires_staff_confirmation for item in order.items.all() if item.product_id)
     qr_url = reverse('order_qr', kwargs={'public_code': order.public_code})
-    return render(request, 'menu/order_confirm.html', {'order': order, 'total': total, 'needs_confirmation': needs_confirmation, 'qr_url': qr_url})
+    return render(request, 'menu/order_confirm.html', {'order': order, 'subtotal': order.subtotal_syp, 'total': total, 'needs_confirmation': needs_confirmation, 'qr_url': qr_url})
 
 
 def order_qr(request, public_code):
@@ -430,25 +504,44 @@ STAFF_CAPABILITIES = {
 }
 
 
+LEGACY_CAPABILITY_MAP = {
+    'reporting/close-day': 'reports',
+    'cashier/payments': 'cashier',
+    'operations': 'staff_home',
+    'pos': 'pos',
+    'orders': 'orders',
+    'order_edit': 'order_edit',
+    'modifiers': 'modifiers',
+}
+
+
+def _can_approve_partial_payment(user):
+    return can_approve_partial_payment(user)
+
+
 def _assert_staff_capability(user, capability_name):
-    if not user.is_authenticated:
-        raise PermissionDenied("غير مصرح")
-    if user.is_superuser:
-        return
-
-    allowed_roles = STAFF_CAPABILITIES.get(capability_name, set())
-    if getattr(user, 'role', '') not in allowed_roles:
-        ActivityLog.objects.create(
-            action='staff_access_denied',
-            details=f'capability={capability_name}; user={user.pk}; role={getattr(user, "role", "")}',
+    capability = LEGACY_CAPABILITY_MAP.get(capability_name)
+    if capability:
+        allowed = user_has_capability(user, capability)
+    else:
+        allowed = bool(
+            user
+            and user.is_authenticated
+            and user.is_active
+            and (user.is_superuser or getattr(user, 'role', '') in STAFF_CAPABILITIES.get(capability_name, set()))
         )
-        raise PermissionDenied("غير مصرح")
-
+    if allowed:
+        return
+    ActivityLog.objects.create(
+        action='staff_access_denied',
+        details=f'capability={capability or capability_name}; user={getattr(user, "pk", None)}; role={getattr(user, "role", "")}',
+    )
+    raise PermissionDenied(ACCESS_DENIED_MESSAGE)
 
 def _order_financials(order):
     total = getattr(order, 'total', None)
     if total is None:
-        total = _items_total(order.items.all())
+        total = order.total_with_delivery_syp if hasattr(order, 'total_with_delivery_syp') else _items_total(order.items.all())
     paid = getattr(order, 'paid', None)
     if paid is None:
         paid = _paid_total(order.payments.all())
@@ -544,15 +637,13 @@ def _redirect_if_order_edit_blocked(request, order):
     return None
 
 
-@login_required
+@require_staff_capability('staff_home')
 def staff_home(request):
-    _assert_staff_capability(request.user, 'operations')
     return render(request, 'staff/home.html')
 
 
-@login_required
+@require_staff_capability('pos')
 def staff_pos(request):
-    _assert_staff_capability(request.user, 'operations')
     tables = TableArea.objects.select_related('room').order_by('room__name_ar', 'name_ar')
     section_products = _section_products_for_ordering(product_filter={'is_available': True}, include_unsectioned=True)
     products = [product for _section, products in section_products for product in products]
@@ -583,13 +674,23 @@ def staff_pos(request):
             table = TableArea.objects.filter(pk=int(table_id)).first()
             if table is None:
                 validation_errors.append('الطاولة المحددة غير صالحة.')
+        fulfillment_mode, fulfillment_error = _validate_fulfillment_mode(request, settings, table=table, allow_table=bool(table))
+        if table:
+            fulfillment_mode = Order.FulfillmentMode.TABLE
+        if fulfillment_error:
+            validation_errors.append(fulfillment_error)
+        if request.POST.get('fulfillment_mode') == Order.FulfillmentMode.TABLE and not table:
+            validation_errors.append('يرجى اختيار طاولة لهذا الطلب.')
         if not selected:
             context.update({'error': 'يرجى اختيار عنصر واحد على الأقل.', 'form_values': request.POST, 'selected_table_id': table_id})
             return render(request, 'staff/pos.html', context)
 
+        subtotal = _subtotal_for_selected(selected)
+        delivery_data, delivery_errors = _validate_delivery_details(request, settings, fulfillment_mode, subtotal)
+        validation_errors.extend(delivery_errors)
         errors = {}
         customer_name = request.POST.get('customer_name', '').strip()
-        customer_phone = _validate_phone_input(request.POST.get('customer_phone', ''), 'رقم الهاتف', errors, required=False)
+        customer_phone = _validate_phone_input(request.POST.get('customer_phone', ''), 'رقم الهاتف', errors, required=fulfillment_mode == Order.FulfillmentMode.DELIVERY and settings.require_phone_for_delivery)
         if errors:
             validation_errors.append(errors['رقم الهاتف'])
         member_id = request.POST.get('member_id', '').strip()
@@ -603,8 +704,8 @@ def staff_pos(request):
             return render(request, 'staff/pos.html', context)
 
         general_note = request.POST.get('general_note', '').strip()
-        service_mode = Order.ServiceMode.TABLE if table else Order.ServiceMode.DINE_IN
-        table_label = _order_location_note(table, service_mode)
+        service_mode = Order.ServiceMode.TABLE if fulfillment_mode == Order.FulfillmentMode.TABLE else (Order.ServiceMode.TAKEAWAY if fulfillment_mode == Order.FulfillmentMode.TAKEAWAY else Order.ServiceMode.DINE_IN)
+        table_label = _order_location_note(table, service_mode, fulfillment_mode)
         note_parts = [
             'Source: staff/pos',
             f'المكان: {table_label}',
@@ -613,20 +714,19 @@ def staff_pos(request):
             f'العضو: {member.name_ar} / {member.phone}' if member else '',
             general_note,
         ]
-        order = _create_order_from_selected_items(table, selected, note_parts, status=Order.Status.NEW, service_mode=service_mode)
+        order = _create_order_from_selected_items(table, selected, note_parts, status=Order.Status.NEW, service_mode=service_mode, fulfillment_mode=fulfillment_mode, delivery_data=delivery_data)
         ActivityLog.objects.create(
             actor=request.user,
             action='staff_pos_order_created',
-            details={'order_public_code': str(order.public_code), 'table_id': table.id if table else None},
+            details={'order_public_code': str(order.public_code), 'table_id': table.id if table else None, 'fulfillment_mode': fulfillment_mode},
         )
         return redirect('staff_cashier_order', public_code=order.public_code)
 
     return render(request, 'staff/pos.html', context)
 
 
-@login_required
+@require_staff_capability('modifiers')
 def staff_modifiers(request):
-    _assert_staff_capability(request.user, 'operations')
     groups = ProductOptionGroup.objects.prefetch_related(
         'options',
         Prefetch(
@@ -706,9 +806,8 @@ def staff_menu_tools(request):
     return render(request, 'staff/menu_tools.html', {'grouped': grouped})
 
 
-@login_required
+@require_staff_capability('orders')
 def staff_orders(request):
-    _assert_staff_capability(request.user, 'operations')
     statuses = [choice[0] for choice in Order.Status.choices]
     orders = (
         Order.objects.select_related('table')
@@ -729,12 +828,24 @@ def staff_orders(request):
     return render(request, template, {'grouped': grouped, 'page_setting': get_page_setting('staff_orders', 'لوحة الطلبات', 'Orders')})
 
 
-@login_required
+@require_staff_capability('orders')
 def staff_order_status(request, public_code):
-    _assert_staff_capability(request.user, 'operations')
     if request.method != 'POST':
         raise Http404()
     order = get_object_or_404(Order, public_code=public_code)
+    new_delivery_status = request.POST.get('delivery_status')
+    if new_delivery_status:
+        if not user_has_capability(request.user, 'delivery_management'):
+            messages.error(request, ACCESS_DENIED_MESSAGE)
+            return redirect('staff_orders')
+        valid_delivery = {choice[0] for choice in Order.DeliveryStatus.choices}
+        if order.is_delivery and new_delivery_status in valid_delivery:
+            old_delivery_status = order.delivery_status
+            if old_delivery_status != new_delivery_status:
+                order.delivery_status = new_delivery_status
+                order.save(update_fields=['delivery_status', 'updated_at'])
+                ActivityLog.objects.create(actor=request.user, action='delivery_status_changed', details={'order_public_code': str(order.public_code), 'old_status': old_delivery_status, 'new_status': new_delivery_status})
+        return redirect('staff_orders')
     new_status = request.POST.get('status')
     valid = {choice[0] for choice in Order.Status.choices}
     if new_status not in valid:
@@ -751,9 +862,8 @@ def staff_order_status(request, public_code):
     return redirect('staff_orders')
 
 
-@login_required
+@require_staff_capability('order_edit')
 def staff_order_edit(request, public_code):
-    _assert_staff_capability(request.user, 'operations')
     order = get_object_or_404(
         Order.objects.select_related('table').prefetch_related('items__product', 'payments'),
         public_code=public_code,
@@ -762,9 +872,8 @@ def staff_order_edit(request, public_code):
     return render(request, 'staff/order_edit.html', _order_edit_context(order, error=block_reason))
 
 
-@login_required
+@require_staff_capability('order_edit')
 def staff_order_edit_add_item(request, public_code):
-    _assert_staff_capability(request.user, 'operations')
     if request.method != 'POST':
         raise Http404()
     order = get_object_or_404(Order.objects.prefetch_related('items', 'payments'), public_code=public_code)
@@ -806,9 +915,8 @@ def staff_order_edit_add_item(request, public_code):
     return redirect('staff_order_edit', public_code=order.public_code)
 
 
-@login_required
+@require_staff_capability('order_edit')
 def staff_order_edit_update_item(request, public_code, item_id):
-    _assert_staff_capability(request.user, 'operations')
     if request.method != 'POST':
         raise Http404()
     order = get_object_or_404(Order.objects.prefetch_related('items', 'payments'), public_code=public_code)
@@ -861,9 +969,8 @@ def staff_order_edit_update_item(request, public_code, item_id):
     return redirect('staff_order_edit', public_code=order.public_code)
 
 
-@login_required
+@require_staff_capability('order_edit')
 def staff_order_edit_remove_item(request, public_code, item_id):
-    _assert_staff_capability(request.user, 'operations')
     if request.method != 'POST':
         raise Http404()
     order = get_object_or_404(Order.objects.prefetch_related('items', 'payments'), public_code=public_code)
@@ -887,9 +994,8 @@ def staff_order_edit_remove_item(request, public_code, item_id):
     return redirect('staff_order_edit', public_code=order.public_code)
 
 
-@login_required
+@require_staff_capability('cashier')
 def staff_cashier(request):
-    _assert_staff_capability(request.user, 'cashier/payments')
     query = request.GET.get('q', '').strip()
     orders = Order.objects.select_related('table').prefetch_related('items', 'payments').order_by('-created_at')
     if query:
@@ -908,18 +1014,16 @@ def staff_cashier(request):
     return render(request, 'staff/cashier.html', {'rows': rows, 'query': query, 'page_setting': get_page_setting('staff_cashier', 'الكاشير', 'Cashier')})
 
 
-@login_required
+@require_staff_capability('cashier')
 def staff_cashier_order(request, public_code):
-    _assert_staff_capability(request.user, 'cashier/payments')
     order = get_object_or_404(Order.objects.select_related('table').prefetch_related('items', 'payments'), public_code=public_code)
     total, paid, remaining, payment_label = _order_financials(order)
     methods = Payment.Method.choices
     return render(request, 'staff/cashier_order.html', {'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods, 'payment_amount_default': remaining, 'qr_url': reverse('order_qr', kwargs={'public_code': order.public_code})})
 
 
-@login_required
+@require_staff_capability('cashier')
 def staff_cashier_pay(request, public_code):
-    _assert_staff_capability(request.user, 'cashier/payments')
     if request.method != 'POST':
         raise Http404()
     order = get_object_or_404(Order, public_code=public_code)
@@ -967,41 +1071,37 @@ def staff_cashier_pay(request, public_code):
     return redirect('staff_cashier_order', public_code=order.public_code)
 
 
-@login_required
+@require_staff_capability('reports')
 def staff_reports_home(request):
-    _assert_staff_capability(request.user, 'reporting/close-day')
     today = datetime.now(DAMASCUS_TZ).date()
     _rows, sums = _build_day_report(today)
     return render(request, 'staff/reports_home.html', {'report_date': today, 'sums': sums})
 
 
-@login_required
+@require_staff_capability('reports')
 def staff_reports_day(request):
-    _assert_staff_capability(request.user, 'reporting/close-day')
     report_date = _parse_report_date(request.GET.get('date', '').strip())
     rows, sums = _build_day_report(report_date)
     return render(request, 'staff/reports_day.html', {'report_date': report_date, 'rows': rows, 'sums': sums})
 
 
-@login_required
+@require_staff_capability('reports')
 def staff_reports_day_csv(request):
-    _assert_staff_capability(request.user, 'reporting/close-day')
     report_date = _parse_report_date(request.GET.get('date', '').strip())
     rows, _sums = _build_day_report(report_date)
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = f'attachment; filename="report-{report_date.isoformat()}.csv"'
-    response.write('display_number,created_at,location,status,total,paid,remaining,payment_methods\n')
+    response.write('display_number,created_at,fulfillment_mode,location,status,subtotal,delivery_fee,total,paid,remaining,payment_methods\n')
     for row in rows:
         order = row['order']
         methods_txt = '; '.join(f'{k}:{v}' for k, v in row['methods'].items())
         table_name = order.location_label
-        response.write(f'{order.display_number},{order.created_at.isoformat()},{table_name},{order.get_status_display()},{row["total"]},{row["paid"]},{row["remaining"]},"{methods_txt}"\n')
+        response.write(f'{order.display_number},{order.created_at.isoformat()},{order.get_fulfillment_label()},{table_name},{order.get_status_display()},{order.subtotal_syp},{order.delivery_fee_syp},{row["total"]},{row["paid"]},{row["remaining"]},"{methods_txt}"\n')
     return response
 
 
-@login_required
+@require_staff_capability('reports')
 def staff_close_day(request):
-    _assert_staff_capability(request.user, 'reporting/close-day')
     today = datetime.now(DAMASCUS_TZ).date()
     _rows, sums = _build_day_report(today)
     return render(request, 'staff/close_day.html', {'report_date': today, 'sums': sums})
@@ -1149,11 +1249,32 @@ def staff_member_subscribe(request, member_id):
 @login_required
 def staff_internet(request):
     _assert_staff_capability(request.user, 'members/internet')
-    active_sessions = InternetSession.objects.select_related('member', 'package').filter(status='active').order_by('-start_time')
-    recent_sessions = InternetSession.objects.select_related('member', 'package').exclude(status='active').order_by('-updated_at')[:50]
+    settings_obj = get_system_settings()
+    now = timezone.now()
+    active_sessions = InternetSession.objects.select_related('member', 'package', 'linked_order').filter(status=InternetSession.Status.ACTIVE).order_by('-started_at', '-start_time')
+    recent_sessions = InternetSession.objects.select_related('member', 'package', 'linked_order', 'linked_payment').exclude(status=InternetSession.Status.ACTIVE).order_by('-updated_at')[:50]
     packages = InternetPackage.objects.order_by('name_ar')
     members = Member.objects.order_by('-created_at')[:200]
-    return render(request, 'staff/internet.html', {'active_sessions': active_sessions, 'recent_sessions': recent_sessions, 'packages': packages, 'members': members, 'now': timezone.now()})
+    active_rows = []
+    for session in active_sessions:
+        duration = calculate_session_duration_minutes(session.effective_started_at, now)
+        estimated_total = 0 if session.billing_mode in {InternetSession.BillingMode.FREE, InternetSession.BillingMode.PREPAID} else calculate_metered_session_total(
+            duration, session.rate_per_hour_syp, session.minimum_minutes, session.free_grace_minutes, session.daily_cap_syp
+        )
+        active_rows.append({'session': session, 'elapsed_minutes': duration, 'estimated_total': estimated_total})
+    return render(request, 'staff/internet.html', {
+        'active_sessions': active_sessions,
+        'active_rows': active_rows,
+        'recent_sessions': recent_sessions,
+        'packages': packages,
+        'members': members,
+        'now': now,
+        'settings_obj': settings_obj,
+        'billing_modes': InternetSession.BillingMode.choices,
+        'can_cancel_sessions': can_override_session_total(request.user),
+        'can_override_total': can_override_session_total(request.user),
+        'form_values': {},
+    })
 
 
 @login_required
@@ -1161,52 +1282,183 @@ def staff_internet_start(request):
     _assert_staff_capability(request.user, 'members/internet')
     if request.method != 'POST':
         return redirect('staff_internet')
-    member = None
-    member_id = request.POST.get('member')
-    if member_id:
-        member = Member.objects.filter(pk=member_id).first()
-    package = get_object_or_404(InternetPackage, pk=request.POST.get('package'))
+    settings_obj = get_system_settings()
     errors = {}
-    customer_phone = _validate_phone_input(request.POST.get('customer_phone', ''), 'هاتف الزبون', errors, required=False)
-    start_time = _parse_local_dt_or_error(request.POST.get('start_time', ''), 'وقت البدء', errors, default=timezone.now())
+    session_kind = request.POST.get('session_kind', 'guest')
+    member = None
+    if session_kind == 'member':
+        if not settings_obj.allow_member_internet_sessions:
+            errors['member'] = 'جلسات الأعضاء غير مفعلة حالياً.'
+        member_id = request.POST.get('member')
+        if member_id:
+            member = Member.objects.filter(pk=member_id).first()
+        if member is None:
+            errors['member'] = 'اختر عضواً صحيحاً.'
+    else:
+        if not settings_obj.allow_guest_internet_sessions:
+            errors['guest'] = 'جلسات الزوار غير مفعلة حالياً.'
+    guest_phone = _validate_phone_input(request.POST.get('guest_phone') or request.POST.get('customer_phone', ''), 'هاتف الزائر', errors, required=settings_obj.require_phone_for_guest_session and session_kind != 'member')
+    started_at = _parse_local_dt_or_error(request.POST.get('started_at') or request.POST.get('start_time', ''), 'وقت البدء', errors, default=timezone.now())
+    billing_mode = request.POST.get('billing_mode') or settings_obj.default_internet_billing_mode
+    if billing_mode not in {choice[0] for choice in InternetSession.BillingMode.choices}:
+        billing_mode = InternetSession.BillingMode.OPEN_METERED
+    rate = _parse_int_or_error(request.POST.get('rate_per_hour_syp', ''), 'سعر الساعة', errors, default=settings_obj.default_rate_per_hour_syp, min_value=0)
+    minimum = _parse_int_or_error(request.POST.get('minimum_minutes', ''), 'الحد الأدنى للدقائق', errors, default=settings_obj.default_minimum_minutes, min_value=0)
+    grace = _parse_int_or_error(request.POST.get('free_grace_minutes', ''), 'دقائق السماح', errors, default=settings_obj.default_free_grace_minutes, min_value=0)
+    daily_cap = _parse_int_or_error(request.POST.get('daily_cap_syp', ''), 'السقف اليومي', errors, default=settings_obj.default_daily_cap_syp, min_value=0)
+    package = None
+    package_id = request.POST.get('package')
+    if package_id:
+        package = InternetPackage.objects.filter(pk=package_id).first()
+    if package and billing_mode == InternetSession.BillingMode.PREPAID:
+        rate = rate or package.price_syp
+        minimum = minimum or package.duration_minutes
     if errors:
-        active_sessions = InternetSession.objects.select_related('member', 'package').filter(status='active').order_by('-start_time')
-        recent_sessions = InternetSession.objects.select_related('member', 'package').exclude(status='active').order_by('-updated_at')[:50]
+        active_sessions = InternetSession.objects.select_related('member', 'package').filter(status=InternetSession.Status.ACTIVE).order_by('-started_at', '-start_time')
+        recent_sessions = InternetSession.objects.select_related('member', 'package').exclude(status=InternetSession.Status.ACTIVE).order_by('-updated_at')[:50]
         packages = InternetPackage.objects.order_by('name_ar')
         members = Member.objects.order_by('-created_at')[:200]
-        return render(request, 'staff/internet.html', {'active_sessions': active_sessions, 'recent_sessions': recent_sessions, 'packages': packages, 'members': members, 'now': timezone.now(), 'errors': errors, 'form_values': request.POST})
-    InternetSession.objects.create(member=member, package=package, customer_name=request.POST.get('customer_name', '').strip(), customer_phone=customer_phone, start_time=start_time, end_time=start_time, notes=(request.POST.get('session_type', '').strip() + ' ' + request.POST.get('notes', '').strip()).strip(), status='active')
-    return redirect('staff_internet')
+        return render(request, 'staff/internet.html', {
+            'active_sessions': active_sessions, 'active_rows': [], 'recent_sessions': recent_sessions,
+            'packages': packages, 'members': members, 'now': timezone.now(), 'errors': errors,
+            'form_values': request.POST, 'settings_obj': settings_obj, 'billing_modes': InternetSession.BillingMode.choices,
+            'can_cancel_sessions': can_override_session_total(request.user), 'can_override_total': can_override_session_total(request.user),
+        })
+    session = InternetSession.objects.create(
+        member=member,
+        package=package,
+        guest_name=(request.POST.get('guest_name') or request.POST.get('customer_name', '')).strip(),
+        guest_phone=guest_phone,
+        customer_name=(request.POST.get('guest_name') or request.POST.get('customer_name', '')).strip(),
+        customer_phone=guest_phone,
+        billing_mode=billing_mode,
+        started_at=started_at,
+        start_time=started_at,
+        rate_per_hour_syp=rate or 0,
+        minimum_minutes=minimum or 0,
+        free_grace_minutes=grace or 0,
+        daily_cap_syp=daily_cap,
+        notes=(request.POST.get('session_type', '').strip() + ' ' + request.POST.get('notes', '').strip()).strip(),
+        status=InternetSession.Status.ACTIVE,
+        started_by=request.user,
+    )
+    messages.success(request, f'تم بدء جلسة #{session.id}.')
+    return redirect('staff_internet_session', session_id=session.id)
+
+
+def _session_preview(session):
+    ended_at = timezone.now()
+    duration = calculate_session_duration_minutes(session.effective_started_at, ended_at)
+    billable = calculate_billable_minutes(duration, session.minimum_minutes, session.free_grace_minutes)
+    calculated_total = 0 if session.billing_mode in {InternetSession.BillingMode.FREE, InternetSession.BillingMode.PREPAID} else calculate_metered_session_total(
+        duration, session.rate_per_hour_syp, session.minimum_minutes, session.free_grace_minutes, session.daily_cap_syp
+    )
+    subscription = _active_subscription_for_member(session.member) if session.member_id else None
+    return {'ended_at': ended_at, 'duration': duration, 'billable_minutes': billable, 'calculated_total': calculated_total, 'subscription': subscription}
 
 
 @login_required
 def staff_internet_session(request, session_id):
     _assert_staff_capability(request.user, 'members/internet')
-    session = get_object_or_404(InternetSession.objects.select_related('member', 'package'), pk=session_id)
-    return render(request, 'staff/internet_session.html', {'session': session})
+    session = get_object_or_404(InternetSession.objects.select_related('member', 'package', 'linked_order', 'linked_payment', 'started_by', 'ended_by'), pk=session_id)
+    ledger_entries = session.member.credit_ledger.order_by('-created_at')[:20] if session.member_id else []
+    preview = _session_preview(session) if session.status == InternetSession.Status.ACTIVE else None
+    return render(request, 'staff/internet_session.html', {
+        'session': session,
+        'preview': preview,
+        'ledger_entries': ledger_entries,
+        'can_cancel_sessions': can_override_session_total(request.user),
+        'can_override_total': can_override_session_total(request.user),
+        'settings_obj': get_system_settings(),
+    })
 
 
 @login_required
 def staff_internet_end(request, session_id):
     _assert_staff_capability(request.user, 'members/internet')
+    session = get_object_or_404(InternetSession.objects.select_related('member', 'package'), pk=session_id)
+    if request.method != 'POST':
+        return render(request, 'staff/internet_end.html', {
+            'session': session,
+            'preview': _session_preview(session),
+            'can_override_total': can_override_session_total(request.user),
+            'settings_obj': get_system_settings(),
+        })
+    if session.status != InternetSession.Status.ACTIVE:
+        return redirect('staff_internet_session', session_id=session_id)
+    manual_total = request.POST.get('manual_total_syp', '').strip()
+    override_reason = request.POST.get('override_reason', '').strip()
+    try:
+        session = finalize_internet_session(session, request.user, manual_total=manual_total or None, override_reason=override_reason or None)
+    except (ValidationError, PermissionDenied) as exc:
+        messages.error(request, '; '.join(exc.messages) if hasattr(exc, 'messages') else str(exc))
+        return render(request, 'staff/internet_end.html', {
+            'session': session,
+            'preview': _session_preview(session),
+            'can_override_total': can_override_session_total(request.user),
+            'settings_obj': get_system_settings(),
+        })
+    settings_obj = get_system_settings()
+    if request.POST.get('create_order') or (settings_obj.auto_create_order_for_metered_sessions and session.payable_total_syp > 0):
+        _create_order_for_internet_session(request, session, mark_paid=request.POST.get('mark_paid') == '1')
+    elif request.POST.get('mark_paid') == '1':
+        messages.warning(request, 'لا يمكن تسجيل دفع آمن دون طلب كاشير مرتبط؛ أنشئ طلباً أولاً أو اضبط منتج خدمة الإنترنت في الإعدادات.')
+    messages.success(request, f'تم إنهاء جلسة #{session.id}.')
+    return redirect('staff_internet_session', session_id=session_id)
+
+
+def _create_order_for_internet_session(request, session, mark_paid=False):
+    if session.linked_order_id:
+        order = session.linked_order
+    else:
+        settings_obj = get_system_settings()
+        product = settings_obj.internet_service_product
+        if product is None:
+            messages.warning(request, 'اضبط منتج خدمة الإنترنت في إعدادات النظام قبل إنشاء طلب كاشير للجلسة.')
+            return None
+        customer = session.member.name_ar if session.member_id else (session.display_guest_name or 'زائر')
+        note = f'جلسة إنترنت/عمل #{session.id}\nالمدة: {session.effective_duration_minutes or 0} دقيقة\nالعميل: {customer}'
+        order = Order.objects.create(service_mode=Order.ServiceMode.DINE_IN, status=Order.Status.NEW, notes=note)
+        OrderItem.objects.create(
+            order=order,
+            product=product,
+            quantity=1,
+            product_name_ar_snapshot=product.name_ar,
+            product_name_en_snapshot=product.name_en,
+            unit_price_syp_snapshot=session.payable_total_syp,
+            selected_options_snapshot=[],
+            item_note=note,
+            line_total_syp_snapshot=session.payable_total_syp,
+        )
+        session.linked_order = order
+        session.status = InternetSession.Status.UNPAID if session.payable_total_syp > 0 else InternetSession.Status.ENDED
+        session.save(update_fields=['linked_order', 'status', 'updated_at'])
+    if mark_paid and session.payable_total_syp > 0:
+        existing_paid = _paid_total(order.payments.all())
+        amount = max(session.payable_total_syp - existing_paid, 0)
+        if amount:
+            payment = Payment.objects.create(order=order, amount_syp=amount, method=Payment.Method.CASH)
+            session.linked_payment = payment
+            session.status = InternetSession.Status.PAID
+            session.save(update_fields=['linked_payment', 'status', 'updated_at'])
+    return order
+
+
+@login_required
+def staff_internet_cancel(request, session_id):
+    _assert_staff_capability(request.user, 'members/internet')
+    if not can_override_session_total(request.user):
+        raise PermissionDenied('إلغاء الجلسات يحتاج صلاحية مدير.')
     if request.method != 'POST':
         return redirect('staff_internet_session', session_id=session_id)
-    session = get_object_or_404(InternetSession.objects.select_related('member'), pk=session_id)
-    if session.status != 'active':
-        return redirect('staff_internet_session', session_id=session_id)
-    now = timezone.now()
-    duration = max(int((now - session.start_time).total_seconds() // 60), 0)
-    session.end_time = now
-    session.actual_duration_minutes = duration
-    session.status = 'ended'
-    session.save(update_fields=['end_time', 'actual_duration_minutes', 'status', 'updated_at'])
-    if session.member_id:
-        sub = _active_subscription_for_member(session.member)
-        if sub and (sub.remaining_internet_minutes or 0) > 0 and duration > 0:
-            used = min(sub.remaining_internet_minutes, duration)
-            sub.remaining_internet_minutes = max((sub.remaining_internet_minutes or 0) - used, 0)
-            sub.save(update_fields=['remaining_internet_minutes', 'updated_at'])
-            MemberCreditLedger.objects.create(member=session.member, subscription=sub, change_type='use_minutes', minutes_delta=-used, notes=f'استهلاك دقائق لجلسة إنترنت #{session.id}', created_by=request.user)
+    session = get_object_or_404(InternetSession, pk=session_id)
+    if session.status == InternetSession.Status.ACTIVE:
+        session.status = InternetSession.Status.CANCELLED
+        session.ended_at = timezone.now()
+        session.end_time = session.ended_at
+        session.ended_by = request.user
+        session.save(update_fields=['status', 'ended_at', 'end_time', 'ended_by', 'updated_at'])
+        messages.success(request, 'تم إلغاء الجلسة.')
     return redirect('staff_internet_session', session_id=session_id)
 
 

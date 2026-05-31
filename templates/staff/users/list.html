@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}المستخدمون والصلاحيات{% endblock %}
+{% block content %}
+<section class="hub-section">
+  <div class="hub-toolbar">
+    <a class="hub-button hub-button-secondary" href="{% url 'staff_home' %}">العودة للفريق</a>
+    <a class="hub-button hub-button-primary" href="{% url 'staff_user_new' %}">مستخدم جديد</a>
+  </div>
+  <h2 class="hub-section-title">المستخدمون والصلاحيات</h2>
+  <div class="hub-card">
+    <p>الدور يحدد صلاحيات المستخدم داخل نظام هاب/مشاريب.</p>
+    <p>صلاحية دخول لوحة Django admin منفصلة عن دور الموظف.</p>
+    <p>الكاشير/النادل/المطبخ عادة لا يحتاجون دخول لوحة الإدارة التقنية.</p>
+    <p>استخدم is_staff فقط لمن يحتاج دخول /admin/.</p>
+    <ul>
+      <li><strong>مدير:</strong> كل الصلاحيات</li>
+      <li><strong>كاشير:</strong> الكاشير، الطلبات، نقطة البيع</li>
+      <li><strong>نادل:</strong> نقطة البيع والطلبات</li>
+      <li><strong>مطبخ:</strong> شاشة التحضير فقط</li>
+    </ul>
+  </div>
+</section>
+
+<section class="hub-section hub-card">
+  <form method="get" class="hub-form">
+    <div class="hub-grid hub-grid-3">
+      <label>بحث<input class="hub-input" type="search" name="q" value="{{ filters.q }}" placeholder="اسم المستخدم، الاسم، البريد، الهاتف"></label>
+      <label>الدور<select class="hub-input" name="role"><option value="">كل الأدوار</option>{% for value,label in role_choices %}<option value="{{ value }}" {% if filters.role == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+      <label>الحالة<select class="hub-input" name="active"><option value="">الكل</option><option value="yes" {% if filters.active == 'yes' %}selected{% endif %}>نشط</option><option value="no" {% if filters.active == 'no' %}selected{% endif %}>غير نشط</option></select></label>
+      <label>دخول Django admin<select class="hub-input" name="admin_access"><option value="">الكل</option><option value="yes" {% if filters.admin_access == 'yes' %}selected{% endif %}>نعم</option><option value="no" {% if filters.admin_access == 'no' %}selected{% endif %}>لا</option></select></label>
+    </div>
+    <button class="hub-button hub-button-primary" type="submit">تصفية</button>
+  </form>
+</section>
+
+<section class="hub-section hub-table-wrap hub-card">
+  <table class="hub-table">
+    <thead><tr><th>الاسم / اسم المستخدم</th><th>البريد</th><th>الهاتف</th><th>الدور</th><th>نشط</th><th>is_staff</th><th>is_superuser</th><th>آخر دخول</th><th>تاريخ الإنشاء</th><th>إجراءات</th></tr></thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td><a href="{% url 'staff_user_detail' u.id %}">{{ u.get_full_name|default:u.username }}</a><br><span class="hub-muted">{{ u.username }}</span></td>
+        <td>{{ u.email|default:'-' }}</td><td>{{ u.phone|default:'-' }}</td><td>{{ u.get_role_display }}</td>
+        <td>{% if u.is_active %}<span class="hub-badge hub-badge-success">نعم</span>{% else %}<span class="hub-badge hub-badge-danger">لا</span>{% endif %}</td>
+        <td>{{ u.is_staff|yesno:'نعم,لا' }}</td><td>{{ u.is_superuser|yesno:'نعم,لا' }}</td>
+        <td>{{ u.last_login|date:'Y-m-d H:i'|default:'-' }}</td><td>{{ u.date_joined|date:'Y-m-d H:i' }}</td>
+        <td><a class="hub-button" href="{% url 'staff_user_edit' u.id %}">تعديل</a> <a class="hub-button" href="{% url 'staff_user_password' u.id %}">كلمة المرور</a></td>
+      </tr>
+      {% empty %}<tr><td colspan="10">لا يوجد مستخدمون مطابقون.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

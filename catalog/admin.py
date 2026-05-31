@@ -133,4 +133,13 @@ class ProductOptionGroupAssignmentAdmin(admin.ModelAdmin):
         return obj.group.applies_to_product(obj.product)
 
 
-admin.site.register([MenuSection, Tag, PrepStation, ProductAvailability])
+
+@admin.register(PrepStation)
+class PrepStationAdmin(admin.ModelAdmin):
+    list_display = ('name_ar', 'name_en', 'is_active', 'sort_order')
+    list_filter = ('is_active',)
+    search_fields = ('name_ar', 'name_en', 'code')
+    ordering = ('sort_order', 'name_ar')
+
+
+admin.site.register([MenuSection, Tag, ProductAvailability])

@@ -1,22 +1,77 @@
 {% extends "base.html" %}
 {% block title %}الإنترنت والعمل{% endblock %}
 {% block content %}
-<h2>الإنترنت والعمل</h2>
-{% if errors %}{% for msg in errors.values %}<p style="color:#b91c1c;">{{ msg }}</p>{% endfor %}{% endif %}
-<h3>بدء جلسة</h3>
-<form method="post" action="{% url 'staff_internet_start' %}">{% csrf_token %}
-<select name="member"><option value="">بدون عضو</option>{% for m in members %}<option value="{{ m.id }}" {% if form_values.member == m.id|stringformat:'s' %}selected{% endif %}>{{ m.name_ar }} - {{ m.phone }}</option>{% endfor %}</select>
-<input name="customer_name" value="{{ form_values.customer_name|default:'' }}" placeholder="اسم الزبون">
-<input name="customer_phone" value="{{ form_values.customer_phone|default:'' }}" placeholder="هاتف الزبون">
-<select name="package" required>{% for p in packages %}<option value="{{ p.id }}" {% if form_values.package == p.id|stringformat:'s' %}selected{% endif %}>{{ p.name_ar }} ({{ p.duration_minutes }} دقيقة)</option>{% endfor %}</select>
-<select name="session_type"><option value="internet" {% if form_values.session_type == 'internet' %}selected{% endif %}>إنترنت</option><option value="workspace" {% if form_values.session_type == 'workspace' %}selected{% endif %}>مساحة عمل</option></select>
-<input type="datetime-local" name="start_time" value="{{ form_values.start_time|default:'' }}">
-<input name="notes" value="{{ form_values.notes|default:'' }}" placeholder="ملاحظات">
-<button type="submit">بدء</button>
-</form>
-<h3>جلسات فعالة</h3>
-<table style="width:100%"><tr><th>#</th><th>العضو/الزبون</th><th>الباقة</th><th>البدء</th><th>الحالة</th><th></th></tr>
-{% for s in active_sessions %}<tr><td><a href="{% url 'staff_internet_session' s.id %}">{{ s.id }}</a></td><td>{% if s.member %}{{ s.member.name_ar }}{% else %}{{ s.customer_name }}{% endif %}</td><td>{{ s.package.name_ar }}</td><td>{{ s.start_time }}</td><td>{{ s.status }}</td><td><form method="post" action="{% url 'staff_internet_end' s.id %}">{% csrf_token %}<button type="submit">إنهاء</button></form></td></tr>{% empty %}<tr><td colspan="6">لا يوجد.</td></tr>{% endfor %}</table>
-<h3>جلسات منتهية حديثاً</h3>
-<table style="width:100%">{% for s in recent_sessions %}<tr><td><a href="{% url 'staff_internet_session' s.id %}">جلسة {{ s.id }}</a></td><td>{{ s.end_time }}</td></tr>{% empty %}<tr><td>لا يوجد.</td></tr>{% endfor %}</table>
+<section class="hub-section">
+  <h2 class="hub-section-title">الإنترنت والعمل</h2>
+  <p class="hub-badge hub-badge-info">فوترة يدوية فقط — لا يوجد تحكم راوتر أو Captive Portal في هذه المرحلة.</p>
+  {% if errors %}{% for msg in errors.values %}<p class="hub-badge hub-badge-danger">{{ msg }}</p>{% endfor %}{% endif %}
+  {% for message in messages %}<p class="hub-badge hub-badge-info">{{ message }}</p>{% endfor %}
+</section>
+
+<section class="hub-section hub-card">
+  <h3 class="hub-section-title">بدء جلسة</h3>
+  <form class="hub-form" method="post" action="{% url 'staff_internet_start' %}" id="internet-start-form">{% csrf_token %}
+    <div class="hub-grid hub-grid-2">
+      <label>نوع الجلسة
+        <select name="session_kind" id="session-kind">
+          <option value="guest" {% if form_values.session_kind != 'member' %}selected{% endif %}>زائر</option>
+          <option value="member" {% if form_values.session_kind == 'member' %}selected{% endif %}>عضو</option>
+        </select>
+      </label>
+      <label class="member-field">العضو
+        <select name="member"><option value="">اختر عضواً</option>{% for m in members %}<option value="{{ m.id }}" {% if form_values.member == m.id|stringformat:'s' %}selected{% endif %}>{{ m.name_ar }} - {{ m.phone }}</option>{% endfor %}</select>
+      </label>
+      <label class="guest-field">اسم الزائر<input name="guest_name" value="{{ form_values.guest_name|default:'' }}" placeholder="اسم الزائر"></label>
+      <label class="guest-field">هاتف الزائر<input name="guest_phone" value="{{ form_values.guest_phone|default:'' }}" placeholder="هاتف الزائر"></label>
+      <label>وضع الفوترة
+        <select name="billing_mode">{% for value,label in billing_modes %}<option value="{{ value }}" {% if form_values.billing_mode == value or not form_values.billing_mode and settings_obj.default_internet_billing_mode == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+      </label>
+      <label>باقة اختيارية
+        <select name="package"><option value="">بدون باقة</option>{% for p in packages %}<option value="{{ p.id }}" {% if form_values.package == p.id|stringformat:'s' %}selected{% endif %}>{{ p.name_ar }} ({{ p.duration_minutes }} دقيقة / {{ p.price_syp }} ل.س)</option>{% endfor %}</select>
+      </label>
+      <label>سعر الساعة<input type="number" min="0" name="rate_per_hour_syp" value="{{ form_values.rate_per_hour_syp|default:settings_obj.default_rate_per_hour_syp }}"></label>
+      <label>الحد الأدنى للدقائق<input type="number" min="0" name="minimum_minutes" value="{{ form_values.minimum_minutes|default:settings_obj.default_minimum_minutes }}"></label>
+      <label>دقائق السماح المجانية<input type="number" min="0" name="free_grace_minutes" value="{{ form_values.free_grace_minutes|default:settings_obj.default_free_grace_minutes }}"></label>
+      <label>السقف اليومي<input type="number" min="0" name="daily_cap_syp" value="{{ form_values.daily_cap_syp|default:settings_obj.default_daily_cap_syp }}"></label>
+      <label>وقت البدء<input type="datetime-local" name="started_at" value="{{ form_values.started_at|default:'' }}"></label>
+      <label>ملاحظات<input name="notes" value="{{ form_values.notes|default:'' }}" placeholder="ملاحظات"></label>
+    </div>
+    <button class="hub-button hub-button-primary" type="submit">بدء الجلسة</button>
+  </form>
+</section>
+
+<section class="hub-section">
+  <h3 class="hub-section-title">جلسات فعالة</h3>
+  <div class="hub-table-wrap"><table class="hub-table">
+    <tr><th>#</th><th>العضو/الزائر</th><th>الهاتف</th><th>البدء</th><th>الوقت المباشر</th><th>الفوترة</th><th>المبلغ التقديري</th><th>الحالة</th><th>إجراءات</th></tr>
+    {% for row in active_rows %}{% with s=row.session %}<tr>
+      <td><a href="{% url 'staff_internet_session' s.id %}">{{ s.id }}</a></td>
+      <td>{% if s.member %}{{ s.member.name_ar }}{% else %}{{ s.display_guest_name|default:'زائر' }}{% endif %}</td>
+      <td>{% if s.member %}{{ s.member.phone }}{% else %}{{ s.display_guest_phone }}{% endif %}</td>
+      <td>{{ s.effective_started_at }}</td>
+      <td><span class="js-elapsed" data-start="{{ s.effective_started_at|date:'c' }}">{{ row.elapsed_minutes }} دقيقة</span></td>
+      <td>{{ s.get_billing_mode_display }}</td>
+      <td><span class="js-estimate" data-start="{{ s.effective_started_at|date:'c' }}" data-rate="{{ s.rate_per_hour_syp }}" data-minimum="{{ s.minimum_minutes }}" data-grace="{{ s.free_grace_minutes }}" data-cap="{{ s.daily_cap_syp|default:'' }}" data-free="{% if s.billing_mode == 'free' or s.billing_mode == 'prepaid' %}1{% else %}0{% endif %}">{{ row.estimated_total }}</span> ل.س</td>
+      <td>{{ s.get_status_display }}</td>
+      <td class="hub-toolbar"><a class="hub-button hub-button-primary" href="{% url 'staff_internet_end' s.id %}">إنهاء</a>{% if can_cancel_sessions %}<form method="post" action="{% url 'staff_internet_cancel' s.id %}" onsubmit="return confirm('إلغاء الجلسة؟');">{% csrf_token %}<button class="hub-button" type="submit">إلغاء</button></form>{% endif %}</td>
+    </tr>{% endwith %}{% empty %}<tr><td colspan="9">لا توجد جلسات فعالة.</td></tr>{% endfor %}
+  </table></div>
+</section>
+
+<section class="hub-section">
+  <h3 class="hub-section-title">جلسات منتهية حديثاً</h3>
+  <div class="hub-table-wrap"><table class="hub-table">
+    <tr><th>#</th><th>العميل</th><th>الانتهاء</th><th>المدة</th><th>المبلغ</th><th>الحالة</th></tr>
+    {% for s in recent_sessions %}<tr><td><a href="{% url 'staff_internet_session' s.id %}">جلسة {{ s.id }}</a></td><td>{% if s.member %}{{ s.member.name_ar }}{% else %}{{ s.display_guest_name|default:'زائر' }}{% endif %}</td><td>{{ s.effective_ended_at }}</td><td>{{ s.effective_duration_minutes|default:'-' }}</td><td>{{ s.payable_total_syp }}</td><td>{{ s.get_status_display }}</td></tr>{% empty %}<tr><td colspan="6">لا يوجد.</td></tr>{% endfor %}
+  </table></div>
+</section>
+<script>
+(function(){
+function ceilPrice(minutes, rate, minimum, grace, cap, freeMode){ if(freeMode) return 0; minutes=Math.max(minutes||0,0); rate=Math.max(rate||0,0); grace=Math.max(grace||0,0); minimum=Math.max(minimum||0,0); if(minutes<=grace||rate<=0) return 0; var billable=Math.max(minutes-grace,0); if(billable>0) billable=Math.max(billable, minimum); var total=Math.ceil((billable*rate)/60); if(cap!==null && cap!=='' && !isNaN(cap)) total=Math.min(total, Math.max(parseInt(cap,10),0)); return Math.max(total,0); }
+function elapsedMinutes(start){ return Math.max(Math.ceil((Date.now()-new Date(start).getTime())/60000),0); }
+function tick(){ document.querySelectorAll('.js-elapsed').forEach(function(el){var m=elapsedMinutes(el.dataset.start); el.textContent=m+' دقيقة';}); document.querySelectorAll('.js-estimate').forEach(function(el){var m=elapsedMinutes(el.dataset.start); el.textContent=ceilPrice(m, parseInt(el.dataset.rate||'0',10), parseInt(el.dataset.minimum||'0',10), parseInt(el.dataset.grace||'0',10), el.dataset.cap, el.dataset.free==='1');}); }
+function toggleKind(){ var isMember=document.getElementById('session-kind').value==='member'; document.querySelectorAll('.member-field').forEach(function(el){el.style.display=isMember?'block':'none';}); document.querySelectorAll('.guest-field').forEach(function(el){el.style.display=isMember?'none':'block';}); }
+var kind=document.getElementById('session-kind'); if(kind){kind.addEventListener('change', toggleKind); toggleKind();} tick(); setInterval(tick, 30000);
+})();
+</script>
 {% endblock %}

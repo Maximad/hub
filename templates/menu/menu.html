@@ -2,36 +2,36 @@
 {% load static menu_form %}
 {% block title %}المنيو{% endblock %}
 {% block content %}
-<div class="menu-public" dir="rtl">
-  <header class="menu-public__header hub-card">
-    <p class="menu-public__brand">{% if system_settings %}{{ system_settings.public_brand_title }}{% else %}مشاريب{% endif %}</p>
+<div class="menu-public menu-layout-{{ system_settings.menu_layout_preset|default:'default_masharib' }} menu-mobile-{{ system_settings.menu_mobile_layout|default:'one_column_cards' }} {{ system_settings.menu_mobile_layout_class|default:'layout-grid-1' }} {{ system_settings.menu_tablet_layout_class|default:'layout-tablet-2' }} {{ system_settings.menu_desktop_layout_class|default:'layout-grid-3' }} {{ system_settings.product_card_style_class|default:'card-image-first' }} sticky-cart-{{ system_settings.sticky_cart_style|default:'bottom_bar' }} cart-review-{{ system_settings.cart_review_position|default:'bottom' }}" dir="rtl">
+  {% if not system_settings or system_settings.show_public_header %}<header class="menu-public__header hub-card">
+    {% if not system_settings or system_settings.show_brand_name %}<p class="menu-public__brand">{% if system_settings %}{{ system_settings.public_brand_title }}{% else %}مشاريب{% endif %}</p>{% endif %}
     <h2 class="hub-section-title">{{ page_setting.title|default:"منيو مشاريب" }}</h2>
-    {% if page_setting.subtitle %}<p>{{ page_setting.subtitle }}</p>{% endif %}
-    {% if not table %}<p class="menu-public__table-banner">المكان: <strong>طلب عام داخل المكان</strong></p>{% endif %}
-    {% if table %}
+    {% if not system_settings or system_settings.show_header_subtitle and page_setting.subtitle %}<p>{{ page_setting.subtitle }}</p>{% endif %}
+    {% if not system_settings or system_settings.show_table_banner and not table %}<p class="menu-public__table-banner">المكان: <strong>طلب عام داخل المكان</strong></p>{% endif %}
+    {% if not system_settings or system_settings.show_table_banner and table %}
       <p class="menu-public__table-banner">الطلب مرتبط بالطاولة: <strong>{{ table.name_ar }}</strong>{% if table.room %} — المساحة: {{ table.room.name_ar }}{% endif %}</p>
     {% endif %}
     {% if error %}<p class="hub-badge hub-badge-danger">{{ error }}</p>{% endif %}
-  </header>
+  </header>{% endif %}
 
-  <form method="post" class="hub-form" id="menu-order-form">
+  <form method="post" class="hub-form" id="menu-order-form" data-show-modifier-summary="{% if not system_settings or system_settings.show_modifier_summary %}true{% else %}false{% endif %}">
     {% csrf_token %}
 
     {% if section_products %}
-      <nav class="menu-sections-nav" aria-label="أقسام المنيو">
+      {% if not system_settings or system_settings.show_section_chips %}<nav class="menu-sections-nav" aria-label="أقسام المنيو">
         {% for section, products in section_products %}
           <a class="menu-section-chip" href="#section-{{ section.id }}">{{ section.name_ar }}</a>
         {% endfor %}
-      </nav>
+      </nav>{% endif %}
 
       <div class="menu-sections-wrap">
       {% for section, products in section_products %}
         <section class="hub-card hub-section" id="section-{{ section.id }}">
           <h3 class="hub-section-title">{{ section.name_ar }}</h3>
-          <div class="menu-product-grid">
+          <div class="menu-product-grid {{ system_settings.menu_mobile_layout_class|default:'layout-grid-1' }} {{ system_settings.menu_tablet_layout_class|default:'layout-tablet-2' }} {{ system_settings.menu_desktop_layout_class|default:'layout-grid-3' }}">
           {% for p in products %}
-            <article class="hub-list-card menu-product-card" data-product-card data-product-id="{{ p.id }}" data-price="{{ p.price_syp|default:'0' }}">
-              <div class="hub-media menu-product-media{% if not p.primary_media %} menu-product-media--placeholder{% endif %}">
+            <article class="hub-list-card menu-product-card {{ system_settings.product_card_style_class|default:'card-image-first' }}" data-product-card data-product-id="{{ p.id }}" data-price="{{ p.price_syp|default:'0' }}">
+              {% if not system_settings or system_settings.show_product_images %}<div class="hub-media menu-product-media{% if not p.primary_media %} menu-product-media--placeholder{% endif %}">
                 {% if p.primary_media %}
                   {% if p.primary_media.is_visual_media %}
                     <img src="{{ p.primary_media.url }}" alt="{{ p.primary_media.display_alt_text }}" loading="lazy">
@@ -43,17 +43,17 @@
                 {% else %}
                   <span>{{ p.name_ar|slice:":1" }}</span>
                 {% endif %}
-              </div>
+              </div>{% endif %}
               <div class="menu-product-main">
                 <h4 class="menu-product-name">{{ p.name_ar }}</h4>
-                {% if p.description_ar %}<p class="menu-product-desc">{{ p.description_ar }}</p>{% endif %}
-                <p class="menu-product-price" data-role="price">{{ p.price_syp }} ل.س</p>
+                {% if not system_settings or system_settings.show_product_descriptions and p.description_ar %}<p class="menu-product-desc">{{ p.description_ar }}</p>{% endif %}
+                {% if not system_settings or system_settings.show_product_prices %}<p class="menu-product-price" data-role="price">{{ p.price_syp }} ل.س</p>{% endif %}
               </div>
-              <div class="menu-product-badges">
+              {% if not system_settings or system_settings.show_product_badges %}<div class="menu-product-badges">
                 {% if p.is_alcoholic %}<span class="hub-badge hub-badge-warning">يحتوي على كحول</span>{% endif %}
                 {% if p.age_restricted %}<span class="hub-badge hub-badge-danger">للبالغين فقط</span>{% endif %}
                 {% if p.requires_staff_confirmation %}<span class="hub-badge hub-badge-info">يحتاج تأكيد من الفريق</span>{% endif %}
-              </div>
+              </div>{% endif %}
 
               <div class="menu-qty-controls">
                 <button class="hub-button hub-button-secondary menu-stepper-btn" type="button" data-action="plus" data-target="qty_{{ p.id }}" aria-label="زيادة {{ p.name_ar }}">+</button>
@@ -63,7 +63,7 @@
               </div>
 
               {% if p.valid_option_assignments %}
-                <details class="menu-options-details" data-options-panel>
+                <details class="menu-options-details" data-options-panel{% if not system_settings.collapse_modifiers_by_default %} open{% endif %}>
                   <summary class="hub-button hub-button-secondary">تخصيص</summary>
                   <div class="menu-options-wrap">
                     {% for assignment in p.valid_option_assignments %}
@@ -90,12 +90,12 @@
                 </details>
               {% endif %}
 
-              <details class="menu-note-details">
+              {% if not system_settings or system_settings.show_item_notes %}<details class="menu-note-details">
                 <summary class="hub-button hub-button-secondary">ملاحظة</summary>
                 <label for="note_{{ p.id }}">ملاحظة على هذا العنصر</label>
                 {% form_value form_values 'note_' p.id '' as note_value %}
                 <input class="hub-input" type="text" name="note_{{ p.id }}" id="note_{{ p.id }}" value="{{ note_value }}" placeholder="مثلاً: بدون سكر، سكر خفيف، بدون بصل">
-              </details>
+              </details>{% endif %}
             </article>
           {% endfor %}
           </div>
@@ -109,23 +109,47 @@
       <p class="menu-cart-helper" data-cart-helper>اختر عناصر من القائمة</p>
       <ul class="menu-cart-list" data-cart-list></ul>
       <p class="menu-cart-total">المجموع التقديري: <strong data-cart-total>0 ل.س</strong></p>
+      <p class="menu-cart-total" data-delivery-fee-row hidden>رسوم التوصيل: <strong data-delivery-fee>{{ settings.fixed_delivery_fee_syp|default:0 }} ل.س</strong></p>
+      <p class="menu-cart-total" data-total-with-delivery-row hidden>الإجمالي مع التوصيل: <strong data-total-with-delivery>0 ل.س</strong></p>
+      {% if settings.minimum_delivery_order_syp %}<p class="hub-help-text" data-delivery-minimum hidden>الحد الأدنى لطلب التوصيل {{ settings.minimum_delivery_order_syp }} ل.س.</p>{% endif %}
 
-      <h4>بيانات اختيارية</h4>
-      <label>الاسم</label><input class="hub-input" type="text" name="customer_name" value="{{ form_values.customer_name|default:'' }}">
-      <label>الهاتف</label><input class="hub-input" type="tel" name="customer_phone" value="{{ form_values.customer_phone|default:'' }}">
-      <label>ملاحظة عامة</label><textarea class="hub-input" name="general_note" rows="3">{{ form_values.general_note|default:'' }}</textarea>
+      <h4>طريقة الطلب</h4>
+      <div class="menu-option-chips" data-fulfillment-selector>
+        {% if table %}
+          <label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="table" checked> طاولة</label>
+        {% else %}
+          <label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="inside_space" {% if form_values.fulfillment_mode != 'delivery' and form_values.fulfillment_mode != 'takeaway' %}checked{% endif %}> طلب داخل المكان</label>
+          {% if settings.enable_delivery %}<label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="delivery" {% if form_values.fulfillment_mode == 'delivery' %}checked{% endif %}> توصيل</label>{% endif %}
+          {% if settings.enable_takeaway %}<label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="takeaway" {% if form_values.fulfillment_mode == 'takeaway' %}checked{% endif %}> تيك أواي</label>{% endif %}
+        {% endif %}
+      </div>
+
+      <div class="hub-card" data-delivery-fields hidden>
+        <h4>بيانات التوصيل</h4>
+        {% if settings.delivery_working_hours_text %}<p class="hub-help-text">ساعات التوصيل: {{ settings.delivery_working_hours_text }}</p>{% endif %}
+        {% if settings.delivery_notes %}<p class="hub-help-text">{{ settings.delivery_notes }}</p>{% endif %}
+        <label>منطقة التوصيل</label><input class="hub-input" type="text" name="delivery_area" value="{{ form_values.delivery_area|default:'' }}">
+        <label>عنوان التوصيل{% if settings.require_address_for_delivery %} *{% endif %}</label><textarea class="hub-input" name="delivery_address" rows="3">{{ form_values.delivery_address|default:'' }}</textarea>
+        <label>ملاحظات التوصيل</label><textarea class="hub-input" name="delivery_notes" rows="2">{{ form_values.delivery_notes|default:'' }}</textarea>
+      </div>
+
+      <h4>بيانات الطلب</h4>
+      {% if not system_settings or system_settings.show_customer_name_field %}<label>الاسم</label><input class="hub-input" type="text" name="customer_name" value="{{ form_values.customer_name|default:'' }}">{% endif %}
+      {% if not system_settings or system_settings.show_customer_phone_field %}<label>الهاتف</label><input class="hub-input" type="tel" name="customer_phone" value="{{ form_values.customer_phone|default:'' }}">{% endif %}
+      {% if not system_settings or system_settings.show_general_note_field %}<label>ملاحظة عامة</label><textarea class="hub-input" name="general_note" rows="3">{{ form_values.general_note|default:'' }}</textarea>{% endif %}
 
       <div class="hub-sticky-actions menu-submit-wrap">
         <button class="hub-button hub-button-primary" type="submit" data-submit-btn>إرسال الطلب</button>
       </div>
     </section>
 
-    <aside class="menu-sticky-cart" data-sticky-cart hidden>
+    {% if not system_settings or system_settings.show_sticky_cart %}<aside class="menu-sticky-cart" data-sticky-cart hidden>
       <p><strong data-item-count>0</strong> عناصر</p>
       <p data-sticky-total>0 ل.س</p>
       <a href="#cart-review" class="hub-button hub-button-primary">مراجعة الطلب</a>
-    </aside>
+    </aside>{% endif %}
   </form>
 </div>
+<script>window.HUB_DELIVERY_SETTINGS = {feeMode: '{{ settings.delivery_fee_mode|default:'none' }}', fixedFee: {{ settings.fixed_delivery_fee_syp|default:0 }}, minimum: {{ settings.minimum_delivery_order_syp|default:0 }}};</script>
 <script src="{% static 'js/menu_cart.js' %}"></script>
 {% endblock %}
