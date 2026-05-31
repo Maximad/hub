@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}إنهاء جلسة{% endblock %}
+{% block content %}
+<section class="hub-section hub-card">
+  <h2>إنهاء جلسة #{{ session.id }}</h2>
+  {% for message in messages %}<p class="hub-badge hub-badge-warning">{{ message }}</p>{% endfor %}
+  <div class="hub-grid hub-grid-2">
+    <p><strong>البدء:</strong> {{ session.effective_started_at }}</p>
+    <p><strong>الانتهاء المتوقع:</strong> {{ preview.ended_at }}</p>
+    <p><strong>المدة:</strong> {{ preview.duration }} دقيقة</p>
+    <p><strong>الدقائق القابلة للفوترة:</strong> {{ preview.billable_minutes }} دقيقة</p>
+    <p><strong>المبلغ المحسوب:</strong> {{ preview.calculated_total }} ل.س</p>
+    <p><strong>رصيد العضو:</strong> {% if preview.subscription %}{{ preview.subscription.remaining_internet_minutes }} دقيقة قبل الخصم{% else %}-{% endif %}</p>
+  </div>
+  <form class="hub-form" method="post">{% csrf_token %}
+    <label><input type="checkbox" name="create_order" value="1"> إنشاء طلب/عنصر كاشير للجلسة</label>
+    <label><input type="checkbox" name="mark_paid" value="1"> تعليمها مدفوعة نقداً الآن عند إنشاء الطلب</label>
+    {% if can_override_total %}
+    <div class="hub-grid hub-grid-2">
+      <label>مبلغ يدوي اختياري<input type="number" min="0" name="manual_total_syp" placeholder="اتركه فارغاً لاستخدام المحسوب"></label>
+      <label>سبب التعديل<textarea name="override_reason" placeholder="مطلوب عند إدخال مبلغ يدوي"></textarea></label>
+    </div>
+    {% endif %}
+    <div class="hub-toolbar"><button class="hub-button hub-button-primary" type="submit">تأكيد الإنهاء</button><a class="hub-button" href="{% url 'staff_internet_session' session.id %}">رجوع</a></div>
+  </form>
+</section>
+{% endblock %}

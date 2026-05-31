@@ -171,3 +171,29 @@ Bulk import tools are available for managers at `/staff/import/`. Access is rest
 ### Deployment note
 
 No schema migrations are required for Phase 11A. Run and test imports on staging before using them in production, especially for duplicate matching and product modifier applicability.
+
+## Phase 11C — Manual internet/workspace session billing
+
+Staff internet/workspace billing is managed from `/staff/internet/`, with session details at `/staff/internet/session/<id>/`. This phase is **manual operational billing only**: staff starts and ends sessions in Hub/Masharib, and the system calculates duration and price. It does not call router APIs, disconnect devices, meter traffic, provision vouchers, or automate MikroTik/UniFi/RADIUS/captive-portal access.
+
+### Billing modes
+
+* **Prepaid/package sessions** (`prepaid`): use a configured member minute balance where available. Ending a prepaid member session deducts the actual duration from the active subscription and creates a member ledger entry. If the active member balance is missing or insufficient, finalization is blocked with an Arabic warning so balances never become negative.
+* **Open metered sessions** (`open_metered`): staff starts the session when the guest/member begins using internet or workspace time and ends it when they leave. The total is calculated from elapsed minutes, hourly rate, minimum billable minutes, grace minutes, and optional daily cap.
+* **Free/manual sessions** (`free`, `manual`): free sessions calculate zero. Manual overrides are available only to admins/superusers and require an override reason.
+
+### Internet/workspace settings
+
+Admin settings include an Arabic fieldset named `إعدادات الإنترنت والعمل` for defaults such as billing mode, hourly rate, minimum minutes, grace minutes, daily cap, guest/member enable flags, automatic order creation, required guest phone, and the optional internet service product.
+
+When order conversion is used, configure **Internet service product** to an existing `Product` that represents internet/workspace billing. The session order uses that product, writes the session duration and customer/member name in the order note, stores the linked order on the session, and then appears normally in cashier. Payments are created only through an order so cashier totals remain consistent.
+
+### Automation roadmap
+
+1. **Manual start/end billing** — current Phase 11C behavior.
+2. **Voucher/access-code captive portal** — future phase for access-code workflows.
+3. **Router integration** — future MikroTik/UniFi/RADIUS integration. Placeholder fields such as provider, access code, network session ID, MAC, IP, bandwidth profile, and network status are optional and not required in the UI yet.
+
+### Current permissions note
+
+The existing staff capability map keeps internet/member operations limited to `admin` and `cashier` roles (plus superusers). Waiter access can be widened in a later role-policy pass without changing the billing data model; kitchen users remain excluded from internet billing management.

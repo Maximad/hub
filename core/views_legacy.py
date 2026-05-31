@@ -7,7 +7,7 @@ from django.http import Http404, HttpResponse
 from django.contrib import messages
 from django.contrib.auth import authenticate
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -17,6 +17,7 @@ from members.models import MembershipBenefitRule, MembershipPlan, MembershipSubs
 from internet.models import WifiNetwork
 from catalog.models import MenuSection, ProductMedia, ProductOption, ProductOptionGroup, ProductOptionGroupAssignment
 from core.settings_helpers import get_page_setting, get_system_settings
+from core.internet_billing import calculate_billable_minutes, calculate_metered_session_total, calculate_session_duration_minutes, can_override_session_total, finalize_internet_session
 from core.models import ActivityLog, InternetPackage, InternetSession, Member, Order, OrderItem, Payment, Product, SystemSetting, TableArea
 from events.models import Event
 from reservations.models import Reservation
@@ -1149,11 +1150,32 @@ def staff_member_subscribe(request, member_id):
 @login_required
 def staff_internet(request):
     _assert_staff_capability(request.user, 'members/internet')
-    active_sessions = InternetSession.objects.select_related('member', 'package').filter(status='active').order_by('-start_time')
-    recent_sessions = InternetSession.objects.select_related('member', 'package').exclude(status='active').order_by('-updated_at')[:50]
+    settings_obj = get_system_settings()
+    now = timezone.now()
+    active_sessions = InternetSession.objects.select_related('member', 'package', 'linked_order').filter(status=InternetSession.Status.ACTIVE).order_by('-started_at', '-start_time')
+    recent_sessions = InternetSession.objects.select_related('member', 'package', 'linked_order', 'linked_payment').exclude(status=InternetSession.Status.ACTIVE).order_by('-updated_at')[:50]
     packages = InternetPackage.objects.order_by('name_ar')
     members = Member.objects.order_by('-created_at')[:200]
-    return render(request, 'staff/internet.html', {'active_sessions': active_sessions, 'recent_sessions': recent_sessions, 'packages': packages, 'members': members, 'now': timezone.now()})
+    active_rows = []
+    for session in active_sessions:
+        duration = calculate_session_duration_minutes(session.effective_started_at, now)
+        estimated_total = 0 if session.billing_mode in {InternetSession.BillingMode.FREE, InternetSession.BillingMode.PREPAID} else calculate_metered_session_total(
+            duration, session.rate_per_hour_syp, session.minimum_minutes, session.free_grace_minutes, session.daily_cap_syp
+        )
+        active_rows.append({'session': session, 'elapsed_minutes': duration, 'estimated_total': estimated_total})
+    return render(request, 'staff/internet.html', {
+        'active_sessions': active_sessions,
+        'active_rows': active_rows,
+        'recent_sessions': recent_sessions,
+        'packages': packages,
+        'members': members,
+        'now': now,
+        'settings_obj': settings_obj,
+        'billing_modes': InternetSession.BillingMode.choices,
+        'can_cancel_sessions': can_override_session_total(request.user),
+        'can_override_total': can_override_session_total(request.user),
+        'form_values': {},
+    })
 
 
 @login_required
@@ -1161,52 +1183,183 @@ def staff_internet_start(request):
     _assert_staff_capability(request.user, 'members/internet')
     if request.method != 'POST':
         return redirect('staff_internet')
-    member = None
-    member_id = request.POST.get('member')
-    if member_id:
-        member = Member.objects.filter(pk=member_id).first()
-    package = get_object_or_404(InternetPackage, pk=request.POST.get('package'))
+    settings_obj = get_system_settings()
     errors = {}
-    customer_phone = _validate_phone_input(request.POST.get('customer_phone', ''), 'هاتف الزبون', errors, required=False)
-    start_time = _parse_local_dt_or_error(request.POST.get('start_time', ''), 'وقت البدء', errors, default=timezone.now())
+    session_kind = request.POST.get('session_kind', 'guest')
+    member = None
+    if session_kind == 'member':
+        if not settings_obj.allow_member_internet_sessions:
+            errors['member'] = 'جلسات الأعضاء غير مفعلة حالياً.'
+        member_id = request.POST.get('member')
+        if member_id:
+            member = Member.objects.filter(pk=member_id).first()
+        if member is None:
+            errors['member'] = 'اختر عضواً صحيحاً.'
+    else:
+        if not settings_obj.allow_guest_internet_sessions:
+            errors['guest'] = 'جلسات الزوار غير مفعلة حالياً.'
+    guest_phone = _validate_phone_input(request.POST.get('guest_phone') or request.POST.get('customer_phone', ''), 'هاتف الزائر', errors, required=settings_obj.require_phone_for_guest_session and session_kind != 'member')
+    started_at = _parse_local_dt_or_error(request.POST.get('started_at') or request.POST.get('start_time', ''), 'وقت البدء', errors, default=timezone.now())
+    billing_mode = request.POST.get('billing_mode') or settings_obj.default_internet_billing_mode
+    if billing_mode not in {choice[0] for choice in InternetSession.BillingMode.choices}:
+        billing_mode = InternetSession.BillingMode.OPEN_METERED
+    rate = _parse_int_or_error(request.POST.get('rate_per_hour_syp', ''), 'سعر الساعة', errors, default=settings_obj.default_rate_per_hour_syp, min_value=0)
+    minimum = _parse_int_or_error(request.POST.get('minimum_minutes', ''), 'الحد الأدنى للدقائق', errors, default=settings_obj.default_minimum_minutes, min_value=0)
+    grace = _parse_int_or_error(request.POST.get('free_grace_minutes', ''), 'دقائق السماح', errors, default=settings_obj.default_free_grace_minutes, min_value=0)
+    daily_cap = _parse_int_or_error(request.POST.get('daily_cap_syp', ''), 'السقف اليومي', errors, default=settings_obj.default_daily_cap_syp, min_value=0)
+    package = None
+    package_id = request.POST.get('package')
+    if package_id:
+        package = InternetPackage.objects.filter(pk=package_id).first()
+    if package and billing_mode == InternetSession.BillingMode.PREPAID:
+        rate = rate or package.price_syp
+        minimum = minimum or package.duration_minutes
     if errors:
-        active_sessions = InternetSession.objects.select_related('member', 'package').filter(status='active').order_by('-start_time')
-        recent_sessions = InternetSession.objects.select_related('member', 'package').exclude(status='active').order_by('-updated_at')[:50]
+        active_sessions = InternetSession.objects.select_related('member', 'package').filter(status=InternetSession.Status.ACTIVE).order_by('-started_at', '-start_time')
+        recent_sessions = InternetSession.objects.select_related('member', 'package').exclude(status=InternetSession.Status.ACTIVE).order_by('-updated_at')[:50]
         packages = InternetPackage.objects.order_by('name_ar')
         members = Member.objects.order_by('-created_at')[:200]
-        return render(request, 'staff/internet.html', {'active_sessions': active_sessions, 'recent_sessions': recent_sessions, 'packages': packages, 'members': members, 'now': timezone.now(), 'errors': errors, 'form_values': request.POST})
-    InternetSession.objects.create(member=member, package=package, customer_name=request.POST.get('customer_name', '').strip(), customer_phone=customer_phone, start_time=start_time, end_time=start_time, notes=(request.POST.get('session_type', '').strip() + ' ' + request.POST.get('notes', '').strip()).strip(), status='active')
-    return redirect('staff_internet')
+        return render(request, 'staff/internet.html', {
+            'active_sessions': active_sessions, 'active_rows': [], 'recent_sessions': recent_sessions,
+            'packages': packages, 'members': members, 'now': timezone.now(), 'errors': errors,
+            'form_values': request.POST, 'settings_obj': settings_obj, 'billing_modes': InternetSession.BillingMode.choices,
+            'can_cancel_sessions': can_override_session_total(request.user), 'can_override_total': can_override_session_total(request.user),
+        })
+    session = InternetSession.objects.create(
+        member=member,
+        package=package,
+        guest_name=(request.POST.get('guest_name') or request.POST.get('customer_name', '')).strip(),
+        guest_phone=guest_phone,
+        customer_name=(request.POST.get('guest_name') or request.POST.get('customer_name', '')).strip(),
+        customer_phone=guest_phone,
+        billing_mode=billing_mode,
+        started_at=started_at,
+        start_time=started_at,
+        rate_per_hour_syp=rate or 0,
+        minimum_minutes=minimum or 0,
+        free_grace_minutes=grace or 0,
+        daily_cap_syp=daily_cap,
+        notes=(request.POST.get('session_type', '').strip() + ' ' + request.POST.get('notes', '').strip()).strip(),
+        status=InternetSession.Status.ACTIVE,
+        started_by=request.user,
+    )
+    messages.success(request, f'تم بدء جلسة #{session.id}.')
+    return redirect('staff_internet_session', session_id=session.id)
+
+
+def _session_preview(session):
+    ended_at = timezone.now()
+    duration = calculate_session_duration_minutes(session.effective_started_at, ended_at)
+    billable = calculate_billable_minutes(duration, session.minimum_minutes, session.free_grace_minutes)
+    calculated_total = 0 if session.billing_mode in {InternetSession.BillingMode.FREE, InternetSession.BillingMode.PREPAID} else calculate_metered_session_total(
+        duration, session.rate_per_hour_syp, session.minimum_minutes, session.free_grace_minutes, session.daily_cap_syp
+    )
+    subscription = _active_subscription_for_member(session.member) if session.member_id else None
+    return {'ended_at': ended_at, 'duration': duration, 'billable_minutes': billable, 'calculated_total': calculated_total, 'subscription': subscription}
 
 
 @login_required
 def staff_internet_session(request, session_id):
     _assert_staff_capability(request.user, 'members/internet')
-    session = get_object_or_404(InternetSession.objects.select_related('member', 'package'), pk=session_id)
-    return render(request, 'staff/internet_session.html', {'session': session})
+    session = get_object_or_404(InternetSession.objects.select_related('member', 'package', 'linked_order', 'linked_payment', 'started_by', 'ended_by'), pk=session_id)
+    ledger_entries = session.member.credit_ledger.order_by('-created_at')[:20] if session.member_id else []
+    preview = _session_preview(session) if session.status == InternetSession.Status.ACTIVE else None
+    return render(request, 'staff/internet_session.html', {
+        'session': session,
+        'preview': preview,
+        'ledger_entries': ledger_entries,
+        'can_cancel_sessions': can_override_session_total(request.user),
+        'can_override_total': can_override_session_total(request.user),
+        'settings_obj': get_system_settings(),
+    })
 
 
 @login_required
 def staff_internet_end(request, session_id):
     _assert_staff_capability(request.user, 'members/internet')
+    session = get_object_or_404(InternetSession.objects.select_related('member', 'package'), pk=session_id)
+    if request.method != 'POST':
+        return render(request, 'staff/internet_end.html', {
+            'session': session,
+            'preview': _session_preview(session),
+            'can_override_total': can_override_session_total(request.user),
+            'settings_obj': get_system_settings(),
+        })
+    if session.status != InternetSession.Status.ACTIVE:
+        return redirect('staff_internet_session', session_id=session_id)
+    manual_total = request.POST.get('manual_total_syp', '').strip()
+    override_reason = request.POST.get('override_reason', '').strip()
+    try:
+        session = finalize_internet_session(session, request.user, manual_total=manual_total or None, override_reason=override_reason or None)
+    except (ValidationError, PermissionDenied) as exc:
+        messages.error(request, '; '.join(exc.messages) if hasattr(exc, 'messages') else str(exc))
+        return render(request, 'staff/internet_end.html', {
+            'session': session,
+            'preview': _session_preview(session),
+            'can_override_total': can_override_session_total(request.user),
+            'settings_obj': get_system_settings(),
+        })
+    settings_obj = get_system_settings()
+    if request.POST.get('create_order') or (settings_obj.auto_create_order_for_metered_sessions and session.payable_total_syp > 0):
+        _create_order_for_internet_session(request, session, mark_paid=request.POST.get('mark_paid') == '1')
+    elif request.POST.get('mark_paid') == '1':
+        messages.warning(request, 'لا يمكن تسجيل دفع آمن دون طلب كاشير مرتبط؛ أنشئ طلباً أولاً أو اضبط منتج خدمة الإنترنت في الإعدادات.')
+    messages.success(request, f'تم إنهاء جلسة #{session.id}.')
+    return redirect('staff_internet_session', session_id=session_id)
+
+
+def _create_order_for_internet_session(request, session, mark_paid=False):
+    if session.linked_order_id:
+        order = session.linked_order
+    else:
+        settings_obj = get_system_settings()
+        product = settings_obj.internet_service_product
+        if product is None:
+            messages.warning(request, 'اضبط منتج خدمة الإنترنت في إعدادات النظام قبل إنشاء طلب كاشير للجلسة.')
+            return None
+        customer = session.member.name_ar if session.member_id else (session.display_guest_name or 'زائر')
+        note = f'جلسة إنترنت/عمل #{session.id}\nالمدة: {session.effective_duration_minutes or 0} دقيقة\nالعميل: {customer}'
+        order = Order.objects.create(service_mode=Order.ServiceMode.DINE_IN, status=Order.Status.NEW, notes=note)
+        OrderItem.objects.create(
+            order=order,
+            product=product,
+            quantity=1,
+            product_name_ar_snapshot=product.name_ar,
+            product_name_en_snapshot=product.name_en,
+            unit_price_syp_snapshot=session.payable_total_syp,
+            selected_options_snapshot=[],
+            item_note=note,
+            line_total_syp_snapshot=session.payable_total_syp,
+        )
+        session.linked_order = order
+        session.status = InternetSession.Status.UNPAID if session.payable_total_syp > 0 else InternetSession.Status.ENDED
+        session.save(update_fields=['linked_order', 'status', 'updated_at'])
+    if mark_paid and session.payable_total_syp > 0:
+        existing_paid = _paid_total(order.payments.all())
+        amount = max(session.payable_total_syp - existing_paid, 0)
+        if amount:
+            payment = Payment.objects.create(order=order, amount_syp=amount, method=Payment.Method.CASH)
+            session.linked_payment = payment
+            session.status = InternetSession.Status.PAID
+            session.save(update_fields=['linked_payment', 'status', 'updated_at'])
+    return order
+
+
+@login_required
+def staff_internet_cancel(request, session_id):
+    _assert_staff_capability(request.user, 'members/internet')
+    if not can_override_session_total(request.user):
+        raise PermissionDenied('إلغاء الجلسات يحتاج صلاحية مدير.')
     if request.method != 'POST':
         return redirect('staff_internet_session', session_id=session_id)
-    session = get_object_or_404(InternetSession.objects.select_related('member'), pk=session_id)
-    if session.status != 'active':
-        return redirect('staff_internet_session', session_id=session_id)
-    now = timezone.now()
-    duration = max(int((now - session.start_time).total_seconds() // 60), 0)
-    session.end_time = now
-    session.actual_duration_minutes = duration
-    session.status = 'ended'
-    session.save(update_fields=['end_time', 'actual_duration_minutes', 'status', 'updated_at'])
-    if session.member_id:
-        sub = _active_subscription_for_member(session.member)
-        if sub and (sub.remaining_internet_minutes or 0) > 0 and duration > 0:
-            used = min(sub.remaining_internet_minutes, duration)
-            sub.remaining_internet_minutes = max((sub.remaining_internet_minutes or 0) - used, 0)
-            sub.save(update_fields=['remaining_internet_minutes', 'updated_at'])
-            MemberCreditLedger.objects.create(member=session.member, subscription=sub, change_type='use_minutes', minutes_delta=-used, notes=f'استهلاك دقائق لجلسة إنترنت #{session.id}', created_by=request.user)
+    session = get_object_or_404(InternetSession, pk=session_id)
+    if session.status == InternetSession.Status.ACTIVE:
+        session.status = InternetSession.Status.CANCELLED
+        session.ended_at = timezone.now()
+        session.end_time = session.ended_at
+        session.ended_by = request.user
+        session.save(update_fields=['status', 'ended_at', 'end_time', 'ended_by', 'updated_at'])
+        messages.success(request, 'تم إلغاء الجلسة.')
     return redirect('staff_internet_session', session_id=session_id)
 
 

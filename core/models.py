@@ -227,20 +227,105 @@ class InternetPackage(TimeStampedModel, PublicCodeModel):
 
 
 class InternetSession(TimeStampedModel, PublicCodeModel):
+    class BillingMode(models.TextChoices):
+        PREPAID = 'prepaid', 'مسبق الدفع'
+        OPEN_METERED = 'open_metered', 'مفتوح محسوب بالوقت'
+        FREE = 'free', 'مجاني'
+        MANUAL = 'manual', 'يدوي'
+
+    class Status(models.TextChoices):
+        ACTIVE = 'active', 'فعالة'
+        ENDED = 'ended', 'منتهية'
+        CANCELLED = 'cancelled', 'ملغاة'
+        UNPAID = 'unpaid', 'غير مدفوعة'
+        PAID = 'paid', 'مدفوعة'
+
+    class NetworkProvider(models.TextChoices):
+        MANUAL = 'manual', 'يدوي'
+        MIKROTIK = 'mikrotik', 'MikroTik'
+        UNIFI = 'unifi', 'UniFi'
+        RADIUS = 'radius', 'RADIUS'
+
     member = models.ForeignKey(Member, on_delete=models.PROTECT, related_name='internet_sessions', null=True, blank=True)
-    package = models.ForeignKey(InternetPackage, on_delete=models.PROTECT, related_name='sessions')
+    package = models.ForeignKey(InternetPackage, on_delete=models.PROTECT, related_name='sessions', null=True, blank=True)
     customer_name = models.CharField(max_length=120, blank=True)
     customer_phone = models.CharField(max_length=30, blank=True)
+    guest_name = models.CharField(max_length=120, blank=True)
+    guest_phone = models.CharField(max_length=30, blank=True)
+    billing_mode = models.CharField(max_length=20, choices=BillingMode.choices, default=BillingMode.OPEN_METERED)
     start_time = models.DateTimeField()
-    end_time = models.DateTimeField()
+    end_time = models.DateTimeField(null=True, blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
     actual_duration_minutes = models.PositiveIntegerField(null=True, blank=True)
-    status = models.CharField(max_length=20, default='active')
+    duration_minutes = models.PositiveIntegerField(null=True, blank=True)
+    rate_per_hour_syp = models.PositiveIntegerField(default=0)
+    minimum_minutes = models.PositiveIntegerField(default=0)
+    free_grace_minutes = models.PositiveIntegerField(default=0)
+    daily_cap_syp = models.PositiveIntegerField(null=True, blank=True)
+    calculated_total_syp = models.PositiveIntegerField(default=0)
+    manual_total_syp = models.PositiveIntegerField(null=True, blank=True)
+    override_reason = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
+    linked_order = models.ForeignKey(Order, on_delete=models.SET_NULL, related_name='internet_sessions', null=True, blank=True)
+    linked_payment = models.ForeignKey(Payment, on_delete=models.SET_NULL, related_name='internet_sessions', null=True, blank=True)
+    started_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, related_name='started_internet_sessions', null=True, blank=True)
+    ended_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, related_name='ended_internet_sessions', null=True, blank=True)
     notes = models.TextField(blank=True)
     consumed = models.BooleanField(default=False)
+    network_provider = models.CharField(max_length=20, choices=NetworkProvider.choices, default=NetworkProvider.MANUAL)
+    access_code = models.CharField(max_length=120, blank=True)
+    network_session_id = models.CharField(max_length=120, blank=True)
+    device_mac = models.CharField(max_length=64, blank=True)
+    ip_address = models.CharField(max_length=64, blank=True)
+    bandwidth_profile = models.CharField(max_length=120, blank=True)
+    network_status = models.CharField(max_length=120, blank=True)
+
+    @property
+    def display_guest_name(self):
+        return self.guest_name or self.customer_name
+
+    @property
+    def display_guest_phone(self):
+        return self.guest_phone or self.customer_phone
+
+    @property
+    def effective_started_at(self):
+        return self.started_at or self.start_time
+
+    @property
+    def effective_ended_at(self):
+        return self.ended_at or self.end_time
+
+    @property
+    def effective_duration_minutes(self):
+        return self.duration_minutes if self.duration_minutes is not None else self.actual_duration_minutes
+
+    @property
+    def payable_total_syp(self):
+        return self.manual_total_syp if self.manual_total_syp is not None else self.calculated_total_syp
+
+    def save(self, *args, **kwargs):
+        if self.started_at is None and self.start_time is not None:
+            self.started_at = self.start_time
+        if self.start_time is None and self.started_at is not None:
+            self.start_time = self.started_at
+        if not self.guest_name and self.customer_name:
+            self.guest_name = self.customer_name
+        if not self.customer_name and self.guest_name:
+            self.customer_name = self.guest_name
+        if not self.guest_phone and self.customer_phone:
+            self.guest_phone = self.customer_phone
+        if not self.customer_phone and self.guest_phone:
+            self.customer_phone = self.guest_phone
+        super().save(*args, **kwargs)
 
     def __str__(self):
-        customer = self.member or self.customer_name or self.customer_phone or 'زائر'
-        return f'{customer} — {self.package} — {self.start_time:%Y-%m-%d %H:%M}'
+        customer = self.member or self.display_guest_name or self.display_guest_phone or 'زائر'
+        package = self.package or self.get_billing_mode_display()
+        started = self.effective_started_at
+        stamp = started.strftime('%Y-%m-%d %H:%M') if started else 'بدون وقت'
+        return f'{customer} — {package} — {stamp}'
 
 
 class Shift(TimeStampedModel, PublicCodeModel):
@@ -349,6 +434,12 @@ class SystemSetting(TimeStampedModel):
         SUMMARY_SIDEBAR = 'summary_sidebar', 'ملخص جانبي'
         LARGE_PAYMENT = 'large_payment', 'دفع كبير'
 
+    class InternetBillingMode(models.TextChoices):
+        PREPAID = 'prepaid', 'مسبق الدفع'
+        OPEN_METERED = 'open_metered', 'مفتوح محسوب بالوقت'
+        FREE = 'free', 'مجاني'
+        MANUAL = 'manual', 'يدوي'
+
     system_title_ar = models.CharField(max_length=160, default='نظام مشاريب', verbose_name='عنوان النظام بالعربية')
     system_title_en = models.CharField(max_length=160, default='Masharib System', verbose_name='عنوان النظام بالإنجليزية')
     public_brand_title_ar = models.CharField(max_length=160, default='مشاريب', verbose_name='اسم العلامة في المنيو')
@@ -421,6 +512,17 @@ class SystemSetting(TimeStampedModel):
     pos_cart_position = models.CharField(max_length=20, choices=POSCartPosition.choices, default=POSCartPosition.SIDE, verbose_name='مكان سلة POS')
     order_board_density = models.CharField(max_length=20, choices=OrderBoardDensity.choices, default=OrderBoardDensity.NORMAL, verbose_name='كثافة لوحة الطلبات')
     cashier_layout = models.CharField(max_length=30, choices=CashierLayout.choices, default=CashierLayout.SINGLE_COLUMN, verbose_name='تخطيط الكاشير')
+
+    default_internet_billing_mode = models.CharField(max_length=20, choices=InternetBillingMode.choices, default=InternetBillingMode.OPEN_METERED, verbose_name='وضع فوترة الإنترنت الافتراضي')
+    default_rate_per_hour_syp = models.PositiveIntegerField(default=0, verbose_name='سعر الساعة الافتراضي للإنترنت/العمل')
+    default_minimum_minutes = models.PositiveIntegerField(default=30, verbose_name='الحد الأدنى الافتراضي للدقائق')
+    default_free_grace_minutes = models.PositiveIntegerField(default=0, verbose_name='دقائق السماح المجانية الافتراضية')
+    default_daily_cap_syp = models.PositiveIntegerField(null=True, blank=True, verbose_name='السقف اليومي الافتراضي')
+    allow_guest_internet_sessions = models.BooleanField(default=True, verbose_name='السماح بجلسات الزوار')
+    allow_member_internet_sessions = models.BooleanField(default=True, verbose_name='السماح بجلسات الأعضاء')
+    auto_create_order_for_metered_sessions = models.BooleanField(default=False, verbose_name='إنشاء طلب تلقائي للجلسات المحسوبة')
+    internet_service_product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True, related_name='internet_setting_profiles', verbose_name='منتج خدمة الإنترنت للطلبات')
+    require_phone_for_guest_session = models.BooleanField(default=False, verbose_name='طلب هاتف الزائر عند بدء الجلسة')
 
     class Meta:
         verbose_name = 'إعدادات النظام'

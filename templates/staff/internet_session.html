@@ -1,13 +1,33 @@
 {% extends "base.html" %}
 {% block title %}تفاصيل الجلسة{% endblock %}
 {% block content %}
-<h2>جلسة #{{ session.id }}</h2>
-<p>العضو: {% if session.member %}{{ session.member.name_ar }}{% else %}-{% endif %}</p>
-<p>الزبون: {{ session.customer_name }} - {{ session.customer_phone }}</p>
-<p>الباقة: {{ session.package.name_ar }}</p>
-<p>البدء: {{ session.start_time }} | الانتهاء: {{ session.end_time }}</p>
-<p>المدة: {{ session.actual_duration_minutes }} دقيقة</p>
-<p>الحالة: {{ session.status }}</p>
-<p>ملاحظات: {{ session.notes }}</p>
-{% if session.status == 'active' %}<form method="post" action="{% url 'staff_internet_end' session.id %}">{% csrf_token %}<button type="submit">إنهاء الجلسة</button></form>{% endif %}
+<section class="hub-section hub-card">
+  <h2>جلسة #{{ session.id }}</h2>
+  {% for message in messages %}<p class="hub-badge hub-badge-info">{{ message }}</p>{% endfor %}
+  <div class="hub-grid hub-grid-2">
+    <p><strong>الحالة:</strong> {{ session.get_status_display }}</p>
+    <p><strong>الفوترة:</strong> {{ session.get_billing_mode_display }}</p>
+    <p><strong>العضو:</strong> {% if session.member %}{{ session.member.name_ar }} — {{ session.member.phone }}{% else %}-{% endif %}</p>
+    <p><strong>الزائر:</strong> {{ session.display_guest_name|default:'-' }} — {{ session.display_guest_phone|default:'-' }}</p>
+    <p><strong>البدء:</strong> {{ session.effective_started_at }}</p>
+    <p><strong>الانتهاء:</strong> {{ session.effective_ended_at|default:'-' }}</p>
+    <p><strong>المدة:</strong> {{ session.effective_duration_minutes|default:'-' }} دقيقة</p>
+    <p><strong>المبلغ المحسوب:</strong> {{ session.calculated_total_syp }} ل.س</p>
+    <p><strong>المبلغ اليدوي:</strong> {{ session.manual_total_syp|default:'-' }}</p>
+    <p><strong>المبلغ المعتمد:</strong> {{ session.payable_total_syp }} ل.س</p>
+    <p><strong>بدأها:</strong> {{ session.started_by|default:'-' }}</p>
+    <p><strong>أنهاها:</strong> {{ session.ended_by|default:'-' }}</p>
+    <p><strong>الطلب المرتبط:</strong> {% if session.linked_order %}<a href="{% url 'staff_cashier_order' session.linked_order.public_code %}">{{ session.linked_order.display_number }}</a>{% else %}-{% endif %}</p>
+    <p><strong>الدفع المرتبط:</strong> {{ session.linked_payment|default:'-' }}</p>
+  </div>
+  <p><strong>ملاحظات:</strong> {{ session.notes|default:'-' }}</p>
+  <details><summary>معلومات الشبكة المستقبلية</summary><p>المزوّد: {{ session.get_network_provider_display }} — كود الوصول: {{ session.access_code|default:'-' }} — جلسة الشبكة: {{ session.network_session_id|default:'-' }} — MAC: {{ session.device_mac|default:'-' }} — IP: {{ session.ip_address|default:'-' }} — البروفايل: {{ session.bandwidth_profile|default:'-' }} — الحالة: {{ session.network_status|default:'-' }}</p></details>
+  {% if preview %}<div class="hub-card"><strong>معاينة الإنهاء الآن:</strong> {{ preview.duration }} دقيقة، {{ preview.billable_minutes }} دقيقة قابلة للفوترة، {{ preview.calculated_total }} ل.س.</div>{% endif %}
+  <div class="hub-toolbar">
+    {% if session.status == 'active' %}<a class="hub-button hub-button-primary" href="{% url 'staff_internet_end' session.id %}">إنهاء الجلسة</a>{% endif %}
+    {% if session.linked_order %}<a class="hub-button" href="{% url 'staff_cashier_order' session.linked_order.public_code %}">فتح طلب الكاشير</a>{% endif %}
+    {% if can_cancel_sessions and session.status == 'active' %}<form method="post" action="{% url 'staff_internet_cancel' session.id %}" onsubmit="return confirm('إلغاء الجلسة؟');">{% csrf_token %}<button class="hub-button" type="submit">إلغاء</button></form>{% endif %}
+  </div>
+</section>
+{% if ledger_entries %}<section class="hub-section"><h3>حركات رصيد العضو</h3><table class="hub-table"><tr><th>الوقت</th><th>النوع</th><th>الدقائق</th><th>ملاحظات</th></tr>{% for entry in ledger_entries %}<tr><td>{{ entry.created_at }}</td><td>{{ entry.change_type }}</td><td>{{ entry.minutes_delta }}</td><td>{{ entry.notes }}</td></tr>{% endfor %}</table></section>{% endif %}
 {% endblock %}
