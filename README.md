@@ -55,6 +55,32 @@ docker compose -f docker-compose.prod.yml up -d --build
 Your existing gateway/proxy should route to:
 - `http://127.0.0.1:8899`
 
+### Persistent product media
+
+Product images are served from the host's persistent media folder and mounted into the Django container:
+
+```bash
+mkdir -p /opt/hub/media/products
+```
+
+When deploying from `/opt/hub`, production Docker Compose mounts `./media:/app/media`, so the container path for product images should be:
+
+```text
+/app/media/products
+```
+
+Public product image URLs use the `/media/` prefix, for example:
+
+```text
+https://hubsweida.jwtalenthouse.com/media/products/normal-tea.png
+```
+
+From Windows PowerShell, upload product images to the VPS with:
+
+```powershell
+scp -i "C:\Users\USER\.ssh\hub_vps" "C:\Users\USER\Desktop\product-images\*" deploy@72.62.52.167:/opt/hub/media/products/
+```
+
 ## Management Commands
 - Primary setup command (recommended):
   ```bash

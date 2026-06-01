@@ -1,6 +1,7 @@
 import uuid
 from django.core.exceptions import ValidationError
 from django.db import models
+from .fields import RelativeOrAbsoluteURLField
 
 
 class CatalogTimeStampedModel(models.Model):
@@ -63,7 +64,7 @@ class ProductMedia(CatalogTimeStampedModel):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     product = models.ForeignKey('core.Product', on_delete=models.CASCADE, related_name='media')
     media_type = models.CharField(max_length=20, choices=MediaType.choices, default=MediaType.IMAGE)
-    url = models.URLField(max_length=500)
+    url = RelativeOrAbsoluteURLField(max_length=500)
     alt_text_ar = models.CharField(max_length=180, blank=True)
     is_primary = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
