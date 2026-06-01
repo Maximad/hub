@@ -1,7 +1,7 @@
 from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import path
+from django.views.static import serve
+from django.urls import path, re_path
 from core.views import menu
 from core.views.staff_reports import staff_reports_home, staff_reports_day, staff_reports_day_csv, staff_close_day
 from core.views.staff_internet import staff_internet, staff_internet_start, staff_internet_session, staff_internet_end, staff_internet_cancel, staff_wifi
@@ -87,5 +87,12 @@ urlpatterns = [
     path('staff/food-lab/', menu.staff_food_lab, name='staff_food_lab'),
 ]
 
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# Serving media through Django is acceptable only for small product-image hosting.
+# For larger traffic, move media to object storage, a CDN, or dedicated media serving.
+urlpatterns += [
+    re_path(
+        r"^media/(?P<path>.*)$",
+        serve,
+        {"document_root": settings.MEDIA_ROOT},
+    ),
+]

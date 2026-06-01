@@ -29,7 +29,7 @@ class ProductMediaInline(admin.TabularInline):
     @admin.display(description='معاينة')
     def media_preview(self, obj):
         if obj and obj.url and obj.media_type in {ProductMedia.MediaType.IMAGE, ProductMedia.MediaType.GIF}:
-            return format_html('<img src="{}" alt="{}" style="max-width: 80px; max-height: 60px; border-radius: 8px; object-fit: cover;" />', obj.url, obj.display_alt_text)
+            return format_html('<span style="display: inline-flex; align-items: center; justify-content: center; width: 64px; aspect-ratio: 2 / 3; overflow: hidden; border-radius: 8px; background: #f8f5ef;"><img src="{}" alt="{}" style="width: 100%; height: 100%; object-fit: cover; object-position: center center; display: block;" /></span>', obj.url, obj.display_alt_text)
         return '—'
 
 

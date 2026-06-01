@@ -74,30 +74,31 @@ Run `collectstatic` after rebuilding because production previously showed `Missi
 Traefik should route public HTTP/HTTPS traffic for `hubsweida.jwtalenthouse.com` to the `web` service on port `8000` through the external `proxy` network. The localhost maintenance tunnel remains available at:
 - `http://127.0.0.1:8899`
 
-### Post-deploy verification
+### Persistent product media
+
+Product images are served from the host's persistent media folder and mounted into the Django container:
+
 ```bash
-curl -I https://hubsweida.jwtalenthouse.com/menu/
-curl -I https://hubsweida.jwtalenthouse.com/admin/login/
-curl -I https://hubsweida.jwtalenthouse.com/staff/
+mkdir -p /opt/hub/media/products
 ```
 
-Expected responses:
-- `/menu/` → `200`
-- `/admin/login/` → `200`
-- `/staff/` → `302` to login
+When deploying from `/opt/hub`, production Docker Compose mounts `./media:/app/media`, so the container path for product images should be:
 
-Verify Django proxy and CSRF settings in the deployed shell:
-```python
-from django.conf import settings
-print(settings.CSRF_TRUSTED_ORIGINS)
-print(settings.SECURE_PROXY_SSL_HEADER)
-print(settings.USE_X_FORWARDED_HOST)
+```text
+/app/media/products
 ```
 
-Expected values:
-- `CSRF_TRUSTED_ORIGINS` includes `https://hubsweida.jwtalenthouse.com`
-- `SECURE_PROXY_SSL_HEADER` is `("HTTP_X_FORWARDED_PROTO", "https")`
-- `USE_X_FORWARDED_HOST` is `True`
+Public product image URLs use the `/media/` prefix, for example:
+
+```text
+https://hubsweida.jwtalenthouse.com/media/products/normal-tea.png
+```
+
+From Windows PowerShell, upload product images to the VPS with:
+
+```powershell
+scp -i "C:\Users\USER\.ssh\hub_vps" "C:\Users\USER\Desktop\product-images\*" deploy@72.62.52.167:/opt/hub/media/products/
+```
 
 ## Management Commands
 - Primary setup command (recommended):
