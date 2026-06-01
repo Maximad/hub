@@ -59,20 +59,44 @@ ssh -i "C:\Users\USER\.ssh\hub_vps" deploy@72.62.52.167
 
 ### Deploy with Docker Compose
 ```bash
-cd /path/to/hub
-cp .env.example .env
-# Edit .env with strong secrets and the production domain settings above
+cd /opt/hub
+
+git fetch origin
+git pull --ff-only origin main
+
+mkdir -p /opt/hub/media/products
+mkdir -p /opt/hub/staticfiles
+
 docker compose -f docker-compose.prod.yml --env-file .env up -d --build --force-recreate web
+
 docker compose -f docker-compose.prod.yml --env-file .env exec web python manage.py migrate
+
 docker compose -f docker-compose.prod.yml --env-file .env exec web mkdir -p /app/staticfiles
-docker compose -f docker-compose.prod.yml --env-file .env exec web python manage.py collectstatic --noinput
+
+docker compose -f docker-compose.prod.yml --env-file .env exec web python manage.py collectstatic --noinput --clear
+
 docker compose -f docker-compose.prod.yml --env-file .env restart web
 ```
 
-Run `collectstatic` after rebuilding because production previously showed `Missing staticfiles manifest entry for css/hub.css` until static assets were collected.
+Run `collectstatic` after rebuilding because production previously showed `Missing staticfiles manifest entry for css/hub.css` until static assets were collected. Production Compose also mounts `./staticfiles:/app/staticfiles` so collected assets persist across container recreation.
 
 Traefik should route public HTTP/HTTPS traffic for `hubsweida.jwtalenthouse.com` to the `web` service on port `8000` through the external `proxy` network. The localhost maintenance tunnel remains available at:
 - `http://127.0.0.1:8899`
+
+After deployment, verify the production routes:
+
+```bash
+curl -I https://hubsweida.jwtalenthouse.com/menu/
+curl -I https://hubsweida.jwtalenthouse.com/media/products/normal-tea.png
+curl -I https://hubsweida.jwtalenthouse.com/admin/login/
+```
+
+Expected results:
+- `/menu/` returns `200`.
+- `/media/products/normal-tea.png` returns `200` with `image/png`.
+- `/admin/login/` returns `200`.
+
+Also verify public menu and staff POS product images/placeholders are 2:3 portrait, centered horizontally and vertically, not distorted, static CSS still loads, Traefik domain routing works, and `hub-web` is attached to both `hub_default` and `proxy` networks.
 
 ### Persistent product media
 
@@ -91,7 +115,13 @@ When deploying from `/opt/hub`, production Docker Compose mounts `./media:/app/m
 Public product image URLs use the `/media/` prefix, for example:
 
 ```text
-https://hubsweida.jwtalenthouse.com/media/products/normal-tea.png
+/media/products/normal-tea.png
+/media/products/morning-combo.png
+/media/products/tea-with-lemon.png
+/media/products/zhourat.png
+/media/products/tea-with-sage.png
+/media/products/quieche.png
+/media/products/full-quieche.png
 ```
 
 From Windows PowerShell, upload product images to the VPS with:
