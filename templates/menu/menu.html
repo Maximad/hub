@@ -31,12 +31,12 @@
           <div class="menu-product-grid {{ system_settings.menu_mobile_layout_class|default:'layout-grid-1' }} {{ system_settings.menu_tablet_layout_class|default:'layout-tablet-2' }} {{ system_settings.menu_desktop_layout_class|default:'layout-grid-3' }}">
           {% for p in products %}
             <article class="hub-list-card menu-product-card {{ system_settings.product_card_style_class|default:'card-image-first' }}" data-product-card data-product-id="{{ p.id }}" data-price="{{ p.price_syp|default:'0' }}">
-              {% if not system_settings or system_settings.show_product_images %}<div class="hub-media menu-product-media{% if not p.primary_media %} menu-product-media--placeholder{% endif %}">
+              {% if not system_settings or system_settings.show_product_images %}<div class="hub-media menu-product-media product-media-frame{% if not p.primary_media %} menu-product-media--placeholder product-media-placeholder{% endif %}">
                 {% if p.primary_media %}
                   {% if p.primary_media.is_visual_media %}
-                    <img src="{{ p.primary_media.url }}" alt="{{ p.primary_media.display_alt_text }}" loading="lazy">
+                    <img class="product-media-image" src="{{ p.primary_media.url }}" alt="{{ p.primary_media.display_alt_text }}" loading="lazy">
                   {% elif p.primary_media.media_type == 'video' %}
-                    <video src="{{ p.primary_media.url }}" aria-label="{{ p.primary_media.display_alt_text }}" muted playsinline controls preload="metadata"></video>
+                    <video class="product-media-image" src="{{ p.primary_media.url }}" aria-label="{{ p.primary_media.display_alt_text }}" muted playsinline controls preload="metadata"></video>
                   {% else %}
                     <span>{{ p.name_ar }}</span>
                   {% endif %}

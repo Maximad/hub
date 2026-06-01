@@ -87,8 +87,8 @@ urlpatterns = [
     path('staff/food-lab/', menu.staff_food_lab, name='staff_food_lab'),
 ]
 
-# Serving media through Django is acceptable only for small product-image hosting.
-# For larger traffic, move media to object storage, a CDN, or dedicated media serving.
+# Temporary small-media serving for product images.
+# For larger traffic, move media to object storage/CDN or dedicated media serving.
 urlpatterns += [
     re_path(
         r"^media/(?P<path>.*)$",
