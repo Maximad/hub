@@ -36,8 +36,21 @@
    ```
 
 ## VPS Deployment (Production)
-This app is designed **not to expose public ports** and to bind only localhost:
+This app keeps the localhost tunnel binding for direct maintenance access:
 - `127.0.0.1:8899:8000`
+
+The live deployment currently uses:
+- Existing Traefik container for public routing
+- External Docker network: `proxy`
+- Let’s Encrypt resolver: `letsencrypt`
+- Public domain: `hubsweida.jwtalenthouse.com`
+
+Required production `.env` values include:
+```env
+DJANGO_DEBUG=False
+DJANGO_ALLOWED_HOSTS=hubsweida.jwtalenthouse.com,72.62.52.167,localhost,127.0.0.1
+DJANGO_CSRF_TRUSTED_ORIGINS=https://hubsweida.jwtalenthouse.com,http://hubsweida.jwtalenthouse.com
+```
 
 ### Windows PowerShell SSH
 ```powershell
@@ -48,11 +61,17 @@ ssh -i "C:\Users\USER\.ssh\hub_vps" deploy@72.62.52.167
 ```bash
 cd /path/to/hub
 cp .env.example .env
-# Edit .env with strong secrets
-docker compose -f docker-compose.prod.yml up -d --build
+# Edit .env with strong secrets and the production domain settings above
+docker compose -f docker-compose.prod.yml --env-file .env up -d --build --force-recreate web
+docker compose -f docker-compose.prod.yml --env-file .env exec web python manage.py migrate
+docker compose -f docker-compose.prod.yml --env-file .env exec web mkdir -p /app/staticfiles
+docker compose -f docker-compose.prod.yml --env-file .env exec web python manage.py collectstatic --noinput
+docker compose -f docker-compose.prod.yml --env-file .env restart web
 ```
 
-Your existing gateway/proxy should route to:
+Run `collectstatic` after rebuilding because production previously showed `Missing staticfiles manifest entry for css/hub.css` until static assets were collected.
+
+Traefik should route public HTTP/HTTPS traffic for `hubsweida.jwtalenthouse.com` to the `web` service on port `8000` through the external `proxy` network. The localhost maintenance tunnel remains available at:
 - `http://127.0.0.1:8899`
 
 ### Persistent product media

@@ -26,3 +26,7 @@ services:
 
 volumes:
   hub_db_data:
+
+networks:
+  proxy:
+    external: true
