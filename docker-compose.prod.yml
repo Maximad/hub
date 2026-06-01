@@ -21,6 +21,8 @@ services:
       - db
     ports:
       - "127.0.0.1:8899:8000"
+    volumes:
+      - ./media:/app/media
 
 volumes:
   hub_db_data:
