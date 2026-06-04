@@ -2,7 +2,7 @@ from django.db import transaction
 import uuid
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
-from django.db.models import Prefetch, Q
+from django.db.models import Exists, OuterRef, Prefetch, Q
 from django.http import Http404, HttpResponse
 from django.contrib import messages
 from django.contrib.auth import authenticate
@@ -15,9 +15,11 @@ import re
 
 from members.models import MembershipBenefitRule, MembershipPlan, MembershipSubscription, MemberCreditLedger
 from internet.models import WifiNetwork
-from catalog.models import MenuSection, ProductMedia, ProductOption, ProductOptionGroup, ProductOptionGroupAssignment
+from catalog.models import MenuSection, PrepStation, ProductMedia, ProductOption, ProductOptionGroup, ProductOptionGroupAssignment, Tag
 from core.settings_helpers import get_page_setting, get_system_settings
 from core.internet_billing import calculate_billable_minutes, calculate_metered_session_total, calculate_session_duration_minutes, can_override_session_total, finalize_internet_session
+from core.services.bulk_edit import BulkEditValidationError
+from core.services.menu_tools import ALLOWED_ACTIONS, apply_product_bulk_action, preview_product_bulk_action
 from accounts.permissions import (
     ACCESS_DENIED_MESSAGE, can_approve_partial_payment,
     require_staff_capability, user_has_capability,
@@ -773,37 +775,154 @@ def table_qr(request, qr_token):
     return _qr_svg_response(request.build_absolute_uri(path))
 
 
+
+@login_required
 def staff_menu_tools(request):
     _assert_staff_capability(request.user, 'operations')
-    if request.method == 'POST':
-        try:
-            product_code = uuid.UUID(request.POST.get('product_code', ''))
-        except (TypeError, ValueError):
-            messages.error(request, 'المنتج المحدد غير صالح.')
-            return redirect('staff_menu_tools')
-        product = get_object_or_404(Product, public_code=product_code)
-        action = request.POST.get('action')
-        allowed = {'is_available', 'visible_on_qr', 'orderable_on_qr'}
-        if action in allowed:
-            setattr(product, action, not getattr(product, action))
-            product.save(update_fields=[action, 'updated_at'])
+    products = _staff_menu_tools_queryset(request.GET)
+    context = _staff_menu_tools_context(request, products)
+    return render(request, 'staff/menu_tools.html', context)
+
+
+@login_required
+def staff_menu_tools_preview(request):
+    _assert_staff_capability(request.user, 'operations')
+    if request.method != 'POST':
         return redirect('staff_menu_tools')
+    selected = _dedupe_selected_products(request.POST.getlist('selected_products'))
+    action = request.POST.get('bulk_action', '')
+    action_value = request.POST.get('bulk_value', '')
+    try:
+        result = preview_product_bulk_action(selected, action, action_value)
+    except BulkEditValidationError as exc:
+        messages.error(request, str(exc))
+        return redirect(f"{reverse('staff_menu_tools')}?{request.POST.get('return_query', '')}")
+    return render(request, 'staff/menu_tools_preview.html', {
+        'result': result,
+        'selected_products': selected,
+        'bulk_action': action,
+        'bulk_value': action_value,
+        'return_query': request.POST.get('return_query', ''),
+    })
 
-    sections = MenuSection.objects.filter(is_active=True).prefetch_related(
-        Prefetch('products', queryset=Product.objects.order_by('sort_order', 'name_ar'))
-    ).order_by('sort_order', 'name_ar')
-    products_in_sections = set()
-    grouped = []
-    for section in sections:
-        products = list(section.products.all())
-        products_in_sections.update(p.pk for p in products)
-        grouped.append((section.name_ar, products))
 
-    ungrouped = list(Product.objects.exclude(pk__in=products_in_sections).order_by('sort_order', 'name_ar'))
-    if ungrouped:
-        grouped.append(('بدون قسم في المنيو', ungrouped))
+@login_required
+def staff_menu_tools_apply(request):
+    _assert_staff_capability(request.user, 'operations')
+    if request.method != 'POST':
+        return redirect('staff_menu_tools')
+    if request.POST.get('confirm') != 'yes':
+        messages.error(request, 'يجب تأكيد الإجراء قبل تطبيق التغييرات.')
+        return redirect('staff_menu_tools')
+    selected = _dedupe_selected_products(request.POST.getlist('selected_products'))
+    action = request.POST.get('bulk_action', '')
+    action_value = request.POST.get('bulk_value', '')
+    return_query = request.POST.get('return_query', '')
+    try:
+        result = apply_product_bulk_action(selected, action, action_value, actor=request.user)
+    except BulkEditValidationError as exc:
+        messages.error(request, str(exc))
+        return redirect(f"{reverse('staff_menu_tools')}?{return_query}")
+    changed_count = sum(1 for change in result.changes if change.changes)
+    messages.success(request, f'تم تطبيق الإجراء على {result.matched_count} منتج. المنتجات المتغيرة فعلياً: {changed_count}.')
+    return redirect(f"{reverse('staff_menu_tools')}?{return_query}")
 
-    return render(request, 'staff/menu_tools.html', {'grouped': grouped})
+
+def _dedupe_selected_products(selected):
+    deduped = []
+    seen = set()
+    for value in selected:
+        text = str(value).strip()
+        if text and text not in seen:
+            deduped.append(text)
+            seen.add(text)
+    return deduped
+
+
+def _staff_menu_tools_queryset(params):
+    active_visual_media = ProductMedia.objects.filter(
+        product_id=OuterRef('pk'),
+        is_active=True,
+        media_type__in=[ProductMedia.MediaType.IMAGE, ProductMedia.MediaType.GIF, ProductMedia.MediaType.EXTERNAL_URL],
+    )
+    products = Product.objects.select_related('category', 'prep_station_ref', 'vendor').prefetch_related('menu_sections', 'tags').annotate(
+        has_active_image=Exists(active_visual_media)
+    )
+    query = params.get('q', '').strip()
+    if query:
+        products = products.filter(Q(name_ar__icontains=query) | Q(name_en__icontains=query))
+    section = params.get('section', '').strip()
+    if section:
+        if section == 'none':
+            products = products.filter(menu_sections__isnull=True)
+        elif section.isdigit():
+            products = products.filter(menu_sections__pk=section)
+    availability = params.get('availability', '').strip()
+    if availability in {'available', 'unavailable'}:
+        products = products.filter(is_available=(availability == 'available'))
+    qr_visibility = params.get('qr_visibility', '').strip()
+    if qr_visibility in {'visible', 'hidden'}:
+        products = products.filter(visible_on_qr=(qr_visibility == 'visible'))
+    qr_orderability = params.get('qr_orderability', '').strip()
+    if qr_orderability in {'orderable', 'not_orderable'}:
+        products = products.filter(orderable_on_qr=(qr_orderability == 'orderable'))
+    item_type = params.get('item_type', '').strip()
+    if item_type:
+        products = products.filter(item_type=item_type)
+    prep_station = params.get('prep_station', '').strip()
+    if prep_station:
+        if prep_station == 'none':
+            products = products.filter(prep_station_ref__isnull=True)
+        elif prep_station.isdigit():
+            products = products.filter(prep_station_ref_id=prep_station)
+    vendor = params.get('vendor', '').strip()
+    if vendor:
+        if vendor == 'none':
+            products = products.filter(vendor__isnull=True)
+        elif vendor.isdigit():
+            products = products.filter(vendor_id=vendor)
+    tag = params.get('tag', '').strip()
+    if tag:
+        if tag == 'none':
+            products = products.filter(tags__isnull=True)
+        elif tag.isdigit():
+            products = products.filter(tags__pk=tag)
+    missing_image = params.get('missing_image', '').strip()
+    if missing_image == 'yes':
+        products = products.filter(has_active_image=False)
+    elif missing_image == 'no':
+        products = products.filter(has_active_image=True)
+    return products.distinct().order_by('sort_order', 'name_ar')
+
+
+def _staff_menu_tools_context(request, products):
+    sections = MenuSection.objects.filter(is_active=True).order_by('sort_order', 'name_ar')
+    grouped_map = {section.pk: {'section_name': section.name_ar, 'products': []} for section in sections}
+    ungrouped = {'section_name': 'بدون قسم في المنيو', 'products': []}
+    for product in products:
+        product_sections = list(product.menu_sections.all())
+        if product_sections:
+            primary_section = sorted(product_sections, key=lambda section: (section.sort_order, section.name_ar))[0]
+            grouped_map.setdefault(primary_section.pk, {'section_name': primary_section.name_ar, 'products': []})['products'].append(product)
+        else:
+            ungrouped['products'].append(product)
+    grouped = [group for group in grouped_map.values() if group['products']]
+    if ungrouped['products']:
+        grouped.append(ungrouped)
+    if not grouped:
+        grouped = [{'section_name': 'لا توجد نتائج مطابقة', 'products': []}]
+    return {
+        'grouped': grouped,
+        'products_count': products.count(),
+        'sections': sections,
+        'prep_stations': PrepStation.objects.filter(is_active=True).order_by('sort_order', 'name_ar'),
+        'vendors': Vendor.objects.filter(is_active=True).order_by('name_ar'),
+        'tags': Tag.objects.filter(is_active=True).order_by('name_ar'),
+        'item_type_choices': Product.ItemType.choices,
+        'bulk_actions': ALLOWED_ACTIONS.items(),
+        'filters': request.GET,
+        'return_query': request.GET.urlencode(),
+    }
 
 
 @require_staff_capability('orders')
