@@ -12,6 +12,7 @@ from .models import (
     InternetSession,
     DailyClose,
     ExpenseCategory, Expense, CashMovement,
+    InventoryItem, Purchase, PurchaseItem, StockMovement, ProductRecipeItem,
     Member,
     Order,
     OrderDiscount,
@@ -49,6 +50,57 @@ class ProductOptionGroupAssignmentInline(admin.TabularInline):
         if not obj or not obj.group_id:
             return 'اختر مجموعة لعرض الانطباق.'
         return obj.group.applicability_summary
+
+
+class ProductRecipeItemInline(admin.TabularInline):
+    model = ProductRecipeItem
+    extra = 0
+    fields = ('inventory_item', 'quantity_per_unit', 'unit', 'is_active', 'notes')
+
+
+@admin.register(InventoryItem)
+class InventoryItemAdmin(admin.ModelAdmin):
+    list_display = ('name_ar', 'item_type', 'unit', 'current_quantity', 'low_stock_threshold', 'estimated_unit_cost_syp', 'is_active')
+    list_filter = ('item_type', 'unit', 'is_active')
+    search_fields = ('name_ar', 'name_en', 'code')
+
+
+class PurchaseItemInline(admin.TabularInline):
+    model = PurchaseItem
+    extra = 1
+    fields = ('inventory_item', 'quantity', 'unit', 'unit_cost_syp', 'line_total_syp', 'notes')
+    readonly_fields = ('line_total_syp',)
+
+
+@admin.register(Purchase)
+class PurchaseAdmin(admin.ModelAdmin):
+    list_display = ('business_date', 'supplier_label', 'status', 'total_syp', 'amount_paid_syp', 'remaining_display', 'paid_from', 'created_by')
+    list_filter = ('business_date', 'status', 'payment_method', 'paid_from')
+    search_fields = ('supplier_name', 'invoice_number', 'notes')
+    inlines = (PurchaseItemInline,)
+
+    @admin.display(description='المتبقي')
+    def remaining_display(self, obj):
+        return obj.remaining_syp
+
+
+@admin.register(PurchaseItem)
+class PurchaseItemAdmin(admin.ModelAdmin):
+    list_display = ('purchase', 'inventory_item', 'quantity', 'unit_cost_syp', 'line_total_syp')
+
+
+@admin.register(StockMovement)
+class StockMovementAdmin(admin.ModelAdmin):
+    list_display = ('business_date', 'inventory_item', 'movement_type', 'direction', 'quantity', 'created_by')
+    list_filter = ('movement_type', 'direction', 'business_date')
+    search_fields = ('inventory_item__name_ar', 'inventory_item__name_en', 'reason')
+
+
+@admin.register(ProductRecipeItem)
+class ProductRecipeItemAdmin(admin.ModelAdmin):
+    list_display = ('product', 'inventory_item', 'quantity_per_unit', 'unit', 'is_active')
+    list_filter = ('unit', 'is_active')
+    search_fields = ('product__name_ar', 'inventory_item__name_ar')
 
 
 @admin.register(SystemSetting)
@@ -97,7 +149,7 @@ class SystemSettingAdmin(admin.ModelAdmin):
         }),
         ('تخطيط نقطة البيع', {
             'fields': (
-                'staff_home_layout', 'pos_layout_preset', 'pos_mobile_columns', 'pos_tablet_columns',
+                'staff_home_layout', 'pos_layout_preset', 'auto_deduct_inventory_on_sale', 'pos_mobile_columns', 'pos_tablet_columns',
                 'pos_desktop_columns', 'pos_cart_position', 'order_board_density', 'cashier_layout',
             ),
         }),
@@ -144,7 +196,7 @@ class ProductAdmin(admin.ModelAdmin):
     search_fields = ('name_ar', 'name_en', 'description_ar', 'category__name_ar', 'menu_sections__name_ar')
     autocomplete_fields = ('category', 'vendor', 'prep_station_ref', 'cost_updated_by')
     readonly_fields = ('cost_updated_at',)
-    inlines = (ProductMediaInline, ProductOptionGroupAssignmentInline)
+    inlines = (ProductMediaInline, ProductOptionGroupAssignmentInline, ProductRecipeItemInline)
 
     @admin.display(description='الهامش التقديري')
     def estimated_margin_display(self, obj):
