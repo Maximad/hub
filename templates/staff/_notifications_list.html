@@ -1,0 +1,10 @@
+{% for recipient in notifications %}
+  {% with event=recipient.notification_event %}
+  <div class="staff-notification-item" data-notification-id="{{ recipient.id }}">
+    <a href="{% url 'staff_orders' %}" class="staff-notification-title">{{ event.title_ar }}</a>
+    <div class="staff-notification-message">{{ event.message_ar }}</div>
+    <small>{% if event.order %}{{ event.order.display_number }} · {% endif %}{% if event.target_station %}{{ event.target_station.name_ar }} · {% endif %}{{ event.created_at|date:'Y-m-d H:i' }}</small>
+    <button type="button" class="hub-btn hub-btn-secondary staff-notification-read" data-notification-id="{{ recipient.id }}">تعيين كمقروء</button>
+  </div>
+  {% endwith %}
+{% empty %}<div class="staff-notification-empty">لا توجد تنبيهات جديدة</div>{% endfor %}
