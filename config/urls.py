@@ -14,6 +14,7 @@ from core.views.staff_import import (
 )
 from core.views.kitchen import staff_kitchen, staff_kitchen_partial, staff_kitchen_order, staff_kitchen_item_status, staff_prep, staff_prep_station
 from core.views.staff_finance import staff_finance_home, staff_expenses, staff_expense_new, staff_cashbox, staff_cashbox_new, staff_expenses_csv, staff_cashbox_csv
+from core.views import staff_inventory
 from core.views_notifications import staff_notifications, staff_notifications_poll, staff_notifications_mark_read, staff_notifications_preferences
 from accounts.views_staff import (
     staff_users_list, staff_user_new, staff_user_detail, staff_user_edit, staff_user_password, staff_user_toggle_active,
@@ -76,6 +77,21 @@ urlpatterns = [
     path('staff/finance/cashbox/', staff_cashbox, name='staff_finance_cashbox'),
     path('staff/finance/cashbox/new/', staff_cashbox_new, name='staff_finance_cashbox_new'),
     path('staff/finance/cashbox.csv', staff_cashbox_csv, name='staff_finance_cashbox_csv'),
+
+    path('staff/inventory/', staff_inventory.staff_inventory_home, name='staff_inventory_home'),
+    path('staff/inventory/items/', staff_inventory.staff_inventory_items, name='staff_inventory_items'),
+    path('staff/inventory/items/new/', staff_inventory.staff_inventory_item_new, name='staff_inventory_item_new'),
+    path('staff/inventory/items.csv', staff_inventory.staff_inventory_items_csv, name='staff_inventory_items_csv'),
+    path('staff/inventory/purchases/', staff_inventory.staff_inventory_purchases, name='staff_inventory_purchases'),
+    path('staff/inventory/purchases/new/', staff_inventory.staff_inventory_purchase_new, name='staff_inventory_purchase_new'),
+    path('staff/inventory/purchases.csv', staff_inventory.staff_inventory_purchases_csv, name='staff_inventory_purchases_csv'),
+    path('staff/inventory/purchases/<int:purchase_id>/', staff_inventory.staff_inventory_purchase_detail, name='staff_inventory_purchase_detail'),
+    path('staff/inventory/purchases/<int:purchase_id>/receive/', staff_inventory.staff_inventory_purchase_receive, name='staff_inventory_purchase_receive'),
+    path('staff/inventory/movements/', staff_inventory.staff_inventory_movements, name='staff_inventory_movements'),
+    path('staff/inventory/movements/new/', staff_inventory.staff_inventory_movement_new, name='staff_inventory_movement_new'),
+    path('staff/inventory/movements.csv', staff_inventory.staff_inventory_movements_csv, name='staff_inventory_movements_csv'),
+    path('staff/inventory/low-stock/', staff_inventory.staff_inventory_low_stock, name='staff_inventory_low_stock'),
+    path('staff/inventory/reports/', staff_inventory.staff_inventory_reports, name='staff_inventory_reports'),
     path('staff/reports/', staff_reports_home, name='staff_reports_home'),
     path('staff/reports/day/', staff_reports_day, name='staff_reports_day'),
     path('staff/reports/day.csv', staff_reports_day_csv, name='staff_reports_day_csv'),

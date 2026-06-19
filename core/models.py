@@ -619,6 +619,130 @@ class CashMovement(TimeStampedModel):
     def __str__(self):
         return f'{self.get_movement_type_display()} — {self.amount_syp} ل.س'
 
+class InventoryItem(TimeStampedModel):
+    class ItemType(models.TextChoices):
+        INGREDIENT='ingredient','مكوّن'; DRINK_SUPPLY='drink_supply','مشروبات ومستلزمات'; PACKAGING='packaging','تغليف'; CLEANING='cleaning','تنظيف'; EQUIPMENT_CONSUMABLE='equipment_consumable','مستهلكات معدات'; OTHER='other','أخرى'
+    class Unit(models.TextChoices):
+        KG='kg','كغ'; G='g','غ'; LITER='liter','لتر'; ML='ml','مل'; PIECE='piece','قطعة'; PACK='pack','عبوة'; BOTTLE='bottle','زجاجة'; BOX='box','صندوق'; PORTION='portion','حصة'; OTHER='other','أخرى'
+    name_ar = models.CharField('مادة مخزون', max_length=160)
+    name_en = models.CharField(max_length=160, blank=True)
+    code = models.CharField('SKU / Code', max_length=80, blank=True, unique=True, null=True)
+    item_type = models.CharField('نوع المادة', max_length=30, choices=ItemType.choices, default=ItemType.INGREDIENT)
+    unit = models.CharField('وحدة القياس', max_length=20, choices=Unit.choices, default=Unit.PIECE)
+    current_quantity = models.DecimalField('الكمية الحالية', max_digits=12, decimal_places=3, default=0, validators=[MinValueValidator(0)])
+    low_stock_threshold = models.DecimalField('حد التنبيه', max_digits=12, decimal_places=3, null=True, blank=True)
+    estimated_unit_cost_syp = models.DecimalField('الكلفة التقديرية للوحدة', max_digits=12, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
+    preferred_vendor = models.ForeignKey('vendors.Vendor', on_delete=models.SET_NULL, null=True, blank=True, related_name='preferred_inventory_items', verbose_name='المورد المفضل')
+    is_active = models.BooleanField('نشط', default=True)
+    notes = models.TextField(blank=True)
+    class Meta:
+        ordering = ['name_ar']
+        verbose_name = 'مادة مخزون'
+        verbose_name_plural = 'مواد المخزون'
+    def clean(self):
+        if self.current_quantity is not None and self.current_quantity < 0: raise ValidationError({'current_quantity':'الكمية الحالية لا يمكن أن تكون سالبة.'})
+        if self.code == '': self.code = None
+    @property
+    def is_low_stock(self):
+        return self.low_stock_threshold is not None and self.current_quantity <= self.low_stock_threshold
+    def __str__(self): return _arabic_first(self,'name_ar','name_en',fallback=self.code or str(self.pk))
+
+class Purchase(TimeStampedModel):
+    class Status(models.TextChoices):
+        DRAFT='draft','مسودة'; RECEIVED='received','مستلمة'; PARTIALLY_PAID='partially_paid','مدفوعة جزئياً'; PAID='paid','مدفوعة'; CANCELLED='cancelled','ملغاة'
+    class PaymentMethod(models.TextChoices):
+        CASH='cash','نقداً'; CARD='card','بطاقة'; BANK_TRANSFER='bank_transfer','حوالة بنكية'; MOBILE_TRANSFER='mobile_transfer','تحويل موبايل'; CREDIT='credit','آجل'; OTHER='other','أخرى'
+    class PaidFrom(models.TextChoices):
+        CASHBOX='cashbox','الصندوق'; OWNER='owner','المالك'; BANK='bank','البنك'; EXTERNAL='external','خارجي'; UNPAID='unpaid','غير مدفوع'
+    business_date = models.DateField('تاريخ العمل')
+    vendor = models.ForeignKey('vendors.Vendor', on_delete=models.SET_NULL, null=True, blank=True, related_name='purchases', verbose_name='المورد')
+    supplier_name = models.CharField('المورد', max_length=160, blank=True)
+    invoice_number = models.CharField('رقم الفاتورة', max_length=80, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
+    payment_method = models.CharField('طريقة الدفع', max_length=30, choices=PaymentMethod.choices, default=PaymentMethod.CREDIT)
+    paid_from = models.CharField('مدفوع من', max_length=20, choices=PaidFrom.choices, default=PaidFrom.UNPAID)
+    subtotal_syp = models.DecimalField(max_digits=14, decimal_places=2, default=0, validators=[MinValueValidator(0)])
+    discount_syp = models.DecimalField(max_digits=14, decimal_places=2, default=0, validators=[MinValueValidator(0)])
+    total_syp = models.DecimalField(max_digits=14, decimal_places=2, default=0, validators=[MinValueValidator(0)])
+    amount_paid_syp = models.DecimalField('المبلغ المدفوع', max_digits=14, decimal_places=2, default=0, validators=[MinValueValidator(0)])
+    related_expense = models.ForeignKey(Expense, on_delete=models.SET_NULL, null=True, blank=True, related_name='inventory_purchases')
+    receipt_media = models.ForeignKey('catalog.MediaAsset', on_delete=models.SET_NULL, null=True, blank=True, related_name='purchase_receipts', verbose_name='إيصال')
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_purchases')
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_purchases')
+    received_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='received_purchases')
+    received_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancellation_reason = models.TextField('سبب الإلغاء', blank=True)
+    class Meta: ordering=['-business_date','-created_at']; verbose_name='عملية شراء'; verbose_name_plural='المشتريات'
+    @property
+    def remaining_syp(self): return max(self.total_syp - self.amount_paid_syp, 0)
+    @property
+    def supplier_label(self): return str(self.vendor) if self.vendor_id else (self.supplier_name or '—')
+    def recalculate_totals(self):
+        self.subtotal_syp = sum((i.line_total_syp for i in self.items.all()), 0)
+        self.total_syp = max(self.subtotal_syp - self.discount_syp, 0)
+        return self.total_syp
+    def clean(self):
+        if self.discount_syp and self.subtotal_syp and self.discount_syp > self.subtotal_syp: raise ValidationError({'discount_syp':'الخصم لا يجوز أن يجعل مجموع الشراء سالباً.'})
+        if self.status == self.Status.CANCELLED and not (self.cancellation_reason or '').strip(): raise ValidationError({'cancellation_reason':'سبب إلغاء الشراء مطلوب.'})
+    def __str__(self): return f'{self.business_date} — {self.supplier_label} — {self.total_syp} ل.س'
+
+class PurchaseItem(TimeStampedModel):
+    purchase = models.ForeignKey(Purchase, on_delete=models.CASCADE, related_name='items')
+    inventory_item = models.ForeignKey(InventoryItem, on_delete=models.PROTECT, related_name='purchase_items', verbose_name='مادة مخزون')
+    quantity = models.DecimalField(max_digits=12, decimal_places=3, validators=[MinValueValidator(0.001)])
+    unit = models.CharField('وحدة القياس', max_length=20, choices=InventoryItem.Unit.choices)
+    unit_cost_syp = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
+    line_total_syp = models.DecimalField(max_digits=14, decimal_places=2, default=0, validators=[MinValueValidator(0)])
+    notes = models.TextField(blank=True)
+    class Meta: verbose_name='بند شراء'; verbose_name_plural='بنود الشراء'
+    def save(self,*args,**kwargs):
+        self.line_total_syp = self.quantity * self.unit_cost_syp
+        super().save(*args,**kwargs)
+    def __str__(self): return f'{self.inventory_item} × {self.quantity}'
+
+class StockMovement(TimeStampedModel):
+    class MovementType(models.TextChoices):
+        PURCHASE_RECEIVED='purchase_received','استلام شراء'; MANUAL_ADJUSTMENT='manual_adjustment','تعديل يدوي'; WASTE='waste','هدر'; INTERNAL_USE='internal_use','استخدام داخلي'; RETURN_TO_VENDOR='return_to_vendor','إرجاع للمورد'; CORRECTION='correction','تصحيح'; OPENING_BALANCE='opening_balance','رصيد افتتاحي'; OTHER='other','أخرى'
+    class Direction(models.TextChoices): IN='in','إدخال'; OUT='out','إخراج'
+    inventory_item = models.ForeignKey(InventoryItem, on_delete=models.PROTECT, related_name='stock_movements', verbose_name='مادة مخزون')
+    business_date = models.DateField('تاريخ العمل')
+    movement_type = models.CharField(max_length=30, choices=MovementType.choices)
+    direction = models.CharField(max_length=5, choices=Direction.choices)
+    quantity = models.DecimalField(max_digits=12, decimal_places=3, validators=[MinValueValidator(0.001)])
+    unit = models.CharField('وحدة القياس', max_length=20, choices=InventoryItem.Unit.choices)
+    unit_cost_syp = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
+    total_value_syp = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
+    related_purchase = models.ForeignKey(Purchase, on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
+    related_purchase_item = models.ForeignKey(PurchaseItem, on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
+    related_expense = models.ForeignKey(Expense, on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
+    reason = models.TextField('سبب الحركة', blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_stock_movements')
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_stock_movements')
+    is_cancelled = models.BooleanField(default=False)
+    cancellation_reason = models.TextField('سبب الإلغاء', blank=True)
+    class Meta: ordering=['-business_date','-created_at']; verbose_name='حركة مخزون'; verbose_name_plural='حركات المخزون'
+    def clean(self):
+        if self.movement_type in {self.MovementType.WASTE,self.MovementType.CORRECTION} and not (self.reason or '').strip(): raise ValidationError({'reason':'سبب الحركة مطلوب للهدر أو التصحيح.'})
+        if self.direction == self.Direction.OUT and self.inventory_item_id and self.quantity and self.inventory_item.current_quantity < self.quantity and not self.is_cancelled: raise ValidationError({'quantity':'لا يمكن إخراج كمية أكبر من المخزون الحالي.'})
+    def apply_to_stock(self):
+        if self.is_cancelled: return
+        item=self.inventory_item
+        item.current_quantity = item.current_quantity + self.quantity if self.direction == self.Direction.IN else item.current_quantity - self.quantity
+        item.full_clean(); item.save(update_fields=['current_quantity','updated_at'])
+    def __str__(self): return f'{self.get_movement_type_display()} — {self.inventory_item} — {self.quantity}'
+
+class ProductRecipeItem(TimeStampedModel):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='recipe_items', verbose_name='وصفة المنتج')
+    inventory_item = models.ForeignKey(InventoryItem, on_delete=models.PROTECT, related_name='recipe_items', verbose_name='مادة مستخدمة')
+    quantity_per_unit = models.DecimalField('الكمية لكل وحدة', max_digits=12, decimal_places=3, validators=[MinValueValidator(0.001)])
+    unit = models.CharField('وحدة القياس', max_length=20, choices=InventoryItem.Unit.choices)
+    is_active = models.BooleanField(default=True)
+    notes = models.TextField(blank=True)
+    class Meta: verbose_name='وصفة المنتج'; verbose_name_plural='وصفات المنتجات'; unique_together=(('product','inventory_item','unit'),)
+    def __str__(self): return f'{self.product} — {self.inventory_item}'
+
 
 class DailyClose(TimeStampedModel):
     business_date = models.DateField(unique=True, verbose_name='تاريخ العمل')
@@ -999,6 +1123,7 @@ class SystemSetting(TimeStampedModel):
     pos_cart_position = models.CharField(max_length=20, choices=POSCartPosition.choices, default=POSCartPosition.SIDE, verbose_name='مكان سلة POS')
     order_board_density = models.CharField(max_length=20, choices=OrderBoardDensity.choices, default=OrderBoardDensity.NORMAL, verbose_name='كثافة لوحة الطلبات')
     cashier_layout = models.CharField(max_length=30, choices=CashierLayout.choices, default=CashierLayout.SINGLE_COLUMN, verbose_name='تخطيط الكاشير')
+    auto_deduct_inventory_on_sale = models.BooleanField(default=False, verbose_name='خصم المخزون تلقائياً عند البيع')
 
     internet_metered_enabled = models.BooleanField(default=True, verbose_name='تفعيل المحاسبة حسب الوقت')
     allow_unpaid_sessions = models.BooleanField(default=True, verbose_name='السماح بجلسات غير مدفوعة')
