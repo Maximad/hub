@@ -170,20 +170,19 @@ class Order(TimeStampedModel, PublicCodeModel):
         TAKEAWAY = 'takeaway', 'تيك أواي'
 
     class FulfillmentMode(models.TextChoices):
-        INSIDE_SPACE = 'inside_space', 'طلب داخل المكان'
+        INSIDE_SPACE = 'inside_space_general', 'طلب عام داخل المكان'
         TABLE = 'table', 'طاولة'
         DELIVERY = 'delivery', 'توصيل'
         TAKEAWAY = 'takeaway', 'تيك أواي'
 
     class DeliveryStatus(models.TextChoices):
-        NOT_DELIVERY = 'not_delivery', 'ليس توصيل'
-        DELIVERY_REQUESTED = 'delivery_requested', 'طلب توصيل'
+        NOT_APPLICABLE = 'not_applicable', 'غير قابل للتطبيق'
+        NEW = 'new', 'جديد'
         CONFIRMED = 'confirmed', 'مؤكد'
         PREPARING = 'preparing', 'قيد التحضير'
-        READY_FOR_DISPATCH = 'ready_for_dispatch', 'جاهز للإرسال'
+        READY_FOR_DELIVERY = 'ready_for_delivery', 'جاهز للتوصيل'
         OUT_FOR_DELIVERY = 'out_for_delivery', 'خرج للتوصيل'
         DELIVERED = 'delivered', 'تم التسليم'
-        FAILED = 'failed', 'فشل التوصيل'
         CANCELLED = 'cancelled', 'ملغى'
 
     class Status(models.TextChoices):
@@ -199,18 +198,27 @@ class Order(TimeStampedModel, PublicCodeModel):
     fulfillment_mode = models.CharField(max_length=20, choices=FulfillmentMode.choices, default=FulfillmentMode.INSIDE_SPACE, verbose_name='وضع الاستلام/التنفيذ')
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.NEW)
     notes = models.TextField(blank=True)
+    delivery_customer_name = models.CharField(max_length=120, blank=True, verbose_name='اسم زبون التوصيل')
+    delivery_phone = models.CharField(max_length=40, blank=True, verbose_name='رقم هاتف التوصيل')
     delivery_address = models.TextField(blank=True, verbose_name='عنوان التوصيل')
     delivery_area = models.CharField(max_length=120, blank=True, verbose_name='منطقة التوصيل')
+    delivery_landmark = models.CharField(max_length=160, blank=True, verbose_name='علامة قريبة')
     delivery_notes = models.TextField(blank=True, verbose_name='ملاحظات التوصيل')
     delivery_fee_syp = models.PositiveIntegerField(default=0, verbose_name='رسوم التوصيل')
     delivery_eta_minutes = models.PositiveIntegerField(null=True, blank=True, verbose_name='زمن التوصيل المتوقع بالدقائق')
-    delivery_status = models.CharField(max_length=30, choices=DeliveryStatus.choices, default=DeliveryStatus.NOT_DELIVERY, verbose_name='حالة التوصيل')
+    delivery_status = models.CharField(max_length=30, choices=DeliveryStatus.choices, default=DeliveryStatus.NOT_APPLICABLE, verbose_name='حالة التوصيل')
     cancellation_reason = models.CharField(max_length=30, choices=CancellationReason.choices, blank=True, verbose_name='سبب الإلغاء')
     cancellation_notes = models.TextField(blank=True, verbose_name='ملاحظات الإلغاء')
     cancelled_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='cancelled_orders', verbose_name='ألغاه')
     cancelled_at = models.DateTimeField(null=True, blank=True, verbose_name='وقت الإلغاء')
     assigned_driver_name = models.CharField(max_length=120, blank=True, verbose_name='اسم السائق')
     assigned_driver_phone = models.CharField(max_length=30, blank=True, verbose_name='هاتف السائق')
+    assigned_to = models.CharField(max_length=120, blank=True, verbose_name='مكلف بالتوصيل')
+    delivery_created_at = models.DateTimeField(null=True, blank=True, verbose_name='وقت إنشاء التوصيل')
+    delivery_confirmed_at = models.DateTimeField(null=True, blank=True, verbose_name='وقت تأكيد التوصيل')
+    delivery_out_at = models.DateTimeField(null=True, blank=True, verbose_name='وقت الخروج للتوصيل')
+    delivery_delivered_at = models.DateTimeField(null=True, blank=True, verbose_name='وقت تسليم التوصيل')
+    delivery_cancelled_at = models.DateTimeField(null=True, blank=True, verbose_name='وقت إلغاء التوصيل')
 
     @property
     def display_number(self):
@@ -696,7 +704,7 @@ class SystemSetting(TimeStampedModel):
         TAKEAWAY = 'takeaway', 'تيك أواي'
 
     class DefaultFulfillmentMode(models.TextChoices):
-        INSIDE_SPACE = 'inside_space', 'طلب داخل المكان'
+        INSIDE_SPACE = 'inside_space_general', 'طلب عام داخل المكان'
         TABLE = 'table', 'طاولة'
         DELIVERY = 'delivery', 'توصيل'
         TAKEAWAY = 'takeaway', 'تيك أواي'
@@ -794,6 +802,12 @@ class SystemSetting(TimeStampedModel):
     header_subtitle_ar = models.CharField(max_length=220, default='Hub Sueda • تشغيل يومي مرن', verbose_name='وصف الهيدر بالعربية')
     header_subtitle_en = models.CharField(max_length=220, default='Hub Sueda • flexible daily operations', verbose_name='وصف الهيدر بالإنجليزية')
     default_language = models.CharField(max_length=5, choices=Language.choices, default=Language.ARABIC, verbose_name='اللغة الافتراضية')
+    delivery_enabled = models.BooleanField(default=False, verbose_name='تفعيل التوصيل')
+    takeaway_enabled = models.BooleanField(default=False, verbose_name='تفعيل السفري')
+    default_delivery_fee_syp = models.PositiveIntegerField(default=0, verbose_name='أجرة التوصيل الافتراضية')
+    require_delivery_address = models.BooleanField(default=True, verbose_name='العنوان مطلوب للتوصيل')
+    require_delivery_phone = models.BooleanField(default=True, verbose_name='رقم الهاتف مطلوب للتوصيل')
+    allow_unpaid_delivery = models.BooleanField(default=True, verbose_name='السماح بطلبات توصيل غير مدفوعة')
     enable_delivery = models.BooleanField(default=False, verbose_name='تفعيل التوصيل', help_text='يبقى خيار التوصيل مخفياً في المنيو وPOS ما لم يتم تفعيله.')
     enable_takeaway = models.BooleanField(default=False, verbose_name='تفعيل التيك أواي', help_text='يبقى خيار التيك أواي مخفياً في المنيو وPOS ما لم يتم تفعيله.')
     enable_table_orders = models.BooleanField(default=True, verbose_name='تفعيل طلبات الطاولات')
@@ -882,6 +896,14 @@ class SystemSetting(TimeStampedModel):
     internet_service_product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True, related_name='internet_setting_profiles', verbose_name='منتج خدمة الإنترنت للطلبات')
     require_phone_for_guest_session = models.BooleanField(default=False, verbose_name='طلب هاتف الزائر عند بدء الجلسة')
 
+    @property
+    def effective_delivery_enabled(self):
+        return self.delivery_enabled or self.enable_delivery
+
+    @property
+    def effective_takeaway_enabled(self):
+        return self.takeaway_enabled or self.enable_takeaway
+
     class Meta:
         verbose_name = 'إعدادات النظام'
         verbose_name_plural = 'إعدادات النظام'
@@ -890,9 +912,15 @@ class SystemSetting(TimeStampedModel):
         return self.system_title_ar or self.system_title_en
 
     def save(self, *args, **kwargs):
-        if self.default_fulfillment_mode == self.DefaultFulfillmentMode.DELIVERY and not self.enable_delivery:
+        if self.delivery_enabled:
+            self.enable_delivery = True
+        if self.takeaway_enabled:
+            self.enable_takeaway = True
+        if self.default_delivery_fee_syp and not self.fixed_delivery_fee_syp:
+            self.fixed_delivery_fee_syp = self.default_delivery_fee_syp
+        if self.default_fulfillment_mode == self.DefaultFulfillmentMode.DELIVERY and not self.effective_delivery_enabled:
             self.default_fulfillment_mode = self.DefaultFulfillmentMode.INSIDE_SPACE
-        if self.default_fulfillment_mode == self.DefaultFulfillmentMode.TAKEAWAY and not self.enable_takeaway:
+        if self.default_fulfillment_mode == self.DefaultFulfillmentMode.TAKEAWAY and not self.effective_takeaway_enabled:
             self.default_fulfillment_mode = self.DefaultFulfillmentMode.INSIDE_SPACE
         self.fixed_delivery_fee_syp = max(self.fixed_delivery_fee_syp or 0, 0)
         self.minimum_delivery_order_syp = max(self.minimum_delivery_order_syp or 0, 0)
@@ -904,18 +932,18 @@ class SystemSetting(TimeStampedModel):
         modes = [Order.FulfillmentMode.INSIDE_SPACE]
         if include_table and self.enable_table_orders:
             modes.append(Order.FulfillmentMode.TABLE)
-        if self.enable_delivery:
+        if self.effective_delivery_enabled:
             modes.append(Order.FulfillmentMode.DELIVERY)
-        if self.enable_takeaway:
+        if self.effective_takeaway_enabled:
             modes.append(Order.FulfillmentMode.TAKEAWAY)
         return modes
 
     @property
     def safe_default_fulfillment_mode(self):
         mode = self.default_fulfillment_mode or self.DefaultFulfillmentMode.INSIDE_SPACE
-        if mode == self.DefaultFulfillmentMode.DELIVERY and not self.enable_delivery:
+        if mode == self.DefaultFulfillmentMode.DELIVERY and not self.effective_delivery_enabled:
             return Order.FulfillmentMode.INSIDE_SPACE
-        if mode == self.DefaultFulfillmentMode.TAKEAWAY and not self.enable_takeaway:
+        if mode == self.DefaultFulfillmentMode.TAKEAWAY and not self.effective_takeaway_enabled:
             return Order.FulfillmentMode.INSIDE_SPACE
         return mode
 
