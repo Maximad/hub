@@ -9,6 +9,7 @@
     {% if staff_caps.orders %}<a class="hub-action-card" href="{% url 'staff_orders' %}"><div class="hub-media"></div><strong>لوحة الطلبات</strong><p>متابعة الطلبات وتعديل الحالة.</p></a>{% endif %}
     {% if staff_caps.kitchen_board %}<a class="hub-action-card" href="{% url 'staff_kitchen' %}"><div class="hub-media"></div><strong>المطبخ / التحضير</strong><p>لوحة عناصر التحضير حسب المحطة والحالة.</p></a>{% endif %}
     {% if staff_caps.cashier %}<a class="hub-action-card" href="{% url 'staff_cashier' %}"><div class="hub-media"></div><strong>الكاشير</strong><p>فتح الطلبات واستلام الدفعات.</p></a>{% endif %}
+    {% if staff_caps.finance %}<a class="hub-action-card" href="{% url 'staff_finance_home' %}"><div class="hub-media"></div><strong>المالية</strong><p>المصاريف وحركات الصندوق والنقد المتوقع.</p></a>{% endif %}
     {% if staff_caps.reports %}<a class="hub-action-card" href="{% url 'staff_reports_home' %}"><div class="hub-media"></div><strong>التقارير</strong><p>مؤشرات اليوم والتصدير.</p></a>{% endif %}
     {% if staff_caps.reports %}<a class="hub-action-card" href="{% url 'staff_close_day' %}"><div class="hub-media"></div><strong>إغلاق اليوم</strong><p>ملخص الإغلاق والطباعة.</p></a>{% endif %}
     <a class="hub-action-card" href="{% url 'menu_public' %}"><div class="hub-media"></div><strong>القائمة العامة</strong><p>واجهة الطلب للزبائن.</p></a>

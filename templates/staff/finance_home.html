@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% block title %}المالية{% endblock %}{% block content %}
+<h2>المالية</h2><p><a href="{% url 'staff_home' %}">العودة</a> | <a href="{% url 'staff_finance_expenses' %}">المصاريف</a> | <a href="{% url 'staff_finance_cashbox' %}">الصندوق</a> | <a href="{% url 'staff_finance_expenses_csv' %}">تصدير CSV المصاريف</a> | <a href="{% url 'staff_finance_cashbox_csv' %}">تصدير CSV الصندوق</a></p>
+<form><label>تاريخ العمل <input class="hub-input" type="date" name="date" value="{{ report_date|date:'Y-m-d' }}"></label><button class="hub-button">عرض</button></form>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem">
+<div class="hub-card"><b>مبيعات نقدية</b><div>{{ sums.cash_total }} ل.س</div></div><div class="hub-card"><b>مبيعات غير نقدية</b><div>{{ sums.non_cash_sales_syp }} ل.س</div></div><div class="hub-card"><b>رصيد افتتاحي</b><div>{{ finance.opening_cash_syp }} ل.س</div></div><div class="hub-card"><b>الداخل</b><div>{{ finance.non_sales_cash_in_syp }} ل.س</div></div><div class="hub-card"><b>الخارج</b><div>{{ finance.cash_out_syp }} ل.س</div></div><div class="hub-card"><b>المصاريف النقدية</b><div>{{ finance.cash_expenses_syp }} ل.س</div></div><div class="hub-card"><b>النقد المتوقع</b><div>{{ finance.expected_cash_syp }} ل.س</div></div><div class="hub-card"><b>الفرق</b><div>{{ finance.cash_difference_syp|default:'—' }}</div></div>
+</div><h3>المعادلة</h3><p>النقد المتوقع = الرصيد الافتتاحي + دفعات الطلبات النقدية + الداخل غير البيعي - المصاريف/الخارج - الاسترجاعات النقدية.</p>
+<h3>حسب التصنيف</h3><ul>{% for row in finance.expenses_by_category %}<li>{{ row.category__name_ar }}: {{ row.total }} ل.س</li>{% empty %}<li>لا توجد مصاريف.</li>{% endfor %}</ul>
+{% endblock %}

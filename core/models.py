@@ -536,6 +536,89 @@ class OrderDiscount(TimeStampedModel):
     def __str__(self):
         return f'{self.order.display_number} — {self.amount_syp} ل.س'
 
+class ExpenseCategory(TimeStampedModel):
+    class CategoryType(models.TextChoices):
+        INGREDIENTS='ingredients','مواد أولية'; DRINKS_SUPPLIES='drinks_supplies','مشروبات ومستلزمات'; PACKAGING='packaging','تغليف'; CLEANING='cleaning','تنظيف'; UTILITIES='utilities','كهرباء/مياه/خدمات'; RENT='rent','إيجار'; MAINTENANCE='maintenance','صيانة'; WAGES='wages','أجور'; TRANSPORT='transport','نقل'; EVENT_COST='event_cost','فعالية'; EQUIPMENT='equipment','معدات'; MARKETING='marketing','تسويق'; OTHER='other','أخرى'
+    name_ar = models.CharField('تصنيف المصروف', max_length=120)
+    name_en = models.CharField(max_length=120, blank=True)
+    code = models.SlugField(max_length=80, unique=True)
+    category_type = models.CharField(max_length=30, choices=CategoryType.choices, default=CategoryType.OTHER)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.IntegerField(default=0)
+    class Meta:
+        ordering = ['sort_order','name_ar']
+    def __str__(self):
+        return _arabic_first(self, 'name_ar', 'name_en', fallback=self.code)
+
+class Expense(TimeStampedModel):
+    class PaymentMethod(models.TextChoices):
+        CASH='cash','نقداً'; CARD='card','بطاقة'; BANK_TRANSFER='bank_transfer','حوالة بنكية'; MOBILE_TRANSFER='mobile_transfer','تحويل موبايل'; CREDIT='credit','آجل'; OTHER='other','أخرى'
+    class PaidFrom(models.TextChoices):
+        CASHBOX='cashbox','الصندوق'; OWNER='owner','المالك'; BANK='bank','البنك'; EXTERNAL='external','خارجي'; UNPAID='unpaid','غير مدفوع'
+    class Status(models.TextChoices):
+        DRAFT='draft','مسودة'; APPROVED='approved','معتمد'; PAID='paid','مدفوع'; CANCELLED='cancelled','ملغى'
+    business_date = models.DateField('تاريخ العمل')
+    category = models.ForeignKey(ExpenseCategory, on_delete=models.PROTECT, related_name='expenses', verbose_name='تصنيف المصروف')
+    vendor = models.ForeignKey('vendors.Vendor', on_delete=models.SET_NULL, null=True, blank=True, related_name='expenses', verbose_name='البائع/المورد')
+    supplier_name = models.CharField('البائع/المورد', max_length=160, blank=True)
+    title = models.CharField('مصروف', max_length=180)
+    description = models.TextField(blank=True)
+    amount_syp = models.PositiveIntegerField('المبلغ', validators=[MinValueValidator(1)])
+    payment_method = models.CharField('طريقة الدفع', max_length=30, choices=PaymentMethod.choices, blank=True)
+    paid_from = models.CharField('مدفوع من', max_length=20, choices=PaidFrom.choices, default=PaidFrom.UNPAID)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
+    receipt_media = models.ForeignKey('catalog.MediaAsset', on_delete=models.SET_NULL, null=True, blank=True, related_name='expense_receipts', verbose_name='إيصال')
+    receipt_number = models.CharField('رقم الفاتورة', max_length=80, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_expenses')
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_expenses')
+    paid_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='paid_expenses')
+    approved_at = models.DateTimeField(null=True, blank=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    cancellation_reason = models.TextField('سبب الإلغاء', blank=True)
+    class Meta:
+        ordering = ['-business_date','-created_at']
+    def clean(self):
+        if self.status == self.Status.PAID and not self.payment_method:
+            raise ValidationError({'payment_method':'طريقة الدفع مطلوبة للمصروف المدفوع.'})
+        if self.status == self.Status.CANCELLED and not (self.cancellation_reason or '').strip():
+            raise ValidationError({'cancellation_reason':'سبب الإلغاء مطلوب.'})
+    @property
+    def supplier_label(self):
+        return str(self.vendor) if self.vendor_id else (self.supplier_name or '—')
+    def affects_cashbox(self):
+        return self.status == self.Status.PAID and self.paid_from == self.PaidFrom.CASHBOX and self.payment_method == self.PaymentMethod.CASH
+    def __str__(self):
+        return f'{self.title} — {self.amount_syp} ل.س'
+
+class CashMovement(TimeStampedModel):
+    class MovementType(models.TextChoices):
+        OPENING_CASH='opening_cash','رصيد افتتاحي'; OWNER_CASH_IN='owner_cash_in','إدخال نقد من المالك'; OWNER_CASH_OUT='owner_cash_out','سحب نقد من المالك'; CASH_EXPENSE='cash_expense','مصروف نقدي'; SUPPLIER_PAYMENT='supplier_payment','دفعة لمورد'; CASH_CORRECTION='cash_correction','تصحيح نقدي'; CASH_DEPOSIT='cash_deposit','إيداع'; CASH_WITHDRAWAL='cash_withdrawal','سحب'; REFUND='refund','استرجاع'; OTHER='other','أخرى'
+    class Direction(models.TextChoices):
+        IN='in','دخول'; OUT='out','خروج'
+    business_date = models.DateField('تاريخ العمل')
+    movement_type = models.CharField(max_length=30, choices=MovementType.choices)
+    direction = models.CharField(max_length=5, choices=Direction.choices)
+    amount_syp = models.PositiveIntegerField('المبلغ', validators=[MinValueValidator(1)])
+    related_expense = models.ForeignKey(Expense, on_delete=models.SET_NULL, null=True, blank=True, related_name='cash_movements')
+    related_order = models.ForeignKey(Order, on_delete=models.SET_NULL, null=True, blank=True, related_name='cash_movements')
+    related_payment = models.ForeignKey(Payment, on_delete=models.SET_NULL, null=True, blank=True, related_name='cash_movements')
+    vendor = models.ForeignKey('vendors.Vendor', on_delete=models.SET_NULL, null=True, blank=True, related_name='cash_movements')
+    title = models.CharField(max_length=180)
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_cash_movements')
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_cash_movements')
+    is_cancelled = models.BooleanField(default=False)
+    cancellation_reason = models.TextField('سبب الإلغاء', blank=True)
+    class Meta:
+        ordering = ['-business_date','-created_at']
+    def clean(self):
+        if self.movement_type == self.MovementType.CASH_CORRECTION and not (self.notes or '').strip():
+            raise ValidationError({'notes':'سبب التصحيح مطلوب.'})
+        if self.is_cancelled and not (self.cancellation_reason or '').strip():
+            raise ValidationError({'cancellation_reason':'سبب الإلغاء مطلوب.'})
+    def __str__(self):
+        return f'{self.get_movement_type_display()} — {self.amount_syp} ل.س'
+
 
 class DailyClose(TimeStampedModel):
     business_date = models.DateField(unique=True, verbose_name='تاريخ العمل')
