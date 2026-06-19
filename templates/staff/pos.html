@@ -98,7 +98,7 @@
             <div class="menu-product-grid staff-pos__grid {{ system_settings.pos_mobile_layout_class|default:'layout-grid-2' }} {{ system_settings.pos_tablet_layout_class|default:'layout-tablet-3' }} {{ system_settings.pos_desktop_layout_class|default:'layout-grid-4' }}">
               {% for p in products %}
                 <article class="hub-list-card menu-product-card staff-pos__product" data-product-card data-product-id="{{ p.id }}" data-price="{{ p.price_syp|default:'0' }}" data-search-text="{{ p.name_ar }} {{ p.name_en }} {{ p.description_ar }}">
-                  {% if not system_settings or system_settings.pos_show_product_images %}<div class="hub-media menu-product-media staff-pos__media{% if not p.primary_media %} menu-product-media--placeholder{% endif %}">
+                  {% if not system_settings or system_settings.pos_show_product_images %}<div class="hub-media menu-product-media product-media-frame staff-pos__media{% if not p.primary_media %} menu-product-media--placeholder product-media-placeholder{% endif %}">
                     {% if p.primary_media %}
                       {% if p.primary_media.is_visual_media %}
                         <img src="{{ p.primary_media.resolved_url }}" alt="{{ p.primary_media.display_alt_text }}" loading="lazy">
