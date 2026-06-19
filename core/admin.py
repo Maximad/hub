@@ -1,4 +1,6 @@
 from django.contrib import admin
+from django.utils import timezone
+from django.utils.html import format_html
 from catalog.admin_media import safe_media_preview
 from catalog.models import ProductMedia, ProductOptionGroupAssignment
 from .settings_helpers import get_system_settings
@@ -136,11 +138,39 @@ class PageSettingAdmin(admin.ModelAdmin):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ('name_ar', 'name_en', 'category', 'product_type', 'requires_preparation', 'price_syp', 'prep_station_ref', 'visible_on_pos', 'visible_on_qr', 'orderable_on_qr', 'requires_staff_confirmation', 'vendor', 'is_available')
-    list_filter = ('is_available', 'visible_on_pos', 'orderable_on_pos', 'visible_on_qr', 'orderable_on_qr', 'product_type', 'requires_preparation', 'item_type', 'prep_station_ref', 'is_alcoholic', 'requires_staff_confirmation', 'beverage_type', 'food_type', 'service_type', 'vendor', 'menu_sections', 'tags')
-    search_fields = ('name_ar', 'name_en', 'description_ar', 'category__name_ar')
-    autocomplete_fields = ('category', 'vendor', 'prep_station_ref')
+    list_display = ('name_ar', 'name_en', 'category', 'product_type', 'price_syp', 'estimated_unit_cost_syp', 'estimated_margin_display', 'estimated_margin_percent_display', 'cost_warning', 'track_margin', 'requires_preparation', 'prep_station_ref', 'visible_on_pos', 'visible_on_qr', 'orderable_on_qr', 'requires_staff_confirmation', 'vendor', 'is_available')
+    list_filter = ('track_margin', 'is_available', 'category', 'menu_sections', 'visible_on_pos', 'orderable_on_pos', 'visible_on_qr', 'orderable_on_qr', 'product_type', 'requires_preparation', 'item_type', 'prep_station_ref', 'is_alcoholic', 'requires_staff_confirmation', 'beverage_type', 'food_type', 'service_type', 'vendor', 'tags')
+    search_fields = ('name_ar', 'name_en', 'description_ar', 'category__name_ar', 'menu_sections__name_ar')
+    autocomplete_fields = ('category', 'vendor', 'prep_station_ref', 'cost_updated_by')
+    readonly_fields = ('cost_updated_at',)
     inlines = (ProductMediaInline, ProductOptionGroupAssignmentInline)
+
+    @admin.display(description='الهامش التقديري')
+    def estimated_margin_display(self, obj):
+        margin, _percent = product_unit_margin(obj)
+        return 'غير محدد' if margin is None else f'{margin} ل.س'
+
+    @admin.display(description='نسبة الهامش')
+    def estimated_margin_percent_display(self, obj):
+        _margin, percent = product_unit_margin(obj)
+        return 'غير محدد' if percent is None else f'{percent}%'
+
+    @admin.display(description='تحذير الكلفة')
+    def cost_warning(self, obj):
+        if obj.estimated_unit_cost_syp is None:
+            return 'غير محدد'
+        if obj.estimated_unit_cost_syp > obj.price_syp:
+            return format_html('<strong style="color:#b91c1c;">تحذير: الكلفة أعلى من السعر</strong>')
+        margin, percent = product_unit_margin(obj)
+        if percent is not None and percent < 15:
+            return format_html('<span style="color:#b45309;">هامش منخفض</span>')
+        return '—'
+
+    def save_model(self, request, obj, form, change):
+        if {'estimated_unit_cost_syp', 'cost_notes', 'track_margin'} & set(form.changed_data):
+            obj.cost_updated_at = timezone.now()
+            obj.cost_updated_by = request.user
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(Category)
@@ -171,8 +201,8 @@ class TableAreaAdmin(admin.ModelAdmin):
 class OrderItemInline(admin.TabularInline):
     model = OrderItem
     extra = 0
-    readonly_fields = ('product_name_ar_snapshot', 'unit_price_syp_snapshot', 'line_total_syp_snapshot')
-    fields = ('product', 'quantity', 'prep_station', 'prep_status', 'product_name_ar_snapshot', 'unit_price_syp_snapshot', 'line_total_syp_snapshot', 'item_note')
+    readonly_fields = ('product_name_ar_snapshot', 'unit_price_syp_snapshot', 'line_total_syp_snapshot', 'estimated_unit_cost_syp_snapshot', 'estimated_line_cost_syp_snapshot', 'estimated_line_margin_syp_snapshot')
+    fields = ('product', 'quantity', 'prep_station', 'prep_status', 'product_name_ar_snapshot', 'unit_price_syp_snapshot', 'line_total_syp_snapshot', 'estimated_unit_cost_syp_snapshot', 'estimated_line_cost_syp_snapshot', 'estimated_line_margin_syp_snapshot', 'item_note')
     autocomplete_fields = ('product',)
 
 
@@ -218,7 +248,7 @@ class OrderAdmin(admin.ModelAdmin):
 
 @admin.register(OrderItem)
 class OrderItemAdmin(admin.ModelAdmin):
-    list_display = ('order', 'product_name_ar_snapshot', 'quantity', 'prep_station', 'prep_status', 'unit_price_syp_snapshot', 'line_total_syp_snapshot')
+    list_display = ('order', 'product_name_ar_snapshot', 'quantity', 'prep_station', 'prep_status', 'unit_price_syp_snapshot', 'line_total_syp_snapshot', 'estimated_unit_cost_syp_snapshot', 'estimated_line_margin_syp_snapshot')
     search_fields = ('order__public_code', 'product_name_ar_snapshot', 'product__name_ar')
     list_filter = ('prep_status', 'prep_station')
     autocomplete_fields = ('order', 'product')
