@@ -11,6 +11,7 @@ from .models import (
     InternetPackage,
     InternetSession,
     DailyClose,
+    ExpenseCategory, Expense, CashMovement,
     Member,
     Order,
     OrderDiscount,
@@ -260,6 +261,32 @@ class OrderDiscountAdmin(admin.ModelAdmin):
     list_filter = ('discount_type', 'created_at', 'is_active', 'created_by', 'approved_by')
     search_fields = ('order__public_code', 'order__id', 'reason', 'notes', 'created_by__username', 'approved_by__username')
     autocomplete_fields = ('order', 'created_by', 'approved_by')
+
+
+@admin.register(ExpenseCategory)
+class ExpenseCategoryAdmin(admin.ModelAdmin):
+    list_display = ('name_ar', 'code', 'category_type', 'is_active', 'sort_order')
+    list_filter = ('category_type', 'is_active')
+    search_fields = ('name_ar', 'name_en', 'code')
+
+
+@admin.register(Expense)
+class ExpenseAdmin(admin.ModelAdmin):
+    list_display = ('business_date', 'title', 'category', 'amount_syp', 'payment_method', 'paid_from', 'status', 'vendor_supplier', 'created_by')
+    list_filter = ('business_date', 'category', 'payment_method', 'paid_from', 'status')
+    search_fields = ('title', 'description', 'supplier_name', 'receipt_number')
+    autocomplete_fields = ('category', 'vendor', 'receipt_media', 'created_by', 'approved_by', 'paid_by')
+    @admin.display(description='البائع/المورد')
+    def vendor_supplier(self, obj):
+        return obj.supplier_label
+
+
+@admin.register(CashMovement)
+class CashMovementAdmin(admin.ModelAdmin):
+    list_display = ('business_date', 'movement_type', 'direction', 'amount_syp', 'title', 'created_by', 'created_at')
+    list_filter = ('business_date', 'movement_type', 'direction', 'is_cancelled')
+    search_fields = ('title', 'notes')
+    autocomplete_fields = ('related_expense', 'related_order', 'related_payment', 'vendor', 'created_by', 'approved_by')
 
 
 @admin.register(DailyClose)

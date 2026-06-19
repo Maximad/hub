@@ -24,7 +24,7 @@ from accounts.permissions import (
     ACCESS_DENIED_MESSAGE, can_approve_partial_payment,
     require_staff_capability, user_has_capability,
 )
-from core.models import ActivityLog, CancellationReason, DailyClose, InternetPackage, InternetSession, Member, Order, OrderDiscount, OrderItem, Payment, Product, SystemSetting, TableArea
+from core.models import ActivityLog, CancellationReason, CashMovement, DailyClose, Expense, InternetPackage, InternetSession, Member, Order, OrderDiscount, OrderItem, Payment, Product, SystemSetting, TableArea
 from events.models import Event
 from reservations.models import Reservation
 from vendors.models import Vendor, VendorParticipation
@@ -262,7 +262,10 @@ def _build_day_report(report_date):
             sums['internet_workspace_cancelled_sessions'] += 1
         if sess.linked_order_id and sess.status in {InternetSession.Status.UNPAID, InternetSession.Status.BILLED}:
             sums['internet_workspace_unpaid_orders'] += 1
-    sums['expected_cash_syp'] = sums['cash_total']
+    from core.finance import finance_summary_for_date
+    finance = finance_summary_for_date(report_date, sums)
+    sums.update({k: v for k, v in finance.items() if not hasattr(v, 'model')})
+    sums['expected_cash_syp'] = finance['expected_cash_syp']
     sums['avg_order_value'] = int(sums['order_total'] / sums['orders_count']) if sums['orders_count'] else 0
     sums['average_delivery_order_value'] = int(sums['delivery_gross_sales'] / sums['delivery_order_count']) if sums['delivery_order_count'] else 0
     sums['estimated_gross_margin_percent'] = round((sums['estimated_gross_margin_syp'] / sums['margin_known_sales_syp']) * 100, 2) if sums['margin_known_sales_syp'] else None
@@ -1539,10 +1542,10 @@ def staff_close_day(request):
             return redirect('staff_close_day')
         opening = _parse_nonnegative_int(request.POST.get('opening_cash_syp'), default=0, maximum=100_000_000)
         actual = _parse_nonnegative_int(request.POST.get('actual_cash_counted_syp'), default=0, maximum=100_000_000)
-        expected = opening + sums['cash_total']
+        expected = opening + sums['cash_total'] + sums.get('non_sales_cash_in_syp', 0) - sums.get('cash_out_syp', 0) - sums.get('cash_expenses_syp', 0)
         close = DailyClose.objects.create(business_date=today, opening_cash_syp=opening, cash_sales_syp=sums['cash_total'], non_cash_sales_syp=sums['non_cash_sales_syp'], total_payments_syp=sums['paid_total'], unpaid_orders_syp=sums['remaining_total'], partial_payments_syp=sums['partial_payments_syp'], discounts_syp=sums['discounts_syp'], cancelled_orders_syp=sums['cancelled_value'], refunds_or_reversals_syp=0, expected_cash_syp=expected, actual_cash_counted_syp=actual, cash_difference_syp=actual - expected, notes=request.POST.get('notes', '').strip(), closed_by=request.user, closed_at=timezone.now())
         try:
-            ActivityLog.objects.create(actor=request.user, action='close_day_finalized', details={'business_date': today.isoformat(), 'daily_close_id': close.id})
+            ActivityLog.objects.create(actor=request.user, action='close_day_finalized', details={'business_date': today.isoformat(), 'daily_close_id': close.id, 'expected_cash_syp': expected, 'cash_expenses_syp': sums.get('cash_expenses_syp', 0), 'cash_out_syp': sums.get('cash_out_syp', 0)})
         except Exception:
             pass
         create_notification('close_day_finalized', 'تم إغلاق اليوم', today.isoformat(), target_role='cashier', created_by=request.user)

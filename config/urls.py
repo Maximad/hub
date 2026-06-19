@@ -13,6 +13,7 @@ from core.views.staff_import import (
     staff_import_home, staff_import_upload, staff_import_template, staff_import_preview, staff_import_confirm,
 )
 from core.views.kitchen import staff_kitchen, staff_kitchen_partial, staff_kitchen_order, staff_kitchen_item_status, staff_prep, staff_prep_station
+from core.views.staff_finance import staff_finance_home, staff_expenses, staff_expense_new, staff_cashbox, staff_cashbox_new, staff_expenses_csv, staff_cashbox_csv
 from core.views_notifications import staff_notifications, staff_notifications_poll, staff_notifications_mark_read, staff_notifications_preferences
 from accounts.views_staff import (
     staff_users_list, staff_user_new, staff_user_detail, staff_user_edit, staff_user_password, staff_user_toggle_active,
@@ -68,6 +69,13 @@ urlpatterns = [
     path('staff/cashier/<uuid:public_code>/', menu.staff_cashier_order, name='staff_cashier_order'),
     path('staff/cashier/<uuid:public_code>/pay/', menu.staff_cashier_pay, name='staff_cashier_pay'),
     path('staff/cashier/<uuid:public_code>/discount/', menu.staff_cashier_discount, name='staff_cashier_discount'),
+    path('staff/finance/', staff_finance_home, name='staff_finance_home'),
+    path('staff/finance/expenses/', staff_expenses, name='staff_finance_expenses'),
+    path('staff/finance/expenses/new/', staff_expense_new, name='staff_finance_expense_new'),
+    path('staff/finance/expenses.csv', staff_expenses_csv, name='staff_finance_expenses_csv'),
+    path('staff/finance/cashbox/', staff_cashbox, name='staff_finance_cashbox'),
+    path('staff/finance/cashbox/new/', staff_cashbox_new, name='staff_finance_cashbox_new'),
+    path('staff/finance/cashbox.csv', staff_cashbox_csv, name='staff_finance_cashbox_csv'),
     path('staff/reports/', staff_reports_home, name='staff_reports_home'),
     path('staff/reports/day/', staff_reports_day, name='staff_reports_day'),
     path('staff/reports/day.csv', staff_reports_day_csv, name='staff_reports_day_csv'),

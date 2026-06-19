@@ -52,6 +52,9 @@ def can_access_cashier(user):
 def can_access_reports(user):
     return is_owner_or_admin(user)
 
+def can_access_finance(user):
+    return is_owner_or_admin(user) or is_cashier(user)
+
 
 def can_access_settings(user):
     return is_owner_or_admin(user)
@@ -95,6 +98,7 @@ CAPABILITY_CHECKS = {
     'pos': can_access_pos,
     'cashier': can_access_cashier,
     'reports': can_access_reports,
+    'finance': can_access_finance,
     'settings': can_access_settings,
     'imports': can_access_imports,
     'users': can_access_users,
