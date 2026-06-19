@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
 from django.db.models import Q
+from decimal import Decimal
 
 
 def _arabic_first(obj, *fields, fallback='—'):
@@ -342,6 +343,9 @@ class OrderItem(TimeStampedModel):
     prep_status = models.CharField(max_length=20, choices=PrepStatus.choices, default=PrepStatus.NEW)
     cancellation_reason = models.CharField(max_length=30, choices=CancellationReason.choices, blank=True, verbose_name='سبب الإلغاء')
     cancellation_notes = models.TextField(blank=True, verbose_name='ملاحظات الإلغاء')
+    stock_deducted = models.BooleanField('تم خصم المخزون', default=False)
+    stock_deducted_at = models.DateTimeField('وقت خصم المخزون', null=True, blank=True)
+    stock_deduction_error = models.TextField('خطأ في خصم المخزون', blank=True)
 
     def assign_prep_defaults(self):
         requires_prep = self.product.infer_requires_preparation() if self.product_id else True
@@ -704,7 +708,7 @@ class PurchaseItem(TimeStampedModel):
 
 class StockMovement(TimeStampedModel):
     class MovementType(models.TextChoices):
-        PURCHASE_RECEIVED='purchase_received','استلام شراء'; MANUAL_ADJUSTMENT='manual_adjustment','تعديل يدوي'; WASTE='waste','هدر'; INTERNAL_USE='internal_use','استخدام داخلي'; RETURN_TO_VENDOR='return_to_vendor','إرجاع للمورد'; CORRECTION='correction','تصحيح'; OPENING_BALANCE='opening_balance','رصيد افتتاحي'; OTHER='other','أخرى'
+        PURCHASE_RECEIVED='purchase_received','استلام شراء'; MANUAL_ADJUSTMENT='manual_adjustment','تعديل يدوي'; WASTE='waste','هدر'; INTERNAL_USE='internal_use','استخدام داخلي'; RETURN_TO_VENDOR='return_to_vendor','إرجاع للمورد'; CORRECTION='correction','تصحيح'; OPENING_BALANCE='opening_balance','رصيد افتتاحي'; SALE_DEDUCTION='sale_deduction','خصم بيع'; PRODUCTION_CONSUMPTION='production_consumption','استهلاك تحضير'; PRODUCTION_OUTPUT='production_output','إنتاج تحضير'; SALE_RETURN='sale_return','إرجاع خصم بيع'; OTHER='other','أخرى'
     class Direction(models.TextChoices): IN='in','إدخال'; OUT='out','إخراج'
     inventory_item = models.ForeignKey(InventoryItem, on_delete=models.PROTECT, related_name='stock_movements', verbose_name='مادة مخزون')
     business_date = models.DateField('تاريخ العمل')
@@ -717,6 +721,10 @@ class StockMovement(TimeStampedModel):
     related_purchase = models.ForeignKey(Purchase, on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
     related_purchase_item = models.ForeignKey(PurchaseItem, on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
     related_expense = models.ForeignKey(Expense, on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
+    related_order = models.ForeignKey(Order, on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
+    related_order_item = models.ForeignKey('OrderItem', on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
+    product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
+    related_batch = models.ForeignKey('ProductionBatch', on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
     reason = models.TextField('سبب الحركة', blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_stock_movements')
     approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_stock_movements')
@@ -738,10 +746,65 @@ class ProductRecipeItem(TimeStampedModel):
     inventory_item = models.ForeignKey(InventoryItem, on_delete=models.PROTECT, related_name='recipe_items', verbose_name='مادة مستخدمة')
     quantity_per_unit = models.DecimalField('الكمية لكل وحدة', max_digits=12, decimal_places=3, validators=[MinValueValidator(0.001)])
     unit = models.CharField('وحدة القياس', max_length=20, choices=InventoryItem.Unit.choices)
-    is_active = models.BooleanField(default=True)
-    notes = models.TextField(blank=True)
+    waste_factor_percent = models.DecimalField('نسبة الهدر', max_digits=6, decimal_places=2, default=0, validators=[MinValueValidator(0)])
+    is_active = models.BooleanField('نشط', default=True)
+    notes = models.TextField('ملاحظات الوصفة', blank=True)
     class Meta: verbose_name='وصفة المنتج'; verbose_name_plural='وصفات المنتجات'; unique_together=(('product','inventory_item','unit'),)
+    def clean(self):
+        if self.quantity_per_unit is not None and self.quantity_per_unit <= 0: raise ValidationError({'quantity_per_unit':'الكمية لكل وحدة يجب أن تكون أكبر من صفر.'})
+        if self.waste_factor_percent is not None and self.waste_factor_percent < 0: raise ValidationError({'waste_factor_percent':'نسبة الهدر يجب ألا تكون سالبة.'})
+    def line_cost(self):
+        if self.inventory_item.estimated_unit_cost_syp is None: return None
+        base = self.quantity_per_unit * self.inventory_item.estimated_unit_cost_syp
+        return base * (Decimal('1') + (self.waste_factor_percent or 0) / Decimal('100'))
     def __str__(self): return f'{self.product} — {self.inventory_item}'
+
+
+class ProductionBatch(TimeStampedModel):
+    class BatchType(models.TextChoices):
+        PREPARED_FOOD='prepared_food','طعام محضر'; DRINK_BASE='drink_base','أساس مشروب'; SAUCE='sauce','صلصة'; MIX='mix','خلطة'; PREP_COMPONENT='prep_component','مكوّن تحضير'; OTHER='other','أخرى'
+    class Unit(models.TextChoices):
+        PORTION='portion','حصة'; PIECE='piece','قطعة'; TRAY='tray','صينية'; LITER='liter','لتر'; ML='ml','مل'; KG='kg','كغ'; G='g','غ'; OTHER='other','أخرى'
+    class Status(models.TextChoices):
+        PLANNED='planned','مخططة'; IN_PROGRESS='in_progress','قيد التحضير'; COMPLETED='completed','مكتملة'; CANCELLED='cancelled','ألغيت'
+    product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True, related_name='production_batches', verbose_name='المنتج')
+    batch_name_ar = models.CharField('دفعة تحضير', max_length=180)
+    batch_name_en = models.CharField(max_length=180, blank=True)
+    business_date = models.DateField('تاريخ العمل')
+    batch_type = models.CharField(max_length=30, choices=BatchType.choices, default=BatchType.PREPARED_FOOD)
+    planned_quantity = models.DecimalField('الكمية المخططة', max_digits=12, decimal_places=3, default=0, validators=[MinValueValidator(0)])
+    produced_quantity = models.DecimalField('الكمية المنتجة', max_digits=12, decimal_places=3, default=0, validators=[MinValueValidator(0)])
+    unit = models.CharField('الوحدة', max_length=20, choices=Unit.choices, default=Unit.PORTION)
+    estimated_unit_cost_syp = models.DecimalField('الكلفة التقديرية للوحدة', max_digits=12, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
+    total_estimated_cost_syp = models.DecimalField('الكلفة التقديرية الكلية', max_digits=14, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PLANNED)
+    prepared_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='prepared_batches')
+    completed_at = models.DateTimeField(null=True, blank=True)
+    cancellation_reason = models.TextField('سبب الإلغاء', blank=True)
+    output_inventory_item = models.ForeignKey(InventoryItem, on_delete=models.SET_NULL, null=True, blank=True, related_name='output_batches', verbose_name='مادة مخزون ناتجة')
+    output_quantity = models.DecimalField('كمية الناتج', max_digits=12, decimal_places=3, default=0, validators=[MinValueValidator(0)])
+    output_unit = models.CharField('وحدة الناتج', max_length=20, choices=InventoryItem.Unit.choices, blank=True)
+    notes = models.TextField(blank=True)
+    class Meta: ordering=['-business_date','-created_at']; verbose_name='دفعة تحضير'; verbose_name_plural='دفعات التحضير'
+    def clean(self):
+        if self.status == self.Status.CANCELLED and not (self.cancellation_reason or '').strip(): raise ValidationError({'cancellation_reason':'سبب الإلغاء مطلوب.'})
+    def __str__(self): return self.batch_name_ar or self.batch_name_en or f'Batch {self.pk}'
+
+class ProductionBatchIngredient(TimeStampedModel):
+    batch = models.ForeignKey(ProductionBatch, on_delete=models.CASCADE, related_name='ingredients')
+    inventory_item = models.ForeignKey(InventoryItem, on_delete=models.PROTECT, related_name='batch_ingredients', verbose_name='مكوّن')
+    planned_quantity = models.DecimalField('الكمية المخططة', max_digits=12, decimal_places=3, default=0, validators=[MinValueValidator(0)])
+    actual_quantity = models.DecimalField('الكمية الفعلية', max_digits=12, decimal_places=3, default=0, validators=[MinValueValidator(0)])
+    unit = models.CharField('وحدة القياس', max_length=20, choices=InventoryItem.Unit.choices)
+    estimated_unit_cost_syp_snapshot = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
+    estimated_line_cost_syp_snapshot = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
+    notes = models.TextField(blank=True)
+    class Meta: verbose_name='مكوّن دفعة تحضير'; verbose_name_plural='مكوّنات دفعات التحضير'
+    def save(self,*args,**kwargs):
+        if self.inventory_item_id and self.estimated_unit_cost_syp_snapshot is None: self.estimated_unit_cost_syp_snapshot = self.inventory_item.estimated_unit_cost_syp
+        if self.estimated_unit_cost_syp_snapshot is not None: self.estimated_line_cost_syp_snapshot = self.actual_quantity * self.estimated_unit_cost_syp_snapshot
+        super().save(*args,**kwargs)
+    def __str__(self): return f'{self.batch} — {self.inventory_item}'
 
 
 class DailyClose(TimeStampedModel):
@@ -1123,7 +1186,15 @@ class SystemSetting(TimeStampedModel):
     pos_cart_position = models.CharField(max_length=20, choices=POSCartPosition.choices, default=POSCartPosition.SIDE, verbose_name='مكان سلة POS')
     order_board_density = models.CharField(max_length=20, choices=OrderBoardDensity.choices, default=OrderBoardDensity.NORMAL, verbose_name='كثافة لوحة الطلبات')
     cashier_layout = models.CharField(max_length=30, choices=CashierLayout.choices, default=CashierLayout.SINGLE_COLUMN, verbose_name='تخطيط الكاشير')
-    auto_deduct_inventory_on_sale = models.BooleanField(default=False, verbose_name='خصم المخزون تلقائياً عند البيع')
+    class StockDeductionMode(models.TextChoices):
+        DISABLED = 'disabled', 'معطّل'
+        ON_ORDER_CREATED = 'on_order_created', 'عند إنشاء الطلب'
+        ON_ITEM_SERVED = 'on_item_served', 'عند تسليم العنصر'
+        ON_ORDER_PAID = 'on_order_paid', 'عند دفع الطلب'
+
+    auto_deduct_inventory_on_sale = models.BooleanField(default=False, verbose_name='خصم المخزون عند البيع')
+    stock_deduction_mode = models.CharField('وضع خصم المخزون', max_length=30, choices=StockDeductionMode.choices, default=StockDeductionMode.DISABLED)
+    strict_stock_deduction = models.BooleanField('منع البيع عند نقص المخزون', default=False)
 
     internet_metered_enabled = models.BooleanField(default=True, verbose_name='تفعيل المحاسبة حسب الوقت')
     allow_unpaid_sessions = models.BooleanField(default=True, verbose_name='السماح بجلسات غير مدفوعة')

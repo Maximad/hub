@@ -24,6 +24,7 @@ from accounts.permissions import (
     ACCESS_DENIED_MESSAGE, can_approve_partial_payment,
     require_staff_capability, user_has_capability,
 )
+from core.stock_recipes import deduct_order_item_stock
 from core.models import ActivityLog, CancellationReason, CashMovement, DailyClose, Expense, InternetPackage, InternetSession, Member, Order, OrderDiscount, OrderItem, Payment, Product, SystemSetting, TableArea
 from events.models import Event
 from reservations.models import Reservation
@@ -504,7 +505,7 @@ def _create_order_from_selected_items(table, selected, note_parts, status=None, 
         for product, qty, item_note, selected_options_snapshot, option_delta in selected:
             unit_price = max(product.price_syp + option_delta, 0)
             prep_station, prep_status = _prep_defaults_for_product(product)
-            OrderItem.objects.create(
+            item = OrderItem.objects.create(
                 order=order,
                 product=product,
                 quantity=qty,
@@ -517,6 +518,7 @@ def _create_order_from_selected_items(table, selected, note_parts, status=None, 
                 prep_station=prep_station,
                 prep_status=prep_status,
             )
+            transaction.on_commit(lambda item_id=item.pk: deduct_order_item_stock(OrderItem.objects.select_related('order','product').get(pk=item_id)))
     transaction.on_commit(lambda: notify_order_created(order))
     return order
 
@@ -1145,6 +1147,7 @@ def staff_order_edit_add_item(request, public_code):
             prep_station=prep_station,
             prep_status=prep_status,
         )
+        transaction.on_commit(lambda item_id=item.pk: deduct_order_item_stock(OrderItem.objects.select_related('order','product').get(pk=item_id), request.user))
         _log_order_edit(request.user, 'order_item_added', order, {'item_id': item.id, 'product_id': product.id, 'quantity': qty})
         transaction.on_commit(lambda: create_notification('order_edited', f'تم تعديل الطلب {order.display_number}', 'تمت إضافة عنصر إلى الطلب', order=order, order_item=item, target_station=item.prep_station, created_by=request.user))
         if item.prep_status != OrderItem.PrepStatus.NO_PREP:

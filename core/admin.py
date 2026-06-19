@@ -4,6 +4,7 @@ from django.utils.html import format_html
 from catalog.admin_media import safe_media_preview
 from catalog.models import ProductMedia, ProductOptionGroupAssignment
 from .settings_helpers import get_system_settings
+from .stock_recipes import calculate_recipe_cost, update_product_cost_from_recipe
 from .models import (
     ActivityLog,
     CancellationReason,
@@ -12,7 +13,7 @@ from .models import (
     InternetSession,
     DailyClose,
     ExpenseCategory, Expense, CashMovement,
-    InventoryItem, Purchase, PurchaseItem, StockMovement, ProductRecipeItem,
+    InventoryItem, Purchase, PurchaseItem, StockMovement, ProductRecipeItem, ProductionBatch, ProductionBatchIngredient,
     Member,
     Order,
     OrderDiscount,
@@ -55,14 +56,19 @@ class ProductOptionGroupAssignmentInline(admin.TabularInline):
 class ProductRecipeItemInline(admin.TabularInline):
     model = ProductRecipeItem
     extra = 0
-    fields = ('inventory_item', 'quantity_per_unit', 'unit', 'is_active', 'notes')
+    fields = ('inventory_item', 'quantity_per_unit', 'unit', 'waste_factor_percent', 'is_active', 'notes')
 
 
 @admin.register(InventoryItem)
 class InventoryItemAdmin(admin.ModelAdmin):
-    list_display = ('name_ar', 'item_type', 'unit', 'current_quantity', 'low_stock_threshold', 'estimated_unit_cost_syp', 'is_active')
+    list_display = ('name_ar', 'item_type', 'unit', 'current_quantity', 'low_stock_threshold', 'estimated_unit_cost_syp', 'used_in_recipes_count', 'is_active')
     list_filter = ('item_type', 'unit', 'is_active')
     search_fields = ('name_ar', 'name_en', 'code')
+    readonly_fields = ('used_in_recipes_count',)
+
+    @admin.display(description='مستخدم في وصفات')
+    def used_in_recipes_count(self, obj):
+        return obj.recipe_items.count()
 
 
 class PurchaseItemInline(admin.TabularInline):
@@ -91,16 +97,38 @@ class PurchaseItemAdmin(admin.ModelAdmin):
 
 @admin.register(StockMovement)
 class StockMovementAdmin(admin.ModelAdmin):
-    list_display = ('business_date', 'inventory_item', 'movement_type', 'direction', 'quantity', 'created_by')
+    list_display = ('business_date', 'inventory_item', 'movement_type', 'direction', 'quantity', 'related_order', 'related_order_item', 'product', 'related_batch', 'created_by')
     list_filter = ('movement_type', 'direction', 'business_date')
     search_fields = ('inventory_item__name_ar', 'inventory_item__name_en', 'reason')
 
 
 @admin.register(ProductRecipeItem)
 class ProductRecipeItemAdmin(admin.ModelAdmin):
-    list_display = ('product', 'inventory_item', 'quantity_per_unit', 'unit', 'is_active')
+    list_display = ('product', 'inventory_item', 'quantity_per_unit', 'unit', 'waste_factor_percent', 'is_active')
     list_filter = ('unit', 'is_active')
     search_fields = ('product__name_ar', 'inventory_item__name_ar')
+
+
+class ProductionBatchIngredientInline(admin.TabularInline):
+    model = ProductionBatchIngredient
+    extra = 1
+    fields = ('inventory_item', 'planned_quantity', 'actual_quantity', 'unit', 'estimated_unit_cost_syp_snapshot', 'estimated_line_cost_syp_snapshot', 'notes')
+    readonly_fields = ('estimated_line_cost_syp_snapshot',)
+
+
+@admin.register(ProductionBatch)
+class ProductionBatchAdmin(admin.ModelAdmin):
+    list_display = ('business_date', 'batch_name_ar', 'product', 'produced_quantity', 'status', 'prepared_by')
+    list_filter = ('business_date', 'status', 'batch_type')
+    search_fields = ('batch_name_ar', 'batch_name_en', 'product__name_ar', 'product__name_en')
+    autocomplete_fields = ('product', 'prepared_by', 'output_inventory_item')
+    inlines = (ProductionBatchIngredientInline,)
+
+
+@admin.register(ProductionBatchIngredient)
+class ProductionBatchIngredientAdmin(admin.ModelAdmin):
+    list_display = ('batch', 'inventory_item', 'planned_quantity', 'actual_quantity', 'unit', 'estimated_line_cost_syp_snapshot')
+    search_fields = ('batch__batch_name_ar', 'inventory_item__name_ar')
 
 
 @admin.register(SystemSetting)
@@ -149,7 +177,7 @@ class SystemSettingAdmin(admin.ModelAdmin):
         }),
         ('تخطيط نقطة البيع', {
             'fields': (
-                'staff_home_layout', 'pos_layout_preset', 'auto_deduct_inventory_on_sale', 'pos_mobile_columns', 'pos_tablet_columns',
+                'staff_home_layout', 'pos_layout_preset', 'auto_deduct_inventory_on_sale', 'stock_deduction_mode', 'strict_stock_deduction', 'pos_mobile_columns', 'pos_tablet_columns',
                 'pos_desktop_columns', 'pos_cart_position', 'order_board_density', 'cashier_layout',
             ),
         }),
@@ -191,12 +219,37 @@ class PageSettingAdmin(admin.ModelAdmin):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
+    actions = ('update_estimated_cost_from_recipe',)
     list_display = ('name_ar', 'name_en', 'category', 'product_type', 'price_syp', 'estimated_unit_cost_syp', 'estimated_margin_display', 'estimated_margin_percent_display', 'cost_warning', 'track_margin', 'requires_preparation', 'prep_station_ref', 'visible_on_pos', 'visible_on_qr', 'orderable_on_qr', 'requires_staff_confirmation', 'vendor', 'is_available')
     list_filter = ('track_margin', 'is_available', 'category', 'menu_sections', 'visible_on_pos', 'orderable_on_pos', 'visible_on_qr', 'orderable_on_qr', 'product_type', 'requires_preparation', 'item_type', 'prep_station_ref', 'is_alcoholic', 'requires_staff_confirmation', 'beverage_type', 'food_type', 'service_type', 'vendor', 'tags')
     search_fields = ('name_ar', 'name_en', 'description_ar', 'category__name_ar', 'menu_sections__name_ar')
     autocomplete_fields = ('category', 'vendor', 'prep_station_ref', 'cost_updated_by')
-    readonly_fields = ('cost_updated_at',)
+    readonly_fields = ('cost_updated_at', 'recipe_cost_preview', 'recipe_cost_difference')
     inlines = (ProductMediaInline, ProductOptionGroupAssignmentInline, ProductRecipeItemInline)
+
+
+    @admin.display(description='الكلفة من الوصفة')
+    def recipe_cost_preview(self, obj):
+        result = calculate_recipe_cost(obj)
+        warnings = []
+        if result['missing_cost_items']:
+            warnings.append('مكوّنات بدون كلفة: ' + '، '.join(result['missing_cost_items']))
+        if result['recipe_estimated_unit_cost_syp'] > obj.price_syp:
+            warnings.append('تحذير: كلفة الوصفة أعلى من سعر المنتج')
+        return format_html('{} ل.س{}', int(result['recipe_estimated_unit_cost_syp']), format_html('<br><strong>{}</strong>', ' | '.join(warnings)) if warnings else '')
+
+    @admin.display(description='فرق الكلفة اليدوية والوصفة')
+    def recipe_cost_difference(self, obj):
+        result = calculate_recipe_cost(obj)
+        if obj.estimated_unit_cost_syp is None:
+            return '—'
+        return int(result['recipe_estimated_unit_cost_syp']) - obj.estimated_unit_cost_syp
+
+    @admin.action(description='تحديث الكلفة من الوصفة')
+    def update_estimated_cost_from_recipe(self, request, queryset):
+        for product in queryset:
+            update_product_cost_from_recipe(product, request.user)
+        self.message_user(request, 'تم تحديث الكلفة من الوصفة للمنتجات المحددة.')
 
     @admin.display(description='الهامش التقديري')
     def estimated_margin_display(self, obj):
@@ -254,8 +307,8 @@ class TableAreaAdmin(admin.ModelAdmin):
 class OrderItemInline(admin.TabularInline):
     model = OrderItem
     extra = 0
-    readonly_fields = ('product_name_ar_snapshot', 'unit_price_syp_snapshot', 'line_total_syp_snapshot', 'estimated_unit_cost_syp_snapshot', 'estimated_line_cost_syp_snapshot', 'estimated_line_margin_syp_snapshot')
-    fields = ('product', 'quantity', 'prep_station', 'prep_status', 'product_name_ar_snapshot', 'unit_price_syp_snapshot', 'line_total_syp_snapshot', 'estimated_unit_cost_syp_snapshot', 'estimated_line_cost_syp_snapshot', 'estimated_line_margin_syp_snapshot', 'item_note')
+    readonly_fields = ('stock_deducted_at', 'stock_deduction_error', 'product_name_ar_snapshot', 'unit_price_syp_snapshot', 'line_total_syp_snapshot', 'estimated_unit_cost_syp_snapshot', 'estimated_line_cost_syp_snapshot', 'estimated_line_margin_syp_snapshot')
+    fields = ('product', 'quantity', 'prep_station', 'prep_status', 'stock_deducted', 'stock_deducted_at', 'stock_deduction_error', 'product_name_ar_snapshot', 'unit_price_syp_snapshot', 'line_total_syp_snapshot', 'estimated_unit_cost_syp_snapshot', 'estimated_line_cost_syp_snapshot', 'estimated_line_margin_syp_snapshot', 'item_note')
     autocomplete_fields = ('product',)
 
 
@@ -301,7 +354,7 @@ class OrderAdmin(admin.ModelAdmin):
 
 @admin.register(OrderItem)
 class OrderItemAdmin(admin.ModelAdmin):
-    list_display = ('order', 'product_name_ar_snapshot', 'quantity', 'prep_station', 'prep_status', 'unit_price_syp_snapshot', 'line_total_syp_snapshot', 'estimated_unit_cost_syp_snapshot', 'estimated_line_margin_syp_snapshot')
+    list_display = ('order', 'product_name_ar_snapshot', 'quantity', 'prep_station', 'prep_status', 'stock_deducted', 'unit_price_syp_snapshot', 'line_total_syp_snapshot', 'estimated_unit_cost_syp_snapshot', 'estimated_line_margin_syp_snapshot')
     search_fields = ('order__public_code', 'product_name_ar_snapshot', 'product__name_ar')
     list_filter = ('prep_status', 'prep_station')
     autocomplete_fields = ('order', 'product')
