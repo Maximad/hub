@@ -4,7 +4,7 @@
 <section class="hub-section hub-card kitchen-order-detail">
   <h2 class="hub-section-title">تفاصيل تحضير الطلب {{ order.display_number }}</h2>
   <p><strong>طريقة الطلب:</strong> {{ order.get_fulfillment_label }}</p>
-  <p><strong>وقت الإنشاء:</strong> {{ order.created_at }}</p>
+  <p><strong>وقت الإنشاء:</strong> {{ order.created_at }}</p><div class="hub-toolbar"><a class="hub-button" href="{% url 'staff_order_prep_ticket' order.public_code %}">طباعة التذكرة</a></div>
   <div class="kitchen-items-grid">
     {% for item in order.items.all %}
     <article class="hub-list-card kitchen-item-card kitchen-status-{{ item.prep_status }}">

@@ -1097,6 +1097,11 @@ class SystemSetting(TimeStampedModel):
         FREE = 'free', 'مجاني'
         MANUAL = 'manual', 'يدوي'
 
+
+    class PrintDefaultTemplate(models.TextChoices):
+        A4 = 'a4', 'A4'
+        THERMAL = 'thermal', 'حراري'
+
     system_title_ar = models.CharField(max_length=160, default='نظام مشاريب', verbose_name='عنوان النظام بالعربية')
     system_title_en = models.CharField(max_length=160, default='Masharib System', verbose_name='عنوان النظام بالإنجليزية')
     public_brand_title_ar = models.CharField(max_length=160, default='مشاريب', verbose_name='اسم العلامة في المنيو')
@@ -1195,6 +1200,14 @@ class SystemSetting(TimeStampedModel):
     auto_deduct_inventory_on_sale = models.BooleanField(default=False, verbose_name='خصم المخزون عند البيع')
     stock_deduction_mode = models.CharField('وضع خصم المخزون', max_length=30, choices=StockDeductionMode.choices, default=StockDeductionMode.DISABLED)
     strict_stock_deduction = models.BooleanField('منع البيع عند نقص المخزون', default=False)
+
+
+    receipt_business_name = models.CharField(max_length=160, blank=True, verbose_name='اسم المنشأة على الإيصال')
+    receipt_footer_text = models.CharField(max_length=240, blank=True, default='شكراً لزيارتكم', verbose_name='نص أسفل الإيصال')
+    receipt_show_qr = models.BooleanField(default=False, verbose_name='إظهار QR')
+    receipt_show_logo = models.BooleanField(default=False, verbose_name='إظهار الشعار')
+    thermal_receipt_width_mm = models.PositiveSmallIntegerField(default=80, validators=[MinValueValidator(50), MaxValueValidator(110)], verbose_name='عرض الإيصال الحراري')
+    print_default_template = models.CharField(max_length=20, choices=PrintDefaultTemplate.choices, default=PrintDefaultTemplate.A4, verbose_name='قالب الطباعة الافتراضي')
 
     internet_metered_enabled = models.BooleanField(default=True, verbose_name='تفعيل المحاسبة حسب الوقت')
     allow_unpaid_sessions = models.BooleanField(default=True, verbose_name='السماح بجلسات غير مدفوعة')

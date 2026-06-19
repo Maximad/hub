@@ -16,6 +16,6 @@
     {% for value,label in order.DeliveryStatus.choices %}{% if value != 'not_applicable' and value != 'new' and value != 'cancelled' %}<form method="post" action="{% url 'staff_order_status' order.public_code %}">{% csrf_token %}<input type="hidden" name="next" value="staff_delivery"><input type="hidden" name="delivery_status" value="{{ value }}"><button class="hub-button hub-button-secondary" type="submit">{{ label }}</button></form>{% endif %}{% endfor %}
   </div>
   <form method="post" action="{% url 'staff_order_status' order.public_code %}">{% csrf_token %}<input type="hidden" name="next" value="staff_delivery"><input type="hidden" name="delivery_status" value="cancelled"><select class="hub-input" name="cancellation_reason"><option value="">سبب الإلغاء</option>{% for value,label in cancellation_reasons %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select><button class="hub-button hub-button-danger" type="submit">إلغاء التوصيل</button></form>
-</article>{% endwith %}{% empty %}<p class="hub-empty-state">لا توجد طلبات توصيل.</p>{% endfor %}
+<a class="hub-button" href="{% url 'staff_order_delivery_ticket' order.public_code %}">طباعة تذكرة توصيل</a></article>{% endwith %}{% empty %}<p class="hub-empty-state">لا توجد طلبات توصيل.</p>{% endfor %}
 </div>
 {% endblock %}
