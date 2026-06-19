@@ -100,10 +100,10 @@ class SystemSettingAdmin(admin.ModelAdmin):
         }),
         ('إعدادات الإنترنت والعمل', {
             'fields': (
-                'default_internet_billing_mode', 'default_rate_per_hour_syp', 'default_minimum_minutes',
-                'default_free_grace_minutes', 'default_daily_cap_syp', 'allow_guest_internet_sessions',
+                'internet_metered_enabled', 'default_internet_billing_mode', 'default_rate_per_hour_syp', 'default_minimum_minutes',
+                'default_rounding_increment_minutes', 'default_minimum_charge_syp', 'default_free_grace_minutes', 'default_daily_cap_syp', 'allow_guest_internet_sessions',
                 'allow_member_internet_sessions', 'auto_create_order_for_metered_sessions',
-                'internet_service_product', 'require_phone_for_guest_session',
+                'allow_unpaid_sessions', 'internet_service_product', 'default_workspace_product', 'require_phone_for_guest_session',
             ),
             'description': 'هذه الإعدادات للفوترة اليدوية فقط. التحكم الآلي بالراوتر/الشبكة/الكابتف بورتال غير مفعّل في هذه المرحلة.',
         }),
@@ -264,9 +264,9 @@ class InternetPackageAdmin(admin.ModelAdmin):
 
 @admin.register(InternetSession)
 class InternetSessionAdmin(admin.ModelAdmin):
-    list_display = ('id', 'customer_label', 'billing_mode', 'status', 'started_at', 'ended_at', 'duration_minutes', 'calculated_total_syp', 'linked_order')
-    list_filter = ('billing_mode', 'status', 'network_provider', 'started_at')
-    search_fields = ('guest_name', 'guest_phone', 'customer_name', 'customer_phone', 'member__name_ar', 'member__name_en', 'member__phone', 'access_code', 'network_session_id')
+    list_display = ('id', 'customer_label', 'session_type', 'billing_mode', 'status', 'started_at', 'ended_at', 'duration_minutes', 'billable_minutes', 'calculated_total_syp', 'linked_order')
+    list_filter = ('session_type', 'billing_mode', 'status', 'network_provider', 'started_at')
+    search_fields = ('guest_name', 'guest_phone', 'customer_name', 'customer_phone', 'member__name_ar', 'member__name_en', 'member__phone', 'access_code', 'network_session_id', 'linked_order__display_number')
     autocomplete_fields = ('member', 'package', 'linked_order', 'linked_payment', 'started_by', 'ended_by')
     readonly_fields = ('created_at', 'updated_at')
 

@@ -23,7 +23,7 @@
   <li>خصم الأعضاء: {{ sums.discount_total }} ل.س</li>
   <li>الطلبات الملغاة: {{ sums.cancelled_count }} / {{ sums.cancelled_value }} ل.س</li>
   <li>النقد المتوقع: {{ sums.expected_cash_syp }} ل.س</li>
-<li>طلبات التوصيل: {{ sums.delivery_order_count }} | رسوم التوصيل: {{ sums.delivery_fees_total }} ل.س | غير مدفوعة: {{ sums.unpaid_delivery_orders }} | ملغاة: {{ sums.cancelled_delivery_orders }} | متوسط التوصيل: {{ sums.average_delivery_order_value }} ل.س</li><li>طلبات السفري: {{ sums.takeaway_order_count }}</li></ul>
+<li>طلبات التوصيل: {{ sums.delivery_order_count }} | رسوم التوصيل: {{ sums.delivery_fees_total }} ل.س | غير مدفوعة: {{ sums.unpaid_delivery_orders }} | ملغاة: {{ sums.cancelled_delivery_orders }} | متوسط التوصيل: {{ sums.average_delivery_order_value }} ل.س</li><li>طلبات السفري: {{ sums.takeaway_order_count }}</li><li>جلسات الإنترنت ومساحة العمل: {{ sums.internet_workspace_sessions_count }} | الوقت الفعلي: {{ sums.internet_workspace_raw_minutes }} دقيقة | الوقت المحسوب: {{ sums.internet_workspace_billable_minutes }} دقيقة | الإيراد: {{ sums.internet_workspace_revenue_syp }} ل.س | حسب الوقت: {{ sums.internet_workspace_metered_revenue_syp }} ل.س | دقائق مسبقة: {{ sums.internet_workspace_prepaid_minutes_used }} | غير مدفوعة: {{ sums.internet_workspace_unpaid_orders }} | ملغاة: {{ sums.internet_workspace_cancelled_sessions }}</li></ul>
 <table style="width:100%; border-collapse:collapse;">
 <tr><th>رقم الطلب</th><th>الوقت</th><th>طريقة الطلب</th><th>الحالة</th><th>العناصر</th><th>التوصيل</th><th>الخصم</th><th>المجموع</th><th>المدفوع</th><th>المتبقي</th></tr>
 {% for row in rows %}

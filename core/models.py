@@ -571,9 +571,14 @@ class InternetPackage(TimeStampedModel, PublicCodeModel):
 
 
 class InternetSession(TimeStampedModel, PublicCodeModel):
+    class SessionType(models.TextChoices):
+        INTERNET = 'internet', 'إنترنت'
+        WORKSPACE = 'workspace', 'مساحة العمل'
+        MIXED = 'mixed', 'إنترنت ومساحة عمل'
+
     class BillingMode(models.TextChoices):
         PREPAID = 'prepaid', 'مسبق الدفع'
-        OPEN_METERED = 'open_metered', 'مفتوح محسوب بالوقت'
+        OPEN_METERED = 'open_metered', 'جلسة مفتوحة حسب الوقت'
         FREE = 'free', 'مجاني'
         MANUAL = 'manual', 'يدوي'
 
@@ -582,6 +587,7 @@ class InternetSession(TimeStampedModel, PublicCodeModel):
         ENDED = 'ended', 'منتهية'
         CANCELLED = 'cancelled', 'ملغاة'
         UNPAID = 'unpaid', 'غير مدفوعة'
+        BILLED = 'billed', 'مفروترة'
         PAID = 'paid', 'مدفوعة'
 
     class NetworkProvider(models.TextChoices):
@@ -590,6 +596,7 @@ class InternetSession(TimeStampedModel, PublicCodeModel):
         UNIFI = 'unifi', 'UniFi'
         RADIUS = 'radius', 'RADIUS'
 
+    session_type = models.CharField(max_length=20, choices=SessionType.choices, default=SessionType.INTERNET, verbose_name='نوع الجلسة')
     member = models.ForeignKey(Member, on_delete=models.PROTECT, related_name='internet_sessions', null=True, blank=True)
     package = models.ForeignKey(InternetPackage, on_delete=models.PROTECT, related_name='sessions', null=True, blank=True)
     customer_name = models.CharField(max_length=120, blank=True)
@@ -606,6 +613,12 @@ class InternetSession(TimeStampedModel, PublicCodeModel):
     rate_per_hour_syp = models.PositiveIntegerField(default=0)
     minimum_minutes = models.PositiveIntegerField(default=0)
     free_grace_minutes = models.PositiveIntegerField(default=0)
+    rounding_increment_minutes = models.PositiveSmallIntegerField(default=15, choices=[(15, '15'), (30, '30'), (60, '60')], verbose_name='التقريب كل')
+    minimum_charge_syp = models.PositiveIntegerField(default=0, verbose_name='الحد الأدنى للدفع')
+    billable_minutes = models.PositiveIntegerField(default=0, verbose_name='المدة المحسوبة')
+    member_minutes_used = models.PositiveIntegerField(default=0, verbose_name='دقائق العضو المستخدمة')
+    member_credit_used_syp = models.PositiveIntegerField(default=0, verbose_name='رصيد العضو المستخدم')
+    cancellation_reason = models.TextField(blank=True, verbose_name='سبب الإلغاء')
     daily_cap_syp = models.PositiveIntegerField(null=True, blank=True)
     calculated_total_syp = models.PositiveIntegerField(default=0)
     manual_total_syp = models.PositiveIntegerField(null=True, blank=True)
@@ -654,6 +667,8 @@ class InternetSession(TimeStampedModel, PublicCodeModel):
             self.started_at = self.start_time
         if self.start_time is None and self.started_at is not None:
             self.start_time = self.started_at
+        if self.rounding_increment_minutes not in {15, 30, 60}:
+            self.rounding_increment_minutes = 15
         if not self.guest_name and self.customer_name:
             self.guest_name = self.customer_name
         if not self.customer_name and self.guest_name:
@@ -791,7 +806,7 @@ class SystemSetting(TimeStampedModel):
 
     class InternetBillingMode(models.TextChoices):
         PREPAID = 'prepaid', 'مسبق الدفع'
-        OPEN_METERED = 'open_metered', 'مفتوح محسوب بالوقت'
+        OPEN_METERED = 'open_metered', 'جلسة مفتوحة حسب الوقت'
         FREE = 'free', 'مجاني'
         MANUAL = 'manual', 'يدوي'
 
@@ -885,15 +900,20 @@ class SystemSetting(TimeStampedModel):
     order_board_density = models.CharField(max_length=20, choices=OrderBoardDensity.choices, default=OrderBoardDensity.NORMAL, verbose_name='كثافة لوحة الطلبات')
     cashier_layout = models.CharField(max_length=30, choices=CashierLayout.choices, default=CashierLayout.SINGLE_COLUMN, verbose_name='تخطيط الكاشير')
 
+    internet_metered_enabled = models.BooleanField(default=True, verbose_name='تفعيل المحاسبة حسب الوقت')
+    allow_unpaid_sessions = models.BooleanField(default=True, verbose_name='السماح بجلسات غير مدفوعة')
+    default_workspace_product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True, related_name='workspace_setting_profiles', verbose_name='منتج مساحة العمل الافتراضي')
     default_internet_billing_mode = models.CharField(max_length=20, choices=InternetBillingMode.choices, default=InternetBillingMode.OPEN_METERED, verbose_name='وضع فوترة الإنترنت الافتراضي')
     default_rate_per_hour_syp = models.PositiveIntegerField(default=0, verbose_name='سعر الساعة الافتراضي للإنترنت/العمل')
     default_minimum_minutes = models.PositiveIntegerField(default=30, verbose_name='الحد الأدنى الافتراضي للدقائق')
+    default_rounding_increment_minutes = models.PositiveSmallIntegerField(default=15, choices=[(15, '15'), (30, '30'), (60, '60')], verbose_name='التقريب كل')
+    default_minimum_charge_syp = models.PositiveIntegerField(default=0, verbose_name='الحد الأدنى للدفع')
     default_free_grace_minutes = models.PositiveIntegerField(default=0, verbose_name='دقائق السماح المجانية الافتراضية')
     default_daily_cap_syp = models.PositiveIntegerField(null=True, blank=True, verbose_name='السقف اليومي الافتراضي')
     allow_guest_internet_sessions = models.BooleanField(default=True, verbose_name='السماح بجلسات الزوار')
     allow_member_internet_sessions = models.BooleanField(default=True, verbose_name='السماح بجلسات الأعضاء')
-    auto_create_order_for_metered_sessions = models.BooleanField(default=False, verbose_name='إنشاء طلب تلقائي للجلسات المحسوبة')
-    internet_service_product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True, related_name='internet_setting_profiles', verbose_name='منتج خدمة الإنترنت للطلبات')
+    auto_create_order_for_metered_sessions = models.BooleanField(default=True, verbose_name='إنشاء طلب تلقائي للجلسات المحسوبة')
+    internet_service_product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True, related_name='internet_setting_profiles', verbose_name='منتج الإنترنت الافتراضي')
     require_phone_for_guest_session = models.BooleanField(default=False, verbose_name='طلب هاتف الزائر عند بدء الجلسة')
 
     @property
