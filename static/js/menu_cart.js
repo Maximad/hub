@@ -67,7 +67,7 @@
       const lineTotal = qty * unitPrice;
       totalQty += qty;
       totalPrice += lineTotal;
-      lines.push({ name, qty, unitPrice, lineTotal, note, options });
+      lines.push({ id, name, qty, unitPrice, lineTotal, note, options });
     });
 
     cartList.innerHTML = lines
@@ -76,7 +76,7 @@
           ? `<ul class="menu-cart-options">${line.options.map((option) => `<li>${escapeHtml(option.name)}</li>`).join('')}</ul>`
           : '';
         const noteHtml = line.note ? `<small>ملاحظة: ${escapeHtml(line.note)}</small>` : '';
-        return `<li><strong>${escapeHtml(line.name)}</strong> × ${line.qty} — ${line.lineTotal.toLocaleString('ar-SY')} ل.س ${optionHtml}${noteHtml}</li>`;
+        return `<li><strong>${escapeHtml(line.name)}</strong> × ${line.qty} — ${line.lineTotal.toLocaleString('ar-SY')} ل.س ${optionHtml}${noteHtml}<div class="menu-cart-actions"><button class="hub-button hub-button-secondary" type="button" data-action="minus" data-target="qty_${line.id}">-</button><button class="hub-button hub-button-secondary" type="button" data-action="plus" data-target="qty_${line.id}">+</button><button class="hub-button hub-button-secondary" type="button" data-action="edit" data-target="qty_${line.id}">تعديل</button><button class="hub-button hub-button-danger" type="button" data-action="remove" data-target="qty_${line.id}">حذف</button></div></li>`;
       })
       .join('');
 
@@ -105,7 +105,12 @@
     const input = form.querySelector('#' + button.dataset.target);
     if (!input) return;
     const current = Math.max(0, parseInt(input.value || '0', 10) || 0);
-    const next = button.dataset.action === 'plus' ? current + 1 : Math.max(0, current - 1);
+    if (button.dataset.action === 'edit') {
+      input.closest('[data-product-card]')?.querySelector('details')?.setAttribute('open', 'open');
+      input.closest('[data-product-card]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    const next = button.dataset.action === 'plus' ? current + 1 : button.dataset.action === 'remove' ? 0 : Math.max(0, current - 1);
     input.value = next;
     update();
   });

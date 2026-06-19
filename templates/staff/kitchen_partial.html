@@ -6,11 +6,11 @@
   </div>
   <div class="kitchen-items-grid">
   {% for row in group.items %}{% with item=row.item order=row.item.order %}
-    <article class="hub-list-card kitchen-item-card kitchen-status-{{ item.prep_status }}{% if item.prep_status == 'pending' %} kitchen-item-card--new{% endif %}">
+    <article class="hub-list-card kitchen-item-card kitchen-status-{{ item.prep_status }}{% if item.prep_status == 'new' or item.prep_status == 'sent' %} kitchen-item-card--new{% endif %}">
       <div class="kitchen-card-topline">
         <strong class="kitchen-order-number">{{ order.display_number }}</strong>
         <span class="hub-badge kitchen-fulfillment-badge">{{ order.get_fulfillment_label }}</span>
-        <span class="hub-badge kitchen-status-badge">{{ item.get_prep_status_display }}</span>
+        <span class="hub-badge kitchen-status-badge">{{ item.get_prep_status_display }}</span><span class="hub-badge hub-badge-info">{{ item.prep_station.name_ar|default:group.label }}</span>
       </div>
       <div class="kitchen-card-meta">
         <span>منذ {{ order.created_at|timesince }}</span>

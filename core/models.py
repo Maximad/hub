@@ -108,11 +108,24 @@ class Product(TimeStampedModel, PublicCodeModel):
     class ServiceType(models.TextChoices):
         INTERNET='internet','Internet'; WORKSPACE='workspace','Workspace'; TABLE_RESERVATION='table_reservation','Table Reservation'; ROOM_BOOKING='room_booking','Room Booking'; WORKSHOP='workshop','Workshop'; OTHER='other','Other'
 
+    class ProductType(models.TextChoices):
+        FOOD = 'food', 'طعام'
+        DRINK = 'drink', 'مشروب'
+        SERVICE = 'service', 'خدمة'
+        INTERNET = 'internet', 'إنترنت'
+        EVENT = 'event', 'فعالية'
+        MEMBERSHIP = 'membership', 'عضوية'
+        OTHER = 'other', 'أخرى'
+
+    product_type = models.CharField('نوع التشغيل', max_length=20, choices=ProductType.choices, default=ProductType.OTHER)
     item_type = models.CharField(max_length=30, choices=ItemType.choices, default=ItemType.BEVERAGE)
     beverage_type = models.CharField(max_length=30, choices=BeverageType.choices, blank=True)
     food_type = models.CharField(max_length=30, choices=FoodType.choices, blank=True)
     service_type = models.CharField(max_length=30, choices=ServiceType.choices, blank=True)
-    prep_station_ref = models.ForeignKey('catalog.PrepStation', on_delete=models.SET_NULL, null=True, blank=True)
+    prep_station_ref = models.ForeignKey('catalog.PrepStation', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='محطة التحضير')
+    requires_preparation = models.BooleanField('يحتاج تحضير', default=False)
+    visible_on_pos = models.BooleanField('ظاهر في نقطة البيع', default=True)
+    orderable_on_pos = models.BooleanField('قابل للطلب من نقطة البيع', default=True)
     vendor = models.ForeignKey('vendors.Vendor', on_delete=models.SET_NULL, null=True, blank=True)
     is_alcoholic = models.BooleanField(default=False)
     age_restricted = models.BooleanField(default=False)
@@ -124,6 +137,17 @@ class Product(TimeStampedModel, PublicCodeModel):
     not_discountable = models.BooleanField(default=False)
     cost_syp = models.PositiveIntegerField(null=True, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
+
+    @property
+    def prep_station(self):
+        return self.prep_station_ref
+
+    @prep_station.setter
+    def prep_station(self, value):
+        self.prep_station_ref = value
+
+    def infer_requires_preparation(self):
+        return self.requires_preparation or self.product_type in {self.ProductType.FOOD, self.ProductType.DRINK} or self.item_type in {self.ItemType.FOOD, self.ItemType.BEVERAGE}
 
     def __str__(self):
         return _arabic_first(self, 'name_ar', 'name_en', fallback=str(self.public_code)[:8])
@@ -279,12 +303,15 @@ class Order(TimeStampedModel, PublicCodeModel):
 
 class OrderItem(TimeStampedModel):
     class PrepStatus(models.TextChoices):
-        PENDING = 'pending', 'جديد'
+        NEW = 'new', 'جديد'
+        SENT = 'sent', 'مرسل للتحضير'
         ACCEPTED = 'accepted', 'تم الاستلام'
         PREPARING = 'preparing', 'قيد التحضير'
         READY = 'ready', 'جاهز'
         SERVED = 'served', 'تم التسليم'
-        CANCELLED = 'cancelled', 'ملغي'
+        CANCELLED = 'cancelled', 'ملغى'
+        NO_PREP = 'no_prep', 'لا يحتاج تحضير'
+        PENDING = 'pending', 'جديد'
 
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
     product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name='order_items')
@@ -295,9 +322,31 @@ class OrderItem(TimeStampedModel):
     selected_options_snapshot = models.JSONField(default=list, blank=True)
     item_note = models.TextField(blank=True)
     line_total_syp_snapshot = models.IntegerField(null=True, blank=True)
-    prep_status = models.CharField(max_length=20, choices=PrepStatus.choices, default=PrepStatus.PENDING)
+    prep_station = models.ForeignKey('catalog.PrepStation', on_delete=models.SET_NULL, null=True, blank=True, related_name='order_items', verbose_name='محطة التحضير')
+    prep_status = models.CharField(max_length=20, choices=PrepStatus.choices, default=PrepStatus.NEW)
     cancellation_reason = models.CharField(max_length=30, choices=CancellationReason.choices, blank=True, verbose_name='سبب الإلغاء')
     cancellation_notes = models.TextField(blank=True, verbose_name='ملاحظات الإلغاء')
+
+    def assign_prep_defaults(self):
+        requires_prep = self.product.infer_requires_preparation() if self.product_id else True
+        if not requires_prep:
+            self.prep_status = self.PrepStatus.NO_PREP
+            return
+        if not self.prep_station_id and self.product_id:
+            self.prep_station = self.product.prep_station_ref
+            if self.prep_station is None and requires_prep:
+                from catalog.models import PrepStation
+                self.prep_station = (
+                    PrepStation.objects.filter(code='general', is_active=True).first()
+                    or PrepStation.objects.filter(station_type='general', is_active=True).first()
+                )
+        if self.prep_status in {'', self.PrepStatus.NO_PREP}:
+            self.prep_status = self.PrepStatus.NEW
+
+    def save(self, *args, **kwargs):
+        if self.product_id and (not self.prep_station_id or not self.prep_status):
+            self.assign_prep_defaults()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f'{self.product_name_ar_snapshot} × {self.quantity} — {self.order.display_number}'
