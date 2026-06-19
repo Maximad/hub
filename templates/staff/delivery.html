@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}طلبات التوصيل{% endblock %}
+{% block content %}
+<div class="hub-card" dir="rtl"><h1>طلبات التوصيل</h1><p>لوحة متابعة طلبات التوصيل بدون إظهار UUID كعنوان رئيسي.</p><a class="hub-button" href="{% url 'staff_orders' %}">لوحة الطلبات</a></div>
+<div class="hub-grid hub-grid-2" dir="rtl">
+{% for row in rows %}{% with order=row.order %}<article class="hub-card">
+  <h3>{{ order.display_number }}</h3>
+  <p><strong>الزبون:</strong> {{ order.delivery_customer_name|default:'—' }}</p>
+  <p><strong>رقم الهاتف:</strong> {{ order.delivery_phone|default:'—' }}</p>
+  <p><strong>العنوان:</strong> {% if order.delivery_area %}{{ order.delivery_area }} — {% endif %}{{ order.delivery_address|truncatechars:120 }}</p>
+  {% if order.delivery_landmark %}<p><strong>علامة قريبة:</strong> {{ order.delivery_landmark }}</p>{% endif %}
+  <p><strong>حالة التوصيل:</strong> <span class="hub-badge hub-badge-info">{{ order.get_delivery_status_display }}</span></p>
+  <p><strong>الدفع:</strong> {{ row.payment_label }} | <strong>الإجمالي:</strong> {{ row.total }} | <strong>أجرة التوصيل:</strong> {{ order.delivery_fee_syp }}</p>
+  <p><strong>وقت الإنشاء:</strong> {{ order.created_at|date:"Y-m-d H:i" }}</p>
+  <div class="hub-toolbar">
+    {% for value,label in order.DeliveryStatus.choices %}{% if value != 'not_applicable' and value != 'new' and value != 'cancelled' %}<form method="post" action="{% url 'staff_order_status' order.public_code %}">{% csrf_token %}<input type="hidden" name="next" value="staff_delivery"><input type="hidden" name="delivery_status" value="{{ value }}"><button class="hub-button hub-button-secondary" type="submit">{{ label }}</button></form>{% endif %}{% endfor %}
+  </div>
+  <form method="post" action="{% url 'staff_order_status' order.public_code %}">{% csrf_token %}<input type="hidden" name="next" value="staff_delivery"><input type="hidden" name="delivery_status" value="cancelled"><select class="hub-input" name="cancellation_reason"><option value="">سبب الإلغاء</option>{% for value,label in cancellation_reasons %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select><button class="hub-button hub-button-danger" type="submit">إلغاء التوصيل</button></form>
+</article>{% endwith %}{% empty %}<p class="hub-empty-state">لا توجد طلبات توصيل.</p>{% endfor %}
+</div>
+{% endblock %}

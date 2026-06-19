@@ -30,7 +30,9 @@ def role_for_station(station):
 
 def _roles_for_event(event_type, station=None, target_role=''):
     if target_role: return [target_role]
-    if event_type in {'new_order','order_edited','order_cancelled','delivery_order_created'}: return ['admin','cashier','waiter']
+    if event_type in {'new_order','order_edited','order_cancelled','delivery_order_created'}: return ['admin','cashier','service']
+    if event_type in {'delivery_order_confirmed','delivery_ready_for_delivery','delivery_out_for_delivery'}: return ['admin','cashier','service']
+    if event_type in {'delivery_delivered','delivery_cancelled'}: return ['admin','cashier']
     if event_type in PREP_EVENTS:
         role = role_for_station(station)
         return ['admin', role] if role else ['admin','kitchen','cashier']
@@ -47,7 +49,7 @@ def link_for_event(event):
     if event.event_type in PAYMENT_EVENTS or event.event_type in MANAGER_EVENTS:
         return reverse('staff_cashier_order', kwargs={'public_code': event.order.public_code}) if event.order_id else reverse('staff_cashier')
     if event.event_type in DAILY_EVENTS: return reverse('staff_close_day')
-    return reverse('staff_orders')
+    return reverse('staff_delivery') if str(event.event_type).startswith('delivery_') else reverse('staff_orders')
 
 
 def create_notification(event_type, title_ar, message_ar='', order=None, order_item=None, target_station=None, target_role='', created_by=None):

@@ -57,6 +57,7 @@ urlpatterns = [
     path('staff/kitchen/order/<uuid:public_code>/', staff_kitchen_order, name='staff_kitchen_order'),
     path('staff/kitchen/item/<int:item_id>/status/', staff_kitchen_item_status, name='staff_kitchen_item_status'),
     path('staff/orders/', menu.staff_orders, name='staff_orders'),
+    path('staff/delivery/', menu.staff_delivery, name='staff_delivery'),
     path('staff/orders/partial/', menu.staff_orders, name='staff_orders_partial'),
     path('staff/orders/<uuid:public_code>/status/', menu.staff_order_status, name='staff_order_status'),
     path('staff/orders/<uuid:public_code>/edit/', menu.staff_order_edit, name='staff_order_edit'),

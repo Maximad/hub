@@ -63,9 +63,9 @@ class SystemSettingAdmin(admin.ModelAdmin):
         }),
         ('خيارات الطلب والتوصيل', {
             'fields': (
-                'enable_delivery', 'enable_takeaway', 'default_fulfillment_mode',
-                'require_phone_for_delivery', 'require_address_for_delivery',
-                'delivery_fee_mode', 'fixed_delivery_fee_syp', 'minimum_delivery_order_syp',
+                'delivery_enabled', 'takeaway_enabled', 'enable_delivery', 'enable_takeaway', 'default_fulfillment_mode',
+                'require_delivery_phone', 'require_delivery_address', 'allow_unpaid_delivery', 'require_phone_for_delivery', 'require_address_for_delivery',
+                'delivery_fee_mode', 'default_delivery_fee_syp', 'fixed_delivery_fee_syp', 'minimum_delivery_order_syp',
                 'delivery_working_hours_text', 'delivery_contact_phone', 'delivery_contact_whatsapp', 'delivery_notes',
             ),
             'description': 'التوصيل والتيك أواي يبقيان مخفيين عن المنيو العام ونقطة البيع ما لم يتم تفعيلهما هنا. إذا كان الوضع الافتراضي غير متاح فسيعود النظام إلى طلب داخل المكان.',
@@ -180,11 +180,11 @@ class OrderItemInline(admin.TabularInline):
 class OrderAdmin(admin.ModelAdmin):
     list_display = ('display_number', 'fulfillment_mode', 'delivery_status', 'customer_summary', 'total_amount', 'discount_amount', 'paid_amount', 'remaining_amount', 'status', 'created_at', 'public_code')
     list_filter = ('fulfillment_mode', 'delivery_status', 'status', 'created_at')
-    search_fields = ('public_code', 'notes', 'table__name_ar', 'delivery_address', 'delivery_area', 'assigned_driver_name', 'assigned_driver_phone')
+    search_fields = ('public_code', 'notes', 'table__name_ar', 'delivery_phone', 'delivery_address', 'delivery_area', 'assigned_driver_name', 'assigned_driver_phone')
     readonly_fields = ('public_code', 'display_number', 'created_at', 'updated_at')
     fieldsets = (
         ('بيانات الطلب', {'fields': ('public_code', 'display_number', 'status', 'table', 'service_mode', 'fulfillment_mode', 'notes')}),
-        ('بيانات التوصيل', {'fields': ('delivery_status', 'delivery_area', 'delivery_address', 'delivery_notes', 'delivery_fee_syp', 'delivery_eta_minutes', 'assigned_driver_name', 'assigned_driver_phone')}),
+        ('بيانات التوصيل', {'fields': ('delivery_status', 'delivery_customer_name', 'delivery_phone', 'delivery_area', 'delivery_address', 'delivery_landmark', 'delivery_notes', 'delivery_fee_syp', 'delivery_eta_minutes', 'assigned_to', 'assigned_driver_name', 'assigned_driver_phone', 'delivery_created_at', 'delivery_confirmed_at', 'delivery_out_at', 'delivery_delivered_at', 'delivery_cancelled_at')}),
         ('التواريخ', {'fields': ('created_at', 'updated_at')}),
     )
     autocomplete_fields = ('table',)

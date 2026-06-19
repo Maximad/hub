@@ -23,10 +23,10 @@
       <div>
         <strong>طريقة الطلب</strong>
         <div class="menu-option-chips" data-fulfillment-selector>
-          <label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="inside_space" {% if form_values.fulfillment_mode != 'delivery' and form_values.fulfillment_mode != 'takeaway' and form_values.fulfillment_mode != 'table' %}checked{% endif %}> داخل المكان</label>
+          <label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="inside_space_general" {% if form_values.fulfillment_mode != 'delivery' and form_values.fulfillment_mode != 'takeaway' and form_values.fulfillment_mode != 'table' %}checked{% endif %}> داخل المكان</label>
           <label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="table" {% if form_values.fulfillment_mode == 'table' %}checked{% endif %}> طاولة</label>
-          {% if settings.enable_delivery %}<label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="delivery" {% if form_values.fulfillment_mode == 'delivery' %}checked{% endif %}> توصيل</label>{% endif %}
-          {% if settings.enable_takeaway %}<label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="takeaway" {% if form_values.fulfillment_mode == 'takeaway' %}checked{% endif %}> تيك أواي</label>{% endif %}
+          {% if settings.effective_delivery_enabled %}<label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="delivery" {% if form_values.fulfillment_mode == 'delivery' %}checked{% endif %}> توصيل</label>{% endif %}
+          {% if settings.effective_takeaway_enabled %}<label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="takeaway" {% if form_values.fulfillment_mode == 'takeaway' %}checked{% endif %}> تيك أواي</label>{% endif %}
         </div>
       </div>
       <div>

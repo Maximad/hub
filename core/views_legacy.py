@@ -104,7 +104,7 @@ def _subtotal_for_selected(selected):
 def _delivery_fee_for_settings(settings, fulfillment_mode, raw_manual_fee=None):
     if fulfillment_mode != Order.FulfillmentMode.DELIVERY:
         return 0
-    if not settings or not settings.enable_delivery:
+    if not settings or not settings.effective_delivery_enabled:
         return 0
     if settings.delivery_fee_mode == SystemSetting.DeliveryFeeMode.FIXED:
         return max(settings.fixed_delivery_fee_syp or 0, 0)
@@ -129,9 +129,9 @@ def _validate_fulfillment_mode(request, settings, table=None, allow_table=True):
     if mode == Order.FulfillmentMode.TABLE and not table:
         # Public menu without QR remains in-space unless a staff POS table is selected.
         return Order.FulfillmentMode.INSIDE_SPACE, ''
-    if mode == Order.FulfillmentMode.DELIVERY and (not settings or not settings.enable_delivery):
+    if mode == Order.FulfillmentMode.DELIVERY and (not settings or not settings.effective_delivery_enabled):
         return default_mode, 'خيار التوصيل غير مفعّل حالياً.'
-    if mode == Order.FulfillmentMode.TAKEAWAY and (not settings or not settings.enable_takeaway):
+    if mode == Order.FulfillmentMode.TAKEAWAY and (not settings or not settings.effective_takeaway_enabled):
         return default_mode, 'خيار التيك أواي غير مفعّل حالياً.'
     return mode, ''
 
@@ -139,19 +139,24 @@ def _validate_fulfillment_mode(request, settings, table=None, allow_table=True):
 def _validate_delivery_details(request, settings, fulfillment_mode, subtotal, manual_fee_name='delivery_fee_syp'):
     errors = []
     delivery_data = {
+        'delivery_customer_name': request.POST.get('delivery_customer_name', request.POST.get('customer_name', '')).strip(),
+        'delivery_phone': request.POST.get('delivery_phone', request.POST.get('customer_phone', '')).strip(),
         'delivery_area': request.POST.get('delivery_area', '').strip(),
+        'delivery_landmark': request.POST.get('delivery_landmark', '').strip(),
         'delivery_address': request.POST.get('delivery_address', '').strip(),
         'delivery_notes': request.POST.get('delivery_notes', '').strip(),
         'delivery_fee_syp': _delivery_fee_for_settings(settings, fulfillment_mode, request.POST.get(manual_fee_name)),
-        'delivery_status': Order.DeliveryStatus.NOT_DELIVERY,
+        'delivery_status': Order.DeliveryStatus.NOT_APPLICABLE,
     }
     if fulfillment_mode != Order.FulfillmentMode.DELIVERY:
         return delivery_data, errors
-    delivery_data['delivery_status'] = Order.DeliveryStatus.DELIVERY_REQUESTED
+    delivery_data['delivery_status'] = Order.DeliveryStatus.NEW
     if settings.minimum_delivery_order_syp and subtotal < settings.minimum_delivery_order_syp:
         errors.append(f'الحد الأدنى لطلب التوصيل هو {settings.minimum_delivery_order_syp} ل.س.')
-    if settings.require_address_for_delivery and not delivery_data['delivery_address']:
+    if (settings.require_delivery_address or settings.require_address_for_delivery) and not delivery_data['delivery_address']:
         errors.append('عنوان التوصيل مطلوب.')
+    if (settings.require_delivery_phone or settings.require_phone_for_delivery) and not delivery_data['delivery_phone']:
+        errors.append('رقم الهاتف مطلوب للتوصيل.')
     return delivery_data, errors
 
 
@@ -191,12 +196,23 @@ def _build_day_report(report_date):
         'orders_count': 0, 'gross_sales': 0, 'net_sales': 0, 'order_total': 0, 'subtotal_total': 0, 'delivery_fee_total': 0, 'paid_total': 0, 'remaining_total': 0,
         'cash_total': 0, 'manual_transfer_total': 0, 'free_total': 0, 'discount_total': 0, 'discounts_syp': 0,
         'cancelled_count': 0, 'cancelled_value': 0, 'served_or_paid_count': 0, 'unpaid_orders_count': 0, 'partial_orders_count': 0, 'partial_payments_syp': 0, 'non_cash_sales_syp': 0,
+        'delivery_order_count': 0, 'delivery_gross_sales': 0, 'delivery_fees_total': 0, 'unpaid_delivery_orders': 0, 'cancelled_delivery_orders': 0, 'takeaway_order_count': 0,
     }
     for order in orders:
         total, paid, remaining, payment_label = _order_financials(order)
         methods = {}
         for payment in order.payments.all():
             methods[payment.method] = methods.get(payment.method, 0) + payment.amount_syp
+        if order.is_delivery:
+            sums['delivery_order_count'] += 1
+            sums['delivery_gross_sales'] += total
+            sums['delivery_fees_total'] += max(order.delivery_fee_syp or 0, 0)
+            if remaining > 0:
+                sums['unpaid_delivery_orders'] += 1
+            if order.delivery_status == Order.DeliveryStatus.CANCELLED or order.status == Order.Status.CANCELLED:
+                sums['cancelled_delivery_orders'] += 1
+        if order.fulfillment_mode == Order.FulfillmentMode.TAKEAWAY:
+            sums['takeaway_order_count'] += 1
         if order.status == Order.Status.CANCELLED:
             sums['cancelled_count'] += 1
             sums['cancelled_value'] += total
@@ -224,6 +240,7 @@ def _build_day_report(report_date):
         rows.append({'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods})
     sums['expected_cash_syp'] = sums['cash_total']
     sums['avg_order_value'] = int(sums['order_total'] / sums['orders_count']) if sums['orders_count'] else 0
+    sums['average_delivery_order_value'] = int(sums['delivery_gross_sales'] / sums['delivery_order_count']) if sums['delivery_order_count'] else 0
     return rows, sums
 
 def dashboard(request):
@@ -495,7 +512,7 @@ def _create_order_from_menu(request, table=None):
     validation_errors.extend(delivery_errors)
     customer_name = request.POST.get('customer_name', '').strip()
     errors = {}
-    customer_phone = _validate_phone_input(request.POST.get('customer_phone', ''), 'رقم الهاتف', errors, required=fulfillment_mode == Order.FulfillmentMode.DELIVERY and settings.require_phone_for_delivery)
+    customer_phone = _validate_phone_input(request.POST.get('customer_phone', ''), 'رقم الهاتف', errors, required=fulfillment_mode == Order.FulfillmentMode.DELIVERY and (settings.require_delivery_phone or settings.require_phone_for_delivery))
     if errors:
         validation_errors.append(errors['رقم الهاتف'])
     if validation_errors:
@@ -719,7 +736,7 @@ def staff_pos(request):
         validation_errors.extend(delivery_errors)
         errors = {}
         customer_name = request.POST.get('customer_name', '').strip()
-        customer_phone = _validate_phone_input(request.POST.get('customer_phone', ''), 'رقم الهاتف', errors, required=fulfillment_mode == Order.FulfillmentMode.DELIVERY and settings.require_phone_for_delivery)
+        customer_phone = _validate_phone_input(request.POST.get('customer_phone', ''), 'رقم الهاتف', errors, required=fulfillment_mode == Order.FulfillmentMode.DELIVERY and (settings.require_delivery_phone or settings.require_phone_for_delivery))
         if errors:
             validation_errors.append(errors['رقم الهاتف'])
         member_id = request.POST.get('member_id', '').strip()
@@ -986,16 +1003,39 @@ def staff_order_status(request, public_code):
             messages.error(request, ACCESS_DENIED_MESSAGE)
             return redirect('staff_orders')
         valid_delivery = {choice[0] for choice in Order.DeliveryStatus.choices}
-        if order.is_delivery and new_delivery_status in valid_delivery:
+        if order.is_delivery and new_delivery_status in valid_delivery and new_delivery_status != Order.DeliveryStatus.NOT_APPLICABLE:
+            if new_delivery_status == Order.DeliveryStatus.CANCELLED and not request.POST.get('cancellation_reason', '').strip():
+                messages.error(request, 'سبب إلغاء التوصيل مطلوب.')
+                return redirect(request.POST.get('next') or 'staff_delivery')
             old_delivery_status = order.delivery_status
             if old_delivery_status != new_delivery_status:
                 order.delivery_status = new_delivery_status
-                order.save(update_fields=['delivery_status', 'updated_at'])
+                now = timezone.now()
+                update_fields = ['delivery_status', 'updated_at']
+                if new_delivery_status == Order.DeliveryStatus.CONFIRMED:
+                    order.delivery_confirmed_at = now; update_fields.append('delivery_confirmed_at')
+                elif new_delivery_status == Order.DeliveryStatus.OUT_FOR_DELIVERY:
+                    order.delivery_out_at = now; update_fields.append('delivery_out_at')
+                elif new_delivery_status == Order.DeliveryStatus.DELIVERED:
+                    order.delivery_delivered_at = now; update_fields.append('delivery_delivered_at')
+                elif new_delivery_status == Order.DeliveryStatus.CANCELLED:
+                    order.delivery_cancelled_at = now; update_fields.append('delivery_cancelled_at')
+                    order.cancellation_reason = request.POST.get('cancellation_reason', '').strip(); update_fields.append('cancellation_reason')
+                order.save(update_fields=update_fields)
+                event_map = {
+                    Order.DeliveryStatus.CONFIRMED: 'delivery_order_confirmed',
+                    Order.DeliveryStatus.READY_FOR_DELIVERY: 'delivery_ready_for_delivery',
+                    Order.DeliveryStatus.OUT_FOR_DELIVERY: 'delivery_out_for_delivery',
+                    Order.DeliveryStatus.DELIVERED: 'delivery_delivered',
+                    Order.DeliveryStatus.CANCELLED: 'delivery_cancelled',
+                }
+                if new_delivery_status in event_map:
+                    create_notification(event_map[new_delivery_status], f'{order.get_delivery_status_display()} {order.display_number}', order.location_label, order=order, created_by=request.user)
                 try:
                     ActivityLog.objects.create(actor=request.user, action='delivery_status_changed', details={'order_public_code': str(order.public_code), 'old_status': old_delivery_status, 'new_status': new_delivery_status})
                 except Exception:
                     pass
-        return redirect('staff_orders')
+        return redirect(request.POST.get('next') or 'staff_orders')
     new_status = request.POST.get('status')
     valid = {choice[0] for choice in Order.Status.choices}
     if new_status not in valid:
@@ -1167,6 +1207,21 @@ def staff_order_edit_remove_item(request, public_code, item_id):
     return redirect('staff_order_edit', public_code=order.public_code)
 
 
+@require_staff_capability('delivery_management')
+def staff_delivery(request):
+    orders = (
+        Order.objects.filter(fulfillment_mode=Order.FulfillmentMode.DELIVERY)
+        .select_related('table')
+        .prefetch_related('items', 'payments')
+        .order_by('-created_at')
+    )
+    rows = []
+    for order in orders[:200]:
+        total, paid, remaining, payment_label = _order_financials(order)
+        rows.append({'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label})
+    return render(request, 'staff/delivery.html', {'rows': rows, 'cancellation_reasons': CancellationReason.choices, 'page_setting': get_page_setting('staff_delivery', 'طلبات التوصيل', 'Delivery')})
+
+
 @require_staff_capability('cashier')
 def staff_cashier(request):
     query = request.GET.get('q', '').strip()
@@ -1310,12 +1365,12 @@ def staff_reports_day_csv(request):
     rows, _sums = _build_day_report(report_date)
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = f'attachment; filename="report-{report_date.isoformat()}.csv"'
-    response.write('display_number,created_at,fulfillment_mode,location,status,subtotal,delivery_fee,total,paid,remaining,payment_methods\n')
+    response.write('display_number,created_at,fulfillment_mode,delivery_status,delivery_fee,delivery_phone,delivery_address,location,status,subtotal,total,paid,remaining,payment_methods\n')
     for row in rows:
         order = row['order']
         methods_txt = '; '.join(f'{k}:{v}' for k, v in row['methods'].items())
         table_name = order.location_label
-        response.write(f'{order.display_number},{order.created_at.isoformat()},{order.get_fulfillment_label()},{table_name},{order.get_status_display()},{order.subtotal_syp},{order.delivery_fee_syp},{row["total"]},{row["paid"]},{row["remaining"]},"{methods_txt}"\n')
+        response.write(f'{order.display_number},{order.created_at.isoformat()},{order.get_fulfillment_label()},{order.get_delivery_status_display()},{order.delivery_fee_syp},"{order.delivery_phone}","{order.delivery_address}",{table_name},{order.get_status_display()},{order.subtotal_syp},{row["total"]},{row["paid"]},{row["remaining"]},"{methods_txt}"\n')
     return response
 
 
