@@ -6,11 +6,11 @@
   </div>
   <div class="kitchen-items-grid">
   {% for row in group.items %}{% with item=row.item order=row.item.order %}
-    <article class="hub-list-card kitchen-item-card kitchen-status-{{ item.prep_status }}{% if item.prep_status == 'pending' %} kitchen-item-card--new{% endif %}">
+    <article class="hub-list-card kitchen-item-card kitchen-status-{{ item.prep_status }}{% if item.prep_status == 'new' or item.prep_status == 'sent' %} kitchen-item-card--new{% endif %}">
       <div class="kitchen-card-topline">
         <strong class="kitchen-order-number">{{ order.display_number }}</strong>
         <span class="hub-badge kitchen-fulfillment-badge">{{ order.get_fulfillment_label }}</span>
-        <span class="hub-badge kitchen-status-badge">{{ item.get_prep_status_display }}</span>
+        <span class="hub-badge kitchen-status-badge">{{ item.get_prep_status_display }}</span><span class="hub-badge hub-badge-info">{{ item.prep_station.name_ar|default:group.label }}</span>
       </div>
       <div class="kitchen-card-meta">
         <span>منذ {{ order.created_at|timesince }}</span>
@@ -34,7 +34,7 @@
       {% if row.order_notes %}<div class="kitchen-note kitchen-note--order"><strong>ملاحظة الطلب:</strong> {{ row.order_notes|linebreaksbr }}</div>{% endif %}
       {% if order.is_delivery and order.delivery_notes %}<div class="kitchen-note kitchen-note--delivery"><strong>ملاحظة التوصيل:</strong> {{ order.delivery_notes|linebreaksbr }}</div>{% endif %}
 
-      <div class="kitchen-actions">
+      <div class="kitchen-actions"><a class="hub-button" href="{% url 'staff_order_prep_ticket' order.public_code %}?station={{ item.prep_station.code|default:'' }}">طباعة التذكرة</a>
         {% for action,label,css_class in row.actions %}
           <form method="post" action="{% url 'staff_kitchen_item_status' item.id %}">
             {% csrf_token %}

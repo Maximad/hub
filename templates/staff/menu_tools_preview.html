@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}معاينة تعديل القائمة{% endblock %}
+{% block content %}
+<h2>معاينة التعديل الجماعي</h2>
+<p><a href="{% url 'staff_menu_tools' %}{% if return_query %}?{{ return_query }}{% endif %}">العودة لأدوات القائمة</a></p>
+<section style="border:1px solid #ddd; border-radius:10px; padding:1rem; margin-bottom:1rem;">
+  <p><strong>الإجراء:</strong> {{ result.action.label }}{% if result.action.target_label %} — {{ result.action.target_label }}{% elif result.action.value != None %} — {{ result.action.value }}{% endif %}</p>
+  <p><strong>عدد المنتجات المحددة:</strong> {{ result.matched_count }}</p>
+  <p>هذه معاينة فقط. لن يتم تطبيق أي تغيير إلا بعد الضغط على زر التأكيد أدناه.</p>
+</section>
+<table style="width:100%; border-collapse:collapse; min-width:800px;">
+  <thead><tr><th>المنتج</th><th>التغييرات المتوقعة</th></tr></thead>
+  <tbody>
+    {% for change in result.changes %}
+    <tr style="border-top:1px solid #eee;"><td>{{ change.object_label }}</td><td>{% if change.changes %}<ul>{% for field, values in change.changes.items %}<li><strong>{{ field }}</strong>: {{ values.before }} ← {{ values.after }}</li>{% endfor %}</ul>{% else %}لا تغيير فعلي لهذا المنتج.{% endif %}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+<form method="post" action="{% url 'staff_menu_tools_apply' %}" style="margin-top:1rem; border:1px solid #f0c36d; padding:1rem; border-radius:10px;">
+  {% csrf_token %}
+  {% for product in selected_products %}<input type="hidden" name="selected_products" value="{{ product }}">{% endfor %}
+  <input type="hidden" name="bulk_action" value="{{ bulk_action }}">
+  <input type="hidden" name="bulk_value" value="{{ bulk_value }}">
+  <input type="hidden" name="return_query" value="{{ return_query }}">
+  <label><input type="checkbox" name="confirm" value="yes" required> أؤكد تطبيق هذا الإجراء على المنتجات المحددة بدون حذف منتجات أو صور.</label><br><br>
+  <button type="submit">تأكيد وتطبيق التغييرات</button>
+</form>
+{% endblock %}

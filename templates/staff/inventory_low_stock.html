@@ -1,0 +1,1 @@
+{% extends "staff/inventory_base.html" %}{% block inventory_content %}<h3>مواد منخفضة</h3><ul>{% for i in items %}<li>{{ i.name_ar }} — {{ i.current_quantity }} / حد التنبيه {{ i.low_stock_threshold }}</li>{% empty %}<li>لا توجد مواد منخفضة.</li>{% endfor %}</ul>{% endblock %}

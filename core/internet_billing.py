@@ -1,3 +1,4 @@
+from datetime import timedelta
 from math import ceil
 
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -17,30 +18,40 @@ def calculate_session_duration_minutes(started_at, ended_at):
     return max(ceil((ended_at - started_at).total_seconds() / 60), 0)
 
 
-def calculate_metered_session_total(duration_minutes, rate_per_hour_syp, minimum_minutes=0, free_grace_minutes=0, daily_cap_syp=None):
+def calculate_metered_session_total(duration_minutes, rate_per_hour_syp, minimum_minutes=0, free_grace_minutes=0, daily_cap_syp=None, rounding_increment_minutes=15, minimum_charge_syp=0):
     duration = max(int(duration_minutes or 0), 0)
-    rate = max(int(rate_per_hour_syp or 0), 0)
-    minimum = max(int(minimum_minutes or 0), 0)
-    grace = max(int(free_grace_minutes or 0), 0)
-    if duration <= grace or rate <= 0:
-        return 0
-    billable_minutes = max(duration - grace, 0)
-    if billable_minutes > 0 and minimum:
-        billable_minutes = max(billable_minutes, minimum)
-    total = ceil((billable_minutes * rate) / 60)
+    now = timezone.now()
+    result = calculate_session_billing(now, now + timedelta(minutes=duration), rate_per_hour_syp, minimum_charge_syp, minimum_minutes, rounding_increment_minutes, free_grace_minutes)
+    total = result['calculated_total_syp']
     if daily_cap_syp not in (None, ''):
         total = min(total, max(int(daily_cap_syp), 0))
     return max(total, 0)
 
 
-def calculate_billable_minutes(duration_minutes, minimum_minutes=0, free_grace_minutes=0):
-    duration = max(int(duration_minutes or 0), 0)
-    grace = max(int(free_grace_minutes or 0), 0)
-    if duration <= grace:
-        return 0
-    billable = max(duration - grace, 0)
-    minimum = max(int(minimum_minutes or 0), 0)
-    return max(billable, minimum) if billable > 0 else 0
+def calculate_billable_minutes(duration_minutes, minimum_minutes=0, free_grace_minutes=0, rounding_increment_minutes=15):
+    now = timezone.now()
+    return calculate_session_billing(now, now + timedelta(minutes=max(int(duration_minutes or 0), 0)), 0, 0, minimum_minutes, rounding_increment_minutes, free_grace_minutes)['billable_minutes']
+
+
+def calculate_session_billing(started_at, ended_at, hourly_rate_syp, minimum_charge_syp=0, minimum_billable_minutes=0, rounding_increment_minutes=15, grace_period_minutes=0, allow_free_grace=True):
+    """Central deterministic internet/workspace billing calculation."""
+    raw = calculate_session_duration_minutes(started_at, ended_at)
+    rate = max(int(hourly_rate_syp or 0), 0)
+    minimum_charge = max(int(minimum_charge_syp or 0), 0)
+    minimum_minutes = max(int(minimum_billable_minutes or 0), 0)
+    increment = int(rounding_increment_minutes or 15)
+    if increment not in {15, 30, 60}:
+        increment = 15
+    grace = max(int(grace_period_minutes or 0), 0)
+    if raw <= grace and allow_free_grace:
+        return {'raw_duration_minutes': raw, 'billable_minutes': 0, 'calculated_total_syp': 0}
+    minutes = max(raw, minimum_minutes)
+    if minutes > 0:
+        minutes = int(ceil(minutes / increment) * increment)
+    total = ceil((minutes * rate) / 60) if rate > 0 else 0
+    if raw > 0 or not allow_free_grace:
+        total = max(total, minimum_charge)
+    return {'raw_duration_minutes': raw, 'billable_minutes': max(minutes, 0), 'calculated_total_syp': max(total, 0)}
 
 
 def can_override_session_total(user):
@@ -76,13 +87,9 @@ def finalize_internet_session(session, ended_by, manual_total=None, override_rea
     duration = calculate_session_duration_minutes(started_at, ended_at)
     calculated_total = 0
     if session.billing_mode not in {InternetSession.BillingMode.FREE, InternetSession.BillingMode.PREPAID}:
-        calculated_total = calculate_metered_session_total(
-            duration,
-            session.rate_per_hour_syp,
-            session.minimum_minutes,
-            session.free_grace_minutes,
-            session.daily_cap_syp,
-        )
+        billing = calculate_session_billing(started_at, ended_at, session.rate_per_hour_syp, session.minimum_charge_syp, session.minimum_minutes, session.rounding_increment_minutes, session.free_grace_minutes)
+        calculated_total = billing['calculated_total_syp']
+        billable_minutes = billing['billable_minutes']
 
     if manual_total not in (None, ''):
         if not can_override_session_total(ended_by):
@@ -105,6 +112,7 @@ def finalize_internet_session(session, ended_by, manual_total=None, override_rea
             raise ValidationError('رصيد دقائق العضو غير كافٍ، ولا يمكن أن يصبح الرصيد سالباً.')
         subscription.remaining_internet_minutes = remaining - duration
         subscription.save(update_fields=['remaining_internet_minutes', 'updated_at'])
+        session.member_minutes_used = duration
         MemberCreditLedger.objects.create(
             member=session.member,
             subscription=subscription,
@@ -119,10 +127,11 @@ def finalize_internet_session(session, ended_by, manual_total=None, override_rea
     session.duration_minutes = duration
     session.actual_duration_minutes = duration
     session.calculated_total_syp = calculated_total
+    session.billable_minutes = locals().get('billable_minutes', 0 if session.billing_mode in {InternetSession.BillingMode.FREE, InternetSession.BillingMode.PREPAID} else duration)
     session.status = InternetSession.Status.ENDED if session.payable_total_syp == 0 else InternetSession.Status.UNPAID
     session.ended_by = ended_by if getattr(ended_by, 'is_authenticated', False) else None
     session.save(update_fields=[
         'ended_at', 'end_time', 'duration_minutes', 'actual_duration_minutes', 'calculated_total_syp',
-        'manual_total_syp', 'override_reason', 'status', 'ended_by', 'updated_at',
+        'manual_total_syp', 'override_reason', 'billable_minutes', 'member_minutes_used', 'status', 'ended_by', 'updated_at',
     ])
     return session

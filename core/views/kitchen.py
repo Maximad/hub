@@ -14,18 +14,21 @@ from accounts.permissions import (
     require_staff_capability,
 )
 from catalog.models import PrepStation
+from core.notifications import create_notification
 from core.models import ActivityLog, Order, OrderItem
 from core.settings_helpers import get_page_setting
 
 ACTIVE_PREP_STATUSES = [
-    OrderItem.PrepStatus.PENDING,
+    OrderItem.PrepStatus.NEW,
+    OrderItem.PrepStatus.SENT,
     OrderItem.PrepStatus.ACCEPTED,
     OrderItem.PrepStatus.PREPARING,
 ]
 VISIBLE_PREP_STATUSES = ACTIVE_PREP_STATUSES + [OrderItem.PrepStatus.READY]
 STATUS_FILTERS = [
     ('active', 'الكل'),
-    (OrderItem.PrepStatus.PENDING, 'جديد'),
+    (OrderItem.PrepStatus.NEW, 'جديد'),
+    (OrderItem.PrepStatus.SENT, 'مرسل للتحضير'),
     (OrderItem.PrepStatus.PREPARING, 'قيد التحضير'),
     (OrderItem.PrepStatus.READY, 'جاهز'),
 ]
@@ -43,7 +46,8 @@ NEXT_STATUS_BY_ACTION = {
     'cancel': OrderItem.PrepStatus.CANCELLED,
 }
 ALLOWED_TRANSITIONS = {
-    OrderItem.PrepStatus.PENDING: {OrderItem.PrepStatus.ACCEPTED, OrderItem.PrepStatus.CANCELLED},
+    OrderItem.PrepStatus.NEW: {OrderItem.PrepStatus.ACCEPTED, OrderItem.PrepStatus.CANCELLED},
+    OrderItem.PrepStatus.SENT: {OrderItem.PrepStatus.ACCEPTED, OrderItem.PrepStatus.CANCELLED},
     OrderItem.PrepStatus.ACCEPTED: {OrderItem.PrepStatus.PREPARING, OrderItem.PrepStatus.CANCELLED},
     OrderItem.PrepStatus.PREPARING: {OrderItem.PrepStatus.READY, OrderItem.PrepStatus.CANCELLED},
     OrderItem.PrepStatus.READY: {OrderItem.PrepStatus.SERVED, OrderItem.PrepStatus.CANCELLED},
@@ -78,7 +82,7 @@ def _item_actions(item, user):
     can_serve = owner_or_admin or can_access_cashier(user) or can_access_pos(user)
     can_cancel = owner_or_admin or can_access_cashier(user)
 
-    if item.prep_status == OrderItem.PrepStatus.PENDING:
+    if item.prep_status == OrderItem.PrepStatus.NEW:
         actions.append(('accept', ACTION_LABELS['accept'], 'hub-button'))
     elif item.prep_status == OrderItem.PrepStatus.ACCEPTED:
         actions.append(('prepare', ACTION_LABELS['prepare'], 'hub-button'))
@@ -110,9 +114,9 @@ def _filtered_items(request):
     fulfillment_filter = request.GET.get('fulfillment', '').strip()
 
     items = (
-        OrderItem.objects.select_related('order', 'order__table', 'order__table__room', 'product', 'product__prep_station_ref')
+        OrderItem.objects.select_related('order', 'order__table', 'order__table__room', 'product', 'prep_station', 'product__prep_station_ref')
         .exclude(order__status=Order.Status.CANCELLED)
-        .order_by('product__prep_station_ref__sort_order', 'product__prep_station_ref__name_ar', 'order__created_at', 'id')
+        .order_by('prep_station__sort_order', 'prep_station__name_ar', 'order__created_at', 'id')
     )
 
     if status_filter == 'active':
@@ -126,9 +130,9 @@ def _filtered_items(request):
         items = items.filter(prep_status__in=ACTIVE_PREP_STATUSES)
 
     if station_filter == 'none':
-        items = items.filter(product__prep_station_ref__isnull=True)
+        items = items.filter(prep_station__isnull=True)
     elif station_filter.isdigit():
-        items = items.filter(product__prep_station_ref_id=int(station_filter))
+        items = items.filter(prep_station_id=int(station_filter))
     elif station_filter:
         station_filter = ''
 
@@ -151,11 +155,11 @@ def _board_context(request):
     total_pending = 0
 
     for item in items:
-        station = item.product.prep_station_ref
+        station = item.prep_station or item.product.prep_station_ref
         key = station.id if station else 'none'
         if key not in grouped_map:
             grouped_map[key] = {'key': key, 'station': station, 'label': _prep_station_label(station), 'items': []}
-        if item.prep_status == OrderItem.PrepStatus.PENDING:
+        if item.prep_status == OrderItem.PrepStatus.NEW:
             total_pending += 1
         grouped_map[key]['items'].append({'item': item, 'actions': _item_actions(item, request.user), 'order_notes': _kitchen_order_notes(item.order)})
 
@@ -169,26 +173,26 @@ def _board_context(request):
         'station_filter': station_filter,
         'fulfillment_filter': fulfillment_filter,
         'pending_count': total_pending,
-        'page_setting': get_page_setting('staff_kitchen', 'المطبخ / التحضير', 'Kitchen'),
+        'page_setting': get_page_setting('staff_prep', 'المطبخ / التحضير', 'Kitchen'),
     }
 
 
 @require_staff_capability('kitchen_board')
-def staff_kitchen(request):
+def staff_prep(request):
     template = 'staff/kitchen_partial.html' if request.headers.get('HX-Request') == 'true' else 'staff/kitchen.html'
     return render(request, template, _board_context(request))
 
 
 @require_staff_capability('kitchen_board')
-def staff_kitchen_partial(request):
+def staff_prep_partial(request):
     return render(request, 'staff/kitchen_partial.html', _board_context(request))
 
 
 @require_staff_capability('kitchen_board')
-def staff_kitchen_order(request, public_code):
+def staff_prep_order(request, public_code):
     order = get_object_or_404(
         Order.objects.select_related('table', 'table__room').prefetch_related(
-            Prefetch('items', queryset=OrderItem.objects.select_related('product', 'product__prep_station_ref'))
+            Prefetch('items', queryset=OrderItem.objects.select_related('product', 'prep_station', 'product__prep_station_ref'))
         ),
         public_code=public_code,
     )
@@ -196,25 +200,25 @@ def staff_kitchen_order(request, public_code):
 
 
 @require_staff_capability('kitchen_board')
-def staff_kitchen_item_status(request, item_id):
+def staff_prep_item_status(request, item_id):
     if request.method != 'POST':
         raise Http404()
     action = request.POST.get('action', '').strip()
     new_status = NEXT_STATUS_BY_ACTION.get(action)
     if not new_status:
         messages.error(request, 'الإجراء المطلوب غير صالح.')
-        return redirect('staff_kitchen')
+        return redirect('staff_prep')
 
     item = get_object_or_404(OrderItem.objects.select_related('order', 'product'), pk=item_id)
     order = item.order
     if order.status == Order.Status.CANCELLED and not is_owner_or_admin(request.user):
         messages.error(request, 'لا يمكن تحديث عنصر من طلب ملغي.')
-        return redirect('staff_kitchen')
+        return redirect('staff_prep')
 
     old_status = item.prep_status
     if not _can_change_to(request.user, old_status, new_status):
         messages.error(request, 'لا يمكن تنفيذ هذا الانتقال في حالة العنصر الحالية أو بصلاحياتك الحالية.')
-        return redirect('staff_kitchen')
+        return redirect('staff_prep')
 
     if old_status != new_status:
         with transaction.atomic():
@@ -233,5 +237,23 @@ def staff_kitchen_item_status(request, item_id):
                     'item_id': item.id,
                 },
             )
+        if new_status == OrderItem.PrepStatus.READY:
+            create_notification('prep_item_ready', 'عنصر جاهز', f'{item.product_name_ar_snapshot} — {order.display_number}', order=order, order_item=item, target_station=item.prep_station, created_by=request.user)
+        elif new_status == OrderItem.PrepStatus.CANCELLED:
+            create_notification('prep_item_cancelled', 'تم إلغاء عنصر', f'{item.product_name_ar_snapshot} — {order.display_number}', order=order, order_item=item, target_station=item.prep_station, created_by=request.user)
         messages.success(request, 'تم تحديث حالة العنصر.')
-    return redirect('staff_kitchen')
+    return redirect('staff_prep')
+
+
+staff_kitchen = staff_prep
+staff_kitchen_partial = staff_prep_partial
+staff_kitchen_order = staff_prep_order
+staff_kitchen_item_status = staff_prep_item_status
+
+@require_staff_capability('kitchen_board')
+def staff_prep_station(request, station_code):
+    station = get_object_or_404(PrepStation, code=station_code, is_active=True)
+    query = request.GET.copy()
+    query['station'] = str(station.id)
+    request.GET = query
+    return staff_prep(request)

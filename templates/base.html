@@ -46,10 +46,20 @@
     </div>
   </header>
   <main class="hub-container">
+
+    {% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %}
+      <div id="staff-notifications" class="staff-notifications" data-poll-url="{% url 'staff_notifications_poll' %}" data-mark-read-url="{% url 'staff_notifications_mark_read' %}" data-pref-url="{% url 'staff_notifications_preferences' %}">
+        <button type="button" id="staff-notification-toggle" class="hub-btn">التنبيهات <span id="staff-notification-badge">0</span></button>
+        <button type="button" id="staff-sound-toggle" class="hub-btn hub-btn-secondary">تشغيل الصوت</button>
+        <button type="button" id="staff-browser-toggle" class="hub-btn hub-btn-secondary">تفعيل تنبيهات المتصفح</button>
+        <div id="staff-notification-dropdown" class="staff-notification-dropdown" hidden><div class="staff-notification-empty">لا توجد تنبيهات جديدة</div></div>
+      </div>
+    {% endif %}
     {% if messages %}
       <div class="hub-messages">{% for message in messages %}<div class="hub-message hub-message-{{ message.tags|default:'info' }}">{{ message }}</div>{% endfor %}</div>
     {% endif %}
     {% block content %}{% endblock %}
   </main>
+  <script src="{% static 'js/staff_notifications.js' %}"></script>
 </body>
 </html>

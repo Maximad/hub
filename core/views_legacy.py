@@ -2,7 +2,7 @@ from django.db import transaction
 import uuid
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
-from django.db.models import Prefetch, Q
+from django.db.models import Exists, OuterRef, Prefetch, Q
 from django.http import Http404, HttpResponse
 from django.contrib import messages
 from django.contrib.auth import authenticate
@@ -15,17 +15,22 @@ import re
 
 from members.models import MembershipBenefitRule, MembershipPlan, MembershipSubscription, MemberCreditLedger
 from internet.models import WifiNetwork
-from catalog.models import MenuSection, ProductMedia, ProductOption, ProductOptionGroup, ProductOptionGroupAssignment
+from catalog.models import MenuSection, PrepStation, ProductMedia, ProductOption, ProductOptionGroup, ProductOptionGroupAssignment, Tag
 from core.settings_helpers import get_page_setting, get_system_settings
 from core.internet_billing import calculate_billable_minutes, calculate_metered_session_total, calculate_session_duration_minutes, can_override_session_total, finalize_internet_session
+from core.services.bulk_edit import BulkEditValidationError
+from core.services.menu_tools import ALLOWED_ACTIONS, apply_product_bulk_action, preview_product_bulk_action
 from accounts.permissions import (
     ACCESS_DENIED_MESSAGE, can_approve_partial_payment,
     require_staff_capability, user_has_capability,
 )
-from core.models import ActivityLog, InternetPackage, InternetSession, Member, Order, OrderItem, Payment, Product, SystemSetting, TableArea
+from core.stock_recipes import deduct_order_item_stock
+from core.models import ActivityLog, CancellationReason, CashMovement, DailyClose, Expense, InternetPackage, InternetSession, Member, Order, OrderDiscount, OrderItem, Payment, Product, SystemSetting, TableArea
 from events.models import Event
 from reservations.models import Reservation
 from vendors.models import Vendor, VendorParticipation
+from core.notifications import create_notification, notify_order_created
+from core.services.margins import item_margin, product_margin_from_values
 
 
 DAMASCUS_TZ = ZoneInfo('Asia/Damascus')
@@ -101,7 +106,7 @@ def _subtotal_for_selected(selected):
 def _delivery_fee_for_settings(settings, fulfillment_mode, raw_manual_fee=None):
     if fulfillment_mode != Order.FulfillmentMode.DELIVERY:
         return 0
-    if not settings or not settings.enable_delivery:
+    if not settings or not settings.effective_delivery_enabled:
         return 0
     if settings.delivery_fee_mode == SystemSetting.DeliveryFeeMode.FIXED:
         return max(settings.fixed_delivery_fee_syp or 0, 0)
@@ -126,9 +131,9 @@ def _validate_fulfillment_mode(request, settings, table=None, allow_table=True):
     if mode == Order.FulfillmentMode.TABLE and not table:
         # Public menu without QR remains in-space unless a staff POS table is selected.
         return Order.FulfillmentMode.INSIDE_SPACE, ''
-    if mode == Order.FulfillmentMode.DELIVERY and (not settings or not settings.enable_delivery):
+    if mode == Order.FulfillmentMode.DELIVERY and (not settings or not settings.effective_delivery_enabled):
         return default_mode, 'خيار التوصيل غير مفعّل حالياً.'
-    if mode == Order.FulfillmentMode.TAKEAWAY and (not settings or not settings.enable_takeaway):
+    if mode == Order.FulfillmentMode.TAKEAWAY and (not settings or not settings.effective_takeaway_enabled):
         return default_mode, 'خيار التيك أواي غير مفعّل حالياً.'
     return mode, ''
 
@@ -136,24 +141,29 @@ def _validate_fulfillment_mode(request, settings, table=None, allow_table=True):
 def _validate_delivery_details(request, settings, fulfillment_mode, subtotal, manual_fee_name='delivery_fee_syp'):
     errors = []
     delivery_data = {
+        'delivery_customer_name': request.POST.get('delivery_customer_name', request.POST.get('customer_name', '')).strip(),
+        'delivery_phone': request.POST.get('delivery_phone', request.POST.get('customer_phone', '')).strip(),
         'delivery_area': request.POST.get('delivery_area', '').strip(),
+        'delivery_landmark': request.POST.get('delivery_landmark', '').strip(),
         'delivery_address': request.POST.get('delivery_address', '').strip(),
         'delivery_notes': request.POST.get('delivery_notes', '').strip(),
         'delivery_fee_syp': _delivery_fee_for_settings(settings, fulfillment_mode, request.POST.get(manual_fee_name)),
-        'delivery_status': Order.DeliveryStatus.NOT_DELIVERY,
+        'delivery_status': Order.DeliveryStatus.NOT_APPLICABLE,
     }
     if fulfillment_mode != Order.FulfillmentMode.DELIVERY:
         return delivery_data, errors
-    delivery_data['delivery_status'] = Order.DeliveryStatus.DELIVERY_REQUESTED
+    delivery_data['delivery_status'] = Order.DeliveryStatus.NEW
     if settings.minimum_delivery_order_syp and subtotal < settings.minimum_delivery_order_syp:
         errors.append(f'الحد الأدنى لطلب التوصيل هو {settings.minimum_delivery_order_syp} ل.س.')
-    if settings.require_address_for_delivery and not delivery_data['delivery_address']:
+    if (settings.require_delivery_address or settings.require_address_for_delivery) and not delivery_data['delivery_address']:
         errors.append('عنوان التوصيل مطلوب.')
+    if (settings.require_delivery_phone or settings.require_phone_for_delivery) and not delivery_data['delivery_phone']:
+        errors.append('رقم الهاتف مطلوب للتوصيل.')
     return delivery_data, errors
 
 
 def _paid_total(payments):
-    return sum(payment.amount_syp for payment in payments if payment.method != Payment.Method.UNPAID)
+    return sum(payment.amount_syp for payment in payments if payment.is_active and not payment.is_reversed and payment.method != Payment.Method.UNPAID)
 
 
 def _parse_positive_int(raw_value, default=1, maximum=99):
@@ -185,22 +195,52 @@ def _build_day_report(report_date):
     )
     rows = []
     sums = {
-        'orders_count': 0, 'order_total': 0, 'subtotal_total': 0, 'delivery_fee_total': 0, 'paid_total': 0, 'remaining_total': 0,
-        'cash_total': 0, 'manual_transfer_total': 0, 'free_total': 0, 'discount_total': 0,
-        'cancelled_count': 0, 'served_or_paid_count': 0, 'unpaid_orders_count': 0,
+        'orders_count': 0, 'gross_sales': 0, 'net_sales': 0, 'order_total': 0, 'subtotal_total': 0, 'delivery_fee_total': 0, 'paid_total': 0, 'remaining_total': 0,
+        'cash_total': 0, 'manual_transfer_total': 0, 'free_total': 0, 'discount_total': 0, 'discounts_syp': 0,
+        'cancelled_count': 0, 'cancelled_value': 0, 'served_or_paid_count': 0, 'unpaid_orders_count': 0, 'partial_orders_count': 0, 'partial_payments_syp': 0, 'non_cash_sales_syp': 0,
+        'delivery_order_count': 0, 'delivery_gross_sales': 0, 'delivery_fees_total': 0, 'unpaid_delivery_orders': 0, 'cancelled_delivery_orders': 0, 'takeaway_order_count': 0,
+        'estimated_cost_syp': 0, 'estimated_gross_margin_syp': 0, 'margin_known_sales_syp': 0, 'products_missing_cost_count': 0, 'comp_value_syp': 0,
+        'internet_workspace_sessions_count': 0, 'internet_workspace_raw_minutes': 0, 'internet_workspace_billable_minutes': 0, 'internet_workspace_revenue_syp': 0,
+        'internet_workspace_prepaid_minutes_used': 0, 'internet_workspace_metered_revenue_syp': 0, 'internet_workspace_cancelled_sessions': 0, 'internet_workspace_unpaid_orders': 0,
     }
     for order in orders:
         total, paid, remaining, payment_label = _order_financials(order)
         methods = {}
         for payment in order.payments.all():
             methods[payment.method] = methods.get(payment.method, 0) + payment.amount_syp
+        if order.is_delivery:
+            sums['delivery_order_count'] += 1
+            sums['delivery_gross_sales'] += total
+            sums['delivery_fees_total'] += max(order.delivery_fee_syp or 0, 0)
+            if remaining > 0:
+                sums['unpaid_delivery_orders'] += 1
+            if order.delivery_status == Order.DeliveryStatus.CANCELLED or order.status == Order.Status.CANCELLED:
+                sums['cancelled_delivery_orders'] += 1
+        if order.fulfillment_mode == Order.FulfillmentMode.TAKEAWAY:
+            sums['takeaway_order_count'] += 1
         if order.status == Order.Status.CANCELLED:
             sums['cancelled_count'] += 1
+            sums['cancelled_value'] += total
         if order.status == Order.Status.SERVED or remaining == 0:
             sums['served_or_paid_count'] += 1
         if remaining > 0:
             sums['unpaid_orders_count'] += 1
+        if paid > 0 and remaining > 0:
+            sums['partial_orders_count'] += 1
+            sums['partial_payments_syp'] += remaining
         sums['orders_count'] += 1
+        sums['gross_sales'] += order.subtotal_syp + order.service_fee_syp + max(order.delivery_fee_syp or 0, 0)
+        sums['discounts_syp'] += order.discount_syp
+        sums['comp_value_syp'] += sum(d.amount_syp for d in order.discounts.all() if d.is_active and d.discount_type == OrderDiscount.DiscountType.COMP)
+        for item in order.items.all():
+            im = item_margin(item, allow_current_product_cost=True)
+            if im['estimated_cost_syp'] is None:
+                sums['products_missing_cost_count'] += 1
+            else:
+                sums['estimated_cost_syp'] += im['estimated_cost_syp']
+                sums['estimated_gross_margin_syp'] += im['estimated_margin_syp']
+                sums['margin_known_sales_syp'] += im['revenue_syp']
+        sums['net_sales'] += total
         sums['order_total'] += total
         sums['subtotal_total'] += order.subtotal_syp
         sums['delivery_fee_total'] += max(order.delivery_fee_syp or 0, 0)
@@ -210,8 +250,28 @@ def _build_day_report(report_date):
         sums['manual_transfer_total'] += methods.get(Payment.Method.MANUAL_TRANSFER, 0)
         sums['free_total'] += methods.get(Payment.Method.FREE, 0)
         sums['discount_total'] += methods.get(Payment.Method.MEMBER_DISCOUNT, 0)
+        sums['non_cash_sales_syp'] += methods.get(Payment.Method.MANUAL_TRANSFER, 0) + methods.get(Payment.Method.FREE, 0) + methods.get(Payment.Method.MEMBER_DISCOUNT, 0)
         rows.append({'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods})
+    sessions = InternetSession.objects.select_related('linked_order').filter(started_at__gte=start_utc, started_at__lt=end_utc)
+    for sess in sessions:
+        sums['internet_workspace_sessions_count'] += 1
+        sums['internet_workspace_raw_minutes'] += sess.effective_duration_minutes or 0
+        sums['internet_workspace_billable_minutes'] += sess.billable_minutes or 0
+        sums['internet_workspace_revenue_syp'] += sess.payable_total_syp or 0
+        sums['internet_workspace_prepaid_minutes_used'] += sess.member_minutes_used or 0
+        if sess.billing_mode == InternetSession.BillingMode.OPEN_METERED:
+            sums['internet_workspace_metered_revenue_syp'] += sess.payable_total_syp or 0
+        if sess.status == InternetSession.Status.CANCELLED:
+            sums['internet_workspace_cancelled_sessions'] += 1
+        if sess.linked_order_id and sess.status in {InternetSession.Status.UNPAID, InternetSession.Status.BILLED}:
+            sums['internet_workspace_unpaid_orders'] += 1
+    from core.finance import finance_summary_for_date
+    finance = finance_summary_for_date(report_date, sums)
+    sums.update({k: v for k, v in finance.items() if not hasattr(v, 'model')})
+    sums['expected_cash_syp'] = finance['expected_cash_syp']
     sums['avg_order_value'] = int(sums['order_total'] / sums['orders_count']) if sums['orders_count'] else 0
+    sums['average_delivery_order_value'] = int(sums['delivery_gross_sales'] / sums['delivery_order_count']) if sums['delivery_order_count'] else 0
+    sums['estimated_gross_margin_percent'] = round((sums['estimated_gross_margin_syp'] / sums['margin_known_sales_syp']) * 100, 2) if sums['margin_known_sales_syp'] else None
     return rows, sums
 
 def dashboard(request):
@@ -239,10 +299,12 @@ def _valid_option_assignments_for_product(product):
     ]
 
 
-def _active_media_prefetch():
+def _active_media_prefetch(**media_filters):
+    filters = {'is_active': True}
+    filters.update(media_filters)
     return Prefetch(
         'media',
-        queryset=ProductMedia.objects.filter(is_active=True).order_by('-is_primary', 'sort_order', 'created_at'),
+        queryset=ProductMedia.objects.filter(**filters).select_related('media_asset').order_by('-is_primary', 'sort_order', 'created_at'),
         to_attr='active_media',
     )
 
@@ -263,12 +325,12 @@ def _attach_valid_option_assignments(products):
     return _attach_product_card_data(products)
 
 
-def _section_products_for_ordering(product_filter=None, section_filter=None, include_unsectioned=False):
+def _section_products_for_ordering(product_filter=None, section_filter=None, include_unsectioned=False, media_filter=None):
     if product_filter is None:
         product_filter = {}
     if section_filter is None:
         section_filter = {}
-    products_qs = Product.objects.filter(**product_filter).prefetch_related(_option_assignment_prefetch(), _active_media_prefetch()).order_by('sort_order', 'name_ar')
+    products_qs = Product.objects.filter(**product_filter).prefetch_related(_option_assignment_prefetch(), _active_media_prefetch(**(media_filter or {}))).order_by('sort_order', 'name_ar')
     sections = (
         MenuSection.objects.filter(is_active=True, **section_filter)
         .prefetch_related(Prefetch('products', queryset=products_qs))
@@ -293,6 +355,7 @@ def _menu_context(table=None):
     section_products = _section_products_for_ordering(
         product_filter={'is_available': True, 'visible_on_qr': True},
         section_filter={'visible_on_qr': True},
+        media_filter={'display_on_public_menu': True},
     )
     page = get_page_setting('public_menu', 'القائمة العامة', 'Public menu', 'اختر طلبك داخل المكان.', 'Choose your in-space order.')
     default_fulfillment_mode = Order.FulfillmentMode.TABLE if table else Order.FulfillmentMode.INSIDE_SPACE
@@ -418,6 +481,20 @@ def _selected_order_items_from_post(request, products):
     return selected, validation_errors
 
 
+
+
+def _prep_defaults_for_product(product):
+    requires_prep = product.infer_requires_preparation() if hasattr(product, 'infer_requires_preparation') else True
+    if not requires_prep:
+        return None, OrderItem.PrepStatus.NO_PREP
+    station = getattr(product, 'prep_station_ref', None)
+    if station is None:
+        try:
+            station = PrepStation.objects.filter(code='general', is_active=True).first() or PrepStation.objects.filter(station_type='general', is_active=True).first()
+        except Exception:
+            station = None
+    return station, OrderItem.PrepStatus.NEW
+
 def _create_order_from_selected_items(table, selected, note_parts, status=None, service_mode=None, fulfillment_mode=None, delivery_data=None):
     note = '\n'.join([part for part in note_parts if part])
     if table and service_mode is None:
@@ -429,7 +506,8 @@ def _create_order_from_selected_items(table, selected, note_parts, status=None, 
         order = Order.objects.create(table=table, service_mode=service_mode, fulfillment_mode=fulfillment_mode, status=status or Order.Status.NEW, notes=note, **delivery_data)
         for product, qty, item_note, selected_options_snapshot, option_delta in selected:
             unit_price = max(product.price_syp + option_delta, 0)
-            OrderItem.objects.create(
+            prep_station, prep_status = _prep_defaults_for_product(product)
+            item = OrderItem.objects.create(
                 order=order,
                 product=product,
                 quantity=qty,
@@ -439,7 +517,11 @@ def _create_order_from_selected_items(table, selected, note_parts, status=None, 
                 selected_options_snapshot=selected_options_snapshot,
                 item_note=item_note,
                 line_total_syp_snapshot=qty * unit_price,
+                prep_station=prep_station,
+                prep_status=prep_status,
             )
+            transaction.on_commit(lambda item_id=item.pk: deduct_order_item_stock(OrderItem.objects.select_related('order','product').get(pk=item_id)))
+    transaction.on_commit(lambda: notify_order_created(order))
     return order
 
 
@@ -462,7 +544,7 @@ def _create_order_from_menu(request, table=None):
     validation_errors.extend(delivery_errors)
     customer_name = request.POST.get('customer_name', '').strip()
     errors = {}
-    customer_phone = _validate_phone_input(request.POST.get('customer_phone', ''), 'رقم الهاتف', errors, required=fulfillment_mode == Order.FulfillmentMode.DELIVERY and settings.require_phone_for_delivery)
+    customer_phone = _validate_phone_input(request.POST.get('customer_phone', ''), 'رقم الهاتف', errors, required=fulfillment_mode == Order.FulfillmentMode.DELIVERY and (settings.require_delivery_phone or settings.require_phone_for_delivery))
     if errors:
         validation_errors.append(errors['رقم الهاتف'])
     if validation_errors:
@@ -539,13 +621,9 @@ def _assert_staff_capability(user, capability_name):
     raise PermissionDenied(ACCESS_DENIED_MESSAGE)
 
 def _order_financials(order):
-    total = getattr(order, 'total', None)
-    if total is None:
-        total = order.total_with_delivery_syp if hasattr(order, 'total_with_delivery_syp') else _items_total(order.items.all())
-    paid = getattr(order, 'paid', None)
-    if paid is None:
-        paid = _paid_total(order.payments.all())
-    remaining = max(total - paid, 0)
+    total = order.total_syp
+    paid = order.paid_syp
+    remaining = order.remaining_syp
     if order.status == Order.Status.CANCELLED:
         payment_label = 'ملغى'
     elif total == 0:
@@ -645,7 +723,7 @@ def staff_home(request):
 @require_staff_capability('pos')
 def staff_pos(request):
     tables = TableArea.objects.select_related('room').order_by('room__name_ar', 'name_ar')
-    section_products = _section_products_for_ordering(product_filter={'is_available': True}, include_unsectioned=True)
+    section_products = _section_products_for_ordering(product_filter={'is_available': True, 'visible_on_pos': True, 'orderable_on_pos': True}, include_unsectioned=True, media_filter={'display_on_pos': True})
     products = [product for _section, products in section_products for product in products]
     member_query = request.GET.get('member_q', '').strip()
     member_rows = []
@@ -690,7 +768,7 @@ def staff_pos(request):
         validation_errors.extend(delivery_errors)
         errors = {}
         customer_name = request.POST.get('customer_name', '').strip()
-        customer_phone = _validate_phone_input(request.POST.get('customer_phone', ''), 'رقم الهاتف', errors, required=fulfillment_mode == Order.FulfillmentMode.DELIVERY and settings.require_phone_for_delivery)
+        customer_phone = _validate_phone_input(request.POST.get('customer_phone', ''), 'رقم الهاتف', errors, required=fulfillment_mode == Order.FulfillmentMode.DELIVERY and (settings.require_delivery_phone or settings.require_phone_for_delivery))
         if errors:
             validation_errors.append(errors['رقم الهاتف'])
         member_id = request.POST.get('member_id', '').strip()
@@ -773,37 +851,155 @@ def table_qr(request, qr_token):
     return _qr_svg_response(request.build_absolute_uri(path))
 
 
+
+@login_required
 def staff_menu_tools(request):
     _assert_staff_capability(request.user, 'operations')
-    if request.method == 'POST':
-        try:
-            product_code = uuid.UUID(request.POST.get('product_code', ''))
-        except (TypeError, ValueError):
-            messages.error(request, 'المنتج المحدد غير صالح.')
-            return redirect('staff_menu_tools')
-        product = get_object_or_404(Product, public_code=product_code)
-        action = request.POST.get('action')
-        allowed = {'is_available', 'visible_on_qr', 'orderable_on_qr'}
-        if action in allowed:
-            setattr(product, action, not getattr(product, action))
-            product.save(update_fields=[action, 'updated_at'])
+    products = _staff_menu_tools_queryset(request.GET)
+    context = _staff_menu_tools_context(request, products)
+    return render(request, 'staff/menu_tools.html', context)
+
+
+@login_required
+def staff_menu_tools_preview(request):
+    _assert_staff_capability(request.user, 'operations')
+    if request.method != 'POST':
         return redirect('staff_menu_tools')
+    selected = _dedupe_selected_products(request.POST.getlist('selected_products'))
+    action = request.POST.get('bulk_action', '')
+    action_value = request.POST.get('bulk_value', '')
+    try:
+        result = preview_product_bulk_action(selected, action, action_value)
+    except BulkEditValidationError as exc:
+        messages.error(request, str(exc))
+        return redirect(f"{reverse('staff_menu_tools')}?{request.POST.get('return_query', '')}")
+    return render(request, 'staff/menu_tools_preview.html', {
+        'result': result,
+        'selected_products': selected,
+        'bulk_action': action,
+        'bulk_value': action_value,
+        'return_query': request.POST.get('return_query', ''),
+    })
 
-    sections = MenuSection.objects.filter(is_active=True).prefetch_related(
-        Prefetch('products', queryset=Product.objects.order_by('sort_order', 'name_ar'))
-    ).order_by('sort_order', 'name_ar')
-    products_in_sections = set()
-    grouped = []
-    for section in sections:
-        products = list(section.products.all())
-        products_in_sections.update(p.pk for p in products)
-        grouped.append((section.name_ar, products))
 
-    ungrouped = list(Product.objects.exclude(pk__in=products_in_sections).order_by('sort_order', 'name_ar'))
-    if ungrouped:
-        grouped.append(('بدون قسم في المنيو', ungrouped))
+@login_required
+def staff_menu_tools_apply(request):
+    _assert_staff_capability(request.user, 'operations')
+    if request.method != 'POST':
+        return redirect('staff_menu_tools')
+    if request.POST.get('confirm') != 'yes':
+        messages.error(request, 'يجب تأكيد الإجراء قبل تطبيق التغييرات.')
+        return redirect('staff_menu_tools')
+    selected = _dedupe_selected_products(request.POST.getlist('selected_products'))
+    action = request.POST.get('bulk_action', '')
+    action_value = request.POST.get('bulk_value', '')
+    return_query = request.POST.get('return_query', '')
+    try:
+        result = apply_product_bulk_action(selected, action, action_value, actor=request.user)
+    except BulkEditValidationError as exc:
+        messages.error(request, str(exc))
+        return redirect(f"{reverse('staff_menu_tools')}?{return_query}")
+    changed_count = sum(1 for change in result.changes if change.changes)
+    messages.success(request, f'تم تطبيق الإجراء على {result.matched_count} منتج. المنتجات المتغيرة فعلياً: {changed_count}.')
+    return redirect(f"{reverse('staff_menu_tools')}?{return_query}")
 
-    return render(request, 'staff/menu_tools.html', {'grouped': grouped})
+
+def _dedupe_selected_products(selected):
+    deduped = []
+    seen = set()
+    for value in selected:
+        text = str(value).strip()
+        if text and text not in seen:
+            deduped.append(text)
+            seen.add(text)
+    return deduped
+
+
+def _staff_menu_tools_queryset(params):
+    active_visual_media = ProductMedia.objects.filter(
+        product_id=OuterRef('pk'),
+        is_active=True,
+        media_type__in=[ProductMedia.MediaType.IMAGE, ProductMedia.MediaType.GIF, ProductMedia.MediaType.EXTERNAL_URL],
+        display_on_public_menu=True,
+    )
+    products = Product.objects.select_related('category', 'prep_station_ref', 'vendor').prefetch_related('menu_sections', 'tags').annotate(
+        has_active_image=Exists(active_visual_media)
+    )
+    query = params.get('q', '').strip()
+    if query:
+        products = products.filter(Q(name_ar__icontains=query) | Q(name_en__icontains=query))
+    section = params.get('section', '').strip()
+    if section:
+        if section == 'none':
+            products = products.filter(menu_sections__isnull=True)
+        elif section.isdigit():
+            products = products.filter(menu_sections__pk=section)
+    availability = params.get('availability', '').strip()
+    if availability in {'available', 'unavailable'}:
+        products = products.filter(is_available=(availability == 'available'))
+    qr_visibility = params.get('qr_visibility', '').strip()
+    if qr_visibility in {'visible', 'hidden'}:
+        products = products.filter(visible_on_qr=(qr_visibility == 'visible'))
+    qr_orderability = params.get('qr_orderability', '').strip()
+    if qr_orderability in {'orderable', 'not_orderable'}:
+        products = products.filter(orderable_on_qr=(qr_orderability == 'orderable'))
+    item_type = params.get('item_type', '').strip()
+    if item_type:
+        products = products.filter(item_type=item_type)
+    prep_station = params.get('prep_station', '').strip()
+    if prep_station:
+        if prep_station == 'none':
+            products = products.filter(prep_station_ref__isnull=True)
+        elif prep_station.isdigit():
+            products = products.filter(prep_station_ref_id=prep_station)
+    vendor = params.get('vendor', '').strip()
+    if vendor:
+        if vendor == 'none':
+            products = products.filter(vendor__isnull=True)
+        elif vendor.isdigit():
+            products = products.filter(vendor_id=vendor)
+    tag = params.get('tag', '').strip()
+    if tag:
+        if tag == 'none':
+            products = products.filter(tags__isnull=True)
+        elif tag.isdigit():
+            products = products.filter(tags__pk=tag)
+    missing_image = params.get('missing_image', '').strip()
+    if missing_image == 'yes':
+        products = products.filter(has_active_image=False)
+    elif missing_image == 'no':
+        products = products.filter(has_active_image=True)
+    return products.distinct().order_by('sort_order', 'name_ar')
+
+
+def _staff_menu_tools_context(request, products):
+    sections = MenuSection.objects.filter(is_active=True).order_by('sort_order', 'name_ar')
+    grouped_map = {section.pk: {'section_name': section.name_ar, 'products': []} for section in sections}
+    ungrouped = {'section_name': 'بدون قسم في المنيو', 'products': []}
+    for product in products:
+        product_sections = list(product.menu_sections.all())
+        if product_sections:
+            primary_section = sorted(product_sections, key=lambda section: (section.sort_order, section.name_ar))[0]
+            grouped_map.setdefault(primary_section.pk, {'section_name': primary_section.name_ar, 'products': []})['products'].append(product)
+        else:
+            ungrouped['products'].append(product)
+    grouped = [group for group in grouped_map.values() if group['products']]
+    if ungrouped['products']:
+        grouped.append(ungrouped)
+    if not grouped:
+        grouped = [{'section_name': 'لا توجد نتائج مطابقة', 'products': []}]
+    return {
+        'grouped': grouped,
+        'products_count': products.count(),
+        'sections': sections,
+        'prep_stations': PrepStation.objects.filter(is_active=True).order_by('sort_order', 'name_ar'),
+        'vendors': Vendor.objects.filter(is_active=True).order_by('name_ar'),
+        'tags': Tag.objects.filter(is_active=True).order_by('name_ar'),
+        'item_type_choices': Product.ItemType.choices,
+        'bulk_actions': ALLOWED_ACTIONS.items(),
+        'filters': request.GET,
+        'return_query': request.GET.urlencode(),
+    }
 
 
 @require_staff_capability('orders')
@@ -839,26 +1035,66 @@ def staff_order_status(request, public_code):
             messages.error(request, ACCESS_DENIED_MESSAGE)
             return redirect('staff_orders')
         valid_delivery = {choice[0] for choice in Order.DeliveryStatus.choices}
-        if order.is_delivery and new_delivery_status in valid_delivery:
+        if order.is_delivery and new_delivery_status in valid_delivery and new_delivery_status != Order.DeliveryStatus.NOT_APPLICABLE:
+            if new_delivery_status == Order.DeliveryStatus.CANCELLED and not request.POST.get('cancellation_reason', '').strip():
+                messages.error(request, 'سبب إلغاء التوصيل مطلوب.')
+                return redirect(request.POST.get('next') or 'staff_delivery')
             old_delivery_status = order.delivery_status
             if old_delivery_status != new_delivery_status:
                 order.delivery_status = new_delivery_status
-                order.save(update_fields=['delivery_status', 'updated_at'])
-                ActivityLog.objects.create(actor=request.user, action='delivery_status_changed', details={'order_public_code': str(order.public_code), 'old_status': old_delivery_status, 'new_status': new_delivery_status})
-        return redirect('staff_orders')
+                now = timezone.now()
+                update_fields = ['delivery_status', 'updated_at']
+                if new_delivery_status == Order.DeliveryStatus.CONFIRMED:
+                    order.delivery_confirmed_at = now; update_fields.append('delivery_confirmed_at')
+                elif new_delivery_status == Order.DeliveryStatus.OUT_FOR_DELIVERY:
+                    order.delivery_out_at = now; update_fields.append('delivery_out_at')
+                elif new_delivery_status == Order.DeliveryStatus.DELIVERED:
+                    order.delivery_delivered_at = now; update_fields.append('delivery_delivered_at')
+                elif new_delivery_status == Order.DeliveryStatus.CANCELLED:
+                    order.delivery_cancelled_at = now; update_fields.append('delivery_cancelled_at')
+                    order.cancellation_reason = request.POST.get('cancellation_reason', '').strip(); update_fields.append('cancellation_reason')
+                order.save(update_fields=update_fields)
+                event_map = {
+                    Order.DeliveryStatus.CONFIRMED: 'delivery_order_confirmed',
+                    Order.DeliveryStatus.READY_FOR_DELIVERY: 'delivery_ready_for_delivery',
+                    Order.DeliveryStatus.OUT_FOR_DELIVERY: 'delivery_out_for_delivery',
+                    Order.DeliveryStatus.DELIVERED: 'delivery_delivered',
+                    Order.DeliveryStatus.CANCELLED: 'delivery_cancelled',
+                }
+                if new_delivery_status in event_map:
+                    create_notification(event_map[new_delivery_status], f'{order.get_delivery_status_display()} {order.display_number}', order.location_label, order=order, created_by=request.user)
+                try:
+                    ActivityLog.objects.create(actor=request.user, action='delivery_status_changed', details={'order_public_code': str(order.public_code), 'old_status': old_delivery_status, 'new_status': new_delivery_status})
+                except Exception:
+                    pass
+        return redirect(request.POST.get('next') or 'staff_orders')
     new_status = request.POST.get('status')
     valid = {choice[0] for choice in Order.Status.choices}
     if new_status not in valid:
         return redirect('staff_orders')
     old_status = order.status
     if old_status != new_status:
+        update_fields = ['status', 'updated_at']
+        if new_status == Order.Status.CANCELLED:
+            reason = request.POST.get('cancellation_reason', '').strip()
+            if reason not in set(CancellationReason.values):
+                messages.error(request, 'سبب الإلغاء مطلوب.')
+                return redirect('staff_orders')
+            _total, paid, _remaining, _label = _order_financials(Order.objects.prefetch_related('items', 'payments', 'discounts').get(pk=order.pk))
+            if paid > 0 and not _can_approve_partial_payment(request.user):
+                messages.error(request, 'إلغاء طلب مدفوع أو مدفوع جزئياً يحتاج موافقة المدير.')
+                return redirect('staff_orders')
+            order.cancellation_reason = reason
+            order.cancellation_notes = request.POST.get('cancellation_notes', '').strip()
+            order.cancelled_by = request.user
+            order.cancelled_at = timezone.now()
+            update_fields += ['cancellation_reason', 'cancellation_notes', 'cancelled_by', 'cancelled_at']
         order.status = new_status
-        order.save(update_fields=['status', 'updated_at'])
-        ActivityLog.objects.create(
-            actor=request.user,
-            action='order_status_changed',
-            details={'order_public_code': str(order.public_code), 'old_status': old_status, 'new_status': new_status},
-        )
+        order.save(update_fields=update_fields)
+        try:
+            ActivityLog.objects.create(actor=request.user, action='order_cancelled' if new_status == Order.Status.CANCELLED else 'order_status_changed', details={'order_public_code': str(order.public_code), 'old_status': old_status, 'new_status': new_status, 'cancellation_reason': getattr(order, 'cancellation_reason', '')})
+        except Exception:
+            pass
     return redirect('staff_orders')
 
 
@@ -886,7 +1122,7 @@ def staff_order_edit_add_item(request, public_code):
         messages.error(request, 'المنتج المحدد غير صالح.')
         return redirect('staff_order_edit', public_code=order.public_code)
     product = get_object_or_404(
-        Product.objects.filter(is_available=True).prefetch_related(_option_assignment_prefetch()),
+        Product.objects.filter(is_available=True, visible_on_pos=True, orderable_on_pos=True).prefetch_related(_option_assignment_prefetch()),
         pk=int(product_id),
     )
     _attach_valid_option_assignments([product])
@@ -898,6 +1134,7 @@ def staff_order_edit_add_item(request, public_code):
         return redirect('staff_order_edit', public_code=order.public_code)
 
     unit_price = max(product.price_syp + option_delta, 0)
+    prep_station, prep_status = _prep_defaults_for_product(product)
     with transaction.atomic():
         item = OrderItem.objects.create(
             order=order,
@@ -909,8 +1146,14 @@ def staff_order_edit_add_item(request, public_code):
             selected_options_snapshot=selected_options_snapshot,
             item_note=item_note,
             line_total_syp_snapshot=qty * unit_price,
+            prep_station=prep_station,
+            prep_status=prep_status,
         )
+        transaction.on_commit(lambda item_id=item.pk: deduct_order_item_stock(OrderItem.objects.select_related('order','product').get(pk=item_id), request.user))
         _log_order_edit(request.user, 'order_item_added', order, {'item_id': item.id, 'product_id': product.id, 'quantity': qty})
+        transaction.on_commit(lambda: create_notification('order_edited', f'تم تعديل الطلب {order.display_number}', 'تمت إضافة عنصر إلى الطلب', order=order, order_item=item, target_station=item.prep_station, created_by=request.user))
+        if item.prep_status != OrderItem.PrepStatus.NO_PREP:
+            transaction.on_commit(lambda: create_notification('new_prep_item', 'عنصر جديد للتحضير', f'{item.product_name_ar_snapshot} × {item.quantity} — {order.display_number}', order=order, order_item=item, target_station=item.prep_station, created_by=request.user))
     messages.success(request, 'تمت إضافة العنصر إلى الطلب.')
     return redirect('staff_order_edit', public_code=order.public_code)
 
@@ -965,6 +1208,7 @@ def staff_order_edit_update_item(request, public_code, item_id):
         order,
         {'item_id': item.id, 'old': old_values, 'new_quantity': item.quantity, 'new_unit_price_syp_snapshot': item.unit_price_syp_snapshot},
     )
+    create_notification('order_edited', f'تم تعديل الطلب {order.display_number}', 'تم تعديل كمية/ملاحظات/خيارات عنصر', order=order, order_item=item, target_station=item.prep_station, created_by=request.user)
     messages.success(request, 'تم تحديث العنصر.')
     return redirect('staff_order_edit', public_code=order.public_code)
 
@@ -990,8 +1234,25 @@ def staff_order_edit_remove_item(request, public_code, item_id):
     with transaction.atomic():
         item.delete()
         _log_order_edit(request.user, 'order_item_removed', order, snapshot)
+        transaction.on_commit(lambda: create_notification('prep_item_cancelled', 'تم إلغاء عنصر', snapshot.get('product_name_ar_snapshot',''), order=order, target_station=getattr(item, 'prep_station', None), created_by=request.user))
+        transaction.on_commit(lambda: create_notification('order_edited', f'تم تعديل الطلب {order.display_number}', 'تم حذف عنصر من الطلب', order=order, created_by=request.user))
     messages.success(request, 'تم حذف العنصر من الطلب.')
     return redirect('staff_order_edit', public_code=order.public_code)
+
+
+@require_staff_capability('delivery_management')
+def staff_delivery(request):
+    orders = (
+        Order.objects.filter(fulfillment_mode=Order.FulfillmentMode.DELIVERY)
+        .select_related('table')
+        .prefetch_related('items', 'payments')
+        .order_by('-created_at')
+    )
+    rows = []
+    for order in orders[:200]:
+        total, paid, remaining, payment_label = _order_financials(order)
+        rows.append({'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label})
+    return render(request, 'staff/delivery.html', {'rows': rows, 'cancellation_reasons': CancellationReason.choices, 'page_setting': get_page_setting('staff_delivery', 'طلبات التوصيل', 'Delivery')})
 
 
 @require_staff_capability('cashier')
@@ -1016,10 +1277,10 @@ def staff_cashier(request):
 
 @require_staff_capability('cashier')
 def staff_cashier_order(request, public_code):
-    order = get_object_or_404(Order.objects.select_related('table').prefetch_related('items', 'payments'), public_code=public_code)
+    order = get_object_or_404(Order.objects.select_related('table').prefetch_related('items', 'payments', 'discounts'), public_code=public_code)
     total, paid, remaining, payment_label = _order_financials(order)
     methods = Payment.Method.choices
-    return render(request, 'staff/cashier_order.html', {'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods, 'payment_amount_default': remaining, 'qr_url': reverse('order_qr', kwargs={'public_code': order.public_code})})
+    return render(request, 'staff/cashier_order.html', {'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods, 'discount_types': OrderDiscount.DiscountType.choices, 'can_manage_discounts': _can_approve_partial_payment(request.user), 'payment_amount_default': remaining, 'qr_url': reverse('order_qr', kwargs={'public_code': order.public_code})})
 
 
 @require_staff_capability('cashier')
@@ -1053,6 +1314,8 @@ def staff_cashier_pay(request, public_code):
             if manager and _can_approve_partial_payment(manager):
                 approving_manager = manager
         if approving_manager is None:
+            create_notification('manager_approval_needed', 'مطلوب موافقة المدير', f'دفع جزئي يحتاج موافقة — {order.display_number}', order=order, target_role='admin', created_by=request.user)
+            create_notification('partial_payment_requested', 'دفع جزئي يحتاج موافقة', f'{amount_val} ل.س — {order.display_number}', order=order, target_role='admin', created_by=request.user)
             messages.error(request, 'الدفع الجزئي يحتاج موافقة المدير أو صاحب المحل.')
             return redirect('staff_cashier_order', public_code=order.public_code)
         ActivityLog.objects.create(
@@ -1067,9 +1330,157 @@ def staff_cashier_pay(request, public_code):
                 'cashier_username': request.user.username,
             },
         )
-    Payment.objects.create(order=order, amount_syp=amount_val, method=method)
+    if not method:
+        messages.error(request, 'طريقة الدفع مطلوبة.')
+        return redirect('staff_cashier_order', public_code=order.public_code)
+    payment = Payment.objects.create(order=order, amount_syp=amount_val, method=method, notes=request.POST.get('notes', '').strip(), created_by=request.user)
+    if order.remaining_syp > 0:
+        create_notification('payment_pending', f'الدفع بانتظار الكاشير {order.display_number}', f'المتبقي {order.remaining_syp} ل.س', order=order, target_role='cashier', created_by=request.user)
+    try:
+        ActivityLog.objects.create(actor=request.user, action='payment_added', details={'order_public_code': str(order.public_code), 'payment_id': payment.id, 'amount_syp': amount_val, 'method': method})
+    except Exception:
+        pass
     return redirect('staff_cashier_order', public_code=order.public_code)
 
+
+@require_staff_capability('cashier')
+def staff_cashier_discount(request, public_code):
+    if request.method != 'POST':
+        raise Http404()
+    order = get_object_or_404(Order.objects.prefetch_related('items', 'payments', 'discounts'), public_code=public_code)
+    if not _can_approve_partial_payment(request.user):
+        messages.error(request, 'إضافة الخصم تحتاج موافقة المدير.')
+        return redirect('staff_cashier_order', public_code=order.public_code)
+    reason = request.POST.get('reason', '').strip()
+    if not reason:
+        messages.error(request, 'سبب الخصم مطلوب.')
+        return redirect('staff_cashier_order', public_code=order.public_code)
+    discount_type = request.POST.get('discount_type', OrderDiscount.DiscountType.FIXED)
+    if discount_type not in set(OrderDiscount.DiscountType.values):
+        discount_type = OrderDiscount.DiscountType.FIXED
+    amount = _parse_nonnegative_int(request.POST.get('amount_syp'), default=0, maximum=10_000_000)
+    if amount <= 0:
+        messages.error(request, 'قيمة الخصم يجب أن تكون أكبر من صفر.')
+        return redirect('staff_cashier_order', public_code=order.public_code)
+    discount = OrderDiscount(order=order, discount_type=discount_type, amount_syp=amount, reason=reason, notes=request.POST.get('notes', '').strip(), created_by=request.user, approved_by=request.user)
+    try:
+        discount.full_clean()
+    except ValidationError as exc:
+        messages.error(request, ' '.join(sum(exc.message_dict.values(), [])) if hasattr(exc, 'message_dict') else 'الخصم غير صالح.')
+        return redirect('staff_cashier_order', public_code=order.public_code)
+    discount.save()
+    create_notification('discount_added', f'تمت إضافة خصم {order.display_number}', f'{amount} ل.س', order=order, target_role='cashier', created_by=request.user)
+    try:
+        ActivityLog.objects.create(actor=request.user, action='discount_added', details={'order_public_code': str(order.public_code), 'discount_id': discount.id, 'amount_syp': amount, 'type': discount_type})
+    except Exception:
+        pass
+    messages.success(request, 'تمت إضافة الخصم.')
+    return redirect('staff_cashier_order', public_code=order.public_code)
+
+
+
+def _parse_range_dates(request):
+    today = datetime.now(DAMASCUS_TZ).date()
+    date_from = _parse_report_date(request.GET.get('date_from', '').strip() or today.isoformat())
+    date_to = _parse_report_date(request.GET.get('date_to', '').strip() or date_from.isoformat())
+    if date_to < date_from:
+        date_from, date_to = date_to, date_from
+    return date_from, date_to
+
+
+def _product_margin_context(request):
+    date_from, date_to = _parse_range_dates(request)
+    start_utc, _ = _day_range_utc(date_from)
+    _, end_utc = _day_range_utc(date_to)
+    product_type = request.GET.get('product_type', '').strip()
+    category_id = request.GET.get('category', '').strip()
+    section_id = request.GET.get('section', '').strip()
+    prep_station_id = request.GET.get('prep_station', '').strip()
+    only_active = request.GET.get('only_active', '1') == '1'
+    only_sold = request.GET.get('only_sold', '') == '1'
+
+    products_qs = Product.objects.select_related('category', 'prep_station_ref').prefetch_related('menu_sections').order_by('category__name_ar', 'name_ar')
+    if only_active:
+        products_qs = products_qs.filter(is_available=True)
+    if product_type:
+        products_qs = products_qs.filter(product_type=product_type)
+    if category_id.isdigit():
+        products_qs = products_qs.filter(category_id=int(category_id))
+    if section_id.isdigit():
+        products_qs = products_qs.filter(menu_sections__id=int(section_id))
+    if prep_station_id.isdigit():
+        products_qs = products_qs.filter(prep_station_ref_id=int(prep_station_id))
+
+    items = (OrderItem.objects.select_related('product', 'product__category', 'product__prep_station_ref')
+        .prefetch_related('product__menu_sections')
+        .filter(order__created_at__gte=start_utc, order__created_at__lt=end_utc)
+        .exclude(order__status=Order.Status.CANCELLED))
+    if product_type:
+        items = items.filter(product__product_type=product_type)
+    if category_id.isdigit():
+        items = items.filter(product__category_id=int(category_id))
+    if section_id.isdigit():
+        items = items.filter(product__menu_sections__id=int(section_id))
+    if prep_station_id.isdigit():
+        items = items.filter(product__prep_station_ref_id=int(prep_station_id))
+
+    stats = {}
+    for item in items:
+        product = item.product
+        row = stats.setdefault(product.id, {'product': product, 'units_sold': 0, 'gross_sales_syp': 0, 'estimated_cost_syp': 0, 'known_cost': True})
+        row['units_sold'] += item.quantity
+        margin = item_margin(item, allow_current_product_cost=True)
+        row['gross_sales_syp'] += margin['revenue_syp']
+        if margin['estimated_cost_syp'] is None:
+            row['known_cost'] = False
+        else:
+            row['estimated_cost_syp'] += margin['estimated_cost_syp']
+    discount_total = sum(o.discount_syp for o in Order.objects.filter(created_at__gte=start_utc, created_at__lt=end_utc).prefetch_related('discounts', 'items'))
+    cancelled_items = OrderItem.objects.filter(order__created_at__gte=start_utc, order__created_at__lt=end_utc, order__status=Order.Status.CANCELLED)
+    cancelled_by_product = {}
+    for item in cancelled_items:
+        data = cancelled_by_product.setdefault(item.product_id, {'units': 0, 'value': 0})
+        data['units'] += item.quantity
+        data['value'] += item.line_total_syp_snapshot if item.line_total_syp_snapshot is not None else item.quantity * item.unit_price_syp_snapshot
+
+    rows = []
+    for product in products_qs.distinct():
+        stat = stats.get(product.id, {'product': product, 'units_sold': 0, 'gross_sales_syp': 0, 'estimated_cost_syp': 0, 'known_cost': product.estimated_unit_cost_syp is not None})
+        if only_sold and stat['units_sold'] <= 0:
+            continue
+        est_cost = stat['estimated_cost_syp'] if stat['known_cost'] else None
+        est_margin, est_percent = product_margin_from_values(stat['gross_sales_syp'], est_cost)
+        cancelled = cancelled_by_product.get(product.id, {'units': 0, 'value': 0})
+        rows.append({**stat, 'net_sales_syp': stat['gross_sales_syp'], 'estimated_cost_display': est_cost, 'estimated_margin_syp': est_margin, 'estimated_margin_percent': est_percent, 'missing_cost': not stat['known_cost'], 'cancelled_units': cancelled['units'], 'cancelled_value_syp': cancelled['value'], 'avg_selling_price': int(stat['gross_sales_syp'] / stat['units_sold']) if stat['units_sold'] else 0})
+
+    section_rows = {}
+    for row in rows:
+        sections = list(row['product'].menu_sections.all()) or [row['product'].category]
+        for section in sections:
+            key = f'{section.__class__.__name__}:{section.id}'
+            data = section_rows.setdefault(key, {'name': getattr(section, 'name_ar', str(section)), 'units_sold': 0, 'gross_sales_syp': 0, 'estimated_cost_syp': 0, 'known_cost': True, 'product_count': 0})
+            data['units_sold'] += row['units_sold']; data['gross_sales_syp'] += row['gross_sales_syp']; data['product_count'] += 1
+            if row['missing_cost']:
+                data['known_cost'] = False
+            else:
+                data['estimated_cost_syp'] += row['estimated_cost_display'] or 0
+    for data in section_rows.values():
+        cost = data['estimated_cost_syp'] if data['known_cost'] else None
+        data['estimated_margin_syp'], data['estimated_margin_percent'] = product_margin_from_values(data['gross_sales_syp'], cost)
+        data['missing_cost'] = not data['known_cost']
+
+    sold_rows = [r for r in rows if r['units_sold'] > 0]
+    cards = {
+        'best_quantity': sorted(sold_rows, key=lambda r: r['units_sold'], reverse=True)[:10],
+        'best_revenue': sorted(sold_rows, key=lambda r: r['gross_sales_syp'], reverse=True)[:10],
+        'highest_margin': sorted([r for r in sold_rows if not r['missing_cost']], key=lambda r: r['estimated_margin_syp'], reverse=True)[:10],
+        'lowest_margin': sorted([r for r in sold_rows if not r['missing_cost']], key=lambda r: r['estimated_margin_syp'])[:10],
+        'missing_cost': [r for r in sold_rows if r['missing_cost']][:25],
+    }
+    categories = Category.objects.order_by('name_ar')
+    sections = MenuSection.objects.order_by('name_ar')
+    prep_stations = PrepStation.objects.order_by('name_ar')
+    return {'date_from': date_from, 'date_to': date_to, 'rows': rows, 'section_rows': sorted(section_rows.values(), key=lambda r: r['gross_sales_syp'], reverse=True), 'cards': cards, 'discount_total': discount_total, 'categories': categories, 'sections': sections, 'prep_stations': prep_stations, 'product_types': Product.ProductType.choices, 'filters': request.GET}
 
 @require_staff_capability('reports')
 def staff_reports_home(request):
@@ -1091,20 +1502,61 @@ def staff_reports_day_csv(request):
     rows, _sums = _build_day_report(report_date)
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = f'attachment; filename="report-{report_date.isoformat()}.csv"'
-    response.write('display_number,created_at,fulfillment_mode,location,status,subtotal,delivery_fee,total,paid,remaining,payment_methods\n')
+    response.write('display_number,created_at,fulfillment_mode,delivery_status,delivery_fee,delivery_phone,delivery_address,location,status,subtotal,total,paid,remaining,payment_methods,session_type,billing_mode,raw_minutes,billable_minutes,calculated_total,linked_order,payment_status\n')
     for row in rows:
         order = row['order']
         methods_txt = '; '.join(f'{k}:{v}' for k, v in row['methods'].items())
         table_name = order.location_label
-        response.write(f'{order.display_number},{order.created_at.isoformat()},{order.get_fulfillment_label()},{table_name},{order.get_status_display()},{order.subtotal_syp},{order.delivery_fee_syp},{row["total"]},{row["paid"]},{row["remaining"]},"{methods_txt}"\n')
+        session = order.internet_sessions.first()
+        session_cols = ''
+        if session:
+            session_cols = f'{session.get_session_type_display()},{session.get_billing_mode_display()},{session.effective_duration_minutes or 0},{session.billable_minutes or 0},{session.calculated_total_syp},{order.display_number},{session.get_status_display()}'
+        response.write(f'{order.display_number},{order.created_at.isoformat()},{order.get_fulfillment_label()},{order.get_delivery_status_display()},{order.delivery_fee_syp},"{order.delivery_phone}","{order.delivery_address}",{table_name},{order.get_status_display()},{order.subtotal_syp},{row["total"]},{row["paid"]},{row["remaining"]},"{methods_txt}",{session_cols}\n')
     return response
 
+
+
+@require_staff_capability('reports')
+def staff_product_margin_report(request):
+    return render(request, 'staff/reports_products.html', _product_margin_context(request))
+
+
+@require_staff_capability('reports')
+def staff_product_margin_csv(request):
+    context = _product_margin_context(request)
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="product-margins-{context["date_from"].isoformat()}-{context["date_to"].isoformat()}.csv"'
+    response.write('product_id,product_name,product_type,section,units_sold,gross_sales,net_sales,estimated_cost,estimated_margin,margin_percent,missing_cost\n')
+    for row in context['rows']:
+        product = row['product']
+        section = product.menu_sections.first() or product.category
+        response.write(f'{product.id},"{product.name_ar}",{product.product_type},"{getattr(section, "name_ar", "")}",{row["units_sold"]},{row["gross_sales_syp"]},{row["net_sales_syp"]},{row["estimated_cost_display"] if row["estimated_cost_display"] is not None else ""},{row["estimated_margin_syp"] if row["estimated_margin_syp"] is not None else ""},{row["estimated_margin_percent"] if row["estimated_margin_percent"] is not None else ""},{"yes" if row["missing_cost"] else "no"}\n')
+    return response
 
 @require_staff_capability('reports')
 def staff_close_day(request):
     today = datetime.now(DAMASCUS_TZ).date()
     _rows, sums = _build_day_report(today)
-    return render(request, 'staff/close_day.html', {'report_date': today, 'sums': sums})
+    existing_close = DailyClose.objects.filter(business_date=today, is_finalized=True).first()
+    if request.method == 'POST':
+        if not _can_approve_partial_payment(request.user):
+            messages.error(request, 'إغلاق اليوم النهائي يحتاج صلاحية المدير.')
+            return redirect('staff_close_day')
+        if existing_close:
+            messages.error(request, 'يوجد إغلاق نهائي لهذا التاريخ بالفعل.')
+            return redirect('staff_close_day')
+        opening = _parse_nonnegative_int(request.POST.get('opening_cash_syp'), default=0, maximum=100_000_000)
+        actual = _parse_nonnegative_int(request.POST.get('actual_cash_counted_syp'), default=0, maximum=100_000_000)
+        expected = opening + sums['cash_total'] + sums.get('non_sales_cash_in_syp', 0) - sums.get('cash_out_syp', 0) - sums.get('cash_expenses_syp', 0)
+        close = DailyClose.objects.create(business_date=today, opening_cash_syp=opening, cash_sales_syp=sums['cash_total'], non_cash_sales_syp=sums['non_cash_sales_syp'], total_payments_syp=sums['paid_total'], unpaid_orders_syp=sums['remaining_total'], partial_payments_syp=sums['partial_payments_syp'], discounts_syp=sums['discounts_syp'], cancelled_orders_syp=sums['cancelled_value'], refunds_or_reversals_syp=0, expected_cash_syp=expected, actual_cash_counted_syp=actual, cash_difference_syp=actual - expected, notes=request.POST.get('notes', '').strip(), closed_by=request.user, closed_at=timezone.now())
+        try:
+            ActivityLog.objects.create(actor=request.user, action='close_day_finalized', details={'business_date': today.isoformat(), 'daily_close_id': close.id, 'expected_cash_syp': expected, 'cash_expenses_syp': sums.get('cash_expenses_syp', 0), 'cash_out_syp': sums.get('cash_out_syp', 0)})
+        except Exception:
+            pass
+        create_notification('close_day_finalized', 'تم إغلاق اليوم', today.isoformat(), target_role='cashier', created_by=request.user)
+        messages.success(request, 'تم إغلاق اليوم.')
+        return redirect('staff_close_day')
+    return render(request, 'staff/close_day.html', {'report_date': today, 'sums': sums, 'existing_close': existing_close, 'can_finalize_close': _can_approve_partial_payment(request.user)})
 
 
 def _get_member_or_404(member_id):
@@ -1259,7 +1711,7 @@ def staff_internet(request):
     for session in active_sessions:
         duration = calculate_session_duration_minutes(session.effective_started_at, now)
         estimated_total = 0 if session.billing_mode in {InternetSession.BillingMode.FREE, InternetSession.BillingMode.PREPAID} else calculate_metered_session_total(
-            duration, session.rate_per_hour_syp, session.minimum_minutes, session.free_grace_minutes, session.daily_cap_syp
+            duration, session.rate_per_hour_syp, session.minimum_minutes, session.free_grace_minutes, session.daily_cap_syp, session.rounding_increment_minutes, session.minimum_charge_syp
         )
         active_rows.append({'session': session, 'elapsed_minutes': duration, 'estimated_total': estimated_total})
     return render(request, 'staff/internet.html', {
@@ -1302,10 +1754,19 @@ def staff_internet_start(request):
     billing_mode = request.POST.get('billing_mode') or settings_obj.default_internet_billing_mode
     if billing_mode not in {choice[0] for choice in InternetSession.BillingMode.choices}:
         billing_mode = InternetSession.BillingMode.OPEN_METERED
+    if billing_mode == InternetSession.BillingMode.OPEN_METERED and not settings_obj.internet_metered_enabled:
+        errors['billing_mode'] = 'المحاسبة حسب الوقت غير مفعلة حالياً.'
     rate = _parse_int_or_error(request.POST.get('rate_per_hour_syp', ''), 'سعر الساعة', errors, default=settings_obj.default_rate_per_hour_syp, min_value=0)
     minimum = _parse_int_or_error(request.POST.get('minimum_minutes', ''), 'الحد الأدنى للدقائق', errors, default=settings_obj.default_minimum_minutes, min_value=0)
     grace = _parse_int_or_error(request.POST.get('free_grace_minutes', ''), 'دقائق السماح', errors, default=settings_obj.default_free_grace_minutes, min_value=0)
     daily_cap = _parse_int_or_error(request.POST.get('daily_cap_syp', ''), 'السقف اليومي', errors, default=settings_obj.default_daily_cap_syp, min_value=0)
+    rounding = _parse_int_or_error(request.POST.get('rounding_increment_minutes', ''), 'التقريب كل', errors, default=settings_obj.default_rounding_increment_minutes, min_value=1)
+    if rounding not in {15, 30, 60}:
+        errors['rounding_increment_minutes'] = 'التقريب يجب أن يكون 15 أو 30 أو 60 دقيقة.'
+    minimum_charge = _parse_int_or_error(request.POST.get('minimum_charge_syp', ''), 'الحد الأدنى للدفع', errors, default=settings_obj.default_minimum_charge_syp, min_value=0)
+    session_type = request.POST.get('session_type') or InternetSession.SessionType.INTERNET
+    if session_type not in {choice[0] for choice in InternetSession.SessionType.choices}:
+        session_type = InternetSession.SessionType.INTERNET
     package = None
     package_id = request.POST.get('package')
     if package_id:
@@ -1325,6 +1786,7 @@ def staff_internet_start(request):
             'can_cancel_sessions': can_override_session_total(request.user), 'can_override_total': can_override_session_total(request.user),
         })
     session = InternetSession.objects.create(
+        session_type=session_type,
         member=member,
         package=package,
         guest_name=(request.POST.get('guest_name') or request.POST.get('customer_name', '')).strip(),
@@ -1337,11 +1799,17 @@ def staff_internet_start(request):
         rate_per_hour_syp=rate or 0,
         minimum_minutes=minimum or 0,
         free_grace_minutes=grace or 0,
+        rounding_increment_minutes=rounding or 15,
+        minimum_charge_syp=minimum_charge or 0,
         daily_cap_syp=daily_cap,
-        notes=(request.POST.get('session_type', '').strip() + ' ' + request.POST.get('notes', '').strip()).strip(),
+        notes=request.POST.get('notes', '').strip(),
         status=InternetSession.Status.ACTIVE,
         started_by=request.user,
     )
+    try:
+        create_notification('session_started', 'بدء الجلسة', str(session), target_role='cashier', created_by=request.user)
+    except Exception:
+        pass
     messages.success(request, f'تم بدء جلسة #{session.id}.')
     return redirect('staff_internet_session', session_id=session.id)
 
@@ -1349,9 +1817,9 @@ def staff_internet_start(request):
 def _session_preview(session):
     ended_at = timezone.now()
     duration = calculate_session_duration_minutes(session.effective_started_at, ended_at)
-    billable = calculate_billable_minutes(duration, session.minimum_minutes, session.free_grace_minutes)
+    billable = calculate_billable_minutes(duration, session.minimum_minutes, session.free_grace_minutes, session.rounding_increment_minutes)
     calculated_total = 0 if session.billing_mode in {InternetSession.BillingMode.FREE, InternetSession.BillingMode.PREPAID} else calculate_metered_session_total(
-        duration, session.rate_per_hour_syp, session.minimum_minutes, session.free_grace_minutes, session.daily_cap_syp
+        duration, session.rate_per_hour_syp, session.minimum_minutes, session.free_grace_minutes, session.daily_cap_syp, session.rounding_increment_minutes, session.minimum_charge_syp
     )
     subscription = _active_subscription_for_member(session.member) if session.member_id else None
     return {'ended_at': ended_at, 'duration': duration, 'billable_minutes': billable, 'calculated_total': calculated_total, 'subscription': subscription}
@@ -1399,6 +1867,10 @@ def staff_internet_end(request, session_id):
             'settings_obj': get_system_settings(),
         })
     settings_obj = get_system_settings()
+    try:
+        create_notification('session_ended', 'إنهاء الجلسة', str(session), target_role='cashier', created_by=request.user)
+    except Exception:
+        pass
     if request.POST.get('create_order') or (settings_obj.auto_create_order_for_metered_sessions and session.payable_total_syp > 0):
         _create_order_for_internet_session(request, session, mark_paid=request.POST.get('mark_paid') == '1')
     elif request.POST.get('mark_paid') == '1':
@@ -1412,13 +1884,14 @@ def _create_order_for_internet_session(request, session, mark_paid=False):
         order = session.linked_order
     else:
         settings_obj = get_system_settings()
-        product = settings_obj.internet_service_product
+        product = settings_obj.default_workspace_product if session.session_type == InternetSession.SessionType.WORKSPACE else settings_obj.internet_service_product
         if product is None:
-            messages.warning(request, 'اضبط منتج خدمة الإنترنت في إعدادات النظام قبل إنشاء طلب كاشير للجلسة.')
+            messages.warning(request, 'اضبط منتج الإنترنت أو مساحة العمل الافتراضي في إعدادات النظام قبل إنشاء طلب كاشير للجلسة.')
             return None
         customer = session.member.name_ar if session.member_id else (session.display_guest_name or 'زائر')
-        note = f'جلسة إنترنت/عمل #{session.id}\nالمدة: {session.effective_duration_minutes or 0} دقيقة\nالعميل: {customer}'
+        note = f'جلسة {session.get_session_type_display()} #{session.id}\nالوقت الفعلي: {session.effective_duration_minutes or 0} دقيقة\nالوقت المحسوب: {session.billable_minutes or 0} دقيقة\nالعميل: {customer}'
         order = Order.objects.create(service_mode=Order.ServiceMode.DINE_IN, status=Order.Status.NEW, notes=note)
+        prep_station, prep_status = _prep_defaults_for_product(product)
         OrderItem.objects.create(
             order=order,
             product=product,
@@ -1429,9 +1902,11 @@ def _create_order_for_internet_session(request, session, mark_paid=False):
             selected_options_snapshot=[],
             item_note=note,
             line_total_syp_snapshot=session.payable_total_syp,
+            prep_station=prep_station,
+            prep_status=prep_status,
         )
         session.linked_order = order
-        session.status = InternetSession.Status.UNPAID if session.payable_total_syp > 0 else InternetSession.Status.ENDED
+        session.status = InternetSession.Status.BILLED if session.payable_total_syp > 0 else InternetSession.Status.ENDED
         session.save(update_fields=['linked_order', 'status', 'updated_at'])
     if mark_paid and session.payable_total_syp > 0:
         existing_paid = _paid_total(order.payments.all())
@@ -1453,11 +1928,20 @@ def staff_internet_cancel(request, session_id):
         return redirect('staff_internet_session', session_id=session_id)
     session = get_object_or_404(InternetSession, pk=session_id)
     if session.status == InternetSession.Status.ACTIVE:
+        reason = request.POST.get('cancellation_reason', '').strip()
+        if not reason:
+            messages.error(request, 'سبب الإلغاء مطلوب.')
+            return redirect('staff_internet_session', session_id=session_id)
         session.status = InternetSession.Status.CANCELLED
+        session.cancellation_reason = reason
         session.ended_at = timezone.now()
         session.end_time = session.ended_at
         session.ended_by = request.user
-        session.save(update_fields=['status', 'ended_at', 'end_time', 'ended_by', 'updated_at'])
+        session.save(update_fields=['status', 'cancellation_reason', 'ended_at', 'end_time', 'ended_by', 'updated_at'])
+        try:
+            create_notification('session_cancelled', 'إلغاء الجلسة', reason, target_role='admin', created_by=request.user)
+        except Exception:
+            pass
         messages.success(request, 'تم إلغاء الجلسة.')
     return redirect('staff_internet_session', session_id=session_id)
 
@@ -1668,3 +2152,84 @@ def staff_food_lab(request):
     participations = VendorParticipation.objects.select_related('vendor', 'location_area').order_by('-starts_at')
     events = Event.objects.filter(Q(title_ar__icontains='Food Lab') | Q(description_ar__icontains='Food Lab') | Q(title_ar__icontains='مختبر') | Q(description_ar__icontains='مختبر')).order_by('-starts_at')
     return render(request, 'staff/food_lab.html', {'participations': participations, 'events': events})
+
+
+def _print_order_queryset():
+    return Order.objects.select_related('table', 'table__room').prefetch_related('items__product', 'items__prep_station', 'payments', 'discounts')
+
+
+def _safe_activity(actor, action, details):
+    try:
+        ActivityLog.objects.create(actor=actor, action=action, details=details)
+    except Exception:
+        pass
+
+
+def _receipt_context(order, request, template_kind='a4'):
+    total, paid, remaining, payment_label = _order_financials(order)
+    system_settings = get_system_settings()
+    public_url = request.build_absolute_uri(reverse('order_public', kwargs={'public_code': order.public_code}))
+    return {
+        'order': order,
+        'total': total,
+        'paid': paid,
+        'remaining': remaining,
+        'payment_label': payment_label,
+        'business_name': (system_settings.receipt_business_name or system_settings.public_brand_title if system_settings else 'مشاريب'),
+        'receipt_footer_text': (system_settings.receipt_footer_text if system_settings else '') or 'شكراً لزيارتكم',
+        'show_qr': bool(getattr(system_settings, 'receipt_show_qr', False)),
+        'public_order_url': public_url,
+        'qr_url': reverse('order_qr', kwargs={'public_code': order.public_code}),
+        'thermal_width': getattr(system_settings, 'thermal_receipt_width_mm', 80) or 80,
+        'template_kind': template_kind,
+    }
+
+
+@require_staff_capability('cashier')
+def staff_order_receipt(request, public_code):
+    order = get_object_or_404(_print_order_queryset(), public_code=public_code)
+    _safe_activity(request.user, 'receipt_print_viewed', {'order_public_code': str(order.public_code), 'order_display_number': order.display_number, 'template': 'a4'})
+    return render(request, 'staff/prints/order_receipt.html', _receipt_context(order, request, 'a4'))
+
+
+@require_staff_capability('cashier')
+def staff_order_receipt_thermal(request, public_code):
+    order = get_object_or_404(_print_order_queryset(), public_code=public_code)
+    _safe_activity(request.user, 'receipt_print_viewed', {'order_public_code': str(order.public_code), 'order_display_number': order.display_number, 'template': 'thermal'})
+    return render(request, 'staff/prints/order_receipt_thermal.html', _receipt_context(order, request, 'thermal'))
+
+
+@require_staff_capability('operations')
+def staff_order_prep_ticket(request, public_code):
+    order = get_object_or_404(_print_order_queryset(), public_code=public_code)
+    station_code = (request.GET.get('station') or '').strip()
+    items = list(order.items.all())
+    if station_code:
+        items = [item for item in items if item.prep_station and item.prep_station.code == station_code]
+    groups = {}
+    for item in items:
+        station = item.prep_station
+        key = station.code if station else 'general'
+        if key not in groups:
+            groups[key] = {'station': station, 'label': station.name_ar if station else 'عام / لا يحتاج تحضير', 'items': []}
+        groups[key]['items'].append(item)
+    _safe_activity(request.user, 'prep_ticket_print_viewed', {'order_public_code': str(order.public_code), 'order_display_number': order.display_number, 'station': station_code or 'all'})
+    return render(request, 'staff/prints/prep_ticket.html', {'order': order, 'groups': groups.values(), 'station_code': station_code})
+
+
+@require_staff_capability('delivery_management')
+def staff_order_delivery_ticket(request, public_code):
+    order = get_object_or_404(_print_order_queryset(), public_code=public_code)
+    if not order.is_delivery:
+        raise Http404()
+    total, paid, remaining, payment_label = _order_financials(order)
+    _safe_activity(request.user, 'delivery_ticket_print_viewed', {'order_public_code': str(order.public_code), 'order_display_number': order.display_number})
+    return render(request, 'staff/prints/delivery_ticket.html', {'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label})
+
+
+@require_staff_capability('reports')
+def staff_close_day_print(request, close_id):
+    close = get_object_or_404(DailyClose.objects.select_related('closed_by'), pk=close_id)
+    _rows, sums = _build_day_report(close.business_date)
+    _safe_activity(request.user, 'close_day_print_viewed', {'daily_close_id': close.id, 'business_date': close.business_date.isoformat()})
+    return render(request, 'staff/prints/close_day_print.html', {'close': close, 'sums': sums})

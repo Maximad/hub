@@ -3,30 +3,82 @@
 {% block content %}
 <h2>أدوات متابعة القائمة</h2>
 <p><a href="{% url 'staff_home' %}">العودة لصفحة الفريق</a></p>
-{% for section_name, products in grouped %}
-<section style="border:1px solid #ddd; border-radius:10px; padding:0.75rem; margin-bottom:1rem; overflow-x:auto;">
-  <h3>{{ section_name }}</h3>
-  <table style="width:100%; border-collapse:collapse; min-width:900px;">
-    <thead>
-      <tr>
-        <th>المنتج</th><th>السعر</th><th>النوع</th><th>مرئي QR</th><th>قابل للطلب QR</th><th>متاح</th><th>كحولي</th><th>يتطلب تأكيد</th><th>إجراءات</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for p in products %}
-      <tr style="border-top:1px solid #eee;">
-        <td>{{ p.name_ar }}</td><td>{{ p.price_syp }}</td><td>{{ p.item_type }}</td><td>{{ p.visible_on_qr|yesno:"نعم,لا" }}</td><td>{{ p.orderable_on_qr|yesno:"نعم,لا" }}</td><td>{{ p.is_available|yesno:"نعم,لا" }}</td><td>{{ p.is_alcoholic|yesno:"نعم,لا" }}</td><td>{{ p.requires_staff_confirmation|yesno:"نعم,لا" }}</td>
-        <td>
-          <form method="post" style="display:inline;">{% csrf_token %}<input type="hidden" name="product_code" value="{{ p.public_code }}"><input type="hidden" name="action" value="is_available"><button type="submit">تبديل التوفر</button></form>
-          <form method="post" style="display:inline;">{% csrf_token %}<input type="hidden" name="product_code" value="{{ p.public_code }}"><input type="hidden" name="action" value="visible_on_qr"><button type="submit">تبديل الظهور</button></form>
-          <form method="post" style="display:inline;">{% csrf_token %}<input type="hidden" name="product_code" value="{{ p.public_code }}"><input type="hidden" name="action" value="orderable_on_qr"><button type="submit">تبديل الطلب</button></form>
-        </td>
-      </tr>
-      {% empty %}
-      <tr><td colspan="9">لا توجد منتجات في هذا القسم.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+
+<section style="border:1px solid #ddd; border-radius:10px; padding:1rem; margin-bottom:1rem;">
+  <h3>بحث وفلاتر</h3>
+  <form method="get" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:0.75rem; align-items:end;">
+    <label>بحث عربي/إنكليزي<br><input type="search" name="q" value="{{ filters.q }}" placeholder="اسم المنتج"></label>
+    <label>القسم<br><select name="section"><option value="">كل الأقسام</option><option value="none" {% if filters.section == 'none' %}selected{% endif %}>بدون قسم</option>{% for section in sections %}<option value="{{ section.pk }}" {% if filters.section == section.pk|stringformat:'s' %}selected{% endif %}>{{ section.name_ar }}</option>{% endfor %}</select></label>
+    <label>التوفر<br><select name="availability"><option value="">الكل</option><option value="available" {% if filters.availability == 'available' %}selected{% endif %}>متاح</option><option value="unavailable" {% if filters.availability == 'unavailable' %}selected{% endif %}>غير متاح</option></select></label>
+    <label>ظهور QR<br><select name="qr_visibility"><option value="">الكل</option><option value="visible" {% if filters.qr_visibility == 'visible' %}selected{% endif %}>ظاهر</option><option value="hidden" {% if filters.qr_visibility == 'hidden' %}selected{% endif %}>مخفي</option></select></label>
+    <label>طلب QR<br><select name="qr_orderability"><option value="">الكل</option><option value="orderable" {% if filters.qr_orderability == 'orderable' %}selected{% endif %}>قابل للطلب</option><option value="not_orderable" {% if filters.qr_orderability == 'not_orderable' %}selected{% endif %}>غير قابل للطلب</option></select></label>
+    <label>نوع المنتج<br><select name="item_type"><option value="">كل الأنواع</option>{% for value, label in item_type_choices %}<option value="{{ value }}" {% if filters.item_type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <label>محطة التحضير<br><select name="prep_station"><option value="">الكل</option><option value="none" {% if filters.prep_station == 'none' %}selected{% endif %}>بدون محطة</option>{% for station in prep_stations %}<option value="{{ station.pk }}" {% if filters.prep_station == station.pk|stringformat:'s' %}selected{% endif %}>{{ station.name_ar }}</option>{% endfor %}</select></label>
+    <label>المورّد<br><select name="vendor"><option value="">الكل</option><option value="none" {% if filters.vendor == 'none' %}selected{% endif %}>بدون مورّد</option>{% for vendor in vendors %}<option value="{{ vendor.pk }}" {% if filters.vendor == vendor.pk|stringformat:'s' %}selected{% endif %}>{{ vendor.name_ar }}</option>{% endfor %}</select></label>
+    <label>الوسم<br><select name="tag"><option value="">كل الوسوم</option><option value="none" {% if filters.tag == 'none' %}selected{% endif %}>بدون وسم</option>{% for tag in tags %}<option value="{{ tag.pk }}" {% if filters.tag == tag.pk|stringformat:'s' %}selected{% endif %}>{{ tag.name_ar }}</option>{% endfor %}</select></label>
+    <label>الصورة<br><select name="missing_image"><option value="">الكل</option><option value="yes" {% if filters.missing_image == 'yes' %}selected{% endif %}>تنقصه صورة</option><option value="no" {% if filters.missing_image == 'no' %}selected{% endif %}>لديه صورة</option></select></label>
+    <div><button type="submit">تطبيق الفلاتر</button> <a href="{% url 'staff_menu_tools' %}">إعادة ضبط</a></div>
+  </form>
 </section>
-{% endfor %}
+
+<form id="bulk-menu-tools-form" method="post" action="{% url 'staff_menu_tools_preview' %}">
+  {% csrf_token %}
+  <input type="hidden" name="return_query" value="{{ return_query }}">
+  <input type="hidden" name="bulk_value" id="bulk-value">
+  <section style="border:1px solid #ddd; border-radius:10px; padding:1rem; margin-bottom:1rem;">
+    <h3>إجراء جماعي</h3>
+    <p>النتائج المطابقة: {{ products_count }}. اختر المنتجات ثم راجع صفحة المعاينة قبل التأكيد النهائي.</p>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:0.75rem; align-items:end;">
+      <label>الإجراء<br><select name="bulk_action" id="bulk-action" required><option value="">اختر إجراءً</option>{% for code, label in bulk_actions %}<option value="{{ code }}">{{ label }}</option>{% endfor %}</select></label>
+      <label>قيمة السعر<br><input type="number" min="0" step="1" id="price-value" placeholder="مثلاً 5000"></label>
+      <label>القسم المستهدف<br><select id="section-value"><option value="">اختر قسماً</option>{% for section in sections %}<option value="{{ section.pk }}">{{ section.name_ar }}</option>{% endfor %}</select></label>
+      <label>محطة التحضير<br><select id="prep-value"><option value="">اختر محطة</option>{% for station in prep_stations %}<option value="{{ station.pk }}">{{ station.name_ar }}</option>{% endfor %}</select></label>
+      <label>الوسم<br><select id="tag-value"><option value="">اختر وسماً</option>{% for tag in tags %}<option value="{{ tag.pk }}">{{ tag.name_ar }}</option>{% endfor %}</select></label>
+      <div><button type="submit">معاينة التغييرات</button></div>
+    </div>
+  </section>
+
+  <p><label><input type="checkbox" id="select-all-visible"> تحديد كل المنتجات الظاهرة</label></p>
+  {% for group in grouped %}
+  <section style="border:1px solid #ddd; border-radius:10px; padding:0.75rem; margin-bottom:1rem; overflow-x:auto;">
+    <h3>{{ group.section_name }}</h3>
+    <table style="width:100%; border-collapse:collapse; min-width:1100px;">
+      <thead><tr><th>اختيار</th><th>المنتج</th><th>السعر</th><th>النوع</th><th>القسم/الأقسام</th><th>محطة</th><th>مورّد</th><th>وسوم</th><th>صورة</th><th>مرئي QR</th><th>قابل للطلب QR</th><th>متاح</th></tr></thead>
+      <tbody>
+        {% for p in group.products %}
+        <tr style="border-top:1px solid #eee;">
+          <td><input class="product-checkbox" type="checkbox" name="selected_products" value="{{ p.public_code }}" aria-label="اختيار {{ p.name_ar }}"></td>
+          <td><strong>{{ p.name_ar }}</strong>{% if p.name_en %}<br><small>{{ p.name_en }}</small>{% endif %}</td>
+          <td>{{ p.price_syp }}</td><td>{{ p.get_item_type_display }}</td>
+          <td>{% for section in p.menu_sections.all %}{{ section.name_ar }}{% if not forloop.last %}، {% endif %}{% empty %}—{% endfor %}</td>
+          <td>{{ p.prep_station_ref.name_ar|default:"—" }}</td><td>{{ p.vendor.name_ar|default:"—" }}</td>
+          <td>{% for tag in p.tags.all %}{{ tag.name_ar }}{% if not forloop.last %}، {% endif %}{% empty %}—{% endfor %}</td>
+          <td>{{ p.has_active_image|yesno:"نعم,لا" }}</td><td>{{ p.visible_on_qr|yesno:"نعم,لا" }}</td><td>{{ p.orderable_on_qr|yesno:"نعم,لا" }}</td><td>{{ p.is_available|yesno:"نعم,لا" }}</td>
+        </tr>
+        {% empty %}<tr><td colspan="12">لا توجد منتجات مطابقة.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endfor %}
+</form>
+
+<script>
+(function () {
+  const selectAll = document.getElementById('select-all-visible');
+  const form = document.getElementById('bulk-menu-tools-form');
+  const action = document.getElementById('bulk-action');
+  const bulkValue = document.getElementById('bulk-value');
+  selectAll && selectAll.addEventListener('change', function () {
+    document.querySelectorAll('.product-checkbox').forEach((box) => { box.checked = selectAll.checked; });
+  });
+  form && form.addEventListener('submit', function () {
+    const code = action.value;
+    if (['set_exact_price', 'increase_price_fixed', 'decrease_price_fixed'].includes(code)) bulkValue.value = document.getElementById('price-value').value;
+    else if (['move_to_menu_section', 'add_to_menu_section', 'remove_from_menu_section'].includes(code)) bulkValue.value = document.getElementById('section-value').value;
+    else if (code === 'set_prep_station') bulkValue.value = document.getElementById('prep-value').value;
+    else if (['add_tag', 'remove_tag'].includes(code)) bulkValue.value = document.getElementById('tag-value').value;
+    else bulkValue.value = '';
+  });
+}());
+</script>
 {% endblock %}

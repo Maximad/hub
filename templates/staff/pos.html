@@ -23,10 +23,10 @@
       <div>
         <strong>طريقة الطلب</strong>
         <div class="menu-option-chips" data-fulfillment-selector>
-          <label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="inside_space" {% if form_values.fulfillment_mode != 'delivery' and form_values.fulfillment_mode != 'takeaway' and form_values.fulfillment_mode != 'table' %}checked{% endif %}> داخل المكان</label>
+          <label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="inside_space_general" {% if form_values.fulfillment_mode != 'delivery' and form_values.fulfillment_mode != 'takeaway' and form_values.fulfillment_mode != 'table' %}checked{% endif %}> داخل المكان</label>
           <label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="table" {% if form_values.fulfillment_mode == 'table' %}checked{% endif %}> طاولة</label>
-          {% if settings.enable_delivery %}<label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="delivery" {% if form_values.fulfillment_mode == 'delivery' %}checked{% endif %}> توصيل</label>{% endif %}
-          {% if settings.enable_takeaway %}<label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="takeaway" {% if form_values.fulfillment_mode == 'takeaway' %}checked{% endif %}> تيك أواي</label>{% endif %}
+          {% if settings.effective_delivery_enabled %}<label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="delivery" {% if form_values.fulfillment_mode == 'delivery' %}checked{% endif %}> توصيل</label>{% endif %}
+          {% if settings.effective_takeaway_enabled %}<label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="takeaway" {% if form_values.fulfillment_mode == 'takeaway' %}checked{% endif %}> تيك أواي</label>{% endif %}
         </div>
       </div>
       <div>
@@ -101,9 +101,9 @@
                   {% if not system_settings or system_settings.pos_show_product_images %}<div class="hub-media menu-product-media product-media-frame staff-pos__media{% if not p.primary_media %} menu-product-media--placeholder product-media-placeholder{% endif %}">
                     {% if p.primary_media %}
                       {% if p.primary_media.is_visual_media %}
-                        <img class="product-media-image" src="{{ p.primary_media.url }}" alt="{{ p.primary_media.display_alt_text }}" loading="lazy">
+                        <img src="{{ p.primary_media.resolved_url }}" alt="{{ p.primary_media.display_alt_text }}" loading="lazy">
                       {% elif p.primary_media.media_type == 'video' %}
-                        <video class="product-media-image" src="{{ p.primary_media.url }}" aria-label="{{ p.primary_media.display_alt_text }}" muted playsinline preload="metadata"></video>
+                        <video src="{{ p.primary_media.resolved_url }}" aria-label="{{ p.primary_media.display_alt_text }}" muted playsinline preload="metadata"></video>
                       {% else %}
                         <span>{{ p.name_ar|slice:":1" }}</span>
                       {% endif %}

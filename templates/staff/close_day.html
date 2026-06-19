@@ -8,12 +8,15 @@
 <ul>
   <li>إجمالي العناصر: {{ sums.subtotal_total }} ل.س</li>
   <li>إجمالي رسوم التوصيل: {{ sums.delivery_fee_total }} ل.س</li>
-  <li>إجمالي الطلبات: {{ sums.order_total }} ل.س</li>
-  <li>النقد المتوقع: {{ sums.cash_total }} ل.س</li>
+  <li>إجمالي المبيعات قبل الخصم: {{ sums.gross_sales }} ل.س</li>
+  <li>الخصومات: {{ sums.discounts_syp }} ل.س</li>
+  <li>صافي المبيعات: {{ sums.net_sales }} ل.س</li>
+  <li>النقد المتوقع: {{ sums.expected_cash_syp }} ل.س</li>
   <li>التحويل اليدوي: {{ sums.manual_transfer_total }} ل.س</li>
   <li>غير المدفوع: {{ sums.remaining_total }} ل.س</li>
   <li>عدد الطلبات: {{ sums.orders_count }}</li>
-  <li>الطلبات الملغاة: {{ sums.cancelled_count }}</li>
+  <li>الطلبات الملغاة: {{ sums.cancelled_count }} / {{ sums.cancelled_value }} ل.س</li>
   <li>الطلبات المقدمة/المدفوعة: {{ sums.served_or_paid_count }}</li>
-</ul>
+<li>جلسات الإنترنت ومساحة العمل: {{ sums.internet_workspace_sessions_count }} | الوقت الفعلي: {{ sums.internet_workspace_raw_minutes }} دقيقة | الوقت المحسوب: {{ sums.internet_workspace_billable_minutes }} دقيقة | الإيراد: {{ sums.internet_workspace_revenue_syp }} ل.س | حسب الوقت: {{ sums.internet_workspace_metered_revenue_syp }} ل.س | دقائق مسبقة: {{ sums.internet_workspace_prepaid_minutes_used }} | غير مدفوعة: {{ sums.internet_workspace_unpaid_orders }} | ملغاة: {{ sums.internet_workspace_cancelled_sessions }}</li></ul>
+{% if existing_close %}<div class="hub-card"><strong>إغلاق اليوم مكتمل</strong><br><a class="hub-button" href="{% url 'staff_close_day_print' existing_close.id %}">طباعة ملخص اليوم</a><br>النقد الفعلي: {{ existing_close.actual_cash_counted_syp }} ل.س<br>الفرق: {{ existing_close.cash_difference_syp }} ل.س<br>أغلق بواسطة: {{ existing_close.closed_by }} — {{ existing_close.closed_at }}</div>{% elif can_finalize_close %}<h3>إغلاق اليوم</h3><form method="post" class="hub-form">{% csrf_token %}<label>النقد الافتتاحي<input class="hub-input" type="number" min="0" name="opening_cash_syp" value="0"></label><label>النقد الفعلي<input class="hub-input" type="number" min="0" name="actual_cash_counted_syp" required></label><label>ملاحظات<textarea class="hub-input" name="notes"></textarea></label><button class="hub-button hub-button-primary" type="submit">إغلاق اليوم النهائي</button></form>{% else %}<p class="hub-help-text">يمكن للكاشير التحضير، والإغلاق النهائي يحتاج صلاحية المدير.</p>{% endif %}
 {% endblock %}
