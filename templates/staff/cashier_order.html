@@ -13,7 +13,7 @@
   <img class="hub-qr" src="{{ qr_url }}" alt="QR رابط الطلب {{ order.display_number }}">
 </div>
 <ul>{% for item in order.items.all %}<li>{{ item.product_name_ar_snapshot }} × {{ item.quantity }} = {% widthratio item.quantity 1 item.unit_price_syp_snapshot %} ل.س{% if item.selected_options_snapshot %}<ul>{% for group in item.selected_options_snapshot %}{% for option in group.options %}<li>{{ option.name_ar }}{% if option.price_delta_syp %} ({% if option.price_delta_syp > 0 %}+{% endif %}{{ option.price_delta_syp }} ل.س){% endif %}</li>{% endfor %}{% endfor %}</ul>{% endif %}{% if item.item_note %}<br><small>ملاحظة: {{ item.item_note }}</small>{% endif %}</li>{% endfor %}</ul>
-<p><strong>مجموع العناصر:</strong> {{ order.subtotal_syp }} ل.س</p>{% if order.delivery_fee_syp %}<p><strong>رسوم التوصيل:</strong> {{ order.delivery_fee_syp }} ل.س</p>{% endif %}<p><strong>المجموع:</strong> {{ total }} ل.س</p><p><strong>المدفوع:</strong> {{ paid }} ل.س</p><p><strong>المتبقي:</strong> {{ remaining }} ل.س</p><p><strong>حالة الدفع:</strong> {{ payment_label }}</p>
+<p><strong>المجموع قبل الخصم:</strong> {{ order.subtotal_syp }} ل.س</p>{% if order.delivery_fee_syp %}<p><strong>رسوم التوصيل:</strong> {{ order.delivery_fee_syp }} ل.س</p>{% endif %}<p><strong>الخصم:</strong> {{ order.discount_syp }} ل.س</p><p><strong>المجموع بعد الخصم:</strong> {{ total }} ل.س</p><p><strong>المدفوع:</strong> {{ paid }} ل.س</p><p><strong>المتبقي:</strong> {{ remaining }} ل.س</p><p><strong>حالة الدفع:</strong> {{ payment_label }}</p>
 <h3>إضافة دفعة</h3>
 <form method="post" action="{% url 'staff_cashier_pay' order.public_code %}" class="hub-form" id="cashier-payment-form">{% csrf_token %}
 <label>المبلغ (ل.س): <input class="hub-input" type="number" min="1" max="{{ remaining }}" name="amount_syp" id="payment-amount" value="{{ payment_amount_default }}" required data-remaining="{{ remaining }}"></label>
@@ -23,6 +23,7 @@
   <label>كلمة المرور<input class="hub-input" type="password" name="manager_password" autocomplete="current-password"></label>
 </div>
 <label>طريقة الدفع:<select class="hub-input" name="method">{% for value, label in methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+<label>ملاحظات الدفع:<textarea class="hub-input" name="notes"></textarea></label>
 <button class="hub-button hub-button-primary" type="submit">حفظ الدفعة</button>
 </form>
 <script>
@@ -36,6 +37,16 @@
   toggleApproval();
 })();
 </script>
+<h3>الخصومات</h3>
+{% if can_manage_discounts %}<form method="post" action="{% url 'staff_cashier_discount' order.public_code %}" class="hub-form">{% csrf_token %}
+<label>نوع الخصم<select class="hub-input" name="discount_type">{% for value, label in discount_types %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+<label>الخصم (ل.س)<input class="hub-input" type="number" min="1" max="{{ total }}" name="amount_syp" required></label>
+<label>سبب الخصم<input class="hub-input" name="reason" required></label>
+<label>ملاحظات<textarea class="hub-input" name="notes"></textarea></label>
+<p class="hub-help-text">موافقة المدير مطلوبة للخصومات والتصحيحات.</p>
+<button class="hub-button" type="submit">إضافة الخصم</button>
+</form>{% else %}<p class="hub-help-text">إضافة الخصم تحتاج موافقة المدير.</p>{% endif %}
+<ul>{% for d in order.discounts.all %}{% if d.is_active %}<li>{{ d.get_discount_type_display }} - {{ d.amount_syp }} ل.س - {{ d.reason }} - موافقة المدير: {% if d.approved_by %}{{ d.approved_by }}{% else %}—{% endif %}</li>{% endif %}{% empty %}<li>لا توجد خصومات.</li>{% endfor %}</ul>
 <h3>سجل الدفعات</h3>
 <ul>{% for p in order.payments.all %}<li>{{ p.get_method_display }} - {{ p.amount_syp }} ل.س - {{ p.created_at }}</li>{% empty %}<li>لا توجد دفعات بعد.</li>{% endfor %}</ul>
 {% endblock %}
