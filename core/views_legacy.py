@@ -238,6 +238,19 @@ def _build_day_report(report_date):
         sums['discount_total'] += methods.get(Payment.Method.MEMBER_DISCOUNT, 0)
         sums['non_cash_sales_syp'] += methods.get(Payment.Method.MANUAL_TRANSFER, 0) + methods.get(Payment.Method.FREE, 0) + methods.get(Payment.Method.MEMBER_DISCOUNT, 0)
         rows.append({'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods})
+    sessions = InternetSession.objects.select_related('linked_order').filter(started_at__gte=start_utc, started_at__lt=end_utc)
+    for sess in sessions:
+        sums['internet_workspace_sessions_count'] += 1
+        sums['internet_workspace_raw_minutes'] += sess.effective_duration_minutes or 0
+        sums['internet_workspace_billable_minutes'] += sess.billable_minutes or 0
+        sums['internet_workspace_revenue_syp'] += sess.payable_total_syp or 0
+        sums['internet_workspace_prepaid_minutes_used'] += sess.member_minutes_used or 0
+        if sess.billing_mode == InternetSession.BillingMode.OPEN_METERED:
+            sums['internet_workspace_metered_revenue_syp'] += sess.payable_total_syp or 0
+        if sess.status == InternetSession.Status.CANCELLED:
+            sums['internet_workspace_cancelled_sessions'] += 1
+        if sess.linked_order_id and sess.status in {InternetSession.Status.UNPAID, InternetSession.Status.BILLED}:
+            sums['internet_workspace_unpaid_orders'] += 1
     sums['expected_cash_syp'] = sums['cash_total']
     sums['avg_order_value'] = int(sums['order_total'] / sums['orders_count']) if sums['orders_count'] else 0
     sums['average_delivery_order_value'] = int(sums['delivery_gross_sales'] / sums['delivery_order_count']) if sums['delivery_order_count'] else 0
@@ -1365,12 +1378,16 @@ def staff_reports_day_csv(request):
     rows, _sums = _build_day_report(report_date)
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = f'attachment; filename="report-{report_date.isoformat()}.csv"'
-    response.write('display_number,created_at,fulfillment_mode,delivery_status,delivery_fee,delivery_phone,delivery_address,location,status,subtotal,total,paid,remaining,payment_methods\n')
+    response.write('display_number,created_at,fulfillment_mode,delivery_status,delivery_fee,delivery_phone,delivery_address,location,status,subtotal,total,paid,remaining,payment_methods,session_type,billing_mode,raw_minutes,billable_minutes,calculated_total,linked_order,payment_status\n')
     for row in rows:
         order = row['order']
         methods_txt = '; '.join(f'{k}:{v}' for k, v in row['methods'].items())
         table_name = order.location_label
-        response.write(f'{order.display_number},{order.created_at.isoformat()},{order.get_fulfillment_label()},{order.get_delivery_status_display()},{order.delivery_fee_syp},"{order.delivery_phone}","{order.delivery_address}",{table_name},{order.get_status_display()},{order.subtotal_syp},{row["total"]},{row["paid"]},{row["remaining"]},"{methods_txt}"\n')
+        session = order.internet_sessions.first()
+        session_cols = ''
+        if session:
+            session_cols = f'{session.get_session_type_display()},{session.get_billing_mode_display()},{session.effective_duration_minutes or 0},{session.billable_minutes or 0},{session.calculated_total_syp},{order.display_number},{session.get_status_display()}'
+        response.write(f'{order.display_number},{order.created_at.isoformat()},{order.get_fulfillment_label()},{order.get_delivery_status_display()},{order.delivery_fee_syp},"{order.delivery_phone}","{order.delivery_address}",{table_name},{order.get_status_display()},{order.subtotal_syp},{row["total"]},{row["paid"]},{row["remaining"]},"{methods_txt}",{session_cols}\n')
     return response
 
 
@@ -1552,7 +1569,7 @@ def staff_internet(request):
     for session in active_sessions:
         duration = calculate_session_duration_minutes(session.effective_started_at, now)
         estimated_total = 0 if session.billing_mode in {InternetSession.BillingMode.FREE, InternetSession.BillingMode.PREPAID} else calculate_metered_session_total(
-            duration, session.rate_per_hour_syp, session.minimum_minutes, session.free_grace_minutes, session.daily_cap_syp
+            duration, session.rate_per_hour_syp, session.minimum_minutes, session.free_grace_minutes, session.daily_cap_syp, session.rounding_increment_minutes, session.minimum_charge_syp
         )
         active_rows.append({'session': session, 'elapsed_minutes': duration, 'estimated_total': estimated_total})
     return render(request, 'staff/internet.html', {
@@ -1595,10 +1612,19 @@ def staff_internet_start(request):
     billing_mode = request.POST.get('billing_mode') or settings_obj.default_internet_billing_mode
     if billing_mode not in {choice[0] for choice in InternetSession.BillingMode.choices}:
         billing_mode = InternetSession.BillingMode.OPEN_METERED
+    if billing_mode == InternetSession.BillingMode.OPEN_METERED and not settings_obj.internet_metered_enabled:
+        errors['billing_mode'] = 'المحاسبة حسب الوقت غير مفعلة حالياً.'
     rate = _parse_int_or_error(request.POST.get('rate_per_hour_syp', ''), 'سعر الساعة', errors, default=settings_obj.default_rate_per_hour_syp, min_value=0)
     minimum = _parse_int_or_error(request.POST.get('minimum_minutes', ''), 'الحد الأدنى للدقائق', errors, default=settings_obj.default_minimum_minutes, min_value=0)
     grace = _parse_int_or_error(request.POST.get('free_grace_minutes', ''), 'دقائق السماح', errors, default=settings_obj.default_free_grace_minutes, min_value=0)
     daily_cap = _parse_int_or_error(request.POST.get('daily_cap_syp', ''), 'السقف اليومي', errors, default=settings_obj.default_daily_cap_syp, min_value=0)
+    rounding = _parse_int_or_error(request.POST.get('rounding_increment_minutes', ''), 'التقريب كل', errors, default=settings_obj.default_rounding_increment_minutes, min_value=1)
+    if rounding not in {15, 30, 60}:
+        errors['rounding_increment_minutes'] = 'التقريب يجب أن يكون 15 أو 30 أو 60 دقيقة.'
+    minimum_charge = _parse_int_or_error(request.POST.get('minimum_charge_syp', ''), 'الحد الأدنى للدفع', errors, default=settings_obj.default_minimum_charge_syp, min_value=0)
+    session_type = request.POST.get('session_type') or InternetSession.SessionType.INTERNET
+    if session_type not in {choice[0] for choice in InternetSession.SessionType.choices}:
+        session_type = InternetSession.SessionType.INTERNET
     package = None
     package_id = request.POST.get('package')
     if package_id:
@@ -1618,6 +1644,7 @@ def staff_internet_start(request):
             'can_cancel_sessions': can_override_session_total(request.user), 'can_override_total': can_override_session_total(request.user),
         })
     session = InternetSession.objects.create(
+        session_type=session_type,
         member=member,
         package=package,
         guest_name=(request.POST.get('guest_name') or request.POST.get('customer_name', '')).strip(),
@@ -1630,11 +1657,17 @@ def staff_internet_start(request):
         rate_per_hour_syp=rate or 0,
         minimum_minutes=minimum or 0,
         free_grace_minutes=grace or 0,
+        rounding_increment_minutes=rounding or 15,
+        minimum_charge_syp=minimum_charge or 0,
         daily_cap_syp=daily_cap,
-        notes=(request.POST.get('session_type', '').strip() + ' ' + request.POST.get('notes', '').strip()).strip(),
+        notes=request.POST.get('notes', '').strip(),
         status=InternetSession.Status.ACTIVE,
         started_by=request.user,
     )
+    try:
+        create_notification('session_started', 'بدء الجلسة', str(session), target_role='cashier', created_by=request.user)
+    except Exception:
+        pass
     messages.success(request, f'تم بدء جلسة #{session.id}.')
     return redirect('staff_internet_session', session_id=session.id)
 
@@ -1642,9 +1675,9 @@ def staff_internet_start(request):
 def _session_preview(session):
     ended_at = timezone.now()
     duration = calculate_session_duration_minutes(session.effective_started_at, ended_at)
-    billable = calculate_billable_minutes(duration, session.minimum_minutes, session.free_grace_minutes)
+    billable = calculate_billable_minutes(duration, session.minimum_minutes, session.free_grace_minutes, session.rounding_increment_minutes)
     calculated_total = 0 if session.billing_mode in {InternetSession.BillingMode.FREE, InternetSession.BillingMode.PREPAID} else calculate_metered_session_total(
-        duration, session.rate_per_hour_syp, session.minimum_minutes, session.free_grace_minutes, session.daily_cap_syp
+        duration, session.rate_per_hour_syp, session.minimum_minutes, session.free_grace_minutes, session.daily_cap_syp, session.rounding_increment_minutes, session.minimum_charge_syp
     )
     subscription = _active_subscription_for_member(session.member) if session.member_id else None
     return {'ended_at': ended_at, 'duration': duration, 'billable_minutes': billable, 'calculated_total': calculated_total, 'subscription': subscription}
@@ -1692,6 +1725,10 @@ def staff_internet_end(request, session_id):
             'settings_obj': get_system_settings(),
         })
     settings_obj = get_system_settings()
+    try:
+        create_notification('session_ended', 'إنهاء الجلسة', str(session), target_role='cashier', created_by=request.user)
+    except Exception:
+        pass
     if request.POST.get('create_order') or (settings_obj.auto_create_order_for_metered_sessions and session.payable_total_syp > 0):
         _create_order_for_internet_session(request, session, mark_paid=request.POST.get('mark_paid') == '1')
     elif request.POST.get('mark_paid') == '1':
@@ -1705,12 +1742,12 @@ def _create_order_for_internet_session(request, session, mark_paid=False):
         order = session.linked_order
     else:
         settings_obj = get_system_settings()
-        product = settings_obj.internet_service_product
+        product = settings_obj.default_workspace_product if session.session_type == InternetSession.SessionType.WORKSPACE else settings_obj.internet_service_product
         if product is None:
-            messages.warning(request, 'اضبط منتج خدمة الإنترنت في إعدادات النظام قبل إنشاء طلب كاشير للجلسة.')
+            messages.warning(request, 'اضبط منتج الإنترنت أو مساحة العمل الافتراضي في إعدادات النظام قبل إنشاء طلب كاشير للجلسة.')
             return None
         customer = session.member.name_ar if session.member_id else (session.display_guest_name or 'زائر')
-        note = f'جلسة إنترنت/عمل #{session.id}\nالمدة: {session.effective_duration_minutes or 0} دقيقة\nالعميل: {customer}'
+        note = f'جلسة {session.get_session_type_display()} #{session.id}\nالوقت الفعلي: {session.effective_duration_minutes or 0} دقيقة\nالوقت المحسوب: {session.billable_minutes or 0} دقيقة\nالعميل: {customer}'
         order = Order.objects.create(service_mode=Order.ServiceMode.DINE_IN, status=Order.Status.NEW, notes=note)
         prep_station, prep_status = _prep_defaults_for_product(product)
         OrderItem.objects.create(
@@ -1727,7 +1764,7 @@ def _create_order_for_internet_session(request, session, mark_paid=False):
             prep_status=prep_status,
         )
         session.linked_order = order
-        session.status = InternetSession.Status.UNPAID if session.payable_total_syp > 0 else InternetSession.Status.ENDED
+        session.status = InternetSession.Status.BILLED if session.payable_total_syp > 0 else InternetSession.Status.ENDED
         session.save(update_fields=['linked_order', 'status', 'updated_at'])
     if mark_paid and session.payable_total_syp > 0:
         existing_paid = _paid_total(order.payments.all())
@@ -1749,11 +1786,20 @@ def staff_internet_cancel(request, session_id):
         return redirect('staff_internet_session', session_id=session_id)
     session = get_object_or_404(InternetSession, pk=session_id)
     if session.status == InternetSession.Status.ACTIVE:
+        reason = request.POST.get('cancellation_reason', '').strip()
+        if not reason:
+            messages.error(request, 'سبب الإلغاء مطلوب.')
+            return redirect('staff_internet_session', session_id=session_id)
         session.status = InternetSession.Status.CANCELLED
+        session.cancellation_reason = reason
         session.ended_at = timezone.now()
         session.end_time = session.ended_at
         session.ended_by = request.user
-        session.save(update_fields=['status', 'ended_at', 'end_time', 'ended_by', 'updated_at'])
+        session.save(update_fields=['status', 'cancellation_reason', 'ended_at', 'end_time', 'ended_by', 'updated_at'])
+        try:
+            create_notification('session_cancelled', 'إلغاء الجلسة', reason, target_role='admin', created_by=request.user)
+        except Exception:
+            pass
         messages.success(request, 'تم إلغاء الجلسة.')
     return redirect('staff_internet_session', session_id=session_id)
 

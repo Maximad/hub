@@ -7,9 +7,9 @@
   <div class="hub-grid hub-grid-2">
     <p><strong>البدء:</strong> {{ session.effective_started_at }}</p>
     <p><strong>الانتهاء المتوقع:</strong> {{ preview.ended_at }}</p>
-    <p><strong>المدة:</strong> {{ preview.duration }} دقيقة</p>
-    <p><strong>الدقائق القابلة للفوترة:</strong> {{ preview.billable_minutes }} دقيقة</p>
-    <p><strong>المبلغ المحسوب:</strong> {{ preview.calculated_total }} ل.س</p>
+    <p><strong>مدة الاستخدام / الوقت الفعلي:</strong> {{ preview.duration }} دقيقة</p>
+    <p><strong>المدة المحسوبة:</strong> {{ preview.billable_minutes }} دقيقة</p>
+    <p><strong>المبلغ المستحق:</strong> {{ preview.calculated_total }} ل.س</p>
     <p><strong>رصيد العضو:</strong> {% if preview.subscription %}{{ preview.subscription.remaining_internet_minutes }} دقيقة قبل الخصم{% else %}-{% endif %}</p>
   </div>
   <form class="hub-form" method="post">{% csrf_token %}
