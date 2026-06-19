@@ -200,6 +200,8 @@ def _build_day_report(report_date):
         'cancelled_count': 0, 'cancelled_value': 0, 'served_or_paid_count': 0, 'unpaid_orders_count': 0, 'partial_orders_count': 0, 'partial_payments_syp': 0, 'non_cash_sales_syp': 0,
         'delivery_order_count': 0, 'delivery_gross_sales': 0, 'delivery_fees_total': 0, 'unpaid_delivery_orders': 0, 'cancelled_delivery_orders': 0, 'takeaway_order_count': 0,
         'estimated_cost_syp': 0, 'estimated_gross_margin_syp': 0, 'margin_known_sales_syp': 0, 'products_missing_cost_count': 0, 'comp_value_syp': 0,
+        'internet_workspace_sessions_count': 0, 'internet_workspace_raw_minutes': 0, 'internet_workspace_billable_minutes': 0, 'internet_workspace_revenue_syp': 0,
+        'internet_workspace_prepaid_minutes_used': 0, 'internet_workspace_metered_revenue_syp': 0, 'internet_workspace_cancelled_sessions': 0, 'internet_workspace_unpaid_orders': 0,
     }
     for order in orders:
         total, paid, remaining, payment_label = _order_financials(order)
@@ -2150,3 +2152,84 @@ def staff_food_lab(request):
     participations = VendorParticipation.objects.select_related('vendor', 'location_area').order_by('-starts_at')
     events = Event.objects.filter(Q(title_ar__icontains='Food Lab') | Q(description_ar__icontains='Food Lab') | Q(title_ar__icontains='مختبر') | Q(description_ar__icontains='مختبر')).order_by('-starts_at')
     return render(request, 'staff/food_lab.html', {'participations': participations, 'events': events})
+
+
+def _print_order_queryset():
+    return Order.objects.select_related('table', 'table__room').prefetch_related('items__product', 'items__prep_station', 'payments', 'discounts')
+
+
+def _safe_activity(actor, action, details):
+    try:
+        ActivityLog.objects.create(actor=actor, action=action, details=details)
+    except Exception:
+        pass
+
+
+def _receipt_context(order, request, template_kind='a4'):
+    total, paid, remaining, payment_label = _order_financials(order)
+    system_settings = get_system_settings()
+    public_url = request.build_absolute_uri(reverse('order_public', kwargs={'public_code': order.public_code}))
+    return {
+        'order': order,
+        'total': total,
+        'paid': paid,
+        'remaining': remaining,
+        'payment_label': payment_label,
+        'business_name': (system_settings.receipt_business_name or system_settings.public_brand_title if system_settings else 'مشاريب'),
+        'receipt_footer_text': (system_settings.receipt_footer_text if system_settings else '') or 'شكراً لزيارتكم',
+        'show_qr': bool(getattr(system_settings, 'receipt_show_qr', False)),
+        'public_order_url': public_url,
+        'qr_url': reverse('order_qr', kwargs={'public_code': order.public_code}),
+        'thermal_width': getattr(system_settings, 'thermal_receipt_width_mm', 80) or 80,
+        'template_kind': template_kind,
+    }
+
+
+@require_staff_capability('cashier')
+def staff_order_receipt(request, public_code):
+    order = get_object_or_404(_print_order_queryset(), public_code=public_code)
+    _safe_activity(request.user, 'receipt_print_viewed', {'order_public_code': str(order.public_code), 'order_display_number': order.display_number, 'template': 'a4'})
+    return render(request, 'staff/prints/order_receipt.html', _receipt_context(order, request, 'a4'))
+
+
+@require_staff_capability('cashier')
+def staff_order_receipt_thermal(request, public_code):
+    order = get_object_or_404(_print_order_queryset(), public_code=public_code)
+    _safe_activity(request.user, 'receipt_print_viewed', {'order_public_code': str(order.public_code), 'order_display_number': order.display_number, 'template': 'thermal'})
+    return render(request, 'staff/prints/order_receipt_thermal.html', _receipt_context(order, request, 'thermal'))
+
+
+@require_staff_capability('operations')
+def staff_order_prep_ticket(request, public_code):
+    order = get_object_or_404(_print_order_queryset(), public_code=public_code)
+    station_code = (request.GET.get('station') or '').strip()
+    items = list(order.items.all())
+    if station_code:
+        items = [item for item in items if item.prep_station and item.prep_station.code == station_code]
+    groups = {}
+    for item in items:
+        station = item.prep_station
+        key = station.code if station else 'general'
+        if key not in groups:
+            groups[key] = {'station': station, 'label': station.name_ar if station else 'عام / لا يحتاج تحضير', 'items': []}
+        groups[key]['items'].append(item)
+    _safe_activity(request.user, 'prep_ticket_print_viewed', {'order_public_code': str(order.public_code), 'order_display_number': order.display_number, 'station': station_code or 'all'})
+    return render(request, 'staff/prints/prep_ticket.html', {'order': order, 'groups': groups.values(), 'station_code': station_code})
+
+
+@require_staff_capability('delivery_management')
+def staff_order_delivery_ticket(request, public_code):
+    order = get_object_or_404(_print_order_queryset(), public_code=public_code)
+    if not order.is_delivery:
+        raise Http404()
+    total, paid, remaining, payment_label = _order_financials(order)
+    _safe_activity(request.user, 'delivery_ticket_print_viewed', {'order_public_code': str(order.public_code), 'order_display_number': order.display_number})
+    return render(request, 'staff/prints/delivery_ticket.html', {'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label})
+
+
+@require_staff_capability('reports')
+def staff_close_day_print(request, close_id):
+    close = get_object_or_404(DailyClose.objects.select_related('closed_by'), pk=close_id)
+    _rows, sums = _build_day_report(close.business_date)
+    _safe_activity(request.user, 'close_day_print_viewed', {'daily_close_id': close.id, 'business_date': close.business_date.isoformat()})
+    return render(request, 'staff/prints/close_day_print.html', {'close': close, 'sums': sums})

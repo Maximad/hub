@@ -2,7 +2,7 @@
 {% block title %}تفاصيل الدفع{% endblock %}
 {% block content %}
 <h2>تفاصيل طلب للكاشير</h2>
-<p><a href="{% url 'staff_cashier' %}">← العودة إلى الكاشير</a> | <a href="{% url 'staff_order_edit' order.public_code %}">تعديل الطلب</a></p>
+<p><a href="{% url 'staff_cashier' %}">← العودة إلى الكاشير</a> | <a href="{% url 'staff_order_edit' order.public_code %}">تعديل الطلب</a></p><div class="hub-toolbar"><a class="hub-button hub-button-primary" href="{% url 'staff_order_receipt' order.public_code %}">طباعة إيصال</a><a class="hub-button" href="{% url 'staff_order_receipt_thermal' order.public_code %}">طباعة إيصال حراري</a><a class="hub-button" href="{% url 'staff_order_prep_ticket' order.public_code %}">طباعة تذكرة تحضير</a>{% if order.is_delivery %}<a class="hub-button" href="{% url 'staff_order_delivery_ticket' order.public_code %}">طباعة تذكرة توصيل</a>{% endif %}</div>
 {% if messages %}{% for message in messages %}<p class="hub-badge hub-badge-danger">{{ message }}</p>{% endfor %}{% endif %}
 <div class="hub-card hub-section">
   <div><strong>رقم الطلب:</strong> {{ order.display_number }}</div>

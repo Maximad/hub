@@ -3,7 +3,7 @@ from django.contrib import admin
 from django.views.static import serve
 from django.urls import path, re_path
 from core.views import menu
-from core.views.staff_reports import staff_reports_home, staff_reports_day, staff_reports_day_csv, staff_product_margin_report, staff_product_margin_csv, staff_close_day
+from core.views.staff_reports import staff_reports_home, staff_reports_day, staff_reports_day_csv, staff_product_margin_report, staff_product_margin_csv, staff_close_day, staff_close_day_print
 from core.views.staff_internet import staff_internet, staff_internet_start, staff_internet_session, staff_internet_end, staff_internet_cancel, staff_wifi
 from core.views.staff_members import staff_members, staff_member_new, staff_member_detail, staff_member_subscribe
 from core.views.staff_events import staff_events, staff_event_new, staff_event_detail
@@ -61,6 +61,10 @@ urlpatterns = [
     path('staff/orders/', menu.staff_orders, name='staff_orders'),
     path('staff/delivery/', menu.staff_delivery, name='staff_delivery'),
     path('staff/orders/partial/', menu.staff_orders, name='staff_orders_partial'),
+    path('staff/orders/<uuid:public_code>/receipt/', menu.staff_order_receipt, name='staff_order_receipt'),
+    path('staff/orders/<uuid:public_code>/receipt/thermal/', menu.staff_order_receipt_thermal, name='staff_order_receipt_thermal'),
+    path('staff/orders/<uuid:public_code>/prep-ticket/', menu.staff_order_prep_ticket, name='staff_order_prep_ticket'),
+    path('staff/orders/<uuid:public_code>/delivery-ticket/', menu.staff_order_delivery_ticket, name='staff_order_delivery_ticket'),
     path('staff/orders/<uuid:public_code>/status/', menu.staff_order_status, name='staff_order_status'),
     path('staff/orders/<uuid:public_code>/edit/', menu.staff_order_edit, name='staff_order_edit'),
     path('staff/orders/<uuid:public_code>/edit/add/', menu.staff_order_edit_add_item, name='staff_order_edit_add_item'),
@@ -105,6 +109,7 @@ urlpatterns = [
     path('staff/reports/products/', staff_product_margin_report, name='staff_product_margin_report'),
     path('staff/reports/products.csv', staff_product_margin_csv, name='staff_product_margin_csv'),
     path('staff/close-day/', staff_close_day, name='staff_close_day'),
+    path('staff/close-day/<int:close_id>/print/', staff_close_day_print, name='staff_close_day_print'),
     path('staff/members/', staff_members, name='staff_members'),
     path('staff/members/new/', staff_member_new, name='staff_member_new'),
     path('staff/members/<str:member_id>/', staff_member_detail, name='staff_member_detail'),
