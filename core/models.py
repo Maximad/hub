@@ -352,6 +352,106 @@ class OrderItem(TimeStampedModel):
         return f'{self.product_name_ar_snapshot} × {self.quantity} — {self.order.display_number}'
 
 
+
+
+class NotificationEvent(TimeStampedModel):
+    class EventType(models.TextChoices):
+        NEW_ORDER = 'new_order', 'طلب جديد'
+        ORDER_EDITED = 'order_edited', 'تم تعديل الطلب'
+        ORDER_CANCELLED = 'order_cancelled', 'تم إلغاء الطلب'
+        NEW_PREP_ITEM = 'new_prep_item', 'عنصر جديد للتحضير'
+        PREP_ITEM_READY = 'prep_item_ready', 'عنصر جاهز'
+        PREP_ITEM_CANCELLED = 'prep_item_cancelled', 'تم إلغاء عنصر'
+        PAYMENT_PENDING = 'payment_pending', 'الدفع بانتظار الكاشير'
+        PARTIAL_PAYMENT_REQUESTED = 'partial_payment_requested', 'دفع جزئي يحتاج موافقة'
+        DISCOUNT_ADDED = 'discount_added', 'تمت إضافة خصم'
+        MANAGER_APPROVAL_NEEDED = 'manager_approval_needed', 'مطلوب موافقة المدير'
+        CLOSE_DAY_FINALIZED = 'close_day_finalized', 'تم إغلاق اليوم'
+        DELIVERY_ORDER_CREATED = 'delivery_order_created', 'طلب توصيل جديد'
+
+    event_type = models.CharField(max_length=40, choices=EventType.choices)
+    title_ar = models.CharField(max_length=160)
+    message_ar = models.TextField(blank=True)
+    order = models.ForeignKey('Order', on_delete=models.SET_NULL, null=True, blank=True, related_name='notification_events')
+    order_item = models.ForeignKey('OrderItem', on_delete=models.SET_NULL, null=True, blank=True, related_name='notification_events')
+    target_station = models.ForeignKey('catalog.PrepStation', on_delete=models.SET_NULL, null=True, blank=True, related_name='notification_events')
+    target_role = models.CharField(max_length=30, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_notification_events')
+    expires_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['event_type', 'created_at']), models.Index(fields=['target_role', 'created_at'])]
+
+    def __str__(self):
+        order = f' {self.order.display_number}' if self.order_id else ''
+        return f'{self.title_ar}{order}'
+
+
+class NotificationRecipient(TimeStampedModel):
+    notification_event = models.ForeignKey(NotificationEvent, on_delete=models.CASCADE, related_name='recipients')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True, related_name='notification_recipients')
+    role = models.CharField(max_length=30, blank=True)
+    station = models.ForeignKey('catalog.PrepStation', on_delete=models.SET_NULL, null=True, blank=True, related_name='notification_recipients')
+    is_read = models.BooleanField(default=False)
+    read_at = models.DateTimeField(null=True, blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['user', 'is_read', 'created_at']), models.Index(fields=['role', 'is_read', 'created_at'])]
+
+    def __str__(self):
+        return str(self.notification_event)
+
+
+class NotificationPreference(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='notification_preference')
+    enable_sound = models.BooleanField(default=True)
+    enable_browser_notifications = models.BooleanField(default=False)
+    notify_new_orders = models.BooleanField(default=True)
+    notify_prep_items = models.BooleanField(default=True)
+    notify_payment_alerts = models.BooleanField(default=True)
+    notify_manager_approvals = models.BooleanField(default=True)
+    notify_daily_close = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'تنبيهات {self.user}'
+
+
+class NotificationLog(TimeStampedModel):
+    class Channel(models.TextChoices):
+        SYSTEM = 'system', 'System'
+        SOUND = 'sound', 'Sound'
+        BROWSER = 'browser', 'Browser'
+        TELEGRAM = 'telegram', 'Telegram'
+        WHATSAPP = 'whatsapp', 'WhatsApp'
+        SMS = 'sms', 'SMS'
+
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        SENT = 'sent', 'Sent'
+        FAILED = 'failed', 'Failed'
+        SKIPPED = 'skipped', 'Skipped'
+
+    notification_event = models.ForeignKey(NotificationEvent, on_delete=models.CASCADE, related_name='logs')
+    channel = models.CharField(max_length=20, choices=Channel.choices, default=Channel.SYSTEM)
+    recipient_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='notification_logs')
+    recipient_role = models.CharField(max_length=30, blank=True)
+    recipient_station = models.ForeignKey('catalog.PrepStation', on_delete=models.SET_NULL, null=True, blank=True, related_name='notification_logs')
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    error_message = models.TextField(blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.notification_event} — {self.channel} — {self.status}'
+
+
 class Payment(TimeStampedModel, PublicCodeModel):
     class Method(models.TextChoices):
         CASH = 'cash', 'نقداً'

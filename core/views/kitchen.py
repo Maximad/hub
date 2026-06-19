@@ -14,6 +14,7 @@ from accounts.permissions import (
     require_staff_capability,
 )
 from catalog.models import PrepStation
+from core.notifications import create_notification
 from core.models import ActivityLog, Order, OrderItem
 from core.settings_helpers import get_page_setting
 
@@ -236,6 +237,10 @@ def staff_prep_item_status(request, item_id):
                     'item_id': item.id,
                 },
             )
+        if new_status == OrderItem.PrepStatus.READY:
+            create_notification('prep_item_ready', 'عنصر جاهز', f'{item.product_name_ar_snapshot} — {order.display_number}', order=order, order_item=item, target_station=item.prep_station, created_by=request.user)
+        elif new_status == OrderItem.PrepStatus.CANCELLED:
+            create_notification('prep_item_cancelled', 'تم إلغاء عنصر', f'{item.product_name_ar_snapshot} — {order.display_number}', order=order, order_item=item, target_station=item.prep_station, created_by=request.user)
         messages.success(request, 'تم تحديث حالة العنصر.')
     return redirect('staff_prep')
 

@@ -28,6 +28,7 @@ from core.models import ActivityLog, CancellationReason, DailyClose, InternetPac
 from events.models import Event
 from reservations.models import Reservation
 from vendors.models import Vendor, VendorParticipation
+from core.notifications import create_notification, notify_order_created
 
 
 DAMASCUS_TZ = ZoneInfo('Asia/Damascus')
@@ -468,6 +469,7 @@ def _create_order_from_selected_items(table, selected, note_parts, status=None, 
                 prep_station=prep_station,
                 prep_status=prep_status,
             )
+    transaction.on_commit(lambda: notify_order_created(order))
     return order
 
 
@@ -1072,6 +1074,9 @@ def staff_order_edit_add_item(request, public_code):
             prep_status=prep_status,
         )
         _log_order_edit(request.user, 'order_item_added', order, {'item_id': item.id, 'product_id': product.id, 'quantity': qty})
+        transaction.on_commit(lambda: create_notification('order_edited', f'تم تعديل الطلب {order.display_number}', 'تمت إضافة عنصر إلى الطلب', order=order, order_item=item, target_station=item.prep_station, created_by=request.user))
+        if item.prep_status != OrderItem.PrepStatus.NO_PREP:
+            transaction.on_commit(lambda: create_notification('new_prep_item', 'عنصر جديد للتحضير', f'{item.product_name_ar_snapshot} × {item.quantity} — {order.display_number}', order=order, order_item=item, target_station=item.prep_station, created_by=request.user))
     messages.success(request, 'تمت إضافة العنصر إلى الطلب.')
     return redirect('staff_order_edit', public_code=order.public_code)
 
@@ -1126,6 +1131,7 @@ def staff_order_edit_update_item(request, public_code, item_id):
         order,
         {'item_id': item.id, 'old': old_values, 'new_quantity': item.quantity, 'new_unit_price_syp_snapshot': item.unit_price_syp_snapshot},
     )
+    create_notification('order_edited', f'تم تعديل الطلب {order.display_number}', 'تم تعديل كمية/ملاحظات/خيارات عنصر', order=order, order_item=item, target_station=item.prep_station, created_by=request.user)
     messages.success(request, 'تم تحديث العنصر.')
     return redirect('staff_order_edit', public_code=order.public_code)
 
@@ -1151,6 +1157,8 @@ def staff_order_edit_remove_item(request, public_code, item_id):
     with transaction.atomic():
         item.delete()
         _log_order_edit(request.user, 'order_item_removed', order, snapshot)
+        transaction.on_commit(lambda: create_notification('prep_item_cancelled', 'تم إلغاء عنصر', snapshot.get('product_name_ar_snapshot',''), order=order, target_station=getattr(item, 'prep_station', None), created_by=request.user))
+        transaction.on_commit(lambda: create_notification('order_edited', f'تم تعديل الطلب {order.display_number}', 'تم حذف عنصر من الطلب', order=order, created_by=request.user))
     messages.success(request, 'تم حذف العنصر من الطلب.')
     return redirect('staff_order_edit', public_code=order.public_code)
 
@@ -1214,6 +1222,8 @@ def staff_cashier_pay(request, public_code):
             if manager and _can_approve_partial_payment(manager):
                 approving_manager = manager
         if approving_manager is None:
+            create_notification('manager_approval_needed', 'مطلوب موافقة المدير', f'دفع جزئي يحتاج موافقة — {order.display_number}', order=order, target_role='admin', created_by=request.user)
+            create_notification('partial_payment_requested', 'دفع جزئي يحتاج موافقة', f'{amount_val} ل.س — {order.display_number}', order=order, target_role='admin', created_by=request.user)
             messages.error(request, 'الدفع الجزئي يحتاج موافقة المدير أو صاحب المحل.')
             return redirect('staff_cashier_order', public_code=order.public_code)
         ActivityLog.objects.create(
@@ -1232,6 +1242,8 @@ def staff_cashier_pay(request, public_code):
         messages.error(request, 'طريقة الدفع مطلوبة.')
         return redirect('staff_cashier_order', public_code=order.public_code)
     payment = Payment.objects.create(order=order, amount_syp=amount_val, method=method, notes=request.POST.get('notes', '').strip(), created_by=request.user)
+    if order.remaining_syp > 0:
+        create_notification('payment_pending', f'الدفع بانتظار الكاشير {order.display_number}', f'المتبقي {order.remaining_syp} ل.س', order=order, target_role='cashier', created_by=request.user)
     try:
         ActivityLog.objects.create(actor=request.user, action='payment_added', details={'order_public_code': str(order.public_code), 'payment_id': payment.id, 'amount_syp': amount_val, 'method': method})
     except Exception:
@@ -1265,6 +1277,7 @@ def staff_cashier_discount(request, public_code):
         messages.error(request, ' '.join(sum(exc.message_dict.values(), [])) if hasattr(exc, 'message_dict') else 'الخصم غير صالح.')
         return redirect('staff_cashier_order', public_code=order.public_code)
     discount.save()
+    create_notification('discount_added', f'تمت إضافة خصم {order.display_number}', f'{amount} ل.س', order=order, target_role='cashier', created_by=request.user)
     try:
         ActivityLog.objects.create(actor=request.user, action='discount_added', details={'order_public_code': str(order.public_code), 'discount_id': discount.id, 'amount_syp': amount, 'type': discount_type})
     except Exception:
@@ -1322,6 +1335,7 @@ def staff_close_day(request):
             ActivityLog.objects.create(actor=request.user, action='close_day_finalized', details={'business_date': today.isoformat(), 'daily_close_id': close.id})
         except Exception:
             pass
+        create_notification('close_day_finalized', 'تم إغلاق اليوم', today.isoformat(), target_role='cashier', created_by=request.user)
         messages.success(request, 'تم إغلاق اليوم.')
         return redirect('staff_close_day')
     return render(request, 'staff/close_day.html', {'report_date': today, 'sums': sums, 'existing_close': existing_close, 'can_finalize_close': _can_approve_partial_payment(request.user)})

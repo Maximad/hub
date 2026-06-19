@@ -13,6 +13,7 @@ from core.views.staff_import import (
     staff_import_home, staff_import_upload, staff_import_template, staff_import_preview, staff_import_confirm,
 )
 from core.views.kitchen import staff_kitchen, staff_kitchen_partial, staff_kitchen_order, staff_kitchen_item_status, staff_prep, staff_prep_station
+from core.views_notifications import staff_notifications, staff_notifications_poll, staff_notifications_mark_read, staff_notifications_preferences
 from accounts.views_staff import (
     staff_users_list, staff_user_new, staff_user_detail, staff_user_edit, staff_user_password, staff_user_toggle_active,
 )
@@ -28,6 +29,10 @@ urlpatterns = [
     path('table/<uuid:qr_token>/qr.svg', menu.table_qr, name='table_qr'),
     path('staff/', menu.staff_home, name='staff_home'),
     path('staff/pos/', menu.staff_pos, name='staff_pos'),
+    path('staff/notifications/', staff_notifications, name='staff_notifications'),
+    path('staff/notifications/poll/', staff_notifications_poll, name='staff_notifications_poll'),
+    path('staff/notifications/mark-read/', staff_notifications_mark_read, name='staff_notifications_mark_read'),
+    path('staff/notifications/preferences/', staff_notifications_preferences, name='staff_notifications_preferences'),
     path('staff/qr/', menu.staff_qr_links, name='staff_qr_links'),
     path('staff/qr/print/', menu.staff_qr_print, name='staff_qr_print'),
     path('staff/menu-tools/', menu.staff_menu_tools, name='staff_menu_tools'),

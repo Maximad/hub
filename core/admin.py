@@ -15,6 +15,7 @@ from .models import (
     OrderItem,
     PageSetting,
     Payment,
+    NotificationEvent, NotificationRecipient, NotificationPreference, NotificationLog,
     Product,
     Room,
     Shift,
@@ -290,3 +291,31 @@ class ActivityLogAdmin(admin.ModelAdmin):
     list_filter = ('action', 'created_at')
     search_fields = ('actor__username', 'action', 'details')
     readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(NotificationEvent)
+class NotificationEventAdmin(admin.ModelAdmin):
+    list_display = ('event_type', 'title_ar', 'order', 'order_item', 'target_station', 'target_role', 'created_at', 'is_active')
+    list_filter = ('event_type', 'target_station', 'target_role', 'is_active', 'created_at')
+    search_fields = ('title_ar', 'message_ar', 'order__public_code', 'order__id')
+    autocomplete_fields = ('order', 'order_item', 'target_station', 'created_by')
+
+
+@admin.register(NotificationRecipient)
+class NotificationRecipientAdmin(admin.ModelAdmin):
+    list_display = ('notification_event', 'user', 'role', 'station', 'is_read', 'delivered_at', 'read_at')
+    list_filter = ('role', 'station', 'is_read')
+    autocomplete_fields = ('notification_event', 'user', 'station')
+
+
+@admin.register(NotificationLog)
+class NotificationLogAdmin(admin.ModelAdmin):
+    list_display = ('notification_event', 'channel', 'status', 'recipient_user', 'recipient_role', 'recipient_station', 'created_at', 'sent_at')
+    list_filter = ('channel', 'status', 'created_at')
+    autocomplete_fields = ('notification_event', 'recipient_user', 'recipient_station')
+
+
+@admin.register(NotificationPreference)
+class NotificationPreferenceAdmin(admin.ModelAdmin):
+    list_display = ('user', 'enable_sound', 'enable_browser_notifications', 'updated_at')
+    autocomplete_fields = ('user',)
