@@ -34,9 +34,9 @@
               {% if not system_settings or system_settings.show_product_images %}<div class="hub-media menu-product-media{% if not p.primary_media %} menu-product-media--placeholder{% endif %}">
                 {% if p.primary_media %}
                   {% if p.primary_media.is_visual_media %}
-                    <img src="{{ p.primary_media.url }}" alt="{{ p.primary_media.display_alt_text }}" loading="lazy">
+                    <img src="{{ p.primary_media.resolved_url }}" alt="{{ p.primary_media.display_alt_text }}" loading="lazy">
                   {% elif p.primary_media.media_type == 'video' %}
-                    <video src="{{ p.primary_media.url }}" aria-label="{{ p.primary_media.display_alt_text }}" muted playsinline controls preload="metadata"></video>
+                    <video src="{{ p.primary_media.resolved_url }}" aria-label="{{ p.primary_media.display_alt_text }}" muted playsinline controls preload="metadata"></video>
                   {% else %}
                     <span>{{ p.name_ar }}</span>
                   {% endif %}

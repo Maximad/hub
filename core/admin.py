@@ -1,5 +1,5 @@
 from django.contrib import admin
-from django.utils.html import format_html
+from catalog.admin_media import safe_media_preview
 from catalog.models import ProductMedia, ProductOptionGroupAssignment
 from .settings_helpers import get_system_settings
 from .models import (
@@ -27,14 +27,12 @@ from .models import (
 class ProductMediaInline(admin.TabularInline):
     model = ProductMedia
     extra = 1
-    fields = ('media_type', 'url', 'alt_text_ar', 'is_primary', 'is_active', 'sort_order', 'media_preview')
+    fields = ('media_asset', 'media_type', 'url', 'alt_text_ar', 'is_primary', 'is_active', 'display_on_public_menu', 'display_on_pos', 'sort_order', 'media_preview')
     readonly_fields = ('media_preview',)
 
     @admin.display(description='معاينة')
     def media_preview(self, obj):
-        if obj and obj.url and obj.media_type in {ProductMedia.MediaType.IMAGE, ProductMedia.MediaType.GIF}:
-            return format_html('<span style="display: inline-flex; align-items: center; justify-content: center; width: 64px; aspect-ratio: 2 / 3; overflow: hidden; border-radius: 8px; background: #f8f5ef;"><img src="{}" alt="{}" style="width: 100%; height: 100%; object-fit: cover; object-position: center center; display: block;" /></span>', obj.url, obj.display_alt_text)
-        return '—'
+        return safe_media_preview(obj, width=64)
 
 
 class ProductOptionGroupAssignmentInline(admin.TabularInline):
