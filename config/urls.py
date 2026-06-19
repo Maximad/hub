@@ -59,6 +59,7 @@ urlpatterns = [
     path('staff/cashier/', menu.staff_cashier, name='staff_cashier'),
     path('staff/cashier/<uuid:public_code>/', menu.staff_cashier_order, name='staff_cashier_order'),
     path('staff/cashier/<uuid:public_code>/pay/', menu.staff_cashier_pay, name='staff_cashier_pay'),
+    path('staff/cashier/<uuid:public_code>/discount/', menu.staff_cashier_discount, name='staff_cashier_discount'),
     path('staff/reports/', staff_reports_home, name='staff_reports_home'),
     path('staff/reports/day/', staff_reports_day, name='staff_reports_day'),
     path('staff/reports/day.csv', staff_reports_day_csv, name='staff_reports_day_csv'),

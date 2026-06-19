@@ -12,27 +12,30 @@
   <li>إجمالي الطلبات: {{ sums.orders_count }}</li>
   <li>إجمالي العناصر: {{ sums.subtotal_total }} ل.س</li>
   <li>إجمالي رسوم التوصيل: {{ sums.delivery_fee_total }} ل.س</li>
-  <li>إجمالي الطلبات (القيمة): {{ sums.order_total }} ل.س</li>
+  <li>إجمالي المبيعات قبل الخصم: {{ sums.gross_sales }} ل.س</li>
+  <li>الخصومات: {{ sums.discounts_syp }} ل.س</li>
+  <li>صافي المبيعات: {{ sums.net_sales }} ل.س</li>
   <li>إجمالي المدفوع: {{ sums.paid_total }} ل.س</li>
   <li>إجمالي المتبقي: {{ sums.remaining_total }} ل.س</li>
   <li>النقدي: {{ sums.cash_total }} ل.س</li>
   <li>التحويل اليدوي: {{ sums.manual_transfer_total }} ل.س</li>
   <li>الضيافة: {{ sums.free_total }} ل.س</li>
   <li>خصم الأعضاء: {{ sums.discount_total }} ل.س</li>
-  <li>الطلبات الملغاة: {{ sums.cancelled_count }}</li>
+  <li>الطلبات الملغاة: {{ sums.cancelled_count }} / {{ sums.cancelled_value }} ل.س</li>
+  <li>النقد المتوقع: {{ sums.expected_cash_syp }} ل.س</li>
 </ul>
 <table style="width:100%; border-collapse:collapse;">
-<tr><th>رقم الطلب</th><th>الوقت</th><th>طريقة الطلب</th><th>الحالة</th><th>العناصر</th><th>التوصيل</th><th>المجموع</th><th>المدفوع</th><th>المتبقي</th></tr>
+<tr><th>رقم الطلب</th><th>الوقت</th><th>طريقة الطلب</th><th>الحالة</th><th>العناصر</th><th>التوصيل</th><th>الخصم</th><th>المجموع</th><th>المدفوع</th><th>المتبقي</th></tr>
 {% for row in rows %}
 <tr>
   <td>{{ row.order.display_number }}</td>
   <td>{{ row.order.created_at|date:'Y-m-d H:i' }}</td>
   <td>{{ row.order.get_fulfillment_label }}{% if row.order.location_detail %}<div class="hub-location-detail">{{ row.order.location_detail }}</div>{% endif %}</td>
   <td>{{ row.order.get_status_display }}</td>
-  <td>{{ row.order.subtotal_syp }}</td><td>{{ row.order.delivery_fee_syp }}</td><td>{{ row.total }}</td><td>{{ row.paid }}</td><td>{{ row.remaining }}</td>
+  <td>{{ row.order.subtotal_syp }}</td><td>{{ row.order.delivery_fee_syp }}</td><td>{{ row.order.discount_syp }}</td><td>{{ row.total }}</td><td>{{ row.paid }}</td><td>{{ row.remaining }}</td>
 </tr>
 {% empty %}
-<tr><td colspan="9">لا توجد طلبات في هذا اليوم.</td></tr>
+<tr><td colspan="10">لا توجد طلبات في هذا اليوم.</td></tr>
 {% endfor %}
 </table>
 {% endblock %}

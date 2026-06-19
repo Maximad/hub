@@ -24,7 +24,7 @@ from accounts.permissions import (
     ACCESS_DENIED_MESSAGE, can_approve_partial_payment,
     require_staff_capability, user_has_capability,
 )
-from core.models import ActivityLog, InternetPackage, InternetSession, Member, Order, OrderItem, Payment, Product, SystemSetting, TableArea
+from core.models import ActivityLog, CancellationReason, DailyClose, InternetPackage, InternetSession, Member, Order, OrderDiscount, OrderItem, Payment, Product, SystemSetting, TableArea
 from events.models import Event
 from reservations.models import Reservation
 from vendors.models import Vendor, VendorParticipation
@@ -155,7 +155,7 @@ def _validate_delivery_details(request, settings, fulfillment_mode, subtotal, ma
 
 
 def _paid_total(payments):
-    return sum(payment.amount_syp for payment in payments if payment.method != Payment.Method.UNPAID)
+    return sum(payment.amount_syp for payment in payments if payment.is_active and not payment.is_reversed and payment.method != Payment.Method.UNPAID)
 
 
 def _parse_positive_int(raw_value, default=1, maximum=99):
@@ -187,9 +187,9 @@ def _build_day_report(report_date):
     )
     rows = []
     sums = {
-        'orders_count': 0, 'order_total': 0, 'subtotal_total': 0, 'delivery_fee_total': 0, 'paid_total': 0, 'remaining_total': 0,
-        'cash_total': 0, 'manual_transfer_total': 0, 'free_total': 0, 'discount_total': 0,
-        'cancelled_count': 0, 'served_or_paid_count': 0, 'unpaid_orders_count': 0,
+        'orders_count': 0, 'gross_sales': 0, 'net_sales': 0, 'order_total': 0, 'subtotal_total': 0, 'delivery_fee_total': 0, 'paid_total': 0, 'remaining_total': 0,
+        'cash_total': 0, 'manual_transfer_total': 0, 'free_total': 0, 'discount_total': 0, 'discounts_syp': 0,
+        'cancelled_count': 0, 'cancelled_value': 0, 'served_or_paid_count': 0, 'unpaid_orders_count': 0, 'partial_orders_count': 0, 'partial_payments_syp': 0, 'non_cash_sales_syp': 0,
     }
     for order in orders:
         total, paid, remaining, payment_label = _order_financials(order)
@@ -198,11 +198,18 @@ def _build_day_report(report_date):
             methods[payment.method] = methods.get(payment.method, 0) + payment.amount_syp
         if order.status == Order.Status.CANCELLED:
             sums['cancelled_count'] += 1
+            sums['cancelled_value'] += total
         if order.status == Order.Status.SERVED or remaining == 0:
             sums['served_or_paid_count'] += 1
         if remaining > 0:
             sums['unpaid_orders_count'] += 1
+        if paid > 0 and remaining > 0:
+            sums['partial_orders_count'] += 1
+            sums['partial_payments_syp'] += remaining
         sums['orders_count'] += 1
+        sums['gross_sales'] += order.subtotal_syp + order.service_fee_syp + max(order.delivery_fee_syp or 0, 0)
+        sums['discounts_syp'] += order.discount_syp
+        sums['net_sales'] += total
         sums['order_total'] += total
         sums['subtotal_total'] += order.subtotal_syp
         sums['delivery_fee_total'] += max(order.delivery_fee_syp or 0, 0)
@@ -212,7 +219,9 @@ def _build_day_report(report_date):
         sums['manual_transfer_total'] += methods.get(Payment.Method.MANUAL_TRANSFER, 0)
         sums['free_total'] += methods.get(Payment.Method.FREE, 0)
         sums['discount_total'] += methods.get(Payment.Method.MEMBER_DISCOUNT, 0)
+        sums['non_cash_sales_syp'] += methods.get(Payment.Method.MANUAL_TRANSFER, 0) + methods.get(Payment.Method.FREE, 0) + methods.get(Payment.Method.MEMBER_DISCOUNT, 0)
         rows.append({'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods})
+    sums['expected_cash_syp'] = sums['cash_total']
     sums['avg_order_value'] = int(sums['order_total'] / sums['orders_count']) if sums['orders_count'] else 0
     return rows, sums
 
@@ -541,13 +550,9 @@ def _assert_staff_capability(user, capability_name):
     raise PermissionDenied(ACCESS_DENIED_MESSAGE)
 
 def _order_financials(order):
-    total = getattr(order, 'total', None)
-    if total is None:
-        total = order.total_with_delivery_syp if hasattr(order, 'total_with_delivery_syp') else _items_total(order.items.all())
-    paid = getattr(order, 'paid', None)
-    if paid is None:
-        paid = _paid_total(order.payments.all())
-    remaining = max(total - paid, 0)
+    total = order.total_syp
+    paid = order.paid_syp
+    remaining = order.remaining_syp
     if order.status == Order.Status.CANCELLED:
         payment_label = 'ملغى'
     elif total == 0:
@@ -963,7 +968,10 @@ def staff_order_status(request, public_code):
             if old_delivery_status != new_delivery_status:
                 order.delivery_status = new_delivery_status
                 order.save(update_fields=['delivery_status', 'updated_at'])
-                ActivityLog.objects.create(actor=request.user, action='delivery_status_changed', details={'order_public_code': str(order.public_code), 'old_status': old_delivery_status, 'new_status': new_delivery_status})
+                try:
+                    ActivityLog.objects.create(actor=request.user, action='delivery_status_changed', details={'order_public_code': str(order.public_code), 'old_status': old_delivery_status, 'new_status': new_delivery_status})
+                except Exception:
+                    pass
         return redirect('staff_orders')
     new_status = request.POST.get('status')
     valid = {choice[0] for choice in Order.Status.choices}
@@ -971,13 +979,27 @@ def staff_order_status(request, public_code):
         return redirect('staff_orders')
     old_status = order.status
     if old_status != new_status:
+        update_fields = ['status', 'updated_at']
+        if new_status == Order.Status.CANCELLED:
+            reason = request.POST.get('cancellation_reason', '').strip()
+            if reason not in set(CancellationReason.values):
+                messages.error(request, 'سبب الإلغاء مطلوب.')
+                return redirect('staff_orders')
+            _total, paid, _remaining, _label = _order_financials(Order.objects.prefetch_related('items', 'payments', 'discounts').get(pk=order.pk))
+            if paid > 0 and not _can_approve_partial_payment(request.user):
+                messages.error(request, 'إلغاء طلب مدفوع أو مدفوع جزئياً يحتاج موافقة المدير.')
+                return redirect('staff_orders')
+            order.cancellation_reason = reason
+            order.cancellation_notes = request.POST.get('cancellation_notes', '').strip()
+            order.cancelled_by = request.user
+            order.cancelled_at = timezone.now()
+            update_fields += ['cancellation_reason', 'cancellation_notes', 'cancelled_by', 'cancelled_at']
         order.status = new_status
-        order.save(update_fields=['status', 'updated_at'])
-        ActivityLog.objects.create(
-            actor=request.user,
-            action='order_status_changed',
-            details={'order_public_code': str(order.public_code), 'old_status': old_status, 'new_status': new_status},
-        )
+        order.save(update_fields=update_fields)
+        try:
+            ActivityLog.objects.create(actor=request.user, action='order_cancelled' if new_status == Order.Status.CANCELLED else 'order_status_changed', details={'order_public_code': str(order.public_code), 'old_status': old_status, 'new_status': new_status, 'cancellation_reason': getattr(order, 'cancellation_reason', '')})
+        except Exception:
+            pass
     return redirect('staff_orders')
 
 
@@ -1135,10 +1157,10 @@ def staff_cashier(request):
 
 @require_staff_capability('cashier')
 def staff_cashier_order(request, public_code):
-    order = get_object_or_404(Order.objects.select_related('table').prefetch_related('items', 'payments'), public_code=public_code)
+    order = get_object_or_404(Order.objects.select_related('table').prefetch_related('items', 'payments', 'discounts'), public_code=public_code)
     total, paid, remaining, payment_label = _order_financials(order)
     methods = Payment.Method.choices
-    return render(request, 'staff/cashier_order.html', {'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods, 'payment_amount_default': remaining, 'qr_url': reverse('order_qr', kwargs={'public_code': order.public_code})})
+    return render(request, 'staff/cashier_order.html', {'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods, 'discount_types': OrderDiscount.DiscountType.choices, 'can_manage_discounts': _can_approve_partial_payment(request.user), 'payment_amount_default': remaining, 'qr_url': reverse('order_qr', kwargs={'public_code': order.public_code})})
 
 
 @require_staff_capability('cashier')
@@ -1186,7 +1208,48 @@ def staff_cashier_pay(request, public_code):
                 'cashier_username': request.user.username,
             },
         )
-    Payment.objects.create(order=order, amount_syp=amount_val, method=method)
+    if not method:
+        messages.error(request, 'طريقة الدفع مطلوبة.')
+        return redirect('staff_cashier_order', public_code=order.public_code)
+    payment = Payment.objects.create(order=order, amount_syp=amount_val, method=method, notes=request.POST.get('notes', '').strip(), created_by=request.user)
+    try:
+        ActivityLog.objects.create(actor=request.user, action='payment_added', details={'order_public_code': str(order.public_code), 'payment_id': payment.id, 'amount_syp': amount_val, 'method': method})
+    except Exception:
+        pass
+    return redirect('staff_cashier_order', public_code=order.public_code)
+
+
+@require_staff_capability('cashier')
+def staff_cashier_discount(request, public_code):
+    if request.method != 'POST':
+        raise Http404()
+    order = get_object_or_404(Order.objects.prefetch_related('items', 'payments', 'discounts'), public_code=public_code)
+    if not _can_approve_partial_payment(request.user):
+        messages.error(request, 'إضافة الخصم تحتاج موافقة المدير.')
+        return redirect('staff_cashier_order', public_code=order.public_code)
+    reason = request.POST.get('reason', '').strip()
+    if not reason:
+        messages.error(request, 'سبب الخصم مطلوب.')
+        return redirect('staff_cashier_order', public_code=order.public_code)
+    discount_type = request.POST.get('discount_type', OrderDiscount.DiscountType.FIXED)
+    if discount_type not in set(OrderDiscount.DiscountType.values):
+        discount_type = OrderDiscount.DiscountType.FIXED
+    amount = _parse_nonnegative_int(request.POST.get('amount_syp'), default=0, maximum=10_000_000)
+    if amount <= 0:
+        messages.error(request, 'قيمة الخصم يجب أن تكون أكبر من صفر.')
+        return redirect('staff_cashier_order', public_code=order.public_code)
+    discount = OrderDiscount(order=order, discount_type=discount_type, amount_syp=amount, reason=reason, notes=request.POST.get('notes', '').strip(), created_by=request.user, approved_by=request.user)
+    try:
+        discount.full_clean()
+    except ValidationError as exc:
+        messages.error(request, ' '.join(sum(exc.message_dict.values(), [])) if hasattr(exc, 'message_dict') else 'الخصم غير صالح.')
+        return redirect('staff_cashier_order', public_code=order.public_code)
+    discount.save()
+    try:
+        ActivityLog.objects.create(actor=request.user, action='discount_added', details={'order_public_code': str(order.public_code), 'discount_id': discount.id, 'amount_syp': amount, 'type': discount_type})
+    except Exception:
+        pass
+    messages.success(request, 'تمت إضافة الخصم.')
     return redirect('staff_cashier_order', public_code=order.public_code)
 
 
@@ -1223,7 +1286,25 @@ def staff_reports_day_csv(request):
 def staff_close_day(request):
     today = datetime.now(DAMASCUS_TZ).date()
     _rows, sums = _build_day_report(today)
-    return render(request, 'staff/close_day.html', {'report_date': today, 'sums': sums})
+    existing_close = DailyClose.objects.filter(business_date=today, is_finalized=True).first()
+    if request.method == 'POST':
+        if not _can_approve_partial_payment(request.user):
+            messages.error(request, 'إغلاق اليوم النهائي يحتاج صلاحية المدير.')
+            return redirect('staff_close_day')
+        if existing_close:
+            messages.error(request, 'يوجد إغلاق نهائي لهذا التاريخ بالفعل.')
+            return redirect('staff_close_day')
+        opening = _parse_nonnegative_int(request.POST.get('opening_cash_syp'), default=0, maximum=100_000_000)
+        actual = _parse_nonnegative_int(request.POST.get('actual_cash_counted_syp'), default=0, maximum=100_000_000)
+        expected = opening + sums['cash_total']
+        close = DailyClose.objects.create(business_date=today, opening_cash_syp=opening, cash_sales_syp=sums['cash_total'], non_cash_sales_syp=sums['non_cash_sales_syp'], total_payments_syp=sums['paid_total'], unpaid_orders_syp=sums['remaining_total'], partial_payments_syp=sums['partial_payments_syp'], discounts_syp=sums['discounts_syp'], cancelled_orders_syp=sums['cancelled_value'], refunds_or_reversals_syp=0, expected_cash_syp=expected, actual_cash_counted_syp=actual, cash_difference_syp=actual - expected, notes=request.POST.get('notes', '').strip(), closed_by=request.user, closed_at=timezone.now())
+        try:
+            ActivityLog.objects.create(actor=request.user, action='close_day_finalized', details={'business_date': today.isoformat(), 'daily_close_id': close.id})
+        except Exception:
+            pass
+        messages.success(request, 'تم إغلاق اليوم.')
+        return redirect('staff_close_day')
+    return render(request, 'staff/close_day.html', {'report_date': today, 'sums': sums, 'existing_close': existing_close, 'can_finalize_close': _can_approve_partial_payment(request.user)})
 
 
 def _get_member_or_404(member_id):

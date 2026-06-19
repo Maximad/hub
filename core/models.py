@@ -5,6 +5,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
+from django.db.models import Q
 
 
 def _arabic_first(obj, *fields, fallback='—'):
@@ -128,6 +129,16 @@ class Product(TimeStampedModel, PublicCodeModel):
         return _arabic_first(self, 'name_ar', 'name_en', fallback=str(self.public_code)[:8])
 
 
+class CancellationReason(models.TextChoices):
+    CUSTOMER_CHANGED_MIND = 'customer_changed_mind', 'غيّر الزبون رأيه'
+    ITEM_UNAVAILABLE = 'item_unavailable', 'المنتج غير متوفر'
+    STAFF_MISTAKE = 'staff_mistake', 'خطأ من الموظف'
+    DUPLICATE_ORDER = 'duplicate_order', 'طلب مكرر'
+    QUALITY_ISSUE = 'quality_issue', 'مشكلة جودة'
+    MANAGER_DECISION = 'manager_decision', 'قرار المدير'
+    OTHER = 'other', 'سبب آخر'
+
+
 class Order(TimeStampedModel, PublicCodeModel):
     class ServiceMode(models.TextChoices):
         DINE_IN = 'dine_in', 'طلب عام داخل المكان'
@@ -170,6 +181,10 @@ class Order(TimeStampedModel, PublicCodeModel):
     delivery_fee_syp = models.PositiveIntegerField(default=0, verbose_name='رسوم التوصيل')
     delivery_eta_minutes = models.PositiveIntegerField(null=True, blank=True, verbose_name='زمن التوصيل المتوقع بالدقائق')
     delivery_status = models.CharField(max_length=30, choices=DeliveryStatus.choices, default=DeliveryStatus.NOT_DELIVERY, verbose_name='حالة التوصيل')
+    cancellation_reason = models.CharField(max_length=30, choices=CancellationReason.choices, blank=True, verbose_name='سبب الإلغاء')
+    cancellation_notes = models.TextField(blank=True, verbose_name='ملاحظات الإلغاء')
+    cancelled_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='cancelled_orders', verbose_name='ألغاه')
+    cancelled_at = models.DateTimeField(null=True, blank=True, verbose_name='وقت الإلغاء')
     assigned_driver_name = models.CharField(max_length=120, blank=True, verbose_name='اسم السائق')
     assigned_driver_phone = models.CharField(max_length=30, blank=True, verbose_name='هاتف السائق')
 
@@ -225,8 +240,38 @@ class Order(TimeStampedModel, PublicCodeModel):
         return max(total, 0)
 
     @property
+    def discount_syp(self):
+        return min(sum(d.amount_syp for d in self.discounts.all() if d.is_active), self.subtotal_syp + self.service_fee_syp + self.delivery_fee_syp)
+
+    @property
+    def service_fee_syp(self):
+        return 0
+
+    @property
+    def total_syp(self):
+        return max(self.subtotal_syp + self.service_fee_syp + max(self.delivery_fee_syp or 0, 0) - self.discount_syp, 0)
+
+    @property
     def total_with_delivery_syp(self):
-        return max(self.subtotal_syp + max(self.delivery_fee_syp or 0, 0), 0)
+        return self.total_syp
+
+    @property
+    def paid_syp(self):
+        return sum(payment.amount_syp for payment in self.payments.all() if payment.is_active and not payment.is_reversed and payment.method != Payment.Method.UNPAID)
+
+    @property
+    def remaining_syp(self):
+        return max(self.total_syp - self.paid_syp, 0)
+
+    @property
+    def payment_status(self):
+        if self.status == self.Status.CANCELLED:
+            return 'cancelled'
+        if self.paid_syp <= 0:
+            return 'unpaid'
+        if self.remaining_syp > 0:
+            return 'partially_paid'
+        return 'paid'
 
     def __str__(self):
         return self.display_number
@@ -251,6 +296,8 @@ class OrderItem(TimeStampedModel):
     item_note = models.TextField(blank=True)
     line_total_syp_snapshot = models.IntegerField(null=True, blank=True)
     prep_status = models.CharField(max_length=20, choices=PrepStatus.choices, default=PrepStatus.PENDING)
+    cancellation_reason = models.CharField(max_length=30, choices=CancellationReason.choices, blank=True, verbose_name='سبب الإلغاء')
+    cancellation_notes = models.TextField(blank=True, verbose_name='ملاحظات الإلغاء')
 
     def __str__(self):
         return f'{self.product_name_ar_snapshot} × {self.quantity} — {self.order.display_number}'
@@ -267,9 +314,79 @@ class Payment(TimeStampedModel, PublicCodeModel):
     order = models.ForeignKey(Order, on_delete=models.PROTECT, related_name='payments')
     amount_syp = models.PositiveIntegerField()
     method = models.CharField(max_length=30, choices=Method.choices, default=Method.UNPAID)
+    notes = models.TextField(blank=True, verbose_name='ملاحظات الدفع')
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_payments')
+    is_active = models.BooleanField(default=True)
+    is_reversed = models.BooleanField(default=False)
+    reversal_reason = models.CharField(max_length=30, choices=CancellationReason.choices, blank=True, verbose_name='سبب عكس الدفعة')
+    reversed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='reversed_payments')
+    reversed_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f'{self.order.display_number} — {self.get_method_display()} — {self.amount_syp} ل.س'
+
+
+class OrderDiscount(TimeStampedModel):
+    class DiscountType(models.TextChoices):
+        FIXED = 'fixed', 'مبلغ ثابت'
+        PERCENTAGE = 'percentage', 'نسبة مئوية'
+        COMP = 'comp', 'ضيافة'
+        CORRECTION = 'correction', 'تصحيح'
+        MEMBER = 'member', 'عضو'
+
+    order = models.ForeignKey(Order, on_delete=models.PROTECT, related_name='discounts')
+    discount_type = models.CharField(max_length=20, choices=DiscountType.choices, default=DiscountType.FIXED, verbose_name='نوع الخصم')
+    amount_syp = models.PositiveIntegerField(verbose_name='الخصم')
+    percent = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0), MaxValueValidator(100)], verbose_name='النسبة')
+    reason = models.CharField(max_length=255, verbose_name='سبب الخصم')
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_order_discounts')
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_order_discounts', verbose_name='موافقة المدير')
+    notes = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+
+    def clean(self):
+        if not (self.reason or '').strip():
+            raise ValidationError({'reason': 'سبب الخصم مطلوب.'})
+        if self.amount_syp < 0:
+            raise ValidationError({'amount_syp': 'الخصم لا يمكن أن يكون سالباً.'})
+        base = self.order.subtotal_syp + self.order.service_fee_syp + max(self.order.delivery_fee_syp or 0, 0) if self.order_id else 0
+        existing = 0
+        if self.order_id:
+            qs = self.order.discounts.filter(is_active=True)
+            if self.pk:
+                qs = qs.exclude(pk=self.pk)
+            existing = sum(d.amount_syp for d in qs)
+        if self.amount_syp + existing > base:
+            raise ValidationError({'amount_syp': 'الخصم لا يجوز أن يجعل المجموع سالباً.'})
+
+    def __str__(self):
+        return f'{self.order.display_number} — {self.amount_syp} ل.س'
+
+
+class DailyClose(TimeStampedModel):
+    business_date = models.DateField(unique=True, verbose_name='تاريخ العمل')
+    opening_cash_syp = models.PositiveIntegerField(default=0, verbose_name='النقد الافتتاحي')
+    cash_sales_syp = models.PositiveIntegerField(default=0, verbose_name='مبيعات نقدية')
+    non_cash_sales_syp = models.PositiveIntegerField(default=0, verbose_name='مبيعات غير نقدية')
+    total_payments_syp = models.PositiveIntegerField(default=0, verbose_name='إجمالي الدفعات')
+    unpaid_orders_syp = models.PositiveIntegerField(default=0, verbose_name='غير مدفوع')
+    partial_payments_syp = models.PositiveIntegerField(default=0, verbose_name='مدفوع جزئياً')
+    discounts_syp = models.PositiveIntegerField(default=0, verbose_name='الخصومات')
+    cancelled_orders_syp = models.PositiveIntegerField(default=0, verbose_name='قيمة الطلبات الملغاة')
+    refunds_or_reversals_syp = models.PositiveIntegerField(default=0, verbose_name='المسترد/المعكوس')
+    expected_cash_syp = models.PositiveIntegerField(default=0, verbose_name='النقد المتوقع')
+    actual_cash_counted_syp = models.PositiveIntegerField(default=0, verbose_name='النقد الفعلي')
+    cash_difference_syp = models.IntegerField(default=0, verbose_name='الفرق')
+    notes = models.TextField(blank=True)
+    closed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='daily_closes')
+    closed_at = models.DateTimeField(null=True, blank=True)
+    is_finalized = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['business_date'], condition=Q(is_finalized=True), name='unique_finalized_daily_close_per_date')]
+
+    def __str__(self):
+        return f'إغلاق اليوم {self.business_date}'
 
 
 class Member(TimeStampedModel, PublicCodeModel):

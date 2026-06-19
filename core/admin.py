@@ -4,11 +4,14 @@ from catalog.models import ProductMedia, ProductOptionGroupAssignment
 from .settings_helpers import get_system_settings
 from .models import (
     ActivityLog,
+    CancellationReason,
     Category,
     InternetPackage,
     InternetSession,
+    DailyClose,
     Member,
     Order,
+    OrderDiscount,
     OrderItem,
     PageSetting,
     Payment,
@@ -176,7 +179,7 @@ class OrderItemInline(admin.TabularInline):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ('display_number', 'fulfillment_mode', 'delivery_status', 'customer_summary', 'total_amount', 'paid_amount', 'remaining_amount', 'status', 'created_at', 'public_code')
+    list_display = ('display_number', 'fulfillment_mode', 'delivery_status', 'customer_summary', 'total_amount', 'discount_amount', 'paid_amount', 'remaining_amount', 'status', 'created_at', 'public_code')
     list_filter = ('fulfillment_mode', 'delivery_status', 'status', 'created_at')
     search_fields = ('public_code', 'notes', 'table__name_ar', 'delivery_address', 'delivery_area', 'assigned_driver_name', 'assigned_driver_phone')
     readonly_fields = ('public_code', 'display_number', 'created_at', 'updated_at')
@@ -199,15 +202,19 @@ class OrderAdmin(admin.ModelAdmin):
 
     @admin.display(description='المجموع')
     def total_amount(self, obj):
-        return obj.total_with_delivery_syp
+        return obj.total_syp
+
+    @admin.display(description='الخصم')
+    def discount_amount(self, obj):
+        return obj.discount_syp
 
     @admin.display(description='المدفوع')
     def paid_amount(self, obj):
-        return sum(payment.amount_syp for payment in obj.payments.all() if payment.method != Payment.Method.UNPAID)
+        return obj.paid_syp
 
     @admin.display(description='المتبقي')
     def remaining_amount(self, obj):
-        return max(obj.total_with_delivery_syp - self.paid_amount(obj), 0)
+        return obj.remaining_syp
 
 
 @admin.register(OrderItem)
@@ -218,12 +225,28 @@ class OrderItemAdmin(admin.ModelAdmin):
     autocomplete_fields = ('order', 'product')
 
 
+@admin.register(OrderDiscount)
+class OrderDiscountAdmin(admin.ModelAdmin):
+    list_display = ('order', 'amount_syp', 'discount_type', 'reason', 'created_by', 'approved_by', 'created_at', 'is_active')
+    list_filter = ('discount_type', 'created_at', 'is_active', 'created_by', 'approved_by')
+    search_fields = ('order__public_code', 'order__id', 'reason', 'notes', 'created_by__username', 'approved_by__username')
+    autocomplete_fields = ('order', 'created_by', 'approved_by')
+
+
+@admin.register(DailyClose)
+class DailyCloseAdmin(admin.ModelAdmin):
+    list_display = ('business_date', 'expected_cash_syp', 'actual_cash_counted_syp', 'cash_difference_syp', 'closed_by', 'closed_at', 'is_finalized')
+    list_filter = ('business_date', 'is_finalized', 'closed_by')
+    search_fields = ('business_date', 'notes', 'closed_by__username')
+    autocomplete_fields = ('closed_by',)
+
+
 @admin.register(Payment)
 class PaymentAdmin(admin.ModelAdmin):
-    list_display = ('order', 'amount_syp', 'method', 'created_at')
-    list_filter = ('method',)
-    search_fields = ('order__public_code',)
-    autocomplete_fields = ('order',)
+    list_display = ('order', 'amount_syp', 'method', 'created_by', 'is_active', 'is_reversed', 'created_at')
+    list_filter = ('method', 'is_active', 'is_reversed', 'created_at')
+    search_fields = ('order__public_code', 'notes', 'created_by__username')
+    autocomplete_fields = ('order', 'created_by', 'reversed_by')
 
 
 @admin.register(Member)
