@@ -12,12 +12,13 @@
       <strong>{{ pending_count }}</strong>
       <span>عنصر بانتظار الاستلام</span>
     </div>
+    <div class="hub-toolbar"><span class="hub-badge hub-badge-info">آخر تحديث: {% now "H:i:s" %}</span><a class="hub-button" href="{{ request.get_full_path }}">تحديث الآن</a></div>
   </div>
 
-  <form class="hub-card kitchen-filters" method="get" action="{% url 'staff_kitchen' %}">
+  <form class="hub-card kitchen-filters" method="get" action="{% url 'staff_prep' %}">
     <div class="kitchen-tabs" role="tablist" aria-label="تصفية الحالة">
       {% for value,label in status_filters %}
-        <a class="hub-button {% if status_filter == value %}hub-button-secondary kitchen-filter-active{% else %}hub-button-secondary{% endif %}" href="{% url 'staff_kitchen' %}?status={{ value }}{% if station_filter %}&station={{ station_filter }}{% endif %}{% if fulfillment_filter %}&fulfillment={{ fulfillment_filter }}{% endif %}">{{ label }}</a>
+        <a class="hub-button {% if status_filter == value %}hub-button-secondary kitchen-filter-active{% else %}hub-button-secondary{% endif %}" href="{% url 'staff_prep' %}?status={{ value }}{% if station_filter %}&station={{ station_filter }}{% endif %}{% if fulfillment_filter %}&fulfillment={{ fulfillment_filter }}{% endif %}">{{ label }}</a>
       {% endfor %}
     </div>
     <label>حسب محطة التحضير
@@ -36,7 +37,7 @@
     <button class="hub-button" type="submit">تطبيق التصفية</button>
   </form>
 
-  <div id="kitchen-board" hx-get="{% url 'staff_kitchen_partial' %}?{{ request.GET.urlencode }}" hx-trigger="load, every 7s" hx-target="#kitchen-board" hx-swap="innerHTML">
+  <div id="kitchen-board" hx-get="{% url 'staff_kitchen_partial' %}?{{ request.GET.urlencode }}" hx-trigger="load, every 5s" hx-target="#kitchen-board" hx-swap="innerHTML">
     {% include "staff/kitchen_partial.html" %}
   </div>
 </section>

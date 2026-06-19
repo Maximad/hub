@@ -429,6 +429,20 @@ def _selected_order_items_from_post(request, products):
     return selected, validation_errors
 
 
+
+
+def _prep_defaults_for_product(product):
+    requires_prep = product.infer_requires_preparation() if hasattr(product, 'infer_requires_preparation') else True
+    if not requires_prep:
+        return None, OrderItem.PrepStatus.NO_PREP
+    station = getattr(product, 'prep_station_ref', None)
+    if station is None:
+        try:
+            station = PrepStation.objects.filter(code='general', is_active=True).first() or PrepStation.objects.filter(station_type='general', is_active=True).first()
+        except Exception:
+            station = None
+    return station, OrderItem.PrepStatus.NEW
+
 def _create_order_from_selected_items(table, selected, note_parts, status=None, service_mode=None, fulfillment_mode=None, delivery_data=None):
     note = '\n'.join([part for part in note_parts if part])
     if table and service_mode is None:
@@ -440,6 +454,7 @@ def _create_order_from_selected_items(table, selected, note_parts, status=None, 
         order = Order.objects.create(table=table, service_mode=service_mode, fulfillment_mode=fulfillment_mode, status=status or Order.Status.NEW, notes=note, **delivery_data)
         for product, qty, item_note, selected_options_snapshot, option_delta in selected:
             unit_price = max(product.price_syp + option_delta, 0)
+            prep_station, prep_status = _prep_defaults_for_product(product)
             OrderItem.objects.create(
                 order=order,
                 product=product,
@@ -450,6 +465,8 @@ def _create_order_from_selected_items(table, selected, note_parts, status=None, 
                 selected_options_snapshot=selected_options_snapshot,
                 item_note=item_note,
                 line_total_syp_snapshot=qty * unit_price,
+                prep_station=prep_station,
+                prep_status=prep_status,
             )
     return order
 
@@ -652,7 +669,7 @@ def staff_home(request):
 @require_staff_capability('pos')
 def staff_pos(request):
     tables = TableArea.objects.select_related('room').order_by('room__name_ar', 'name_ar')
-    section_products = _section_products_for_ordering(product_filter={'is_available': True}, include_unsectioned=True)
+    section_products = _section_products_for_ordering(product_filter={'is_available': True, 'visible_on_pos': True, 'orderable_on_pos': True}, include_unsectioned=True)
     products = [product for _section, products in section_products for product in products]
     member_query = request.GET.get('member_q', '').strip()
     member_rows = []
@@ -1027,7 +1044,7 @@ def staff_order_edit_add_item(request, public_code):
         messages.error(request, 'المنتج المحدد غير صالح.')
         return redirect('staff_order_edit', public_code=order.public_code)
     product = get_object_or_404(
-        Product.objects.filter(is_available=True).prefetch_related(_option_assignment_prefetch()),
+        Product.objects.filter(is_available=True, visible_on_pos=True, orderable_on_pos=True).prefetch_related(_option_assignment_prefetch()),
         pk=int(product_id),
     )
     _attach_valid_option_assignments([product])
@@ -1039,6 +1056,7 @@ def staff_order_edit_add_item(request, public_code):
         return redirect('staff_order_edit', public_code=order.public_code)
 
     unit_price = max(product.price_syp + option_delta, 0)
+    prep_station, prep_status = _prep_defaults_for_product(product)
     with transaction.atomic():
         item = OrderItem.objects.create(
             order=order,
@@ -1050,6 +1068,8 @@ def staff_order_edit_add_item(request, public_code):
             selected_options_snapshot=selected_options_snapshot,
             item_note=item_note,
             line_total_syp_snapshot=qty * unit_price,
+            prep_station=prep_station,
+            prep_status=prep_status,
         )
         _log_order_edit(request.user, 'order_item_added', order, {'item_id': item.id, 'product_id': product.id, 'quantity': qty})
     messages.success(request, 'تمت إضافة العنصر إلى الطلب.')
@@ -1619,6 +1639,7 @@ def _create_order_for_internet_session(request, session, mark_paid=False):
         customer = session.member.name_ar if session.member_id else (session.display_guest_name or 'زائر')
         note = f'جلسة إنترنت/عمل #{session.id}\nالمدة: {session.effective_duration_minutes or 0} دقيقة\nالعميل: {customer}'
         order = Order.objects.create(service_mode=Order.ServiceMode.DINE_IN, status=Order.Status.NEW, notes=note)
+        prep_station, prep_status = _prep_defaults_for_product(product)
         OrderItem.objects.create(
             order=order,
             product=product,
@@ -1629,6 +1650,8 @@ def _create_order_for_internet_session(request, session, mark_paid=False):
             selected_options_snapshot=[],
             item_note=note,
             line_total_syp_snapshot=session.payable_total_syp,
+            prep_station=prep_station,
+            prep_status=prep_status,
         )
         session.linked_order = order
         session.status = InternetSession.Status.UNPAID if session.payable_total_syp > 0 else InternetSession.Status.ENDED

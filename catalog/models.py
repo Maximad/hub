@@ -43,15 +43,28 @@ class Tag(CatalogTimeStampedModel):
 
 
 class PrepStation(CatalogTimeStampedModel):
+    class StationType(models.TextChoices):
+        KITCHEN = 'kitchen', 'المطبخ'
+        BAR = 'bar', 'البار'
+        CASHIER = 'cashier', 'الكاشير'
+        SERVICE = 'service', 'الخدمات'
+        GENERAL = 'general', 'عام'
+
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     code = models.SlugField(unique=True)
     name_ar = models.CharField(max_length=120)
     name_en = models.CharField(max_length=120, blank=True)
+    station_type = models.CharField(max_length=20, choices=StationType.choices, default=StationType.GENERAL)
     is_active = models.BooleanField(default=True)
     sort_order = models.IntegerField(default=0)
 
+    class Meta:
+        ordering = ['sort_order', 'name_ar']
+        verbose_name = 'محطة التحضير'
+        verbose_name_plural = 'محطات التحضير'
+
     def __str__(self):
-        return self.name_ar
+        return self.name_ar or self.name_en or self.code
 
 
 class ProductMedia(CatalogTimeStampedModel):

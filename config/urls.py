@@ -12,7 +12,7 @@ from core.views.staff_vendors import staff_vendors, staff_vendor_new, staff_vend
 from core.views.staff_import import (
     staff_import_home, staff_import_upload, staff_import_template, staff_import_preview, staff_import_confirm,
 )
-from core.views.kitchen import staff_kitchen, staff_kitchen_partial, staff_kitchen_order, staff_kitchen_item_status
+from core.views.kitchen import staff_kitchen, staff_kitchen_partial, staff_kitchen_order, staff_kitchen_item_status, staff_prep, staff_prep_station
 from accounts.views_staff import (
     staff_users_list, staff_user_new, staff_user_detail, staff_user_edit, staff_user_password, staff_user_toggle_active,
 )
@@ -45,6 +45,8 @@ urlpatterns = [
     path('staff/import/<str:import_type>/preview/', staff_import_preview, name='staff_import_preview'),
     path('staff/import/<str:import_type>/confirm/', staff_import_confirm, name='staff_import_confirm'),
     path('staff/modifiers/', menu.staff_modifiers, name='staff_modifiers'),
+    path('staff/prep/', staff_prep, name='staff_prep'),
+    path('staff/prep/<slug:station_code>/', staff_prep_station, name='staff_prep_station'),
     path('staff/kitchen/', staff_kitchen, name='staff_kitchen'),
     path('staff/kitchen/partial/', staff_kitchen_partial, name='staff_kitchen_partial'),
     path('staff/kitchen/order/<uuid:public_code>/', staff_kitchen_order, name='staff_kitchen_order'),
