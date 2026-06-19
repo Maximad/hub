@@ -175,3 +175,70 @@ def staff_inventory_items_csv(request): return _csv_response('inventory-items.cs
 def staff_inventory_purchases_csv(request): return _csv_response('inventory-purchases.csv',['id','date','supplier','invoice','status','total','paid','remaining','paid_from'], ((p.pk,p.business_date,p.supplier_label,p.invoice_number,p.status,p.total_syp,p.amount_paid_syp,p.remaining_syp,p.paid_from) for p in Purchase.objects.select_related('vendor')))
 @inventory_required
 def staff_inventory_movements_csv(request): return _csv_response('inventory-movements.csv',['id','date','item','type','direction','quantity','unit','value','user','reason'], ((m.pk,m.business_date,m.inventory_item.name_ar,m.movement_type,m.direction,m.quantity,m.unit,m.total_value_syp,getattr(m.created_by,'username',''),m.reason) for m in StockMovement.objects.select_related('inventory_item','created_by')))
+
+@inventory_required
+def staff_recipe_report(request):
+    rows=[]
+    for product in Product.objects.prefetch_related('recipe_items__inventory_item').order_by('name_ar'):
+        from core.stock_recipes import calculate_recipe_cost
+        result=calculate_recipe_cost(product)
+        rows.append({'product':product,'recipe':result})
+    return render(request,'staff/recipe_report.html',{'rows':rows})
+
+@inventory_required
+def staff_production_report(request):
+    from core.models import ProductionBatch
+    batches=ProductionBatch.objects.select_related('product','prepared_by').prefetch_related('ingredients__inventory_item').order_by('-business_date','-created_at')[:300]
+    return render(request,'staff/production_report.html',{'batches':batches})
+
+@inventory_required
+def staff_stock_deduction_report(request):
+    from core.models import OrderItem
+    items=OrderItem.objects.select_related('order','product').exclude(stock_deduction_error='').order_by('-created_at')[:300]
+    deducted=OrderItem.objects.select_related('order','product').filter(stock_deducted=True).order_by('-stock_deducted_at')[:300]
+    return render(request,'staff/stock_deduction_report.html',{'items':items,'deducted':deducted})
+
+@inventory_required
+def staff_waste_report(request):
+    waste=StockMovement.objects.select_related('inventory_item','created_by','related_batch').filter(movement_type=StockMovement.MovementType.WASTE).order_by('-business_date','-created_at')[:300]
+    return render(request,'staff/waste_report.html',{'waste':waste})
+
+@inventory_required
+def staff_prep_batches(request):
+    from core.models import ProductionBatch
+    qs=ProductionBatch.objects.select_related('product','prepared_by').order_by('-business_date','-created_at')
+    if request.GET.get('today','1') == '1': qs=qs.filter(business_date=timezone.localdate())
+    return render(request,'staff/prep_batches.html',{'batches':qs[:200]})
+
+@inventory_required
+def staff_prep_batch_new(request):
+    from core.models import ProductionBatch
+    if request.method=='POST':
+        b=ProductionBatch(batch_name_ar=request.POST.get('batch_name_ar','').strip(), business_date=request.POST.get('business_date') or timezone.localdate(), product_id=request.POST.get('product') or None, batch_type=request.POST.get('batch_type') or ProductionBatch.BatchType.PREPARED_FOOD, planned_quantity=_dec(request.POST.get('planned_quantity')), produced_quantity=_dec(request.POST.get('produced_quantity')), unit=request.POST.get('unit') or ProductionBatch.Unit.PORTION, output_inventory_item_id=request.POST.get('output_inventory_item') or None, output_quantity=_dec(request.POST.get('output_quantity')), output_unit=request.POST.get('output_unit') or '', notes=request.POST.get('notes',''), prepared_by=request.user)
+        try: b.full_clean(); b.save(); messages.success(request,'تم إنشاء دفعة التحضير.'); return redirect('staff_prep_batch_detail', batch_id=b.pk)
+        except ValidationError as e: messages.error(request,e.messages[0])
+    return render(request,'staff/prep_batch_form.html',{'products':Product.objects.filter(is_available=True),'items':InventoryItem.objects.filter(is_active=True),'types':ProductionBatch.BatchType.choices,'units':ProductionBatch.Unit.choices,'inv_units':InventoryItem.Unit.choices,'today':timezone.localdate()})
+
+@inventory_required
+def staff_prep_batch_detail(request,batch_id):
+    from core.models import ProductionBatch, ProductionBatchIngredient
+    from core.stock_recipes import complete_production_batch
+    b=get_object_or_404(ProductionBatch.objects.prefetch_related('ingredients__inventory_item'),pk=batch_id)
+    if request.method=='POST':
+        action=request.POST.get('action')
+        try:
+            if action=='add_ingredient':
+                item=get_object_or_404(InventoryItem,pk=request.POST.get('inventory_item'))
+                ProductionBatchIngredient.objects.create(batch=b,inventory_item=item,planned_quantity=_dec(request.POST.get('planned_quantity')),actual_quantity=_dec(request.POST.get('actual_quantity')),unit=item.unit,notes=request.POST.get('notes',''))
+                messages.success(request,'تمت إضافة المكوّن.')
+            elif action=='start':
+                b.status=ProductionBatch.Status.IN_PROGRESS; b.save(update_fields=['status','updated_at']); messages.success(request,'تم تحويل الدفعة إلى قيد التحضير.')
+            elif action=='complete':
+                complete_production_batch(b, request.user); messages.success(request,'تم إكمال الدفعة وتسجيل الحركات.')
+            elif action=='waste':
+                item=get_object_or_404(InventoryItem,pk=request.POST.get('inventory_item'))
+                mv=StockMovement(inventory_item=item,business_date=timezone.localdate(),movement_type=StockMovement.MovementType.WASTE,direction=StockMovement.Direction.OUT,quantity=_dec(request.POST.get('quantity')),unit=item.unit,unit_cost_syp=item.estimated_unit_cost_syp,total_value_syp=(item.estimated_unit_cost_syp or 0)*_dec(request.POST.get('quantity')),related_batch=b,reason=request.POST.get('reason',''),created_by=request.user)
+                mv.full_clean(); mv.save(); mv.apply_to_stock(); messages.success(request,'تم تسجيل الهدر.')
+        except Exception as e: messages.error(request,str(e))
+        return redirect('staff_prep_batch_detail', batch_id=b.pk)
+    return render(request,'staff/prep_batch_detail.html',{'batch':b,'items':InventoryItem.objects.filter(is_active=True)})
