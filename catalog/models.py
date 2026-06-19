@@ -1,6 +1,12 @@
+import os
 import uuid
+from pathlib import Path
+
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
+from django.utils.text import get_valid_filename
 from .fields import RelativeOrAbsoluteURLField
 
 
@@ -10,6 +16,95 @@ class CatalogTimeStampedModel(models.Model):
 
     class Meta:
         abstract = True
+
+
+
+
+def media_asset_upload_path(instance, filename):
+    safe_name = get_valid_filename(Path(filename).name).replace(' ', '-')
+    now = timezone.now()
+    media_type_folder = {
+        MediaAsset.MediaType.IMAGE: 'products',
+        MediaAsset.MediaType.GIF: 'products',
+        MediaAsset.MediaType.VIDEO: 'uploads',
+        MediaAsset.MediaType.DOCUMENT: 'uploads',
+        MediaAsset.MediaType.EXTERNAL_URL: 'uploads',
+    }.get(instance.media_type, 'uploads')
+    return f'{media_type_folder}/{now:%Y/%m}/{uuid.uuid4().hex[:12]}-{safe_name}'
+
+
+def validate_media_asset_file(value):
+    if not value:
+        return
+    filename = Path(value.name).name
+    if filename != value.name or '/' in value.name or '\\' in value.name:
+        raise ValidationError('نوع الملف غير مدعوم')
+    extension = Path(filename).suffix.lower().lstrip('.')
+    allowed_extensions = getattr(settings, 'MEDIA_ASSET_ALLOWED_EXTENSIONS', {'jpg', 'jpeg', 'png', 'webp', 'gif', 'pdf'})
+    if extension not in allowed_extensions:
+        raise ValidationError('نوع الملف غير مدعوم')
+    max_size = getattr(settings, 'MEDIA_ASSET_MAX_UPLOAD_SIZE', 10 * 1024 * 1024)
+    if value.size and value.size > max_size:
+        raise ValidationError('حجم الملف أكبر من الحد المسموح')
+
+
+class MediaAsset(CatalogTimeStampedModel):
+    class MediaType(models.TextChoices):
+        IMAGE = 'image', 'صورة'
+        GIF = 'gif', 'صورة متحركة'
+        VIDEO = 'video', 'فيديو'
+        EXTERNAL_URL = 'external_url', 'رابط خارجي'
+        DOCUMENT = 'document', 'مستند'
+
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    title_ar = models.CharField('العنوان', max_length=180)
+    title_en = models.CharField('العنوان بالإنجليزية', max_length=180, blank=True)
+    file = models.FileField('رفع صورة', upload_to=media_asset_upload_path, validators=[validate_media_asset_file], blank=True)
+    external_url = RelativeOrAbsoluteURLField('رابط خارجي', max_length=500, blank=True)
+    media_type = models.CharField('نوع الوسيط', max_length=20, choices=MediaType.choices, default=MediaType.IMAGE)
+    alt_text_ar = models.CharField('النص البديل', max_length=180, blank=True)
+    alt_text_en = models.CharField('النص البديل بالإنجليزية', max_length=180, blank=True)
+    caption_ar = models.CharField('التسمية', max_length=220, blank=True)
+    caption_en = models.CharField('التسمية بالإنجليزية', max_length=220, blank=True)
+    is_active = models.BooleanField('نشط', default=True)
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='uploaded_media_assets', verbose_name='رفع بواسطة')
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['media_type', 'is_active', 'created_at'])]
+        verbose_name = 'مكتبة الوسائط'
+        verbose_name_plural = 'مكتبة الوسائط'
+
+    def __str__(self):
+        return self.title_ar or self.title_en or self.filename or str(self.uuid)[:8]
+
+    def clean(self):
+        super().clean()
+        if self.file and self.external_url:
+            raise ValidationError('لا يمكن استخدام ملف ورابط معاً')
+        if not self.file and not self.external_url:
+            raise ValidationError('يجب اختيار ملف أو رابط')
+
+    @property
+    def filename(self):
+        return Path(self.file.name).name if self.file else ''
+
+    @property
+    def url(self):
+        if self.file:
+            try:
+                return self.file.url
+            except ValueError:
+                return ''
+        return self.external_url or ''
+
+    @property
+    def is_visual_media(self):
+        return self.media_type in {self.MediaType.IMAGE, self.MediaType.GIF}
+
+    @property
+    def display_alt_text(self):
+        return self.alt_text_ar or self.title_ar or self.title_en
 
 
 class MenuSection(CatalogTimeStampedModel):
@@ -76,11 +171,14 @@ class ProductMedia(CatalogTimeStampedModel):
 
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     product = models.ForeignKey('core.Product', on_delete=models.CASCADE, related_name='media')
+    media_asset = models.ForeignKey('catalog.MediaAsset', on_delete=models.SET_NULL, null=True, blank=True, related_name='product_media', verbose_name='مكتبة الوسائط')
     media_type = models.CharField(max_length=20, choices=MediaType.choices, default=MediaType.IMAGE)
-    url = RelativeOrAbsoluteURLField(max_length=500)
+    url = RelativeOrAbsoluteURLField(max_length=500, blank=True, default='')
     alt_text_ar = models.CharField(max_length=180, blank=True)
     is_primary = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
+    display_on_public_menu = models.BooleanField('إظهار في المنيو العام', default=True)
+    display_on_pos = models.BooleanField('إظهار في نقطة البيع', default=True)
     sort_order = models.IntegerField(default=0)
 
     class Meta:
@@ -99,15 +197,34 @@ class ProductMedia(CatalogTimeStampedModel):
         verbose_name_plural = 'وسائط المنتجات'
 
     def __str__(self):
-        return f'{self.product} - {self.get_media_type_display()}'
+        return f'{self.product} - {self.media_asset or self.get_media_type_display()}'
+
+    def clean(self):
+        super().clean()
+        if not self.media_asset and not self.url:
+            raise ValidationError('يجب اختيار ملف أو رابط')
+
+    @property
+    def resolved_url(self):
+        return self.media_asset.url if self.media_asset_id and self.media_asset.url else self.url
 
     @property
     def display_alt_text(self):
-        return self.alt_text_ar or self.product.name_ar
+        if self.alt_text_ar:
+            return self.alt_text_ar
+        if self.media_asset_id and self.media_asset.display_alt_text:
+            return self.media_asset.display_alt_text
+        return self.product.name_ar
 
     @property
     def is_visual_media(self):
+        if self.media_asset_id:
+            return self.media_asset.is_visual_media
         return self.media_type in {self.MediaType.IMAGE, self.MediaType.GIF}
+
+    @property
+    def url_for_display(self):
+        return self.resolved_url
 
 
 class ProductAvailability(CatalogTimeStampedModel):

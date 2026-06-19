@@ -1,5 +1,4 @@
 from django.contrib import admin
-from django.utils.html import format_html
 from .models import (
     MenuSection,
     PrepStation,
@@ -7,9 +6,11 @@ from .models import (
     ProductOption,
     ProductOptionGroup,
     ProductOptionGroupAssignment,
+    MediaAsset,
     ProductMedia,
     Tag,
 )
+from .admin_media import safe_media_preview
 
 
 class ProductOptionInline(admin.TabularInline):
@@ -46,15 +47,47 @@ class ProductOptionGroupAdmin(admin.ModelAdmin):
     inlines = (ProductOptionInline,)
 
 
+@admin.register(MediaAsset)
+class MediaAssetAdmin(admin.ModelAdmin):
+    list_display = ('thumbnail_preview', 'title_ar', 'title_en', 'media_type', 'is_active', 'uploaded_by', 'created_at', 'updated_at')
+    list_filter = ('media_type', 'is_active', 'created_at')
+    search_fields = ('title_ar', 'title_en', 'alt_text_ar', 'caption_ar', 'file', 'external_url')
+    readonly_fields = ('thumbnail_preview', 'file_link', 'uuid', 'created_at', 'updated_at')
+    fields = ('uuid', 'title_ar', 'title_en', 'file', 'external_url', 'file_link', 'media_type', 'alt_text_ar', 'alt_text_en', 'caption_ar', 'caption_en', 'is_active', 'uploaded_by', 'thumbnail_preview', 'created_at', 'updated_at')
+    autocomplete_fields = ('uploaded_by',)
+    actions = ('mark_active', 'mark_inactive')
+
+    def save_model(self, request, obj, form, change):
+        if not obj.uploaded_by_id and request.user.is_authenticated:
+            obj.uploaded_by = request.user
+        super().save_model(request, obj, form, change)
+
+    @admin.display(description='معاينة')
+    def thumbnail_preview(self, obj):
+        return safe_media_preview(obj)
+
+    @admin.display(description='رابط الملف')
+    def file_link(self, obj):
+        return safe_media_preview(obj, width=48)
+
+    @admin.action(description='تعليم كوسائط نشطة')
+    def mark_active(self, request, queryset):
+        queryset.update(is_active=True)
+
+    @admin.action(description='تعليم كوسائط غير نشطة')
+    def mark_inactive(self, request, queryset):
+        queryset.update(is_active=False)
+
+
 @admin.register(ProductMedia)
 class ProductMediaAdmin(admin.ModelAdmin):
-    list_display = ('readable_product_name', 'media_type', 'is_primary', 'is_active', 'sort_order', 'media_preview', 'updated_at')
-    list_filter = ('media_type', 'is_primary', 'is_active')
-    search_fields = ('product__name_ar', 'product__name_en', 'alt_text_ar', 'url')
+    list_display = ('readable_product_name', 'media_type', 'media_asset', 'is_primary', 'is_active', 'display_on_public_menu', 'display_on_pos', 'sort_order', 'media_preview', 'updated_at')
+    list_filter = ('media_type', 'is_primary', 'is_active', 'display_on_public_menu', 'display_on_pos')
+    search_fields = ('product__name_ar', 'product__name_en', 'alt_text_ar', 'url', 'media_asset__title_ar', 'media_asset__title_en')
     ordering = ('product__name_ar', 'sort_order', '-is_primary')
-    autocomplete_fields = ('product',)
+    autocomplete_fields = ('product', 'media_asset')
     readonly_fields = ('media_preview', 'uuid', 'created_at', 'updated_at')
-    fields = ('uuid', 'product', 'media_type', 'url', 'alt_text_ar', 'is_primary', 'is_active', 'sort_order', 'media_preview', 'created_at', 'updated_at')
+    fields = ('uuid', 'product', 'media_asset', 'media_type', 'url', 'alt_text_ar', 'is_primary', 'is_active', 'display_on_public_menu', 'display_on_pos', 'sort_order', 'media_preview', 'created_at', 'updated_at')
 
     @admin.display(description='المنتج', ordering='product__name_ar')
     def readable_product_name(self, obj):
@@ -62,9 +95,7 @@ class ProductMediaAdmin(admin.ModelAdmin):
 
     @admin.display(description='معاينة')
     def media_preview(self, obj):
-        if obj and obj.url and obj.media_type in {ProductMedia.MediaType.IMAGE, ProductMedia.MediaType.GIF}:
-            return format_html('<span style="display: inline-flex; align-items: center; justify-content: center; width: 72px; aspect-ratio: 2 / 3; overflow: hidden; border-radius: 8px; background: #f8f5ef;"><img src="{}" alt="{}" style="width: 100%; height: 100%; object-fit: cover; object-position: center center; display: block;" /></span>', obj.url, obj.display_alt_text)
-        return '—'
+        return safe_media_preview(obj)
 
 
 @admin.register(ProductOption)

@@ -251,10 +251,12 @@ def _valid_option_assignments_for_product(product):
     ]
 
 
-def _active_media_prefetch():
+def _active_media_prefetch(**media_filters):
+    filters = {'is_active': True}
+    filters.update(media_filters)
     return Prefetch(
         'media',
-        queryset=ProductMedia.objects.filter(is_active=True).order_by('-is_primary', 'sort_order', 'created_at'),
+        queryset=ProductMedia.objects.filter(**filters).select_related('media_asset').order_by('-is_primary', 'sort_order', 'created_at'),
         to_attr='active_media',
     )
 
@@ -275,12 +277,12 @@ def _attach_valid_option_assignments(products):
     return _attach_product_card_data(products)
 
 
-def _section_products_for_ordering(product_filter=None, section_filter=None, include_unsectioned=False):
+def _section_products_for_ordering(product_filter=None, section_filter=None, include_unsectioned=False, media_filter=None):
     if product_filter is None:
         product_filter = {}
     if section_filter is None:
         section_filter = {}
-    products_qs = Product.objects.filter(**product_filter).prefetch_related(_option_assignment_prefetch(), _active_media_prefetch()).order_by('sort_order', 'name_ar')
+    products_qs = Product.objects.filter(**product_filter).prefetch_related(_option_assignment_prefetch(), _active_media_prefetch(**(media_filter or {}))).order_by('sort_order', 'name_ar')
     sections = (
         MenuSection.objects.filter(is_active=True, **section_filter)
         .prefetch_related(Prefetch('products', queryset=products_qs))
@@ -305,6 +307,7 @@ def _menu_context(table=None):
     section_products = _section_products_for_ordering(
         product_filter={'is_available': True, 'visible_on_qr': True},
         section_filter={'visible_on_qr': True},
+        media_filter={'display_on_public_menu': True},
     )
     page = get_page_setting('public_menu', 'القائمة العامة', 'Public menu', 'اختر طلبك داخل المكان.', 'Choose your in-space order.')
     default_fulfillment_mode = Order.FulfillmentMode.TABLE if table else Order.FulfillmentMode.INSIDE_SPACE
@@ -671,7 +674,7 @@ def staff_home(request):
 @require_staff_capability('pos')
 def staff_pos(request):
     tables = TableArea.objects.select_related('room').order_by('room__name_ar', 'name_ar')
-    section_products = _section_products_for_ordering(product_filter={'is_available': True, 'visible_on_pos': True, 'orderable_on_pos': True}, include_unsectioned=True)
+    section_products = _section_products_for_ordering(product_filter={'is_available': True, 'visible_on_pos': True, 'orderable_on_pos': True}, include_unsectioned=True, media_filter={'display_on_pos': True})
     products = [product for _section, products in section_products for product in products]
     member_query = request.GET.get('member_q', '').strip()
     member_rows = []
@@ -868,6 +871,7 @@ def _staff_menu_tools_queryset(params):
         product_id=OuterRef('pk'),
         is_active=True,
         media_type__in=[ProductMedia.MediaType.IMAGE, ProductMedia.MediaType.GIF, ProductMedia.MediaType.EXTERNAL_URL],
+        display_on_public_menu=True,
     )
     products = Product.objects.select_related('category', 'prep_station_ref', 'vendor').prefetch_related('menu_sections', 'tags').annotate(
         has_active_image=Exists(active_visual_media)
