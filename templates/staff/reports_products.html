@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}تقرير المنتجات والهامش{% endblock %}
+{% block content %}
+<h2>تقرير المنتجات</h2>
+<p><a href="{% url 'staff_reports_home' %}">العودة للتقارير</a> | <a href="{% url 'staff_product_margin_csv' %}?{{ request.GET.urlencode }}">تصدير CSV</a></p>
+<form method="get" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;margin-bottom:1rem;">
+  <label>من تاريخ <input type="date" name="date_from" value="{{ date_from|date:'Y-m-d' }}"></label>
+  <label>إلى تاريخ <input type="date" name="date_to" value="{{ date_to|date:'Y-m-d' }}"></label>
+  <label>نوع المنتج <select name="product_type"><option value="">الكل</option>{% for value,label in product_types %}<option value="{{ value }}" {% if filters.product_type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+  <label>الفئة <select name="category"><option value="">الكل</option>{% for category in categories %}<option value="{{ category.id }}" {% if filters.category == category.id|stringformat:'s' %}selected{% endif %}>{{ category.name_ar }}</option>{% endfor %}</select></label>
+  <label>القسم <select name="section"><option value="">الكل</option>{% for section in sections %}<option value="{{ section.id }}" {% if filters.section == section.id|stringformat:'s' %}selected{% endif %}>{{ section.name_ar }}</option>{% endfor %}</select></label>
+  <label>محطة التحضير <select name="prep_station"><option value="">الكل</option>{% for station in prep_stations %}<option value="{{ station.id }}" {% if filters.prep_station == station.id|stringformat:'s' %}selected{% endif %}>{{ station.name_ar }}</option>{% endfor %}</select></label>
+  <label><input type="checkbox" name="only_active" value="1" {% if filters.only_active != '0' %}checked{% endif %}> المنتجات الفعالة فقط</label>
+  <label><input type="checkbox" name="only_sold" value="1" {% if filters.only_sold == '1' %}checked{% endif %}> المنتجات المباعة فقط</label>
+  <button type="submit">عرض</button>
+</form>
+<p><strong>تنبيه:</strong> كلفة المعدّلات غير محسوبة في هذه المرحلة، والخصومات على مستوى الطلب معروضة منفصلة ولا توزع بصمت على المنتجات. إجمالي الخصومات: {{ discount_total }} ل.س.</p>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.75rem;">
+  <section><h3>الأكثر مبيعاً</h3><ol>{% for row in cards.best_quantity %}<li>{{ row.product.name_ar }} — {{ row.units_sold }}</li>{% empty %}<li>لا يوجد</li>{% endfor %}</ol></section>
+  <section><h3>الأعلى إيراداً</h3><ol>{% for row in cards.best_revenue %}<li>{{ row.product.name_ar }} — {{ row.gross_sales_syp }} ل.س</li>{% empty %}<li>لا يوجد</li>{% endfor %}</ol></section>
+  <section><h3>أعلى هامش</h3><ol>{% for row in cards.highest_margin %}<li>{{ row.product.name_ar }} — {{ row.estimated_margin_syp }} ل.س</li>{% empty %}<li>لا يوجد</li>{% endfor %}</ol></section>
+  <section><h3>أقل هامش</h3><ol>{% for row in cards.lowest_margin %}<li>{{ row.product.name_ar }} — {{ row.estimated_margin_syp }} ل.س</li>{% empty %}<li>لا يوجد</li>{% endfor %}</ol></section>
+  <section><h3>منتجات بدون كلفة محددة</h3><ol>{% for row in cards.missing_cost %}<li>{{ row.product.name_ar }}</li>{% empty %}<li>لا يوجد</li>{% endfor %}</ol></section>
+</div>
+<h3>تقرير الهامش حسب المنتج</h3>
+<table style="width:100%;border-collapse:collapse;">
+<tr><th>المنتج</th><th>عدد المبيعات</th><th>المبيعات الإجمالية</th><th>الخصومات</th><th>صافي الإيراد</th><th>الكلفة التقديرية</th><th>الهامش التقديري</th><th>نسبة الهامش</th><th>ملغى</th><th>متوسط السعر</th></tr>
+{% for row in rows %}<tr><td>{{ row.product.name_ar }}</td><td>{{ row.units_sold }}</td><td>{{ row.gross_sales_syp }}</td><td>غير موزعة</td><td>{{ row.net_sales_syp }}</td><td>{% if row.missing_cost %}غير محدد{% else %}{{ row.estimated_cost_display }}{% endif %}</td><td>{% if row.estimated_margin_syp == None %}غير محدد{% else %}{{ row.estimated_margin_syp }}{% endif %}</td><td>{% if row.estimated_margin_percent == None %}غير محدد{% else %}{{ row.estimated_margin_percent }}%{% endif %}</td><td>{{ row.cancelled_units }} / {{ row.cancelled_value_syp }}</td><td>{{ row.avg_selling_price }}</td></tr>{% empty %}<tr><td colspan="10">لا توجد بيانات.</td></tr>{% endfor %}
+</table>
+<h3>تقرير القسم/الفئة</h3>
+<table style="width:100%;border-collapse:collapse;">
+<tr><th>القسم/الفئة</th><th>عدد المبيعات</th><th>المبيعات الإجمالية</th><th>الكلفة التقديرية</th><th>الهامش التقديري</th><th>نسبة الهامش</th><th>عدد المنتجات</th></tr>
+{% for row in section_rows %}<tr><td>{{ row.name }}</td><td>{{ row.units_sold }}</td><td>{{ row.gross_sales_syp }}</td><td>{% if row.missing_cost %}غير محدد{% else %}{{ row.estimated_cost_syp }}{% endif %}</td><td>{% if row.estimated_margin_syp == None %}غير محدد{% else %}{{ row.estimated_margin_syp }}{% endif %}</td><td>{% if row.estimated_margin_percent == None %}غير محدد{% else %}{{ row.estimated_margin_percent }}%{% endif %}</td><td>{{ row.product_count }}</td></tr>{% empty %}<tr><td colspan="7">لا توجد بيانات.</td></tr>{% endfor %}
+</table>
+{% endblock %}

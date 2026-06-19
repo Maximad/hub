@@ -136,6 +136,11 @@ class Product(TimeStampedModel, PublicCodeModel):
     available_for_takeaway = models.BooleanField(default=False)
     not_discountable = models.BooleanField(default=False)
     cost_syp = models.PositiveIntegerField(null=True, blank=True)
+    estimated_unit_cost_syp = models.PositiveIntegerField('الكلفة التقديرية', null=True, blank=True)
+    cost_notes = models.TextField('ملاحظات الكلفة', blank=True)
+    cost_updated_at = models.DateTimeField('آخر تحديث للكلفة', null=True, blank=True)
+    cost_updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='updated_product_costs', verbose_name='محدّث الكلفة')
+    track_margin = models.BooleanField('تتبع الهامش', default=True)
     metadata = models.JSONField(default=dict, blank=True)
 
     @property
@@ -330,6 +335,9 @@ class OrderItem(TimeStampedModel):
     selected_options_snapshot = models.JSONField(default=list, blank=True)
     item_note = models.TextField(blank=True)
     line_total_syp_snapshot = models.IntegerField(null=True, blank=True)
+    estimated_unit_cost_syp_snapshot = models.PositiveIntegerField('كلفة الوحدة التقديرية وقت البيع', null=True, blank=True)
+    estimated_line_cost_syp_snapshot = models.PositiveIntegerField('الكلفة التقديرية للسطر وقت البيع', null=True, blank=True)
+    estimated_line_margin_syp_snapshot = models.IntegerField('الهامش التقديري للسطر وقت البيع', null=True, blank=True)
     prep_station = models.ForeignKey('catalog.PrepStation', on_delete=models.SET_NULL, null=True, blank=True, related_name='order_items', verbose_name='محطة التحضير')
     prep_status = models.CharField(max_length=20, choices=PrepStatus.choices, default=PrepStatus.NEW)
     cancellation_reason = models.CharField(max_length=30, choices=CancellationReason.choices, blank=True, verbose_name='سبب الإلغاء')
@@ -354,6 +362,15 @@ class OrderItem(TimeStampedModel):
     def save(self, *args, **kwargs):
         if self.product_id and (not self.prep_station_id or not self.prep_status):
             self.assign_prep_defaults()
+        if self.product_id and self.estimated_unit_cost_syp_snapshot is None:
+            unit_cost = getattr(self.product, 'estimated_unit_cost_syp', None)
+            if unit_cost is not None:
+                self.estimated_unit_cost_syp_snapshot = unit_cost
+        if self.estimated_unit_cost_syp_snapshot is not None and self.estimated_line_cost_syp_snapshot is None:
+            self.estimated_line_cost_syp_snapshot = self.quantity * self.estimated_unit_cost_syp_snapshot
+        if self.estimated_line_cost_syp_snapshot is not None and self.estimated_line_margin_syp_snapshot is None:
+            line_total = self.line_total_syp_snapshot if self.line_total_syp_snapshot is not None else self.quantity * self.unit_price_syp_snapshot
+            self.estimated_line_margin_syp_snapshot = line_total - self.estimated_line_cost_syp_snapshot
         super().save(*args, **kwargs)
 
     def __str__(self):

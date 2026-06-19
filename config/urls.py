@@ -3,7 +3,7 @@ from django.contrib import admin
 from django.views.static import serve
 from django.urls import path, re_path
 from core.views import menu
-from core.views.staff_reports import staff_reports_home, staff_reports_day, staff_reports_day_csv, staff_close_day
+from core.views.staff_reports import staff_reports_home, staff_reports_day, staff_reports_day_csv, staff_product_margin_report, staff_product_margin_csv, staff_close_day
 from core.views.staff_internet import staff_internet, staff_internet_start, staff_internet_session, staff_internet_end, staff_internet_cancel, staff_wifi
 from core.views.staff_members import staff_members, staff_member_new, staff_member_detail, staff_member_subscribe
 from core.views.staff_events import staff_events, staff_event_new, staff_event_detail
@@ -71,6 +71,8 @@ urlpatterns = [
     path('staff/reports/', staff_reports_home, name='staff_reports_home'),
     path('staff/reports/day/', staff_reports_day, name='staff_reports_day'),
     path('staff/reports/day.csv', staff_reports_day_csv, name='staff_reports_day_csv'),
+    path('staff/reports/products/', staff_product_margin_report, name='staff_product_margin_report'),
+    path('staff/reports/products.csv', staff_product_margin_csv, name='staff_product_margin_csv'),
     path('staff/close-day/', staff_close_day, name='staff_close_day'),
     path('staff/members/', staff_members, name='staff_members'),
     path('staff/members/new/', staff_member_new, name='staff_member_new'),

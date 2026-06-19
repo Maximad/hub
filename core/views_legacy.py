@@ -29,6 +29,7 @@ from events.models import Event
 from reservations.models import Reservation
 from vendors.models import Vendor, VendorParticipation
 from core.notifications import create_notification, notify_order_created
+from core.services.margins import item_margin, product_margin_from_values
 
 
 DAMASCUS_TZ = ZoneInfo('Asia/Damascus')
@@ -197,6 +198,7 @@ def _build_day_report(report_date):
         'cash_total': 0, 'manual_transfer_total': 0, 'free_total': 0, 'discount_total': 0, 'discounts_syp': 0,
         'cancelled_count': 0, 'cancelled_value': 0, 'served_or_paid_count': 0, 'unpaid_orders_count': 0, 'partial_orders_count': 0, 'partial_payments_syp': 0, 'non_cash_sales_syp': 0,
         'delivery_order_count': 0, 'delivery_gross_sales': 0, 'delivery_fees_total': 0, 'unpaid_delivery_orders': 0, 'cancelled_delivery_orders': 0, 'takeaway_order_count': 0,
+        'estimated_cost_syp': 0, 'estimated_gross_margin_syp': 0, 'margin_known_sales_syp': 0, 'products_missing_cost_count': 0, 'comp_value_syp': 0,
     }
     for order in orders:
         total, paid, remaining, payment_label = _order_financials(order)
@@ -226,6 +228,15 @@ def _build_day_report(report_date):
         sums['orders_count'] += 1
         sums['gross_sales'] += order.subtotal_syp + order.service_fee_syp + max(order.delivery_fee_syp or 0, 0)
         sums['discounts_syp'] += order.discount_syp
+        sums['comp_value_syp'] += sum(d.amount_syp for d in order.discounts.all() if d.is_active and d.discount_type == OrderDiscount.DiscountType.COMP)
+        for item in order.items.all():
+            im = item_margin(item, allow_current_product_cost=True)
+            if im['estimated_cost_syp'] is None:
+                sums['products_missing_cost_count'] += 1
+            else:
+                sums['estimated_cost_syp'] += im['estimated_cost_syp']
+                sums['estimated_gross_margin_syp'] += im['estimated_margin_syp']
+                sums['margin_known_sales_syp'] += im['revenue_syp']
         sums['net_sales'] += total
         sums['order_total'] += total
         sums['subtotal_total'] += order.subtotal_syp
@@ -254,6 +265,7 @@ def _build_day_report(report_date):
     sums['expected_cash_syp'] = sums['cash_total']
     sums['avg_order_value'] = int(sums['order_total'] / sums['orders_count']) if sums['orders_count'] else 0
     sums['average_delivery_order_value'] = int(sums['delivery_gross_sales'] / sums['delivery_order_count']) if sums['delivery_order_count'] else 0
+    sums['estimated_gross_margin_percent'] = round((sums['estimated_gross_margin_syp'] / sums['margin_known_sales_syp']) * 100, 2) if sums['margin_known_sales_syp'] else None
     return rows, sums
 
 def dashboard(request):
@@ -1358,6 +1370,110 @@ def staff_cashier_discount(request, public_code):
     return redirect('staff_cashier_order', public_code=order.public_code)
 
 
+
+def _parse_range_dates(request):
+    today = datetime.now(DAMASCUS_TZ).date()
+    date_from = _parse_report_date(request.GET.get('date_from', '').strip() or today.isoformat())
+    date_to = _parse_report_date(request.GET.get('date_to', '').strip() or date_from.isoformat())
+    if date_to < date_from:
+        date_from, date_to = date_to, date_from
+    return date_from, date_to
+
+
+def _product_margin_context(request):
+    date_from, date_to = _parse_range_dates(request)
+    start_utc, _ = _day_range_utc(date_from)
+    _, end_utc = _day_range_utc(date_to)
+    product_type = request.GET.get('product_type', '').strip()
+    category_id = request.GET.get('category', '').strip()
+    section_id = request.GET.get('section', '').strip()
+    prep_station_id = request.GET.get('prep_station', '').strip()
+    only_active = request.GET.get('only_active', '1') == '1'
+    only_sold = request.GET.get('only_sold', '') == '1'
+
+    products_qs = Product.objects.select_related('category', 'prep_station_ref').prefetch_related('menu_sections').order_by('category__name_ar', 'name_ar')
+    if only_active:
+        products_qs = products_qs.filter(is_available=True)
+    if product_type:
+        products_qs = products_qs.filter(product_type=product_type)
+    if category_id.isdigit():
+        products_qs = products_qs.filter(category_id=int(category_id))
+    if section_id.isdigit():
+        products_qs = products_qs.filter(menu_sections__id=int(section_id))
+    if prep_station_id.isdigit():
+        products_qs = products_qs.filter(prep_station_ref_id=int(prep_station_id))
+
+    items = (OrderItem.objects.select_related('product', 'product__category', 'product__prep_station_ref')
+        .prefetch_related('product__menu_sections')
+        .filter(order__created_at__gte=start_utc, order__created_at__lt=end_utc)
+        .exclude(order__status=Order.Status.CANCELLED))
+    if product_type:
+        items = items.filter(product__product_type=product_type)
+    if category_id.isdigit():
+        items = items.filter(product__category_id=int(category_id))
+    if section_id.isdigit():
+        items = items.filter(product__menu_sections__id=int(section_id))
+    if prep_station_id.isdigit():
+        items = items.filter(product__prep_station_ref_id=int(prep_station_id))
+
+    stats = {}
+    for item in items:
+        product = item.product
+        row = stats.setdefault(product.id, {'product': product, 'units_sold': 0, 'gross_sales_syp': 0, 'estimated_cost_syp': 0, 'known_cost': True})
+        row['units_sold'] += item.quantity
+        margin = item_margin(item, allow_current_product_cost=True)
+        row['gross_sales_syp'] += margin['revenue_syp']
+        if margin['estimated_cost_syp'] is None:
+            row['known_cost'] = False
+        else:
+            row['estimated_cost_syp'] += margin['estimated_cost_syp']
+    discount_total = sum(o.discount_syp for o in Order.objects.filter(created_at__gte=start_utc, created_at__lt=end_utc).prefetch_related('discounts', 'items'))
+    cancelled_items = OrderItem.objects.filter(order__created_at__gte=start_utc, order__created_at__lt=end_utc, order__status=Order.Status.CANCELLED)
+    cancelled_by_product = {}
+    for item in cancelled_items:
+        data = cancelled_by_product.setdefault(item.product_id, {'units': 0, 'value': 0})
+        data['units'] += item.quantity
+        data['value'] += item.line_total_syp_snapshot if item.line_total_syp_snapshot is not None else item.quantity * item.unit_price_syp_snapshot
+
+    rows = []
+    for product in products_qs.distinct():
+        stat = stats.get(product.id, {'product': product, 'units_sold': 0, 'gross_sales_syp': 0, 'estimated_cost_syp': 0, 'known_cost': product.estimated_unit_cost_syp is not None})
+        if only_sold and stat['units_sold'] <= 0:
+            continue
+        est_cost = stat['estimated_cost_syp'] if stat['known_cost'] else None
+        est_margin, est_percent = product_margin_from_values(stat['gross_sales_syp'], est_cost)
+        cancelled = cancelled_by_product.get(product.id, {'units': 0, 'value': 0})
+        rows.append({**stat, 'net_sales_syp': stat['gross_sales_syp'], 'estimated_cost_display': est_cost, 'estimated_margin_syp': est_margin, 'estimated_margin_percent': est_percent, 'missing_cost': not stat['known_cost'], 'cancelled_units': cancelled['units'], 'cancelled_value_syp': cancelled['value'], 'avg_selling_price': int(stat['gross_sales_syp'] / stat['units_sold']) if stat['units_sold'] else 0})
+
+    section_rows = {}
+    for row in rows:
+        sections = list(row['product'].menu_sections.all()) or [row['product'].category]
+        for section in sections:
+            key = f'{section.__class__.__name__}:{section.id}'
+            data = section_rows.setdefault(key, {'name': getattr(section, 'name_ar', str(section)), 'units_sold': 0, 'gross_sales_syp': 0, 'estimated_cost_syp': 0, 'known_cost': True, 'product_count': 0})
+            data['units_sold'] += row['units_sold']; data['gross_sales_syp'] += row['gross_sales_syp']; data['product_count'] += 1
+            if row['missing_cost']:
+                data['known_cost'] = False
+            else:
+                data['estimated_cost_syp'] += row['estimated_cost_display'] or 0
+    for data in section_rows.values():
+        cost = data['estimated_cost_syp'] if data['known_cost'] else None
+        data['estimated_margin_syp'], data['estimated_margin_percent'] = product_margin_from_values(data['gross_sales_syp'], cost)
+        data['missing_cost'] = not data['known_cost']
+
+    sold_rows = [r for r in rows if r['units_sold'] > 0]
+    cards = {
+        'best_quantity': sorted(sold_rows, key=lambda r: r['units_sold'], reverse=True)[:10],
+        'best_revenue': sorted(sold_rows, key=lambda r: r['gross_sales_syp'], reverse=True)[:10],
+        'highest_margin': sorted([r for r in sold_rows if not r['missing_cost']], key=lambda r: r['estimated_margin_syp'], reverse=True)[:10],
+        'lowest_margin': sorted([r for r in sold_rows if not r['missing_cost']], key=lambda r: r['estimated_margin_syp'])[:10],
+        'missing_cost': [r for r in sold_rows if r['missing_cost']][:25],
+    }
+    categories = Category.objects.order_by('name_ar')
+    sections = MenuSection.objects.order_by('name_ar')
+    prep_stations = PrepStation.objects.order_by('name_ar')
+    return {'date_from': date_from, 'date_to': date_to, 'rows': rows, 'section_rows': sorted(section_rows.values(), key=lambda r: r['gross_sales_syp'], reverse=True), 'cards': cards, 'discount_total': discount_total, 'categories': categories, 'sections': sections, 'prep_stations': prep_stations, 'product_types': Product.ProductType.choices, 'filters': request.GET}
+
 @require_staff_capability('reports')
 def staff_reports_home(request):
     today = datetime.now(DAMASCUS_TZ).date()
@@ -1390,6 +1506,24 @@ def staff_reports_day_csv(request):
         response.write(f'{order.display_number},{order.created_at.isoformat()},{order.get_fulfillment_label()},{order.get_delivery_status_display()},{order.delivery_fee_syp},"{order.delivery_phone}","{order.delivery_address}",{table_name},{order.get_status_display()},{order.subtotal_syp},{row["total"]},{row["paid"]},{row["remaining"]},"{methods_txt}",{session_cols}\n')
     return response
 
+
+
+@require_staff_capability('reports')
+def staff_product_margin_report(request):
+    return render(request, 'staff/reports_products.html', _product_margin_context(request))
+
+
+@require_staff_capability('reports')
+def staff_product_margin_csv(request):
+    context = _product_margin_context(request)
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="product-margins-{context["date_from"].isoformat()}-{context["date_to"].isoformat()}.csv"'
+    response.write('product_id,product_name,product_type,section,units_sold,gross_sales,net_sales,estimated_cost,estimated_margin,margin_percent,missing_cost\n')
+    for row in context['rows']:
+        product = row['product']
+        section = product.menu_sections.first() or product.category
+        response.write(f'{product.id},"{product.name_ar}",{product.product_type},"{getattr(section, "name_ar", "")}",{row["units_sold"]},{row["gross_sales_syp"]},{row["net_sales_syp"]},{row["estimated_cost_display"] if row["estimated_cost_display"] is not None else ""},{row["estimated_margin_syp"] if row["estimated_margin_syp"] is not None else ""},{row["estimated_margin_percent"] if row["estimated_margin_percent"] is not None else ""},{"yes" if row["missing_cost"] else "no"}\n')
+    return response
 
 @require_staff_capability('reports')
 def staff_close_day(request):

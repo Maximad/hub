@@ -2,7 +2,7 @@
 {% block title %}تقارير التشغيل{% endblock %}
 {% block content %}
 <h2>تقارير التشغيل اليومية</h2>
-<p><a href="{% url 'staff_home' %}">العودة لصفحة الفريق</a> | <a href="{% url 'staff_reports_day' %}?date={{ report_date|date:'Y-m-d' }}">تفاصيل اليوم</a></p>
+<p><a href="{% url 'staff_home' %}">العودة لصفحة الفريق</a> | <a href="{% url 'staff_reports_day' %}?date={{ report_date|date:'Y-m-d' }}">تفاصيل اليوم</a> | <a href="{% url 'staff_product_margin_report' %}">تقرير المنتجات والهامش</a></p>
 <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:0.75rem;">
   <div style="border:1px solid #ddd;border-radius:10px;padding:.75rem;"><strong>مبيعات اليوم</strong><div>{{ sums.order_total }} ل.س</div></div>
   <div style="border:1px solid #ddd;border-radius:10px;padding:.75rem;"><strong>عدد الطلبات اليوم</strong><div>{{ sums.orders_count }}</div></div>
@@ -11,5 +11,7 @@
   <div style="border:1px solid #ddd;border-radius:10px;padding:.75rem;"><strong>الطلبات الملغاة</strong><div>{{ sums.cancelled_count }}</div></div>
   <div style="border:1px solid #ddd;border-radius:10px;padding:.75rem;"><strong>متوسط قيمة الطلب</strong><div>{{ sums.avg_order_value }} ل.س</div></div>
   <div style="border:1px solid #ddd;border-radius:10px;padding:.75rem;"><strong>طلبات التوصيل</strong><div>{{ sums.delivery_order_count }} / {{ sums.delivery_fees_total }} ل.س</div></div>
+  <div style="border:1px solid #ddd;border-radius:10px;padding:.75rem;"><strong>الهامش التقديري</strong><div>{{ sums.estimated_gross_margin_syp }} ل.س</div></div>
+  <div style="border:1px solid #ddd;border-radius:10px;padding:.75rem;"><strong>منتجات بدون كلفة</strong><div>{{ sums.products_missing_cost_count }}</div></div>
 </div>
 {% endblock %}

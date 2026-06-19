@@ -15,6 +15,11 @@
   <li>إجمالي المبيعات قبل الخصم: {{ sums.gross_sales }} ل.س</li>
   <li>الخصومات: {{ sums.discounts_syp }} ل.س</li>
   <li>صافي المبيعات: {{ sums.net_sales }} ل.س</li>
+  <li>الكلفة التقديرية: {{ sums.estimated_cost_syp }} ل.س</li>
+  <li>الهامش التقديري: {{ sums.estimated_gross_margin_syp }} ل.س</li>
+  <li>نسبة الهامش: {% if sums.estimated_gross_margin_percent == None %}غير محدد{% else %}{{ sums.estimated_gross_margin_percent }}%{% endif %}</li>
+  <li>منتجات بدون كلفة: {{ sums.products_missing_cost_count }}</li>
+  <li>قيمة الضيافة/المجاني: {{ sums.comp_value_syp }} ل.س</li>
   <li>إجمالي المدفوع: {{ sums.paid_total }} ل.س</li>
   <li>إجمالي المتبقي: {{ sums.remaining_total }} ل.س</li>
   <li>النقدي: {{ sums.cash_total }} ل.س</li>
