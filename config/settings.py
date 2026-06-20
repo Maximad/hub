@@ -104,6 +104,9 @@ MEDIA_ROOT = Path(os.environ.get('DJANGO_MEDIA_ROOT', BASE_DIR / 'media'))
 MEDIA_ASSET_MAX_UPLOAD_SIZE = int(os.environ.get('MEDIA_ASSET_MAX_UPLOAD_SIZE', 10 * 1024 * 1024))
 MEDIA_ASSET_ALLOWED_EXTENSIONS = {ext.strip().lower() for ext in os.environ.get('MEDIA_ASSET_ALLOWED_EXTENSIONS', 'jpg,jpeg,png,webp,gif,pdf').split(',') if ext.strip()}
 STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
     'staticfiles': {
         'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
     },
