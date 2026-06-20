@@ -5,45 +5,51 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 from accounts.permissions import can_access_staff_home
 from core.models import NotificationPreference
-from core.notifications import link_for_event, visible_recipients_for
+from core.notifications import group_notification_recipients_for_user, mark_grouped_notification_read
 
 
 def _deny(user):
     return not (user.is_authenticated and can_access_staff_home(user))
 
 
-def _serialize(recipient):
-    event = recipient.notification_event
-    order_number = event.order.display_number if event.order_id else ''
-    station = event.target_station.name_ar if event.target_station_id else ''
-    return {'id': recipient.id, 'title': event.title_ar, 'message': event.message_ar, 'order_number': order_number, 'station': station, 'created_at': event.created_at.strftime('%Y-%m-%d %H:%M'), 'link': link_for_event(event)}
+def _serialize(card):
+    return {
+        'id': card['group_key'],
+        'title': card['title'],
+        'message': card['message'],
+        'order_number': card['order_number'],
+        'station': card['station'],
+        'created_at': card['created_at_display'],
+        'link': card['link'],
+        'is_read': card['is_read'],
+    }
 
 
 @login_required
 def staff_notifications(request):
     if _deny(request.user): raise Http404()
-    qs = visible_recipients_for(request.user).select_related('notification_event','notification_event__order','notification_event__target_station').filter(notification_event__is_active=True).order_by('-created_at')[:50]
-    return render(request, 'staff/notifications.html', {'notifications': qs})
+    notifications = group_notification_recipients_for_user(request.user, limit=50)
+    return render(request, 'staff/notifications.html', {'notifications': notifications})
 
 
 @login_required
 def staff_notifications_poll(request):
     if _deny(request.user): raise Http404()
-    qs = visible_recipients_for(request.user).select_related('notification_event','notification_event__order','notification_event__target_station').filter(notification_event__is_active=True, is_read=False)
-    latest = list(qs.order_by('-created_at')[:10])
+    latest = group_notification_recipients_for_user(request.user, unread_only=True, limit=10)
+    latest_ids = [card['group_key'] for card in latest]
+    known_ids = {value for value in (request.GET.get('known') or '').split(',') if value}
     after = request.GET.get('after') or ''
-    has_new = any(str(r.id) != after for r in latest[:1]) if latest else False
-    return JsonResponse({'unread_count': qs.count(), 'latest': [_serialize(r) for r in latest], 'has_new': has_new, 'server_timestamp': timezone.now().isoformat(), 'html': render(request, 'staff/_notifications_list.html', {'notifications': latest}).content.decode()})
+    has_new = bool(latest_ids and (set(latest_ids) - known_ids) and latest_ids[0] != after)
+    return JsonResponse({'unread_count': len(group_notification_recipients_for_user(request.user, unread_only=True, limit=500, fetch_limit=500)), 'latest': [_serialize(card) for card in latest], 'latest_ids': latest_ids, 'has_new': has_new, 'server_timestamp': timezone.now().isoformat(), 'html': render(request, 'staff/_notifications_list.html', {'notifications': latest}).content.decode()})
 
 
 @login_required
 @require_POST
 def staff_notifications_mark_read(request):
     if _deny(request.user): raise Http404()
-    qs = visible_recipients_for(request.user).filter(is_read=False)
-    nid = request.POST.get('id')
-    if nid and nid.isdigit(): qs = qs.filter(pk=int(nid))
-    updated = qs.update(is_read=True, read_at=timezone.now(), delivered_at=timezone.now())
+    nid = request.POST.get('id') or ''
+    recipient_id = int(nid) if nid.isdigit() else None
+    updated = mark_grouped_notification_read(request.user, group_key=nid if not recipient_id else None, recipient_id=recipient_id)
     return JsonResponse({'ok': True, 'updated': updated})
 
 
