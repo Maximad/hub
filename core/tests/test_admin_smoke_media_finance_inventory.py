@@ -54,7 +54,7 @@ class MediaSafetyTests(TestCase):
 
     def test_missing_file_does_not_crash_display_helpers(self):
         asset = MediaAsset.objects.create(title_ar='مفقود', file='products/missing.jpg')
-        self.assertIn('/media/products/missing.jpg', asset.url)
+        self.assertEqual(asset.url, '')
 
     def test_product_can_have_media_assigned(self):
         asset = MediaAsset.objects.create(title_ar='رابط', media_type=MediaAsset.MediaType.EXTERNAL_URL, external_url='https://example.com/image.jpg')

@@ -1272,25 +1272,41 @@ class SystemSetting(TimeStampedModel):
     require_phone_for_guest_session = models.BooleanField(default=False, verbose_name='طلب هاتف الزائر عند بدء الجلسة')
 
 
+    @staticmethod
+    def _safe_media_url(media):
+        if not media:
+            return ''
+        try:
+            return media.safe_url or ''
+        except Exception:
+            return ''
+
+    def _branding_media_url(self, field_name, fallback=''):
+        try:
+            media = getattr(self, field_name, None)
+        except Exception:
+            media = None
+        return self._safe_media_url(media) or fallback or ''
+
     @property
     def brand_logo_url(self):
-        return self.brand_logo_media.resolved_url if self.brand_logo_media_id and self.brand_logo_media else ''
+        return self._branding_media_url('brand_logo_media')
 
     @property
     def brand_icon_url(self):
-        return self.brand_icon_media.resolved_url if self.brand_icon_media_id and self.brand_icon_media else ''
+        return self._branding_media_url('brand_icon_media')
 
     @property
     def public_menu_banner_url(self):
-        return self.public_menu_banner_media.resolved_url if self.public_menu_banner_media_id and self.public_menu_banner_media else ''
+        return self._branding_media_url('public_menu_banner_media')
 
     @property
     def pos_logo_url(self):
-        return self.pos_logo_media.resolved_url if self.pos_logo_media_id and self.pos_logo_media else self.brand_logo_url
+        return self._branding_media_url('pos_logo_media', fallback=self.brand_logo_url)
 
     @property
     def receipt_logo_url(self):
-        return self.receipt_logo_media.resolved_url if self.receipt_logo_media_id and self.receipt_logo_media else self.brand_logo_url
+        return self._branding_media_url('receipt_logo_media', fallback=self.brand_logo_url)
 
     @property
     def image_ratio_css(self):
