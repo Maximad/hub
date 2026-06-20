@@ -1103,6 +1103,25 @@ class SystemSetting(TimeStampedModel):
         SUMMARY_SIDEBAR = 'summary_sidebar', 'ملخص جانبي'
         LARGE_PAYMENT = 'large_payment', 'دفع كبير'
 
+    class CardStyle(models.TextChoices):
+        SOFT = 'soft', 'ناعم'
+        FLAT = 'flat', 'مسطح'
+        BORDERED = 'bordered', 'بحدود'
+
+    class PublicMenuLayout(models.TextChoices):
+        COMFORTABLE = 'comfortable', 'مريح'
+        COMPACT = 'compact', 'مضغوط'
+        IMAGE_GRID = 'image_grid', 'شبكة صور'
+
+    class MobileProductDensity(models.TextChoices):
+        COMFORTABLE = 'comfortable', 'مريح'
+        COMPACT = 'compact', 'مضغوط'
+
+    class ProductImageRatio(models.TextChoices):
+        SQUARE = '1_1', '1:1'
+        FOUR_THREE = '4_3', '4:3'
+        THREE_TWO = '3_2', '3:2'
+
     class InternetBillingMode(models.TextChoices):
         PREPAID = 'prepaid', 'مسبق الدفع'
         OPEN_METERED = 'open_metered', 'جلسة مفتوحة حسب الوقت'
@@ -1120,6 +1139,13 @@ class SystemSetting(TimeStampedModel):
     public_brand_title_en = models.CharField(max_length=160, default='Masharib', verbose_name='اسم العلامة بالإنجليزية')
     header_subtitle_ar = models.CharField(max_length=220, default='Hub Sueda • تشغيل يومي مرن', verbose_name='وصف الهيدر بالعربية')
     header_subtitle_en = models.CharField(max_length=220, default='Hub Sueda • flexible daily operations', verbose_name='وصف الهيدر بالإنجليزية')
+    brand_logo_media = models.ForeignKey('catalog.MediaAsset', on_delete=models.SET_NULL, null=True, blank=True, related_name='brand_logo_settings', verbose_name='الشعار')
+    brand_icon_media = models.ForeignKey('catalog.MediaAsset', on_delete=models.SET_NULL, null=True, blank=True, related_name='brand_icon_settings', verbose_name='الأيقونة')
+    public_menu_banner_media = models.ForeignKey('catalog.MediaAsset', on_delete=models.SET_NULL, null=True, blank=True, related_name='public_menu_banner_settings', verbose_name='بانر المنيو')
+    pos_logo_media = models.ForeignKey('catalog.MediaAsset', on_delete=models.SET_NULL, null=True, blank=True, related_name='pos_logo_settings', verbose_name='شعار نقطة البيع')
+    receipt_logo_media = models.ForeignKey('catalog.MediaAsset', on_delete=models.SET_NULL, null=True, blank=True, related_name='receipt_logo_settings', verbose_name='شعار الإيصال')
+    public_menu_title = models.CharField(max_length=160, blank=True, verbose_name='عنوان المنيو')
+    public_menu_subtitle = models.CharField(max_length=240, blank=True, verbose_name='وصف المنيو')
     default_language = models.CharField(max_length=5, choices=Language.choices, default=Language.ARABIC, verbose_name='اللغة الافتراضية')
     delivery_enabled = models.BooleanField(default=False, verbose_name='تفعيل التوصيل')
     takeaway_enabled = models.BooleanField(default=False, verbose_name='تفعيل السفري')
@@ -1147,6 +1173,7 @@ class SystemSetting(TimeStampedModel):
     primary_color = models.CharField(max_length=20, default='#0f5f57', validators=[validate_hex_color], verbose_name='اللون الأساسي')
     header_color = models.CharField(max_length=20, default='#0f5f57', validators=[validate_hex_color], verbose_name='لون الهيدر')
     background_color = models.CharField(max_length=20, default='#f6f1e8', validators=[validate_hex_color], verbose_name='لون خلفية الصفحة')
+    surface_color = models.CharField(max_length=20, default='#fffaf1', validators=[validate_hex_color], verbose_name='لون سطح البطاقات')
     card_background_color = models.CharField(max_length=20, default='#fffaf1', validators=[validate_hex_color], verbose_name='لون خلفية البطاقات')
     text_color = models.CharField(max_length=20, default='#262626', validators=[validate_hex_color], verbose_name='لون النص')
     muted_text_color = models.CharField(max_length=20, default='#6b6b6b', validators=[validate_hex_color], verbose_name='لون النص الثانوي')
@@ -1161,12 +1188,19 @@ class SystemSetting(TimeStampedModel):
     button_padding_scale = models.CharField(max_length=20, choices=ButtonPaddingScale.choices, default=ButtonPaddingScale.NORMAL, verbose_name='حجم حشوة الأزرار')
     input_size = models.CharField(max_length=20, choices=InputSize.choices, default=InputSize.NORMAL, verbose_name='حجم حقول الإدخال')
     border_radius_px = models.PositiveIntegerField(default=18, validators=[MinValueValidator(0), MaxValueValidator(32)], verbose_name='استدارة الزوايا')
+    border_radius = models.PositiveIntegerField(default=18, validators=[MinValueValidator(0), MaxValueValidator(32)], verbose_name='استدارة الزوايا المختصرة')
+    card_style = models.CharField(max_length=20, choices=CardStyle.choices, default=CardStyle.SOFT, verbose_name='نمط البطاقات')
     card_shadow_level = models.CharField(max_length=20, choices=CardShadowLevel.choices, default=CardShadowLevel.SOFT, verbose_name='ظل البطاقات')
     page_max_width_px = models.PositiveIntegerField(default=1200, validators=[MinValueValidator(360), MaxValueValidator(1600)], verbose_name='أقصى عرض للصفحة')
     ui_density = models.CharField(max_length=20, choices=UIDensity.choices, default=UIDensity.COMFORTABLE, verbose_name='كثافة الواجهة')
     custom_font_name = models.CharField(max_length=120, blank=True, verbose_name='اسم الخط المخصص')
     custom_font_file = models.FileField(upload_to='system/fonts/', blank=True, validators=[validate_font_upload], verbose_name='ملف الخط المخصص')
 
+    public_menu_layout = models.CharField(max_length=20, choices=PublicMenuLayout.choices, default=PublicMenuLayout.COMFORTABLE, verbose_name='تخطيط المنيو العام')
+    mobile_product_density = models.CharField(max_length=20, choices=MobileProductDensity.choices, default=MobileProductDensity.COMPACT, verbose_name='كثافة العرض على الموبايل')
+    product_image_ratio = models.CharField(max_length=10, choices=ProductImageRatio.choices, default=ProductImageRatio.FOUR_THREE, verbose_name='نسبة صور المنتجات')
+    show_product_descriptions_mobile = models.BooleanField(default=False, verbose_name='إظهار وصف المنتج على الموبايل')
+    show_banner_on_public_menu = models.BooleanField(default=True, verbose_name='إظهار بانر المنيو')
     menu_layout_preset = models.CharField(max_length=30, choices=MenuLayoutPreset.choices, default=MenuLayoutPreset.DEFAULT_MASHARIB, verbose_name='نمط تخطيط المنيو')
     menu_mobile_layout = models.CharField(max_length=30, choices=MenuMobileLayout.choices, default=MenuMobileLayout.ONE_COLUMN_CARDS, verbose_name='تخطيط الجوال للمنيو')
     menu_tablet_columns = models.PositiveSmallIntegerField(default=2, choices=[(1, '1'), (2, '2'), (3, '3')], verbose_name='أعمدة المنيو على التابلت')
@@ -1237,6 +1271,31 @@ class SystemSetting(TimeStampedModel):
     internet_service_product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True, related_name='internet_setting_profiles', verbose_name='منتج الإنترنت الافتراضي')
     require_phone_for_guest_session = models.BooleanField(default=False, verbose_name='طلب هاتف الزائر عند بدء الجلسة')
 
+
+    @property
+    def brand_logo_url(self):
+        return self.brand_logo_media.resolved_url if self.brand_logo_media_id and self.brand_logo_media else ''
+
+    @property
+    def brand_icon_url(self):
+        return self.brand_icon_media.resolved_url if self.brand_icon_media_id and self.brand_icon_media else ''
+
+    @property
+    def public_menu_banner_url(self):
+        return self.public_menu_banner_media.resolved_url if self.public_menu_banner_media_id and self.public_menu_banner_media else ''
+
+    @property
+    def pos_logo_url(self):
+        return self.pos_logo_media.resolved_url if self.pos_logo_media_id and self.pos_logo_media else self.brand_logo_url
+
+    @property
+    def receipt_logo_url(self):
+        return self.receipt_logo_media.resolved_url if self.receipt_logo_media_id and self.receipt_logo_media else self.brand_logo_url
+
+    @property
+    def image_ratio_css(self):
+        return {'1_1': '1 / 1', '4_3': '4 / 3', '3_2': '3 / 2'}.get(self.product_image_ratio, '4 / 3')
+
     @property
     def effective_delivery_enabled(self):
         return self.delivery_enabled or self.enable_delivery
@@ -1264,6 +1323,8 @@ class SystemSetting(TimeStampedModel):
         if self.default_fulfillment_mode == self.DefaultFulfillmentMode.TAKEAWAY and not self.effective_takeaway_enabled:
             self.default_fulfillment_mode = self.DefaultFulfillmentMode.INSIDE_SPACE
         self.fixed_delivery_fee_syp = max(self.fixed_delivery_fee_syp or 0, 0)
+        self.card_background_color = self.surface_color or self.card_background_color
+        self.border_radius_px = self.border_radius if self.border_radius is not None else self.border_radius_px
         self.minimum_delivery_order_syp = max(self.minimum_delivery_order_syp or 0, 0)
         if not self.pk and SystemSetting.objects.exists():
             self.pk = SystemSetting.objects.order_by('-updated_at', '-pk').first().pk

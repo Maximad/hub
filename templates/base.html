@@ -16,8 +16,8 @@
       --hub-button:{{ system_settings.button_color }};
       --hub-accent:{{ system_settings.accent_color }};
       --hub-bg:{{ system_settings.background_color }};
-      --hub-card:{{ system_settings.card_background_color }};
-      --hub-surface:{{ system_settings.card_background_color }};
+      --hub-card:{{ system_settings.surface_color|default:system_settings.card_background_color }};
+      --hub-surface:{{ system_settings.surface_color|default:system_settings.card_background_color }};
       --hub-text:{{ system_settings.text_color }};
       --hub-muted:{{ system_settings.muted_text_color }};
       --hub-border:{{ system_settings.border_color }};
@@ -26,6 +26,8 @@
       --hub-small-font-size:{{ system_settings.small_font_size_px }}px;
       --hub-button-font-size:{{ system_settings.button_font_size_px }}px;
       --hub-radius:{{ system_settings.border_radius_px }}px;
+      --hub-card-radius:{{ system_settings.border_radius_px }}px;
+      --hub-image-ratio:{{ system_settings.image_ratio_css|default:'4 / 3' }};
       --hub-page-max-width:{{ system_settings.page_max_width_px }}px;
       --hub-card-shadow-level:{{ system_settings.card_shadow_level }};
       {% if system_settings.button_padding_scale == 'compact' %}--hub-button-padding-y:.4rem;--hub-button-padding-x:.7rem;{% elif system_settings.button_padding_scale == 'large' %}--hub-button-padding-y:.75rem;--hub-button-padding-x:1.15rem;{% else %}--hub-button-padding-y:.55rem;--hub-button-padding-x:.9rem;{% endif %}
@@ -41,7 +43,7 @@
 <body class="hub-page{% if system_settings %} density-{{ system_settings.ui_density }} button-scale-{{ system_settings.button_padding_scale }} input-size-{{ system_settings.input_size }} shadow-{{ system_settings.card_shadow_level }}{% endif %}">
   <header class="hub-header">
     <div class="hub-container">
-      <h1 class="hub-title">{% if system_settings %}{{ system_settings.system_title }}{% else %}نظام مشاريب{% endif %}</h1>
+      {% if system_settings.brand_icon_url %}<img class="hub-header__icon" src="{{ system_settings.brand_icon_url }}" alt="">{% endif %}<h1 class="hub-title">{% if system_settings %}{{ system_settings.system_title }}{% else %}نظام مشاريب{% endif %}</h1>
       <div class="hub-subtitle">{% if system_settings %}{{ system_settings.header_subtitle }}{% else %}Hub Sueda • تشغيل يومي مرن{% endif %}</div>
     </div>
   </header>

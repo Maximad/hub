@@ -5,7 +5,7 @@
 <div class="staff-pos pos-layout-{{ system_settings.pos_layout_preset|default:'fast_touch' }} pos-cart-{{ system_settings.pos_cart_position|default:'side' }} {{ system_settings.pos_mobile_layout_class|default:'layout-grid-2' }} {{ system_settings.pos_tablet_layout_class|default:'layout-tablet-3' }} {{ system_settings.pos_desktop_layout_class|default:'layout-grid-4' }}" dir="rtl">
   <header class="hub-card staff-pos__header">
     <div>
-      <p class="menu-public__brand">Staff POS / نقطة البيع</p>
+      {% if system_settings.pos_logo_url %}<img class="staff-pos__logo" src="{{ system_settings.pos_logo_url }}" alt="POS">{% endif %}<p class="menu-public__brand">Staff POS / نقطة البيع</p>
       <h2 class="hub-section-title">{{ page_setting.title|default:"إدخال طلب سريع باللمس" }}</h2>
       {% if page_setting.subtitle %}<p>{{ page_setting.subtitle }}</p>{% else %}<p>اختر الطاولة أو طلب عام داخل المكان، اضغط المنتجات بسرعة، ثم أرسل الطلب إلى لوحة الطلبات والكاشير.</p>{% endif %}
     </div>

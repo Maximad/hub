@@ -33,6 +33,8 @@ from .models import (
 class ProductMediaInline(admin.TabularInline):
     model = ProductMedia
     extra = 1
+    verbose_name = 'ربط صورة من مكتبة الوسائط'
+    verbose_name_plural = 'وسائط المنتج — ارفع الصورة في مكتبة الوسائط ثم اربطها بالمنتج هنا.'
     fields = ('media_asset', 'media_type', 'url', 'alt_text_ar', 'is_primary', 'is_active', 'display_on_public_menu', 'display_on_pos', 'sort_order', 'media_preview')
     readonly_fields = ('media_preview',)
 
@@ -147,7 +149,7 @@ class SystemSettingAdmin(admin.ModelAdmin):
         ('الهوية العامة', {
             'fields': (
                 'system_title_ar', 'system_title_en', 'public_brand_title_ar', 'public_brand_title_en',
-                'header_subtitle_ar', 'header_subtitle_en', 'default_language', 'custom_font_name', 'custom_font_file',
+                'header_subtitle_ar', 'header_subtitle_en', 'public_menu_title', 'public_menu_subtitle', 'default_language', 'brand_logo_media', 'brand_icon_media', 'public_menu_banner_media', 'pos_logo_media', 'receipt_logo_media', 'custom_font_name', 'custom_font_file',
             ),
             'description': 'إعدادات الهوية التي تظهر في واجهات مشاريب العامة وواجهات الفريق.',
         }),
@@ -165,22 +167,22 @@ class SystemSettingAdmin(admin.ModelAdmin):
         }),
         ('الألوان', {
             'fields': (
-                'primary_color', 'header_color', 'background_color', 'card_background_color',
-                'text_color', 'muted_text_color', 'border_color', 'button_color', 'accent_color',
+                'primary_color', 'header_color', 'accent_color', 'background_color', 'surface_color', 'card_background_color',
+                'text_color', 'muted_text_color', 'border_color', 'button_color',
             ),
             'description': 'استخدم ألوان HEX آمنة مثل #0f5f57. لا حاجة لمعرفة CSS.',
         }),
         ('الخطوط والأحجام', {
             'fields': (
                 'base_font_size_px', 'heading_font_size_px', 'small_font_size_px', 'button_font_size_px',
-                'button_padding_scale', 'input_size', 'border_radius_px', 'card_shadow_level',
+                'button_padding_scale', 'input_size', 'border_radius_px', 'border_radius', 'card_style', 'card_shadow_level',
                 'page_max_width_px', 'ui_density',
             ),
             'description': 'القيم محددة بنطاقات آمنة حتى لا تنكسر الواجهة على الجوال أو التابلت.',
         }),
         ('تخطيط المنيو', {
             'fields': (
-                'menu_layout_preset', 'menu_mobile_layout', 'menu_tablet_columns', 'menu_desktop_columns',
+                'public_menu_layout', 'mobile_product_density', 'product_image_ratio', 'show_product_descriptions_mobile', 'show_banner_on_public_menu', 'menu_layout_preset', 'menu_mobile_layout', 'menu_tablet_columns', 'menu_desktop_columns',
                 'product_card_style', 'sticky_cart_style', 'cart_review_position',
             ),
             'description': 'تحكم بطريقة عرض المنيو العام دون تغيير حقول إرسال الطلب.',
@@ -206,10 +208,21 @@ class SystemSettingAdmin(admin.ModelAdmin):
                 'show_section_chips', 'show_product_images', 'show_product_descriptions', 'show_product_prices',
                 'show_product_badges', 'show_modifier_summary', 'collapse_modifiers_by_default', 'show_item_notes',
                 'show_customer_name_field', 'show_customer_phone_field', 'show_general_note_field', 'show_sticky_cart',
-                'pos_show_product_images', 'pos_show_prices', 'pos_show_section_chips', 'pos_enable_search_bar',
+                'pos_show_product_images', 'pos_show_prices', 'pos_show_section_chips', 'pos_enable_search_bar', 'branding_preview',
             ),
         }),
     )
+    autocomplete_fields = ('brand_logo_media', 'brand_icon_media', 'public_menu_banner_media', 'pos_logo_media', 'receipt_logo_media', 'internet_service_product', 'default_workspace_product')
+    readonly_fields = ('branding_preview',)
+
+    def branding_preview(self, obj):
+        logo = obj.brand_logo_url if obj else ''
+        banner = obj.public_menu_banner_url if obj else ''
+        logo_html = f'<img src="{logo}" style="width:72px;height:72px;object-fit:contain;border:1px solid #ddd;border-radius:12px;background:#fff">' if logo else '<strong>لا يوجد شعار محدد</strong>'
+        banner_html = f'<img src="{banner}" style="width:260px;max-width:100%;height:90px;object-fit:cover;border-radius:16px">' if banner else '<span>لا يوجد بانر محدد</span>'
+        return format_html('<div style="display:grid;gap:12px;max-width:520px"><div>{}</div><div>{}</div><div style="border:1px solid {};border-radius:{}px;padding:12px;background:{};color:{}"><strong>بطاقة منتج تجريبية</strong><p>زر ولون وهوية قبل الحفظ النهائي.</p><button type="button" style="background:{};color:white;border:0;border-radius:10px;padding:8px 14px">زر تجريبي</button></div><div style="text-align:center;border:1px dashed #999;padding:10px">رأس إيصال تجريبي<br>{}</div></div>', logo_html, banner_html, obj.border_color, obj.border_radius_px, obj.surface_color, obj.text_color, obj.primary_color, logo_html)
+    branding_preview.short_description = 'معاينة الهوية'
+
     list_display = ('system_title_ar', 'default_language', 'menu_layout_preset', 'pos_layout_preset', 'ui_density', 'updated_at')
 
     def has_add_permission(self, request):

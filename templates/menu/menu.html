@@ -2,11 +2,13 @@
 {% load static menu_form %}
 {% block title %}المنيو{% endblock %}
 {% block content %}
-<div class="menu-public menu-layout-{{ system_settings.menu_layout_preset|default:'default_masharib' }} menu-mobile-{{ system_settings.menu_mobile_layout|default:'one_column_cards' }} {{ system_settings.menu_mobile_layout_class|default:'layout-grid-1' }} {{ system_settings.menu_tablet_layout_class|default:'layout-tablet-2' }} {{ system_settings.menu_desktop_layout_class|default:'layout-grid-3' }} {{ system_settings.product_card_style_class|default:'card-image-first' }} sticky-cart-{{ system_settings.sticky_cart_style|default:'bottom_bar' }} cart-review-{{ system_settings.cart_review_position|default:'bottom' }}" dir="rtl">
+<div class="menu-public public-menu-layout-{{ system_settings.public_menu_layout|default:'comfortable' }} mobile-density-{{ system_settings.mobile_product_density|default:'compact' }} card-style-{{ system_settings.card_style|default:'soft' }} menu-layout-{{ system_settings.menu_layout_preset|default:'default_masharib' }} menu-mobile-{{ system_settings.menu_mobile_layout|default:'one_column_cards' }} {{ system_settings.menu_mobile_layout_class|default:'layout-grid-1' }} {{ system_settings.menu_tablet_layout_class|default:'layout-tablet-2' }} {{ system_settings.menu_desktop_layout_class|default:'layout-grid-3' }} {{ system_settings.product_card_style_class|default:'card-image-first' }} sticky-cart-{{ system_settings.sticky_cart_style|default:'bottom_bar' }} cart-review-{{ system_settings.cart_review_position|default:'bottom' }}" dir="rtl">
   {% if not system_settings or system_settings.show_public_header %}<header class="menu-public__header hub-card">
+    {% if system_settings.brand_logo_url %}<img class="menu-public__logo" src="{{ system_settings.brand_logo_url }}" alt="{{ system_settings.public_brand_title }}">{% endif %}
     {% if not system_settings or system_settings.show_brand_name %}<p class="menu-public__brand">{% if system_settings %}{{ system_settings.public_brand_title }}{% else %}مشاريب{% endif %}</p>{% endif %}
-    <h2 class="hub-section-title">{{ page_setting.title|default:"منيو مشاريب" }}</h2>
-    {% if not system_settings or system_settings.show_header_subtitle and page_setting.subtitle %}<p>{{ page_setting.subtitle }}</p>{% endif %}
+    {% if system_settings.show_banner_on_public_menu and system_settings.public_menu_banner_url %}<img class="menu-public__banner" src="{{ system_settings.public_menu_banner_url }}" alt="">{% endif %}
+    <h2 class="hub-section-title">{% if system_settings.public_menu_title %}{{ system_settings.public_menu_title }}{% else %}{{ page_setting.title|default:"منيو مشاريب" }}{% endif %}</h2>
+    {% if system_settings.public_menu_subtitle or page_setting.subtitle %}<p>{% if system_settings.public_menu_subtitle %}{{ system_settings.public_menu_subtitle }}{% else %}{{ page_setting.subtitle }}{% endif %}</p>{% endif %}
     {% if not system_settings or system_settings.show_table_banner and not table %}<p class="menu-public__table-banner">المكان: <strong>طلب عام داخل المكان</strong></p>{% endif %}
     {% if not system_settings or system_settings.show_table_banner and table %}
       <p class="menu-public__table-banner">الطلب مرتبط بالطاولة: <strong>{{ table.name_ar }}</strong>{% if table.room %} — المساحة: {{ table.room.name_ar }}{% endif %}</p>
@@ -46,7 +48,7 @@
               </div>{% endif %}
               <div class="menu-product-main">
                 <h4 class="menu-product-name">{{ p.name_ar }}</h4>
-                {% if not system_settings or system_settings.show_product_descriptions and p.description_ar %}<p class="menu-product-desc">{{ p.description_ar }}</p>{% endif %}
+                {% if not system_settings or system_settings.show_product_descriptions and p.description_ar %}<p class="menu-product-desc{% if not system_settings.show_product_descriptions_mobile %} menu-product-desc--desktop{% endif %}">{{ p.description_ar }}</p>{% endif %}
                 {% if not system_settings or system_settings.show_product_prices %}<p class="menu-product-price" data-role="price">{{ p.price_syp }} ل.س</p>{% endif %}
               </div>
               {% if not system_settings or system_settings.show_product_badges %}<div class="menu-product-badges">
