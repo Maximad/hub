@@ -81,6 +81,10 @@ class MediaAssetAdmin(admin.ModelAdmin):
 
 @admin.register(ProductMedia)
 class ProductMediaAdmin(admin.ModelAdmin):
+    def get_model_perms(self, request):
+        # Product media is managed from the Product admin inline to avoid a second image-library entry.
+        return {}
+
     list_display = ('readable_product_name', 'media_type', 'media_asset', 'is_primary', 'is_active', 'display_on_public_menu', 'display_on_pos', 'sort_order', 'media_preview', 'updated_at')
     list_filter = ('media_type', 'is_primary', 'is_active', 'display_on_public_menu', 'display_on_pos')
     search_fields = ('product__name_ar', 'product__name_en', 'alt_text_ar', 'url', 'media_asset__title_ar', 'media_asset__title_en')
@@ -112,6 +116,10 @@ class ProductOptionAdmin(admin.ModelAdmin):
 
 @admin.register(ProductOptionGroupAssignment)
 class ProductOptionGroupAssignmentAdmin(admin.ModelAdmin):
+    def get_model_perms(self, request):
+        # Keep registered for autocomplete/direct links, but avoid promoting this join table on admin home.
+        return {}
+
     list_display = (
         'readable_product_name',
         'readable_group_name',

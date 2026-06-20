@@ -93,11 +93,17 @@ class PurchaseAdmin(admin.ModelAdmin):
 
 @admin.register(PurchaseItem)
 class PurchaseItemAdmin(admin.ModelAdmin):
+    def get_model_perms(self, request):
+        return {}
+
     list_display = ('purchase', 'inventory_item', 'quantity', 'unit_cost_syp', 'line_total_syp')
 
 
 @admin.register(StockMovement)
 class StockMovementAdmin(admin.ModelAdmin):
+    def get_model_perms(self, request):
+        return {}
+
     list_display = ('business_date', 'inventory_item', 'movement_type', 'direction', 'quantity', 'related_order', 'related_order_item', 'product', 'related_batch', 'created_by')
     list_filter = ('movement_type', 'direction', 'business_date')
     search_fields = ('inventory_item__name_ar', 'inventory_item__name_en', 'reason')
@@ -128,6 +134,9 @@ class ProductionBatchAdmin(admin.ModelAdmin):
 
 @admin.register(ProductionBatchIngredient)
 class ProductionBatchIngredientAdmin(admin.ModelAdmin):
+    def get_model_perms(self, request):
+        return {}
+
     list_display = ('batch', 'inventory_item', 'planned_quantity', 'actual_quantity', 'unit', 'estimated_line_cost_syp_snapshot')
     search_fields = ('batch__batch_name_ar', 'inventory_item__name_ar')
 
@@ -355,6 +364,9 @@ class OrderAdmin(admin.ModelAdmin):
 
 @admin.register(OrderItem)
 class OrderItemAdmin(admin.ModelAdmin):
+    def get_model_perms(self, request):
+        return {}
+
     list_display = ('order', 'product_name_ar_snapshot', 'quantity', 'prep_station', 'prep_status', 'stock_deducted', 'unit_price_syp_snapshot', 'line_total_syp_snapshot', 'estimated_unit_cost_syp_snapshot', 'estimated_line_margin_syp_snapshot')
     search_fields = ('order__public_code', 'product_name_ar_snapshot', 'product__name_ar')
     list_filter = ('prep_status', 'prep_station')
@@ -448,6 +460,9 @@ class ShiftAdmin(admin.ModelAdmin):
 
 @admin.register(ActivityLog)
 class ActivityLogAdmin(admin.ModelAdmin):
+    def get_model_perms(self, request):
+        return {}
+
     list_display = ('created_at', 'actor', 'action', 'details')
     list_filter = ('action', 'created_at')
     search_fields = ('actor__username', 'action', 'details')
@@ -464,6 +479,9 @@ class NotificationEventAdmin(admin.ModelAdmin):
 
 @admin.register(NotificationRecipient)
 class NotificationRecipientAdmin(admin.ModelAdmin):
+    def get_model_perms(self, request):
+        return {}
+
     list_display = ('notification_event', 'user', 'role', 'station', 'is_read', 'delivered_at', 'read_at')
     list_filter = ('role', 'station', 'is_read')
     autocomplete_fields = ('notification_event', 'user', 'station')
@@ -471,6 +489,9 @@ class NotificationRecipientAdmin(admin.ModelAdmin):
 
 @admin.register(NotificationLog)
 class NotificationLogAdmin(admin.ModelAdmin):
+    def get_model_perms(self, request):
+        return {}
+
     list_display = ('notification_event', 'channel', 'status', 'recipient_user', 'recipient_role', 'recipient_station', 'created_at', 'sent_at')
     list_filter = ('channel', 'status', 'created_at')
     autocomplete_fields = ('notification_event', 'recipient_user', 'recipient_station')
