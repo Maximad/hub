@@ -82,3 +82,77 @@ class BrandingMediaSafetyTests(TestCase):
         self.assertEqual(invalid.safe_url, '')
         for path in ['/menu/', '/staff/pos/', '/staff/orders/', '/staff/cashier/', '/admin/core/systemsetting/']:
             self._assert_loads(path)
+
+class SystemSettingAppearanceSafetyTests(TestCase):
+    BAD_COLORS = ['', '   ', '###', 'red; background:url(x)', 'javascript:alert(1)', 'نص عربي']
+    BAD_SIZES = ['', None, 'large', '-100', '9999', '10px; color:red']
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username='appearance-admin', password='pass', email='appearance@example.com', phone='+963900000002'
+        )
+        self.client.force_login(self.user)
+
+    def tearDown(self):
+        get_system_settings.cache_clear()
+
+    def _setting(self):
+        get_system_settings.cache_clear()
+        setting = SystemSetting.objects.create(system_title_ar='اختبار المظهر')
+        get_system_settings.cache_clear()
+        return setting
+
+    def _assert_core_pages_load(self):
+        for path in ['/menu/', '/staff/', '/staff/pos/', '/staff/orders/', '/staff/cashier/']:
+            with self.subTest(path=path):
+                self.assertLess(self.client.get(path).status_code, 500)
+
+    def test_invalid_color_helpers_fallback_to_safe_hex_values(self):
+        setting = SystemSetting()
+        color_fields = SystemSetting.SAFE_COLOR_DEFAULTS.keys()
+        for field in color_fields:
+            for value in self.BAD_COLORS:
+                with self.subTest(field=field, value=value):
+                    setattr(setting, field, value)
+                    safe = getattr(setting, f'safe_{field}')
+                    self.assertRegex(safe, r'^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$')
+                    self.assertEqual(safe, SystemSetting.SAFE_COLOR_DEFAULTS[field])
+
+    def test_invalid_size_helpers_fallback_or_clamp(self):
+        setting = SystemSetting()
+        expectations = {
+            'border_radius_px': (0, 40),
+            'base_font_size_px': (12, 22),
+            'heading_font_size_px': (18, 40),
+        }
+        for field, (minimum, maximum) in expectations.items():
+            for value in self.BAD_SIZES:
+                with self.subTest(field=field, value=value):
+                    setattr(setting, field, value)
+                    safe = getattr(setting, f'safe_{field}')
+                    self.assertGreaterEqual(safe, minimum)
+                    self.assertLessEqual(safe, maximum)
+
+    def test_invalid_choice_helpers_fallback(self):
+        setting = SystemSetting(card_style='wrong', public_menu_layout='wrong', mobile_product_density='wrong', product_image_ratio='wrong')
+        self.assertEqual(setting.safe_card_style, SystemSetting.CardStyle.SOFT)
+        self.assertEqual(setting.safe_public_menu_layout, SystemSetting.PublicMenuLayout.COMFORTABLE)
+        self.assertEqual(setting.safe_mobile_product_density, SystemSetting.MobileProductDensity.COMPACT)
+        self.assertEqual(setting.safe_product_image_ratio, SystemSetting.ProductImageRatio.FOUR_THREE)
+        self.assertEqual(setting.safe_product_image_ratio_css, '4 / 3')
+
+    @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
+    def test_pages_load_with_invalid_db_color_values(self):
+        setting = self._setting()
+        for index, field in enumerate(SystemSetting.SAFE_COLOR_DEFAULTS.keys()):
+            setattr(setting, field, self.BAD_COLORS[index % len(self.BAD_COLORS)])
+        setting.save(update_fields=list(SystemSetting.SAFE_COLOR_DEFAULTS.keys()))
+        get_system_settings.cache_clear()
+        self._assert_core_pages_load()
+
+    @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
+    def test_pages_load_with_invalid_db_choices(self):
+        setting = self._setting()
+        SystemSetting.objects.filter(pk=setting.pk).update(card_style='wrong', public_menu_layout='wrong', mobile_product_density='wrong', product_image_ratio='wrong')
+        get_system_settings.cache_clear()
+        self._assert_core_pages_load()

@@ -1,3 +1,4 @@
+import re
 import uuid
 from pathlib import Path
 
@@ -1272,6 +1273,189 @@ class SystemSetting(TimeStampedModel):
     require_phone_for_guest_session = models.BooleanField(default=False, verbose_name='طلب هاتف الزائر عند بدء الجلسة')
 
 
+    SAFE_COLOR_DEFAULTS = {
+        'primary_color': '#0f5f57',
+        'header_color': '#0f5f57',
+        'button_color': '#0f5f57',
+        'accent_color': '#c88a2b',
+        'background_color': '#f6f1e8',
+        'surface_color': '#fffaf1',
+        'card_background_color': '#fffaf1',
+        'text_color': '#262626',
+        'muted_text_color': '#6b6b6b',
+        'border_color': '#ddd2c0',
+    }
+    SAFE_NUMBER_DEFAULTS = {
+        'border_radius_px': (18, 0, 40),
+        'border_radius': (18, 0, 40),
+        'base_font_size_px': (18, 12, 22),
+        'heading_font_size_px': (34, 18, 40),
+        'small_font_size_px': (15, 11, 20),
+        'button_font_size_px': (16, 12, 24),
+        'page_max_width_px': (1200, 360, 1600),
+    }
+    SAFE_HEX_COLOR_RE = re.compile(r'^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$')
+
+    @classmethod
+    def safe_color_value(cls, value, fallback):
+        value = str(value or '').strip()
+        if cls.SAFE_HEX_COLOR_RE.fullmatch(value):
+            return value
+        return fallback
+
+    @staticmethod
+    def safe_int_value(value, fallback, minimum, maximum):
+        try:
+            if isinstance(value, str):
+                value = value.strip()
+                if not re.fullmatch(r'-?\d+', value):
+                    return fallback
+            number = int(value)
+        except (TypeError, ValueError, OverflowError):
+            return fallback
+        return min(max(number, minimum), maximum)
+
+    @staticmethod
+    def safe_choice_value(value, allowed, fallback):
+        value = str(value or '').strip()
+        return value if value in allowed else fallback
+
+    @staticmethod
+    def safe_css_identifier(value, fallback, allowed=None):
+        value = str(value or '').strip()
+        if allowed is not None and value not in allowed:
+            return fallback
+        if re.fullmatch(r'[a-z0-9_-]+', value):
+            return value
+        return fallback
+
+    def _safe_color_field(self, field_name):
+        return self.safe_color_value(getattr(self, field_name, ''), self.SAFE_COLOR_DEFAULTS[field_name])
+
+    def _safe_number_field(self, field_name):
+        fallback, minimum, maximum = self.SAFE_NUMBER_DEFAULTS[field_name]
+        return self.safe_int_value(getattr(self, field_name, None), fallback, minimum, maximum)
+
+    @property
+    def safe_primary_color(self):
+        return self._safe_color_field('primary_color')
+
+    @property
+    def safe_header_color(self):
+        return self._safe_color_field('header_color')
+
+    @property
+    def safe_button_color(self):
+        return self._safe_color_field('button_color')
+
+    @property
+    def safe_accent_color(self):
+        return self._safe_color_field('accent_color')
+
+    @property
+    def safe_background_color(self):
+        return self._safe_color_field('background_color')
+
+    @property
+    def safe_surface_color(self):
+        return self.safe_color_value(getattr(self, 'surface_color', ''), self.SAFE_COLOR_DEFAULTS['surface_color'])
+
+    @property
+    def safe_card_background_color(self):
+        return self.safe_color_value(getattr(self, 'card_background_color', ''), self.safe_surface_color)
+
+    @property
+    def safe_text_color(self):
+        return self._safe_color_field('text_color')
+
+    @property
+    def safe_muted_text_color(self):
+        return self._safe_color_field('muted_text_color')
+
+    @property
+    def safe_border_color(self):
+        return self._safe_color_field('border_color')
+
+    @property
+    def safe_border_radius_px(self):
+        return self._safe_number_field('border_radius_px')
+
+    @property
+    def safe_base_font_size_px(self):
+        return self._safe_number_field('base_font_size_px')
+
+    @property
+    def safe_heading_font_size_px(self):
+        return self._safe_number_field('heading_font_size_px')
+
+    @property
+    def safe_small_font_size_px(self):
+        return self._safe_number_field('small_font_size_px')
+
+    @property
+    def safe_button_font_size_px(self):
+        return self._safe_number_field('button_font_size_px')
+
+    @property
+    def safe_page_max_width_px(self):
+        return self._safe_number_field('page_max_width_px')
+
+    @property
+    def safe_card_style(self):
+        return self.safe_choice_value(self.card_style, set(self.CardStyle.values), self.CardStyle.SOFT)
+
+    @property
+    def safe_public_menu_layout(self):
+        return self.safe_choice_value(self.public_menu_layout, set(self.PublicMenuLayout.values), self.PublicMenuLayout.COMFORTABLE)
+
+    @property
+    def safe_mobile_product_density(self):
+        return self.safe_choice_value(self.mobile_product_density, set(self.MobileProductDensity.values), self.MobileProductDensity.COMPACT)
+
+    @property
+    def safe_product_image_ratio(self):
+        return self.safe_choice_value(self.product_image_ratio, set(self.ProductImageRatio.values), self.ProductImageRatio.FOUR_THREE)
+
+    @property
+    def safe_product_image_ratio_css(self):
+        return {'1_1': '1 / 1', '4_3': '4 / 3', '3_2': '3 / 2'}.get(self.safe_product_image_ratio, '4 / 3')
+
+    @property
+    def safe_button_padding_scale(self):
+        return self.safe_choice_value(self.button_padding_scale, set(self.ButtonPaddingScale.values), self.ButtonPaddingScale.NORMAL)
+
+    @property
+    def safe_input_size(self):
+        return self.safe_choice_value(self.input_size, set(self.InputSize.values), self.InputSize.NORMAL)
+
+    @property
+    def safe_card_shadow_level(self):
+        return self.safe_choice_value(self.card_shadow_level, set(self.CardShadowLevel.values), self.CardShadowLevel.SOFT)
+
+    @property
+    def safe_ui_density(self):
+        return self.safe_choice_value(self.ui_density, set(self.UIDensity.values), self.UIDensity.COMFORTABLE)
+
+    @property
+    def safe_custom_font_name(self):
+        name = str(self.custom_font_name or '').strip() or 'HubCustomFont'
+        return name if re.fullmatch(r'[\w \-]+', name, flags=re.ASCII) else 'HubCustomFont'
+
+    @property
+    def safe_custom_font_url(self):
+        if not self.custom_font_file:
+            return ''
+        try:
+            name = self.custom_font_file.name
+            if not name or not self.custom_font_file.storage.exists(name):
+                return ''
+            url = self.custom_font_file.url
+            return url if str(url).startswith('/') else ''
+        except Exception:
+            return ''
+
+
+
     @staticmethod
     def _safe_media_url(media):
         if not media:
@@ -1310,7 +1494,7 @@ class SystemSetting(TimeStampedModel):
 
     @property
     def image_ratio_css(self):
-        return {'1_1': '1 / 1', '4_3': '4 / 3', '3_2': '3 / 2'}.get(self.product_image_ratio, '4 / 3')
+        return self.safe_product_image_ratio_css
 
     @property
     def effective_delivery_enabled(self):
@@ -1384,33 +1568,34 @@ class SystemSetting(TimeStampedModel):
 
     @property
     def menu_mobile_layout_class(self):
-        if self.menu_mobile_layout == self.MenuMobileLayout.LIST:
+        if self.safe_choice_value(self.menu_mobile_layout, set(self.MenuMobileLayout.values), self.MenuMobileLayout.ONE_COLUMN_CARDS) == self.MenuMobileLayout.LIST:
             return 'layout-list'
         return 'layout-grid-1'
 
     @property
     def menu_tablet_layout_class(self):
-        return f'layout-tablet-{self.menu_tablet_columns}'
+        return f'layout-tablet-{self.safe_int_value(self.menu_tablet_columns, 2, 1, 3)}'
 
     @property
     def menu_desktop_layout_class(self):
-        return f'layout-grid-{self.menu_desktop_columns}'
+        return f'layout-grid-{self.safe_int_value(self.menu_desktop_columns, 3, 1, 4)}'
 
     @property
     def product_card_style_class(self):
-        return f'card-{self.product_card_style.replace("_", "-")}'
+        style = self.safe_choice_value(self.product_card_style, set(self.ProductCardStyle.values), self.ProductCardStyle.IMAGE_FIRST)
+        return f'card-{style.replace("_", "-")}'
 
     @property
     def pos_mobile_layout_class(self):
-        return f'layout-grid-{self.pos_mobile_columns}'
+        return f'layout-grid-{self.safe_int_value(self.pos_mobile_columns, 2, 1, 2)}'
 
     @property
     def pos_tablet_layout_class(self):
-        return f'layout-tablet-{self.pos_tablet_columns}'
+        return f'layout-tablet-{self.safe_int_value(self.pos_tablet_columns, 3, 1, 3)}'
 
     @property
     def pos_desktop_layout_class(self):
-        return f'layout-grid-{self.pos_desktop_columns}'
+        return f'layout-grid-{self.safe_int_value(self.pos_desktop_columns, 4, 1, 4)}'
 
 
 class PageSetting(TimeStampedModel):

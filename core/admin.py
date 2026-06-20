@@ -1,4 +1,6 @@
+from django import forms
 from django.contrib import admin
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.utils.html import format_html
 from catalog.admin_media import safe_media_preview
@@ -143,8 +145,43 @@ class ProductionBatchIngredientAdmin(admin.ModelAdmin):
     search_fields = ('batch__batch_name_ar', 'inventory_item__name_ar')
 
 
+
+class SystemSettingAdminForm(forms.ModelForm):
+    COLOR_FIELDS = (
+        'primary_color', 'header_color', 'accent_color', 'background_color', 'surface_color',
+        'card_background_color', 'text_color', 'muted_text_color', 'border_color', 'button_color',
+    )
+    NUMBER_FIELDS = ('base_font_size_px', 'heading_font_size_px', 'small_font_size_px', 'button_font_size_px', 'border_radius_px', 'border_radius', 'page_max_width_px')
+
+    class Meta:
+        model = SystemSetting
+        fields = '__all__'
+
+    def clean(self):
+        cleaned = super().clean()
+        errors = {}
+        for field in self.COLOR_FIELDS:
+            value = cleaned.get(field)
+            fallback = SystemSetting.SAFE_COLOR_DEFAULTS[field]
+            if value in (None, ''):
+                cleaned[field] = fallback
+            elif SystemSetting.safe_color_value(value, fallback) != str(value).strip():
+                errors[field] = 'أدخل لوناً آمناً بصيغة HEX مثل #0f5f57 أو #fff.'
+        for field in self.NUMBER_FIELDS:
+            if cleaned.get(field) in (None, ''):
+                continue
+            fallback, minimum, maximum = SystemSetting.SAFE_NUMBER_DEFAULTS[field]
+            safe_value = SystemSetting.safe_int_value(cleaned.get(field), fallback, minimum, maximum)
+            if safe_value != cleaned.get(field):
+                errors[field] = f'أدخل رقماً بين {minimum} و {maximum}.'
+        if errors:
+            raise ValidationError(errors)
+        return cleaned
+
+
 @admin.register(SystemSetting)
 class SystemSettingAdmin(admin.ModelAdmin):
+    form = SystemSettingAdminForm
     fieldsets = (
         ('الهوية العامة', {
             'fields': (
@@ -220,7 +257,7 @@ class SystemSettingAdmin(admin.ModelAdmin):
         banner = obj.public_menu_banner_url if obj else ''
         logo_html = f'<img src="{logo}" style="width:72px;height:72px;object-fit:contain;border:1px solid #ddd;border-radius:12px;background:#fff">' if logo else '<strong>لا يوجد شعار محدد</strong>'
         banner_html = f'<img src="{banner}" style="width:260px;max-width:100%;height:90px;object-fit:cover;border-radius:16px">' if banner else '<span>لا يوجد بانر محدد</span>'
-        return format_html('<div style="display:grid;gap:12px;max-width:520px"><div>{}</div><div>{}</div><div style="border:1px solid {};border-radius:{}px;padding:12px;background:{};color:{}"><strong>بطاقة منتج تجريبية</strong><p>زر ولون وهوية قبل الحفظ النهائي.</p><button type="button" style="background:{};color:white;border:0;border-radius:10px;padding:8px 14px">زر تجريبي</button></div><div style="text-align:center;border:1px dashed #999;padding:10px">رأس إيصال تجريبي<br>{}</div></div>', logo_html, banner_html, obj.border_color, obj.border_radius_px, obj.surface_color, obj.text_color, obj.primary_color, logo_html)
+        return format_html('<div style="display:grid;gap:12px;max-width:520px"><div>{}</div><div>{}</div><div style="border:1px solid {};border-radius:{}px;padding:12px;background:{};color:{}"><strong>بطاقة منتج تجريبية</strong><p>زر ولون وهوية قبل الحفظ النهائي.</p><button type="button" style="background:{};color:white;border:0;border-radius:10px;padding:8px 14px">زر تجريبي</button></div><div style="text-align:center;border:1px dashed #999;padding:10px">رأس إيصال تجريبي<br>{}</div></div>', logo_html, banner_html, obj.safe_border_color, obj.safe_border_radius_px, obj.safe_surface_color, obj.safe_text_color, obj.safe_primary_color, logo_html)
     branding_preview.short_description = 'معاينة الهوية'
 
     list_display = ('system_title_ar', 'default_language', 'menu_layout_preset', 'pos_layout_preset', 'ui_density', 'updated_at')
