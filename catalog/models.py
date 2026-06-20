@@ -1,6 +1,7 @@
 import os
 import uuid
 from pathlib import Path
+from urllib.parse import urlparse
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -89,14 +90,37 @@ class MediaAsset(CatalogTimeStampedModel):
     def filename(self):
         return Path(self.file.name).name if self.file else ''
 
+    @staticmethod
+    def _safe_external_url(value):
+        value = (value or '').strip()
+        if not value:
+            return ''
+        parsed = urlparse(value)
+        if parsed.scheme in {'http', 'https'} and parsed.netloc:
+            return value
+        if not parsed.scheme and value.startswith('/'):
+            return value
+        return ''
+
     @property
-    def url(self):
+    def safe_url(self):
         if self.file:
             try:
-                return self.file.url
-            except ValueError:
+                name = self.file.name
+                if not name or not self.file.storage.exists(name):
+                    return ''
+                return self._safe_external_url(self.file.url)
+            except Exception:
                 return ''
-        return self.external_url or ''
+        return self._safe_external_url(self.external_url)
+
+    @property
+    def resolved_url(self):
+        return self.safe_url
+
+    @property
+    def url(self):
+        return self.safe_url
 
     @property
     def is_visual_media(self):
