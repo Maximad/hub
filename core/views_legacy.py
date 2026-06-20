@@ -25,7 +25,7 @@ from accounts.permissions import (
     require_staff_capability, user_has_capability,
 )
 from core.stock_recipes import deduct_order_item_stock
-from core.models import ActivityLog, CancellationReason, CashMovement, DailyClose, Expense, InternetPackage, InternetSession, Member, Order, OrderDiscount, OrderItem, Payment, Product, SystemSetting, TableArea
+from core.models import ActivityLog, CancellationReason, CashMovement, Category, DailyClose, Expense, InternetPackage, InternetSession, Member, Order, OrderDiscount, OrderItem, Payment, Product, SystemSetting, TableArea
 from events.models import Event
 from reservations.models import Reservation
 from vendors.models import Vendor, VendorParticipation
