@@ -500,6 +500,18 @@ class Payment(TimeStampedModel, PublicCodeModel):
     reversed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='reversed_payments')
     reversed_at = models.DateTimeField(null=True, blank=True)
 
+    def clean(self):
+        super().clean()
+        if not self.order_id or self.method == self.Method.UNPAID or self.is_reversed or not self.is_active:
+            return
+        paid_qs = self.order.payments.filter(is_active=True, is_reversed=False).exclude(method=self.Method.UNPAID)
+        if self.pk:
+            paid_qs = paid_qs.exclude(pk=self.pk)
+        paid_before = sum(payment.amount_syp for payment in paid_qs)
+        remaining = max(self.order.total_syp - paid_before, 0)
+        if self.amount_syp > remaining:
+            raise ValidationError({'amount_syp': 'المبلغ لا يجوز أن يتجاوز المتبقي.'})
+
     def __str__(self):
         return f'{self.order.display_number} — {self.get_method_display()} — {self.amount_syp} ل.س'
 

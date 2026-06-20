@@ -5,6 +5,7 @@ from catalog.admin_media import safe_media_preview
 from catalog.models import ProductMedia, ProductOptionGroupAssignment
 from .settings_helpers import get_system_settings
 from .stock_recipes import calculate_recipe_cost, update_product_cost_from_recipe
+from .services.margins import product_unit_margin
 from .models import (
     ActivityLog,
     CancellationReason,
