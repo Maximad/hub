@@ -79,6 +79,124 @@ def notify_order_created(order, created_by=None):
             create_notification('new_prep_item', 'عنصر جديد للتحضير', f'{item.product_name_ar_snapshot} × {item.quantity} — {order.display_number}', order=order, order_item=item, target_station=item.prep_station, created_by=created_by)
 
 
+def user_is_notification_admin(user):
+    return bool(getattr(user, 'is_superuser', False) or getattr(user, 'role', '') == 'admin')
+
+def notification_group_key_for_event(event, *, collapse_prep_by_order=True):
+    if collapse_prep_by_order and event.event_type == 'new_prep_item' and event.order_id:
+        station_id = event.target_station_id or 'none'
+        return f'prep-order:{event.order_id}:station:{station_id}'
+    if event.id:
+        return f'event:{event.id}'
+    return 'fallback:{event_type}:{order_id}:{item_id}:{station_id}:{role}'.format(
+        event_type=event.event_type or '',
+        order_id=event.order_id or '',
+        item_id=event.order_item_id or '',
+        station_id=event.target_station_id or '',
+        role=event.target_role or '',
+    )
+
+def _context_label(event):
+    if event.target_station_id:
+        return event.target_station.name_ar
+    if event.target_role == 'cashier' or event.event_type in PAYMENT_EVENTS:
+        return 'الكاشير'
+    if event.target_role == 'admin' or event.event_type in MANAGER_EVENTS:
+        return 'الإدارة'
+    return ''
+
+def _card_from_group(group_key, recipients):
+    recipients = sorted(recipients, key=lambda r: r.notification_event.created_at, reverse=True)
+    representative = recipients[0]
+    events = []
+    seen_events = set()
+    for recipient in recipients:
+        event = recipient.notification_event
+        event_key = event.id or id(event)
+        if event_key not in seen_events:
+            seen_events.add(event_key)
+            events.append(event)
+    event = representative.notification_event
+    title = event.title_ar
+    message = event.message_ar
+    if len(events) > 1 and event.event_type == 'new_prep_item':
+        title = f'طلب جديد {event.order.display_number} — عناصر للتحضير' if event.order_id else 'عناصر جديدة للتحضير'
+        item_messages = [e.message_ar for e in events if e.message_ar]
+        message = '، '.join(item_messages[:3])
+        if len(item_messages) > 3:
+            message = f'{message}، و{len(item_messages) - 3} عناصر أخرى'
+    order_number = event.order.display_number if event.order_id else ''
+    recipient_ids = sorted({r.id for r in recipients})
+    unread = any(not r.is_read for r in recipients)
+    return {
+        'id': group_key,
+        'group_key': group_key,
+        'recipient_ids': recipient_ids,
+        'recipient_count': len(recipient_ids),
+        'event_count': len(events),
+        'title': title,
+        'message': message,
+        'order_number': order_number,
+        'station': _context_label(event),
+        'created_at': event.created_at,
+        'created_at_display': event.created_at.strftime('%Y-%m-%d %H:%M'),
+        'link': link_for_event(event),
+        'is_read': not unread,
+    }
+
+def group_notification_recipients_for_user(user, *, unread_only=False, limit=50, fetch_limit=250):
+    qs = visible_recipients_for(user).select_related(
+        'notification_event',
+        'notification_event__order',
+        'notification_event__order_item',
+        'notification_event__target_station',
+        'station',
+    ).filter(notification_event__is_active=True)
+    if unread_only:
+        qs = qs.filter(is_read=False)
+    rows = list(qs.order_by('-notification_event__created_at', '-created_at')[:fetch_limit])
+    grouped = {}
+    order = []
+    collapse_prep = user_is_notification_admin(user)
+    for recipient in rows:
+        event = recipient.notification_event
+        key = notification_group_key_for_event(event, collapse_prep_by_order=collapse_prep)
+        if key not in grouped:
+            grouped[key] = []
+            order.append(key)
+        grouped[key].append(recipient)
+    cards = [_card_from_group(key, grouped[key]) for key in order]
+    cards.sort(key=lambda c: c['created_at'], reverse=True)
+    return cards[:limit]
+
+def get_user_notification_events(user):
+    return group_notification_recipients_for_user(user)
+
+def get_unread_grouped_notification_count(user):
+    return len(group_notification_recipients_for_user(user, unread_only=True, limit=500, fetch_limit=500))
+
+def mark_grouped_notification_read(user, group_key=None, recipient_id=None):
+    qs = visible_recipients_for(user).filter(is_read=False, notification_event__is_active=True)
+    if recipient_id:
+        try:
+            recipient = qs.select_related('notification_event').get(pk=recipient_id)
+        except NotificationRecipient.DoesNotExist:
+            return 0
+        group_key = notification_group_key_for_event(
+            recipient.notification_event,
+            collapse_prep_by_order=user_is_notification_admin(user),
+        )
+    if group_key:
+        cards = group_notification_recipients_for_user(user, unread_only=True, limit=500, fetch_limit=500)
+        recipient_ids = []
+        for card in cards:
+            if card['group_key'] == group_key:
+                recipient_ids = card['recipient_ids']
+                break
+        qs = qs.filter(pk__in=recipient_ids)
+    return qs.update(is_read=True, read_at=timezone.now(), delivered_at=timezone.now())
+
+
 def visible_recipients_for(user):
     role = getattr(user, 'role', '')
     if user.is_superuser or role == 'admin':

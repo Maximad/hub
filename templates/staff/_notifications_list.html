@@ -1,10 +1,15 @@
-{% for recipient in notifications %}
-  {% with event=recipient.notification_event %}
-  <div class="staff-notification-item" data-notification-id="{{ recipient.id }}">
-    <a href="{% url 'staff_orders' %}" class="staff-notification-title">{{ event.title_ar }}</a>
-    <div class="staff-notification-message">{{ event.message_ar }}</div>
-    <small>{% if event.order %}{{ event.order.display_number }} · {% endif %}{% if event.target_station %}{{ event.target_station.name_ar }} · {% endif %}{{ event.created_at|date:'Y-m-d H:i' }}</small>
-    <button type="button" class="hub-btn hub-btn-secondary staff-notification-read" data-notification-id="{{ recipient.id }}">تعيين كمقروء</button>
+{% for notification in notifications %}
+  <div class="staff-notification-item{% if notification.is_read %} staff-notification-item-read{% else %} staff-notification-item-unread{% endif %}" data-notification-id="{{ notification.group_key }}">
+    <a href="{{ notification.link }}" class="staff-notification-title">{{ notification.title }}</a>
+    {% if notification.message %}<div class="staff-notification-message">{{ notification.message }}</div>{% endif %}
+    <small>
+      {% if notification.order_number %}{{ notification.order_number }} · {% endif %}
+      {% if notification.station %}{{ notification.station }} · {% endif %}
+      {{ notification.created_at|date:'Y-m-d H:i' }} ·
+      {% if notification.is_read %}مقروء{% else %}غير مقروء{% endif %}
+    </small>
+    {% if not notification.is_read %}
+      <button type="button" class="hub-btn hub-btn-secondary staff-notification-read" data-notification-id="{{ notification.group_key }}">تعيين كمقروء</button>
+    {% endif %}
   </div>
-  {% endwith %}
 {% empty %}<div class="staff-notification-empty">لا توجد تنبيهات جديدة</div>{% endfor %}
