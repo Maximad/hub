@@ -5,6 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}{% if system_settings %}{{ system_settings.public_brand_title }}{% else %}مشاريب{% endif %}{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/hub.css' %}">
   {% if system_settings %}
   <style>
     {% if system_settings.safe_custom_font_url %}
@@ -35,9 +36,11 @@
       {% if system_settings.safe_card_shadow_level == 'none' %}--hub-card-shadow:none;{% elif system_settings.safe_card_shadow_level == 'medium' %}--hub-card-shadow:0 14px 34px rgba(0,0,0,.14);{% else %}--hub-card-shadow:0 1px 2px rgba(0,0,0,.06);{% endif %}
       {% if system_settings.safe_custom_font_url %}--hub-font-body:"HubCustomFont","Tahoma","Noto Naskh Arabic","Segoe UI",Arial,sans-serif;{% endif %}
     }
+    {% if system_settings.safe_custom_font_url %}
+    html,body,button,input,textarea,select,.hub-app,.hub-page,.hub-container,.staff-page,.hub-card,.card,.hub-action-card,.hub-stat-card,.hub-list-card,.menu-public,.menu-section-chip,.menu-option-chip,.menu-product-card,.menu-product-main,.menu-cart-review,.menu-sticky-cart,.staff-pos,.staff-pos__form,.staff-pos__catalog,.staff-pos__cart,.staff-pos__product,.staff-pos__tap-zone,.staff-pos__catalog-tools,.print-sheet,.receipt-print,.thermal-print,.prep-ticket,.delivery-ticket,.close-day-print{font-family:var(--hub-font-body);}
+    {% endif %}
   </style>
   {% endif %}
-  <link rel="stylesheet" href="{% static 'css/hub.css' %}">
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 </head>
 <body class="hub-page{% if system_settings %} density-{{ system_settings.safe_ui_density }} button-scale-{{ system_settings.safe_button_padding_scale }} input-size-{{ system_settings.safe_input_size }} shadow-{{ system_settings.safe_card_shadow_level }}{% endif %}">

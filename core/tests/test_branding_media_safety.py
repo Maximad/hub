@@ -198,6 +198,8 @@ class SystemSettingCustomFontTests(TestCase):
                         self.assertIn('font-family:"HubCustomFont"', content)
                         self.assertIn('--hub-font-body:"HubCustomFont","Tahoma","Noto Naskh Arabic","Segoe UI",Arial,sans-serif', content)
                         self.assertIn('font-family:var(--hub-font-body)', content)
+                        self.assertIn('html,body,button,input,textarea,select', content)
+                        self.assertLess(content.index('css/hub.css'), content.index('--hub-font-body:"HubCustomFont"'))
                         self.assertNotIn('MadaniArabicDEMO', content)
                         self.assertNotIn('\\u002D', content)
 
@@ -221,12 +223,14 @@ class SystemSettingCustomFontTests(TestCase):
                 content = response.content.decode(response.charset or 'utf-8')
                 self.assertIn('/media/system/fonts/BrandFont.woff2', content)
                 self.assertIn('format("woff2")', content)
+                self.assertIn('html,body,button,input,textarea,select', content)
+                self.assertIn('font-family:var(--hub-font-body)', content)
 
     def test_base_ui_selectors_use_font_variable_without_late_hardcoded_overrides(self):
         css = (settings.BASE_DIR / 'static/css/hub.css').read_text()
         required_selectors = (
-            'html', 'body', 'button', 'input', 'textarea', 'select', '.hub-app', '.hub-card', '.card',
-            '.menu-product-card', '.staff-pos', '.staff-pos__cart', '.menu-section-chip', '.menu-option-chip',
+            'html', 'body', 'button', 'input', 'textarea', 'select', '.hub-app', '.hub-page', '.hub-container', '.hub-card', '.card',
+            '.menu-product-card', '.staff-pos', '.staff-pos__catalog-tools', '.staff-pos__cart', '.menu-section-chip', '.menu-option-chip',
             '.print-sheet', '.receipt-print', '.thermal-print',
         )
         font_rule = css.split('font-family:var(--hub-font-body)', 1)[0]
