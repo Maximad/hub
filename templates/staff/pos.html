@@ -114,12 +114,12 @@
                   <button class="staff-pos__tap-zone" type="button" data-action="plus" data-target="qty_{{ p.id }}" aria-label="إضافة {{ p.name_ar }}">
                     <span class="menu-product-name">{{ p.name_ar }}</span>
                     {% if p.name_en %}<small>{{ p.name_en }}</small>{% endif %}
-                    {% if not system_settings or system_settings.pos_show_prices %}<strong data-role="price">{{ p.price_syp }} ل.س</strong>{% endif %}
+                    {% if not system_settings or system_settings.pos_show_prices %}<strong data-role="price"><span class="hub-money">{{ p.price_syp|format_syp }}</span></strong>{% endif %}
                   </button>
                   <div class="menu-qty-controls staff-pos__qty">
                     <button class="hub-button hub-button-secondary menu-stepper-btn" type="button" data-action="minus" data-target="qty_{{ p.id }}" aria-label="تقليل {{ p.name_ar }}">-</button>
                     {% form_value form_values 'qty_' p.id '0' as qty_value %}
-                    <input class="hub-input menu-qty-input" type="number" min="0" step="1" value="{{ qty_value }}" name="qty_{{ p.id }}" id="qty_{{ p.id }}" inputmode="numeric" aria-label="كمية {{ p.name_ar }}">
+                    <input class="hub-input menu-qty-input hub-number" type="number" min="0" step="1" value="{{ qty_value }}" name="qty_{{ p.id }}" id="qty_{{ p.id }}" inputmode="numeric" aria-label="كمية {{ p.name_ar }}">
                     <button class="hub-button hub-button-secondary menu-stepper-btn" type="button" data-action="plus" data-target="qty_{{ p.id }}" aria-label="زيادة {{ p.name_ar }}">+</button>
                   </div>
 
@@ -137,7 +137,7 @@
                                   <label class="menu-option-chip">
                                     <input type="{% if group.selection_type == 'single' %}radio{% else %}checkbox{% endif %}" name="option_{{ p.id }}_{{ group.id }}{% if group.selection_type == 'multiple' %}[]{% endif %}" value="{{ option.id }}" data-option-input data-option-name="{{ option.name_ar }}" data-price-delta="{{ option.price_delta_syp }}" {% if checked %}checked{% endif %}>
                                     <span>{{ option.name_ar }}</span>
-                                    {% if option.price_delta_syp %}<small>{% if option.price_delta_syp > 0 %}+{% endif %}{{ option.price_delta_syp }} ل.س</small>{% endif %}
+                                    {% if option.price_delta_syp %}<small>{% if option.price_delta_syp > 0 %}+{% endif %}<span class="hub-money">{{ option.price_delta_syp|format_syp }}</span></small>{% endif %}
                                   </label>
                                 {% endfor %}
                               </div>
@@ -167,11 +167,11 @@
     <aside class="hub-card staff-pos__cart" id="cart-review" aria-live="polite">
       <div class="staff-pos__cart-head">
         <h3>السلة</h3>
-        <span class="hub-badge hub-badge-info"><strong data-item-count>0</strong> عنصر</span>
+        <span class="hub-badge hub-badge-info"><strong data-item-count class="hub-number">0</strong> عنصر</span>
       </div>
       <p class="menu-cart-helper" data-cart-helper>اضغط على منتج لإضافته.</p>
       <ul class="menu-cart-list" data-cart-list></ul>
-      <p class="menu-cart-total">المجموع: <strong data-cart-total>0 ل.س</strong></p>
+      <p class="menu-cart-total">المجموع: <strong data-cart-total class="hub-money">0 ل.س</strong></p>
       <label for="general_note"><strong>ملاحظة عامة</strong></label>
       <textarea class="hub-input" name="general_note" id="general_note" rows="3" placeholder="تعليمات عامة للطلب">{{ form_values.general_note|default:'' }}</textarea>
       <div class="hub-sticky-actions staff-pos__submit">
@@ -180,8 +180,8 @@
     </aside>
 
     {% if not system_settings or system_settings.show_sticky_cart %}<aside class="menu-sticky-cart staff-pos__floating-cart" data-sticky-cart hidden>
-      <p><strong data-item-count>0</strong> عناصر</p>
-      <p data-sticky-total>0 ل.س</p>
+      <p><strong data-item-count class="hub-number">0</strong> عناصر</p>
+      <p data-sticky-total class="hub-money">0 ل.س</p>
       <a href="#cart-review" class="hub-button hub-button-primary">فتح السلة</a>
     </aside>{% endif %}
   </form>

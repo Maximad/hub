@@ -2,7 +2,7 @@
 {% load static menu_form %}
 {% block title %}المنيو{% endblock %}
 {% block content %}
-<div class="menu-public public-menu-layout-{{ system_settings.safe_public_menu_layout|default:'comfortable' }} mobile-density-{{ system_settings.safe_mobile_product_density|default:'compact' }} card-style-{{ system_settings.safe_card_style|default:'soft' }} menu-layout-{{ system_settings.menu_layout_preset|default:'default_masharib' }} menu-mobile-{{ system_settings.menu_mobile_layout|default:'one_column_cards' }} {{ system_settings.menu_mobile_layout_class|default:'layout-grid-1' }} {{ system_settings.menu_tablet_layout_class|default:'layout-tablet-2' }} {{ system_settings.menu_desktop_layout_class|default:'layout-grid-3' }} {{ system_settings.product_card_style_class|default:'card-image-first' }} sticky-cart-{{ system_settings.sticky_cart_style|default:'bottom_bar' }} cart-review-{{ system_settings.cart_review_position|default:'bottom' }}" dir="rtl">
+<div class="menu-public menu-layout-{{ system_settings.safe_public_menu_layout|default:'comfortable' }} public-menu-layout-{{ system_settings.safe_public_menu_layout|default:'comfortable' }} mobile-density-{{ system_settings.safe_mobile_product_density|default:'compact' }} card-style-{{ system_settings.safe_card_style|default:'soft' }} menu-layout-{{ system_settings.menu_layout_preset|default:'default_masharib' }} menu-mobile-{{ system_settings.menu_mobile_layout|default:'one_column_cards' }} {{ system_settings.menu_mobile_layout_class|default:'layout-grid-1' }} {{ system_settings.menu_tablet_layout_class|default:'layout-tablet-2' }} {{ system_settings.menu_desktop_layout_class|default:'layout-grid-3' }} {{ system_settings.product_card_style_class|default:'card-image-first' }} sticky-cart-{{ system_settings.sticky_cart_style|default:'bottom_bar' }} cart-review-{{ system_settings.cart_review_position|default:'bottom' }}" dir="rtl">
   {% if not system_settings or system_settings.show_public_header %}<header class="menu-public__header hub-card">
     {% if system_settings.brand_logo_url %}<img class="menu-public__logo" src="{{ system_settings.brand_logo_url }}" alt="{{ system_settings.public_brand_title }}">{% endif %}
     {% if not system_settings or system_settings.show_brand_name %}<p class="menu-public__brand">{% if system_settings %}{{ system_settings.public_brand_title }}{% else %}مشاريب{% endif %}</p>{% endif %}
@@ -30,10 +30,10 @@
       {% for section, products in section_products %}
         <section class="hub-card hub-section" id="section-{{ section.id }}">
           <h3 class="hub-section-title">{{ section.name_ar }}</h3>
-          <div class="menu-product-grid {{ system_settings.menu_mobile_layout_class|default:'layout-grid-1' }} {{ system_settings.menu_tablet_layout_class|default:'layout-tablet-2' }} {{ system_settings.menu_desktop_layout_class|default:'layout-grid-3' }}">
+          <div class="menu-product-grid menu-list {{ system_settings.menu_mobile_layout_class|default:'layout-grid-1' }} {{ system_settings.menu_tablet_layout_class|default:'layout-tablet-2' }} {{ system_settings.menu_desktop_layout_class|default:'layout-grid-3' }}">
           {% for p in products %}
-            <article class="hub-list-card menu-product-card {{ system_settings.product_card_style_class|default:'card-image-first' }}" data-product-card data-product-id="{{ p.id }}" data-price="{{ p.price_syp|default:'0' }}">
-              {% if not system_settings or system_settings.show_product_images %}<div class="hub-media menu-product-media product-media-frame{% if not p.primary_media %} menu-product-media--placeholder product-media-placeholder{% endif %}">
+            <article class="hub-list-card menu-product-card menu-list-item {{ system_settings.product_card_style_class|default:'card-image-first' }}" data-product-card data-product-id="{{ p.id }}" data-price="{{ p.price_syp|default:'0' }}">
+              {% if not system_settings or system_settings.show_product_images %}<div class="hub-media menu-product-media menu-list-thumb product-media-frame{% if not p.primary_media %} menu-product-media--placeholder product-media-placeholder{% endif %}">
                 {% if p.primary_media %}
                   {% if p.primary_media.is_visual_media %}
                     <img src="{{ p.primary_media.resolved_url }}" alt="{{ p.primary_media.display_alt_text }}" loading="lazy">
@@ -46,10 +46,10 @@
                   <span>{{ p.name_ar|slice:":1" }}</span>
                 {% endif %}
               </div>{% endif %}
-              <div class="menu-product-main">
-                <h4 class="menu-product-name">{{ p.name_ar }}</h4>
-                {% if not system_settings or system_settings.show_product_descriptions and p.description_ar %}<p class="menu-product-desc{% if not system_settings.show_product_descriptions_mobile %} menu-product-desc--desktop{% endif %}">{{ p.description_ar }}</p>{% endif %}
-                {% if not system_settings or system_settings.show_product_prices %}<p class="menu-product-price" data-role="price">{{ p.price_syp }} ل.س</p>{% endif %}
+              <div class="menu-product-main menu-list-body">
+                <h4 class="menu-product-name menu-list-title">{{ p.name_ar }}</h4>
+                {% if not system_settings or system_settings.show_product_descriptions and p.description_ar %}<p class="menu-product-desc menu-list-description{% if not system_settings.show_product_descriptions_mobile %} menu-product-desc--desktop{% endif %}">{{ p.description_ar }}</p>{% endif %}
+                {% if not system_settings or system_settings.show_product_prices %}<p class="menu-product-price menu-list-price hub-money" data-role="price"><span class="hub-money">{{ p.price_syp|format_syp }}</span></p>{% endif %}
               </div>
               {% if not system_settings or system_settings.show_product_badges %}<div class="menu-product-badges">
                 {% if p.is_alcoholic %}<span class="hub-badge hub-badge-warning">يحتوي على كحول</span>{% endif %}
@@ -57,10 +57,10 @@
                 {% if p.requires_staff_confirmation %}<span class="hub-badge hub-badge-info">يحتاج تأكيد من الفريق</span>{% endif %}
               </div>{% endif %}
 
-              <div class="menu-qty-controls">
+              <div class="menu-qty-controls menu-list-actions">
                 <button class="hub-button hub-button-secondary menu-stepper-btn" type="button" data-action="plus" data-target="qty_{{ p.id }}" aria-label="زيادة {{ p.name_ar }}">+</button>
                 {% form_value form_values 'qty_' p.id '0' as qty_value %}
-                <input class="hub-input menu-qty-input" type="number" min="0" step="1" value="{{ qty_value }}" name="qty_{{ p.id }}" id="qty_{{ p.id }}" inputmode="numeric">
+                <input class="hub-input menu-qty-input hub-number" type="number" min="0" step="1" value="{{ qty_value }}" name="qty_{{ p.id }}" id="qty_{{ p.id }}" inputmode="numeric">
                 <button class="hub-button hub-button-secondary menu-stepper-btn" type="button" data-action="minus" data-target="qty_{{ p.id }}" aria-label="تقليل {{ p.name_ar }}">-</button>
               </div>
 
@@ -81,7 +81,7 @@
                               <label class="menu-option-chip">
                                 <input type="{% if group.selection_type == 'single' %}radio{% else %}checkbox{% endif %}" name="option_{{ p.id }}_{{ group.id }}{% if group.selection_type == 'multiple' %}[]{% endif %}" value="{{ option.id }}" data-option-input data-option-name="{{ option.name_ar }}" data-price-delta="{{ option.price_delta_syp }}" {% if checked %}checked{% endif %}>
                                 <span>{{ option.name_ar }}</span>
-                                {% if option.price_delta_syp %}<small>{% if option.price_delta_syp > 0 %}+{% endif %}{{ option.price_delta_syp }} ل.س</small>{% endif %}
+                                {% if option.price_delta_syp %}<small>{% if option.price_delta_syp > 0 %}+{% endif %}<span class="hub-money">{{ option.price_delta_syp|format_syp }}</span></small>{% endif %}
                               </label>
                             {% endfor %}
                           </div>
@@ -110,10 +110,10 @@
       <h3>مراجعة الطلب</h3>
       <p class="menu-cart-helper" data-cart-helper>اختر عناصر من القائمة</p>
       <ul class="menu-cart-list" data-cart-list></ul>
-      <p class="menu-cart-total">المجموع التقديري: <strong data-cart-total>0 ل.س</strong></p>
-      <p class="menu-cart-total" data-delivery-fee-row hidden>رسوم التوصيل: <strong data-delivery-fee>{{ settings.fixed_delivery_fee_syp|default:0 }} ل.س</strong></p>
-      <p class="menu-cart-total" data-total-with-delivery-row hidden>الإجمالي مع التوصيل: <strong data-total-with-delivery>0 ل.س</strong></p>
-      {% if settings.minimum_delivery_order_syp %}<p class="hub-help-text" data-delivery-minimum hidden>الحد الأدنى لطلب التوصيل {{ settings.minimum_delivery_order_syp }} ل.س.</p>{% endif %}
+      <p class="menu-cart-total">المجموع التقديري: <strong data-cart-total class="hub-money">0 ل.س</strong></p>
+      <p class="menu-cart-total" data-delivery-fee-row hidden>رسوم التوصيل: <strong data-delivery-fee class="hub-money">{{ settings.fixed_delivery_fee_syp|default:0|format_syp }}</strong></p>
+      <p class="menu-cart-total" data-total-with-delivery-row hidden>الإجمالي مع التوصيل: <strong data-total-with-delivery class="hub-money">0 ل.س</strong></p>
+      {% if settings.minimum_delivery_order_syp %}<p class="hub-help-text" data-delivery-minimum hidden>الحد الأدنى لطلب التوصيل <span class="hub-money">{{ settings.minimum_delivery_order_syp|format_syp }}</span>.</p>{% endif %}
 
       <h4>طريقة الطلب</h4>
       <div class="menu-option-chips" data-fulfillment-selector>
@@ -146,8 +146,8 @@
     </section>
 
     {% if not system_settings or system_settings.show_sticky_cart %}<aside class="menu-sticky-cart" data-sticky-cart hidden>
-      <p><strong data-item-count>0</strong> عناصر</p>
-      <p data-sticky-total>0 ل.س</p>
+      <p><strong data-item-count class="hub-number">0</strong> عناصر</p>
+      <p data-sticky-total class="hub-money">0 ل.س</p>
       <a href="#cart-review" class="hub-button hub-button-primary">مراجعة الطلب</a>
     </aside>{% endif %}
   </form>
