@@ -34,6 +34,8 @@
     activeReturnFocus = document.activeElement;
     source.hidden = false;
     modalBody.appendChild(source);
+    const title = source.querySelector('[id^="menu-item-modal-title-"]');
+    if (title?.id) modal.setAttribute('aria-labelledby', title.id);
     modal.hidden = false;
     document.body.classList.add('menu-modal-open');
     modal.querySelector('[data-menu-modal-close]')?.focus();
@@ -42,11 +44,12 @@
   function closeItemModal(restoreFocus = true) {
     if (!modal || !modalBody || modal.hidden) return;
     if (activeModalSource) {
-      const card = cards.find((item) => item.dataset.productId === activeModalSource.querySelector('.menu-qty-input')?.id?.replace('qty_', ''));
+      const card = cards.find((item) => item.dataset.productId === activeModalSource.dataset.modalProductId);
       activeModalSource.hidden = true;
       (card || form).appendChild(activeModalSource);
     }
     modal.hidden = true;
+    modal.removeAttribute('aria-labelledby');
     document.body.classList.remove('menu-modal-open');
     activeModalSource = null;
     update();
@@ -151,7 +154,8 @@
     if (!input) return;
     const current = Math.max(0, parseInt(input.value || '0', 10) || 0);
     if (button.dataset.action === 'edit') {
-      const card = input.closest('[data-product-card]');
+      const productId = button.dataset.target?.replace('qty_', '');
+      const card = cards.find((item) => item.dataset.productId === productId) || input.closest('[data-product-card]');
       if (card) openItemModal(card);
       return;
     }
