@@ -156,3 +156,51 @@ class SystemSettingAppearanceSafetyTests(TestCase):
         SystemSetting.objects.filter(pk=setting.pk).update(card_style='wrong', public_menu_layout='wrong', mobile_product_density='wrong', product_image_ratio='wrong')
         get_system_settings.cache_clear()
         self._assert_core_pages_load()
+
+class SystemSettingCustomFontTests(TestCase):
+    def tearDown(self):
+        get_system_settings.cache_clear()
+
+    def _settings(self, **kwargs):
+        get_system_settings.cache_clear()
+        setting = SystemSetting.objects.create(system_title_ar='اختبار الخط', **kwargs)
+        get_system_settings.cache_clear()
+        return setting
+
+    @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
+    def test_menu_without_custom_font_uses_default_stack(self):
+        self._settings()
+        response = self.client.get('/menu/')
+        self.assertLess(response.status_code, 500)
+        self.assertNotContains(response, 'HubCustomFont')
+        self.assertNotContains(response, '\\u002D')
+
+    @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
+    def test_custom_font_uses_fixed_internal_css_family(self):
+        with TemporaryDirectory() as tmp:
+            with override_settings(MEDIA_ROOT=tmp):
+                setting = self._settings(custom_font_name='MadaniArabicDEMO-Regular')
+                setting.custom_font_file.save(
+                    'MadaniArabicDEMO-Regular.otf',
+                    SimpleUploadedFile('MadaniArabicDEMO-Regular.otf', b'OTTO\x00font', content_type='font/otf'),
+                    save=True,
+                )
+                get_system_settings.cache_clear()
+
+                for path in ['/menu/', '/staff/pos/', '/staff/orders/', '/staff/cashier/']:
+                    with self.subTest(path=path):
+                        response = self.client.get(path)
+                        self.assertLess(response.status_code, 500)
+                        content = response.content.decode(response.charset or 'utf-8')
+                        self.assertIn('font-family:"HubCustomFont"', content)
+                        self.assertIn('--hub-font-body:"HubCustomFont","Tahoma","Noto Naskh Arabic","Segoe UI",Arial,sans-serif', content)
+                        self.assertNotIn('MadaniArabicDEMO', content)
+                        self.assertNotIn('\\u002D', content)
+
+    @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
+    def test_missing_custom_font_file_does_not_500_or_emit_custom_family(self):
+        setting = self._settings(custom_font_name='MissingFont', custom_font_file='system/fonts/missing-font.otf')
+        self.assertEqual(setting.safe_custom_font_url, '')
+        response = self.client.get('/menu/')
+        self.assertLess(response.status_code, 500)
+        self.assertNotContains(response, 'HubCustomFont')
