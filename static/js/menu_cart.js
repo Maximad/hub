@@ -20,6 +20,42 @@
   const deliveryMinimum = form.querySelector('[data-delivery-minimum]');
   const deliverySettings = window.HUB_DELIVERY_SETTINGS || { feeMode: 'none', fixedFee: 0, minimum: 0 };
 
+  const modal = form.querySelector('[data-menu-modal]');
+  const modalBody = form.querySelector('[data-menu-modal-body]');
+  let activeModalSource = null;
+  let activeReturnFocus = null;
+
+  function openItemModal(card) {
+    if (!modal || !modalBody) return;
+    const source = card.querySelector('[data-modal-source]');
+    if (!source) return;
+    closeItemModal(false);
+    activeModalSource = source;
+    activeReturnFocus = document.activeElement;
+    source.hidden = false;
+    modalBody.appendChild(source);
+    const title = source.querySelector('[id^="menu-item-modal-title-"]');
+    if (title?.id) modal.setAttribute('aria-labelledby', title.id);
+    modal.hidden = false;
+    document.body.classList.add('menu-modal-open');
+    modal.querySelector('[data-menu-modal-close]')?.focus();
+  }
+
+  function closeItemModal(restoreFocus = true) {
+    if (!modal || !modalBody || modal.hidden) return;
+    if (activeModalSource) {
+      const card = cards.find((item) => item.dataset.productId === activeModalSource.dataset.modalProductId);
+      activeModalSource.hidden = true;
+      (card || form).appendChild(activeModalSource);
+    }
+    modal.hidden = true;
+    modal.removeAttribute('aria-labelledby');
+    document.body.classList.remove('menu-modal-open');
+    activeModalSource = null;
+    update();
+    if (restoreFocus && activeReturnFocus?.focus) activeReturnFocus.focus();
+  }
+
   function parsePrice(text) {
     const raw = String(text || '0').replace(/[^0-9.-]/g, '');
     return Number(raw) || 0;
@@ -36,10 +72,13 @@
   }
 
   function selectedOptions(card) {
-    return Array.from(card.querySelectorAll('[data-option-input]:checked')).map((input) => ({
-      name: input.dataset.optionName || input.closest('label')?.textContent?.trim() || '',
-      delta: parsePrice(input.dataset.priceDelta),
-    }));
+    const prefix = `option_${card.dataset.productId}_`;
+    return Array.from(form.querySelectorAll('[data-option-input]:checked'))
+      .filter((input) => input.name.startsWith(prefix))
+      .map((input) => ({
+        name: input.dataset.optionName || input.closest('label')?.textContent?.trim() || '',
+        delta: parsePrice(input.dataset.priceDelta),
+      }));
   }
 
   function currentFulfillmentMode() {
@@ -101,13 +140,23 @@
 
   form.addEventListener('click', (event) => {
     const button = event.target.closest('[data-action]');
+    if (event.target.closest('[data-menu-modal-close]')) {
+      closeItemModal();
+      return;
+    }
+    const opener = event.target.closest('[data-product-card]');
+    if (opener && !event.target.closest('button, input, textarea, select, label, a, [data-modal-source]')) {
+      openItemModal(opener);
+      return;
+    }
     if (!button) return;
     const input = form.querySelector('#' + button.dataset.target);
     if (!input) return;
     const current = Math.max(0, parseInt(input.value || '0', 10) || 0);
     if (button.dataset.action === 'edit') {
-      input.closest('[data-product-card]')?.querySelector('details')?.setAttribute('open', 'open');
-      input.closest('[data-product-card]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const productId = button.dataset.target?.replace('qty_', '');
+      const card = cards.find((item) => item.dataset.productId === productId) || input.closest('[data-product-card]');
+      if (card) openItemModal(card);
       return;
     }
     const next = button.dataset.action === 'plus' ? current + 1 : button.dataset.action === 'remove' ? 0 : Math.max(0, current - 1);
@@ -123,6 +172,14 @@
       card.hidden = Boolean(query) && !haystack.includes(query);
     });
   }
+
+  form.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeItemModal();
+    if ((event.key === 'Enter' || event.key === ' ') && event.target.matches('[data-product-card]')) {
+      event.preventDefault();
+      openItemModal(event.target);
+    }
+  });
 
   form.addEventListener('input', (event) => {
     if (event.target === posSearch) filterProducts();

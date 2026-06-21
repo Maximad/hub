@@ -52,18 +52,21 @@ class CompactMenuRenderingTests(TestCase):
         return setting
 
     @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
-    def test_public_menu_compact_list_contains_latin_price_controls_notes_and_modifiers(self):
+    def test_public_menu_compact_list_uses_clickable_rows_and_modal_controls(self):
         self._settings(public_menu_layout=SystemSetting.PublicMenuLayout.COMPACT_LIST, show_item_notes=True)
         response = self.client.get('/menu/')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'menu-layout-compact_list')
         self.assertContains(response, '25,000 ل.س')
         self.assertNotContains(response, '٢٥')
-        self.assertContains(response, 'data-action="plus"')
-        self.assertContains(response, 'data-action="minus"')
+        self.assertContains(response, 'data-menu-item-open')
+        self.assertContains(response, 'role="button"')
+        self.assertContains(response, 'data-menu-modal')
+        self.assertContains(response, 'menu-item-modal-source')
         self.assertContains(response, 'name="note_')
-        self.assertContains(response, 'تخصيص')
+        self.assertContains(response, 'خيارات متاحة')
         self.assertContains(response, 'menu-product-media--placeholder')
+        self.assertNotContains(response, 'menu-list-actions')
 
     @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
     def test_invalid_public_menu_layout_falls_back(self):
