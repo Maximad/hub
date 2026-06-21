@@ -31,6 +31,30 @@
         <section class="hub-card hub-section" id="section-{{ section.id }}">
           <h3 class="hub-section-title">{{ section.name_ar }}</h3>
           <div class="menu-product-grid menu-list {{ system_settings.menu_mobile_layout_class|default:'layout-grid-1' }} {{ system_settings.menu_tablet_layout_class|default:'layout-tablet-2' }} {{ system_settings.menu_desktop_layout_class|default:'layout-grid-3' }}">
+          {% if system_settings.safe_public_menu_layout == 'compact_list' %}
+          {% for p in products %}
+            <article class="hub-list-card menu-product-card menu-list-item {{ system_settings.product_card_style_class|default:'card-image-first' }}" data-product-card data-product-id="{{ p.id }}" data-price="{{ p.price_syp|default:'0' }}" tabindex="0" role="button" aria-haspopup="dialog" aria-controls="menu-item-modal" aria-label="عرض تفاصيل {{ p.name_ar }}">
+              <div class="menu-list-row" data-menu-item-open>
+                {% if not system_settings or system_settings.show_product_images %}<div class="hub-media menu-product-media menu-list-thumb product-media-frame{% if not p.primary_media %} menu-product-media--placeholder product-media-placeholder{% endif %}">{% if p.primary_media %}{% if p.primary_media.is_visual_media %}<img src="{{ p.primary_media.resolved_url }}" alt="{{ p.primary_media.display_alt_text }}" loading="lazy">{% elif p.primary_media.media_type == 'video' %}<video src="{{ p.primary_media.resolved_url }}" aria-label="{{ p.primary_media.display_alt_text }}" muted playsinline preload="metadata"></video>{% else %}<span>{{ p.name_ar }}</span>{% endif %}{% else %}<span>{{ p.name_ar|slice:":1" }}</span>{% endif %}</div>{% endif %}
+                <div class="menu-product-main menu-list-content">
+                  <div class="menu-list-header"><h4 class="menu-product-name menu-list-title">{{ p.name_ar }}</h4>{% if not system_settings or system_settings.show_product_prices %}<p class="menu-product-price menu-list-price hub-money" data-role="price"><span class="hub-money">{{ p.price_syp|format_syp }}</span></p>{% endif %}</div>
+                  {% if not system_settings or system_settings.show_product_descriptions and p.description_ar %}<p class="menu-product-desc menu-list-description{% if not system_settings.show_product_descriptions_mobile %} menu-product-desc--desktop{% endif %}">{{ p.description_ar }}</p>{% endif %}
+                  <div class="menu-list-meta">{% if not system_settings or system_settings.show_product_badges %}{% if p.is_alcoholic %}<span class="hub-badge hub-badge-warning">يحتوي على كحول</span>{% endif %}{% if p.age_restricted %}<span class="hub-badge hub-badge-danger">للبالغين فقط</span>{% endif %}{% if p.requires_staff_confirmation %}<span class="hub-badge hub-badge-info">يحتاج تأكيد من الفريق</span>{% endif %}{% endif %}{% if p.valid_option_assignments %}<span class="menu-list-hint">خيارات متاحة</span>{% endif %}<span class="menu-list-cta">اضغط للتفاصيل</span></div>
+                </div>
+              </div>
+              <div class="menu-item-modal-source" data-modal-source hidden>
+                <div class="menu-item-modal-hero">
+                  {% if not system_settings or system_settings.show_product_images %}<div class="hub-media menu-product-media menu-item-modal-image product-media-frame{% if not p.primary_media %} menu-product-media--placeholder product-media-placeholder{% endif %}">{% if p.primary_media %}{% if p.primary_media.is_visual_media %}<img src="{{ p.primary_media.resolved_url }}" alt="{{ p.primary_media.display_alt_text }}" loading="lazy">{% elif p.primary_media.media_type == 'video' %}<video src="{{ p.primary_media.resolved_url }}" aria-label="{{ p.primary_media.display_alt_text }}" muted playsinline controls preload="metadata"></video>{% else %}<span>{{ p.name_ar }}</span>{% endif %}{% else %}<span>{{ p.name_ar|slice:":1" }}</span>{% endif %}</div>{% endif %}
+                  <div class="menu-item-modal-heading"><h3 id="menu-item-modal-title" class="menu-product-name">{{ p.name_ar }}</h3>{% if not system_settings or system_settings.show_product_prices %}<p class="menu-product-price hub-money" data-role="price"><span class="hub-money">{{ p.price_syp|format_syp }}</span></p>{% endif %}{% if p.description_ar %}<p class="menu-product-desc">{{ p.description_ar }}</p>{% endif %}</div>
+                </div>
+                {% if p.valid_option_assignments %}<div class="menu-options-wrap">{% for assignment in p.valid_option_assignments %}{% with group=assignment.group %}<fieldset class="menu-option-group" data-option-group data-selection-type="{{ group.selection_type }}" data-required="{% if group.is_required %}true{% else %}false{% endif %}" data-min-selected="{{ group.min_selected }}" data-max-selected="{{ group.max_selected|default:'' }}"><legend>{{ group.name_ar }}{% if group.is_required %}<span class="hub-badge hub-badge-warning">مطلوب</span>{% endif %}</legend><div class="menu-option-chips">{% for option in group.options.all %}{% option_selected form_values p.id group.id option.id option.is_default as checked %}<label class="menu-option-chip"><input type="{% if group.selection_type == 'single' %}radio{% else %}checkbox{% endif %}" name="option_{{ p.id }}_{{ group.id }}{% if group.selection_type == 'multiple' %}[]{% endif %}" value="{{ option.id }}" data-option-input data-option-name="{{ option.name_ar }}" data-price-delta="{{ option.price_delta_syp }}" {% if checked %}checked{% endif %}> <span>{{ option.name_ar }}</span>{% if option.price_delta_syp %}<small>{% if option.price_delta_syp > 0 %}+{% endif %}<span class="hub-money">{{ option.price_delta_syp|format_syp }}</span></small>{% endif %}</label>{% endfor %}</div></fieldset>{% endwith %}{% endfor %}</div>{% endif %}
+                {% if not system_settings or system_settings.show_item_notes %}<div class="menu-note-details"><label for="note_{{ p.id }}">ملاحظة على هذا العنصر</label>{% form_value form_values 'note_' p.id '' as note_value %}<input class="hub-input" type="text" name="note_{{ p.id }}" id="note_{{ p.id }}" value="{{ note_value }}" placeholder="مثلاً: بدون سكر، سكر خفيف، بدون بصل"></div>{% endif %}
+                <div class="menu-qty-controls menu-item-modal-actions"><button class="hub-button hub-button-secondary menu-stepper-btn" type="button" data-action="minus" data-target="qty_{{ p.id }}" aria-label="تقليل {{ p.name_ar }}">-</button>{% form_value form_values 'qty_' p.id '0' as qty_value %}<input class="hub-input menu-qty-input hub-number" type="number" min="0" step="1" value="{{ qty_value }}" name="qty_{{ p.id }}" id="qty_{{ p.id }}" inputmode="numeric"><button class="hub-button hub-button-secondary menu-stepper-btn" type="button" data-action="plus" data-target="qty_{{ p.id }}" aria-label="زيادة {{ p.name_ar }}">+</button></div>
+                <button class="hub-button hub-button-primary menu-item-modal-add" type="button" data-menu-modal-close>إضافة إلى السلة</button>
+              </div>
+            </article>
+          {% endfor %}
+          {% else %}
           {% for p in products %}
             <article class="hub-list-card menu-product-card menu-list-item {{ system_settings.product_card_style_class|default:'card-image-first' }}" data-product-card data-product-id="{{ p.id }}" data-price="{{ p.price_syp|default:'0' }}">
               {% if not system_settings or system_settings.show_product_images %}<div class="hub-media menu-product-media menu-list-thumb product-media-frame{% if not p.primary_media %} menu-product-media--placeholder product-media-placeholder{% endif %}">
@@ -100,6 +124,8 @@
               </details>{% endif %}
             </article>
           {% endfor %}
+          {% endif %}
+
           </div>
         </section>
       {% endfor %}
@@ -150,6 +176,14 @@
       <p data-sticky-total class="hub-money">0 ل.س</p>
       <a href="#cart-review" class="hub-button hub-button-primary">مراجعة الطلب</a>
     </aside>{% endif %}
+
+    <div class="menu-item-modal" id="menu-item-modal" data-menu-modal hidden role="dialog" aria-modal="true" aria-labelledby="menu-item-modal-title">
+      <div class="menu-item-modal-backdrop" data-menu-modal-close></div>
+      <div class="menu-item-modal-content hub-card" role="document">
+        <button class="hub-button hub-button-secondary menu-item-modal-close" type="button" data-menu-modal-close aria-label="إغلاق">×</button>
+        <div data-menu-modal-body></div>
+      </div>
+    </div>
   </form>
 </div>
 <script>window.HUB_DELIVERY_SETTINGS = {feeMode: '{{ settings.delivery_fee_mode|default:'none' }}', fixedFee: {{ settings.fixed_delivery_fee_syp|default:0 }}, minimum: {{ settings.minimum_delivery_order_syp|default:0 }}};</script>
