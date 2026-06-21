@@ -1110,9 +1110,10 @@ class SystemSetting(TimeStampedModel):
         BORDERED = 'bordered', 'بحدود'
 
     class PublicMenuLayout(models.TextChoices):
-        COMFORTABLE = 'comfortable', 'مريح'
-        COMPACT = 'compact', 'مضغوط'
+        COMFORTABLE = 'comfortable', 'مريح / بطاقات كبيرة'
+        COMPACT = 'compact', 'مدمج'
         IMAGE_GRID = 'image_grid', 'شبكة صور'
+        COMPACT_LIST = 'compact_list', 'قائمة تطبيق مدمجة'
 
     class MobileProductDensity(models.TextChoices):
         COMFORTABLE = 'comfortable', 'مريح'
@@ -1197,7 +1198,7 @@ class SystemSetting(TimeStampedModel):
     custom_font_name = models.CharField(max_length=120, blank=True, verbose_name='اسم الخط المخصص')
     custom_font_file = models.FileField(upload_to='system/fonts/', blank=True, validators=[validate_font_upload], verbose_name='ملف الخط المخصص')
 
-    public_menu_layout = models.CharField(max_length=20, choices=PublicMenuLayout.choices, default=PublicMenuLayout.COMFORTABLE, verbose_name='تخطيط المنيو العام')
+    public_menu_layout = models.CharField(max_length=20, choices=PublicMenuLayout.choices, default=PublicMenuLayout.COMFORTABLE, verbose_name='تخطيط المنيو العام', help_text='قائمة تطبيق مدمجة تعرض المنتجات كسطور صغيرة لتسهيل التصفح على الموبايل.')
     mobile_product_density = models.CharField(max_length=20, choices=MobileProductDensity.choices, default=MobileProductDensity.COMPACT, verbose_name='كثافة العرض على الموبايل')
     product_image_ratio = models.CharField(max_length=10, choices=ProductImageRatio.choices, default=ProductImageRatio.FOUR_THREE, verbose_name='نسبة صور المنتجات')
     show_product_descriptions_mobile = models.BooleanField(default=False, verbose_name='إظهار وصف المنتج على الموبايل')

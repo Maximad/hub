@@ -76,7 +76,7 @@
           ? `<ul class="menu-cart-options">${line.options.map((option) => `<li>${escapeHtml(option.name)}</li>`).join('')}</ul>`
           : '';
         const noteHtml = line.note ? `<small>ملاحظة: ${escapeHtml(line.note)}</small>` : '';
-        return `<li><strong>${escapeHtml(line.name)}</strong> × ${line.qty} — ${line.lineTotal.toLocaleString('ar-SY')} ل.س ${optionHtml}${noteHtml}<div class="menu-cart-actions"><button class="hub-button hub-button-secondary" type="button" data-action="minus" data-target="qty_${line.id}">-</button><button class="hub-button hub-button-secondary" type="button" data-action="plus" data-target="qty_${line.id}">+</button><button class="hub-button hub-button-secondary" type="button" data-action="edit" data-target="qty_${line.id}">تعديل</button><button class="hub-button hub-button-danger" type="button" data-action="remove" data-target="qty_${line.id}">حذف</button></div></li>`;
+        return `<li><strong>${escapeHtml(line.name)}</strong> × <span class="hub-number">${line.qty}</span> — <span class="hub-money">${line.lineTotal.toLocaleString('en-US')} ل.س</span> ${optionHtml}${noteHtml}<div class="menu-cart-actions"><button class="hub-button hub-button-secondary" type="button" data-action="minus" data-target="qty_${line.id}">-</button><button class="hub-button hub-button-secondary" type="button" data-action="plus" data-target="qty_${line.id}">+</button><button class="hub-button hub-button-secondary" type="button" data-action="edit" data-target="qty_${line.id}">تعديل</button><button class="hub-button hub-button-danger" type="button" data-action="remove" data-target="qty_${line.id}">حذف</button></div></li>`;
       })
       .join('');
 
@@ -84,14 +84,14 @@
     const deliveryFee = isDelivery && deliverySettings.feeMode === 'fixed' ? Math.max(Number(deliverySettings.fixedFee || 0), 0) : 0;
     if (deliveryFields) deliveryFields.hidden = !isDelivery;
     if (deliveryFeeRow) deliveryFeeRow.hidden = !isDelivery || deliveryFee <= 0;
-    if (deliveryFeeNode) deliveryFeeNode.textContent = `${deliveryFee.toLocaleString('ar-SY')} ل.س`;
+    if (deliveryFeeNode) deliveryFeeNode.textContent = `${deliveryFee.toLocaleString('en-US')} ل.س`;
     if (totalWithDeliveryRow) totalWithDeliveryRow.hidden = !isDelivery || deliveryFee <= 0;
-    if (totalWithDeliveryNode) totalWithDeliveryNode.textContent = `${(totalPrice + deliveryFee).toLocaleString('ar-SY')} ل.س`;
+    if (totalWithDeliveryNode) totalWithDeliveryNode.textContent = `${(totalPrice + deliveryFee).toLocaleString('en-US')} ل.س`;
     if (deliveryMinimum) deliveryMinimum.hidden = !(isDelivery && Number(deliverySettings.minimum || 0) > 0 && totalPrice < Number(deliverySettings.minimum || 0));
-    const totalText = `${totalPrice.toLocaleString('ar-SY')} ل.س`;
+    const totalText = `${totalPrice.toLocaleString('en-US')} ل.س`;
     cartTotal.textContent = totalText;
     stickyTotalNodes.forEach((node) => { node.textContent = totalText; });
-    itemCountNodes.forEach((node) => { node.textContent = totalQty.toLocaleString('ar-SY'); });
+    itemCountNodes.forEach((node) => { node.textContent = totalQty.toLocaleString('en-US'); });
 
     const hasItems = totalQty > 0;
     cartHelper.hidden = hasItems;
