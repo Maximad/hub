@@ -1,8 +1,11 @@
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
+from django.conf import settings
+from django.contrib import admin as django_admin
 
 from catalog.models import MediaAsset
 from core.models import SystemSetting
@@ -194,8 +197,75 @@ class SystemSettingCustomFontTests(TestCase):
                         content = response.content.decode(response.charset or 'utf-8')
                         self.assertIn('font-family:"HubCustomFont"', content)
                         self.assertIn('--hub-font-body:"HubCustomFont","Tahoma","Noto Naskh Arabic","Segoe UI",Arial,sans-serif', content)
+                        self.assertIn('font-family:var(--hub-font-body)', content)
+                        self.assertIn('html,body,button,input,textarea,select', content)
+                        self.assertLess(content.index('css/hub.css'), content.index('--hub-font-body:"HubCustomFont"'))
                         self.assertNotIn('MadaniArabicDEMO', content)
                         self.assertNotIn('\\u002D', content)
+
+
+    def test_custom_font_prefers_uploaded_woff2_with_same_stem(self):
+        with TemporaryDirectory() as tmp:
+            with override_settings(MEDIA_ROOT=tmp):
+                setting = self._settings(custom_font_name='BrandFont')
+                setting.custom_font_file.save(
+                    'BrandFont.otf',
+                    SimpleUploadedFile('BrandFont.otf', b'OTTO\x00font', content_type='font/otf'),
+                    save=True,
+                )
+                setting.custom_font_file.storage.save(
+                    'system/fonts/BrandFont.woff2',
+                    SimpleUploadedFile('BrandFont.woff2', b'wOF2font', content_type='font/woff2'),
+                )
+                get_system_settings.cache_clear()
+
+                response = self.client.get('/menu/')
+                content = response.content.decode(response.charset or 'utf-8')
+                self.assertIn('/media/system/fonts/BrandFont.woff2', content)
+                self.assertIn('format("woff2")', content)
+                self.assertIn('html,body,button,input,textarea,select', content)
+                self.assertIn('font-family:var(--hub-font-body)', content)
+
+    def test_base_ui_selectors_use_font_variable_without_late_hardcoded_overrides(self):
+        css = (settings.BASE_DIR / 'static/css/hub.css').read_text()
+        required_selectors = (
+            'html', 'body', 'button', 'input', 'textarea', 'select', '.hub-app', '.hub-page', '.hub-container', '.hub-card', '.card',
+            '.menu-product-card', '.staff-pos', '.staff-pos__catalog-tools', '.staff-pos__cart', '.menu-section-chip', '.menu-option-chip',
+            '.print-sheet', '.receipt-print', '.thermal-print',
+        )
+        font_rule = css.split('font-family:var(--hub-font-body)', 1)[0]
+        for selector in required_selectors:
+            self.assertIn(selector, font_rule)
+        for forbidden in (
+            'body{margin:0;background:var(--hub-bg);color:var(--hub-text);font-family:',
+            '.staff-pos{padding-bottom:7rem;font-family:',
+            '.menu-product-card{display:grid;gap:var(--space-2);font-family:',
+        ):
+            self.assertNotIn(forbidden, css)
+
+    def test_font_media_files_are_served_with_font_mime_types(self):
+        cases = {
+            'font.woff2': 'font/woff2',
+            'font.woff': 'font/woff',
+            'font.otf': 'font/otf',
+            'font.ttf': 'font/ttf',
+        }
+        with TemporaryDirectory() as tmp:
+            with override_settings(MEDIA_ROOT=tmp):
+                for filename, content_type in cases.items():
+                    path = Path(settings.MEDIA_ROOT) / 'system' / 'fonts' / filename
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(b'font')
+                    response = self.client.get(f'/media/system/fonts/{filename}')
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response['Content-Type'], content_type)
+
+    def test_admin_branding_preview_includes_active_font_sample(self):
+        setting = self._settings()
+        model_admin = __import__('core.admin', fromlist=['SystemSettingAdmin']).SystemSettingAdmin(SystemSetting, django_admin.site)
+        preview = str(model_admin.branding_preview(setting))
+        self.assertIn('معاينة الخط النشط', preview)
+        self.assertIn('font-family:var(--hub-font-body)', preview)
 
     @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
     def test_missing_custom_font_file_does_not_500_or_emit_custom_family(self):

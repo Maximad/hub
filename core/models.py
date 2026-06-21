@@ -1441,15 +1441,31 @@ class SystemSetting(TimeStampedModel):
         name = str(self.custom_font_name or '').strip() or 'HubCustomFont'
         return name if re.fullmatch(r'[\w \-]+', name, flags=re.ASCII) else 'HubCustomFont'
 
-    @property
-    def safe_custom_font_url(self):
+    def _preferred_custom_font_name(self):
         if not self.custom_font_file:
             return ''
+        name = self.custom_font_file.name
+        if not name:
+            return ''
+        if Path(name).suffix.lower() == '.woff2':
+            return name
+        woff2_name = str(Path(name).with_suffix('.woff2'))
         try:
-            name = self.custom_font_file.name
-            if not name or not self.custom_font_file.storage.exists(name):
+            if self.custom_font_file.storage.exists(woff2_name):
+                return woff2_name
+        except (OSError, ValueError, FileNotFoundError):
+            pass
+        return name
+
+    @property
+    def safe_custom_font_url(self):
+        name = self._preferred_custom_font_name()
+        if not name:
+            return ''
+        try:
+            if not self.custom_font_file.storage.exists(name):
                 return ''
-            url = self.custom_font_file.url
+            url = self.custom_font_file.storage.url(name)
             return url if str(url).startswith('/') else ''
         except Exception:
             return ''
@@ -1551,7 +1567,8 @@ class SystemSetting(TimeStampedModel):
 
     @property
     def custom_font_format(self):
-        ext = Path(self.custom_font_file.name).suffix.lower().lstrip('.') if self.custom_font_file else ''
+        name = self._preferred_custom_font_name()
+        ext = Path(name).suffix.lower().lstrip('.') if name else ''
         return 'truetype' if ext == 'ttf' else ('opentype' if ext == 'otf' else ext or 'woff2')
 
     @property
