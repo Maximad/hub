@@ -8,7 +8,7 @@
   {% if system_settings %}
   <style>
     {% if system_settings.safe_custom_font_url %}
-    @font-face{font-family:"{{ system_settings.safe_custom_font_name|escapejs }}";src:url("{{ system_settings.safe_custom_font_url }}") format("{{ system_settings.custom_font_format }}");font-display:swap;}
+    @font-face{font-family:"HubCustomFont";src:url("{{ system_settings.safe_custom_font_url }}") format("{{ system_settings.custom_font_format }}");font-display:swap;}
     {% endif %}
     :root{
       --hub-primary:{{ system_settings.safe_primary_color }};
@@ -33,7 +33,7 @@
       {% if system_settings.safe_button_padding_scale == 'compact' %}--hub-button-padding-y:.4rem;--hub-button-padding-x:.7rem;{% elif system_settings.safe_button_padding_scale == 'large' %}--hub-button-padding-y:.75rem;--hub-button-padding-x:1.15rem;{% else %}--hub-button-padding-y:.55rem;--hub-button-padding-x:.9rem;{% endif %}
       {% if system_settings.safe_input_size == 'compact' %}--hub-input-padding-y:.42rem;--hub-input-padding-x:.55rem;--hub-input-min-height:40px;{% elif system_settings.safe_input_size == 'large' %}--hub-input-padding-y:.75rem;--hub-input-padding-x:.85rem;--hub-input-min-height:52px;{% else %}--hub-input-padding-y:.55rem;--hub-input-padding-x:.65rem;--hub-input-min-height:44px;{% endif %}
       {% if system_settings.safe_card_shadow_level == 'none' %}--hub-card-shadow:none;{% elif system_settings.safe_card_shadow_level == 'medium' %}--hub-card-shadow:0 14px 34px rgba(0,0,0,.14);{% else %}--hub-card-shadow:0 1px 2px rgba(0,0,0,.06);{% endif %}
-      {% if system_settings.safe_custom_font_url %}--hub-font-body:"{{ system_settings.safe_custom_font_name }}","Tahoma","Noto Naskh Arabic","Segoe UI",Arial,sans-serif;{% endif %}
+      {% if system_settings.safe_custom_font_url %}--hub-font-body:"HubCustomFont","Tahoma","Noto Naskh Arabic","Segoe UI",Arial,sans-serif;{% endif %}
     }
   </style>
   {% endif %}
