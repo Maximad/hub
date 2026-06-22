@@ -37,7 +37,7 @@
               <div class="menu-list-row" data-menu-item-open>
                 {% if not system_settings or system_settings.show_product_images %}<div class="hub-media menu-product-media menu-list-thumb product-media-frame{% if not p.primary_media %} menu-product-media--placeholder product-media-placeholder{% endif %}">{% if p.primary_media %}{% if p.primary_media.is_visual_media %}<img src="{{ p.primary_media.resolved_url }}" alt="{{ p.primary_media.display_alt_text }}" loading="lazy">{% elif p.primary_media.media_type == 'video' %}<video src="{{ p.primary_media.resolved_url }}" aria-label="{{ p.primary_media.display_alt_text }}" muted playsinline preload="metadata"></video>{% else %}<span>{{ p.name_ar }}</span>{% endif %}{% else %}<span>{{ p.name_ar|slice:":1" }}</span>{% endif %}</div>{% endif %}
                 <div class="menu-product-main menu-list-content">
-                  <div class="menu-list-header"><h4 class="menu-product-name menu-list-title">{{ p.name_ar }}</h4>{% if not system_settings or system_settings.show_product_prices %}<p class="menu-product-price menu-list-price hub-money" data-role="price"><span class="hub-money">{{ p.price_syp|format_syp }}</span></p>{% endif %}</div>
+                  <div class="menu-list-header"><h4 class="menu-product-name menu-list-title">{{ p.name_ar }}</h4>{% if not system_settings or system_settings.show_product_prices %}<p class="menu-product-price menu-list-price hub-money" data-role="price"><span class="hub-money latin-numbers">{{ p.price_syp|format_syp }}</span></p>{% endif %}</div>
                   {% if not system_settings or system_settings.show_product_descriptions and p.description_ar %}<p class="menu-product-desc menu-list-description{% if not system_settings.show_product_descriptions_mobile %} menu-product-desc--desktop{% endif %}">{{ p.description_ar }}</p>{% endif %}
                   <div class="menu-list-meta">{% if not system_settings or system_settings.show_product_badges %}{% if p.is_alcoholic %}<span class="hub-badge hub-badge-warning">يحتوي على كحول</span>{% endif %}{% if p.age_restricted %}<span class="hub-badge hub-badge-danger">للبالغين فقط</span>{% endif %}{% if p.requires_staff_confirmation %}<span class="hub-badge hub-badge-info">يحتاج تأكيد من الفريق</span>{% endif %}{% endif %}{% if p.valid_option_assignments %}<span class="menu-list-hint">خيارات متاحة</span>{% endif %}<span class="menu-list-cta">اضغط للتفاصيل</span></div>
                 </div>
@@ -45,11 +45,11 @@
               <div class="menu-item-modal-source" data-modal-source data-modal-product-id="{{ p.id }}" hidden>
                 <div class="menu-item-modal-hero">
                   {% if not system_settings or system_settings.show_product_images %}<div class="hub-media menu-product-media menu-item-modal-image product-media-frame{% if not p.primary_media %} menu-product-media--placeholder product-media-placeholder{% endif %}">{% if p.primary_media %}{% if p.primary_media.is_visual_media %}<img src="{{ p.primary_media.resolved_url }}" alt="{{ p.primary_media.display_alt_text }}" loading="lazy">{% elif p.primary_media.media_type == 'video' %}<video src="{{ p.primary_media.resolved_url }}" aria-label="{{ p.primary_media.display_alt_text }}" muted playsinline controls preload="metadata"></video>{% else %}<span>{{ p.name_ar }}</span>{% endif %}{% else %}<span>{{ p.name_ar|slice:":1" }}</span>{% endif %}</div>{% endif %}
-                  <div class="menu-item-modal-heading"><h3 id="menu-item-modal-title-{{ p.id }}" class="menu-product-name">{{ p.name_ar }}</h3>{% if not system_settings or system_settings.show_product_prices %}<p class="menu-product-price hub-money" data-role="price"><span class="hub-money">{{ p.price_syp|format_syp }}</span></p>{% endif %}{% if p.description_ar %}<p class="menu-product-desc">{{ p.description_ar }}</p>{% endif %}</div>
+                  <div class="menu-item-modal-heading"><h3 id="menu-item-modal-title-{{ p.id }}" class="menu-product-name">{{ p.name_ar }}</h3>{% if not system_settings or system_settings.show_product_prices %}<p class="menu-product-price hub-money" data-role="price"><span class="hub-money latin-numbers">{{ p.price_syp|format_syp }}</span></p>{% endif %}{% if p.description_ar %}<p class="menu-product-desc">{{ p.description_ar }}</p>{% endif %}</div>
                 </div>
-                {% if p.valid_option_assignments %}<div class="menu-options-wrap">{% for assignment in p.valid_option_assignments %}{% with group=assignment.group %}<fieldset class="menu-option-group" data-option-group data-selection-type="{{ group.selection_type }}" data-required="{% if group.is_required %}true{% else %}false{% endif %}" data-min-selected="{{ group.min_selected }}" data-max-selected="{{ group.max_selected|default:'' }}"><legend>{{ group.name_ar }}{% if group.is_required %}<span class="hub-badge hub-badge-warning">مطلوب</span>{% endif %}</legend><div class="menu-option-chips">{% for option in group.options.all %}{% option_selected form_values p.id group.id option.id option.is_default as checked %}<label class="menu-option-chip"><input type="{% if group.selection_type == 'single' %}radio{% else %}checkbox{% endif %}" name="option_{{ p.id }}_{{ group.id }}{% if group.selection_type == 'multiple' %}[]{% endif %}" value="{{ option.id }}" data-option-input data-option-name="{{ option.name_ar }}" data-price-delta="{{ option.price_delta_syp }}" {% if checked %}checked{% endif %}> <span>{{ option.name_ar }}</span>{% if option.price_delta_syp %}<small>{% if option.price_delta_syp > 0 %}+{% endif %}<span class="hub-money">{{ option.price_delta_syp|format_syp }}</span></small>{% endif %}</label>{% endfor %}</div></fieldset>{% endwith %}{% endfor %}</div>{% endif %}
+                {% if p.valid_option_assignments %}<div class="menu-options-wrap">{% for assignment in p.valid_option_assignments %}{% with group=assignment.group %}<fieldset class="menu-option-group" data-option-group data-selection-type="{{ group.selection_type }}" data-required="{% if group.is_required %}true{% else %}false{% endif %}" data-min-selected="{{ group.min_selected }}" data-max-selected="{{ group.max_selected|default:'' }}"><legend>{{ group.name_ar }}{% if group.is_required %}<span class="hub-badge hub-badge-warning">مطلوب</span>{% endif %}</legend><div class="menu-option-chips">{% for option in group.options.all %}{% option_selected form_values p.id group.id option.id option.is_default as checked %}<label class="menu-option-chip"><input type="{% if group.selection_type == 'single' %}radio{% else %}checkbox{% endif %}" name="option_{{ p.id }}_{{ group.id }}{% if group.selection_type == 'multiple' %}[]{% endif %}" value="{{ option.id }}" data-option-input data-option-name="{{ option.name_ar }}" data-price-delta="{{ option.price_delta_syp }}" {% if checked %}checked{% endif %}> <span>{{ option.name_ar }}</span>{% if option.price_delta_syp %}<small>{% if option.price_delta_syp > 0 %}+{% endif %}<span class="hub-money latin-numbers">{{ option.price_delta_syp|format_syp }}</span></small>{% endif %}</label>{% endfor %}</div></fieldset>{% endwith %}{% endfor %}</div>{% endif %}
                 {% if not system_settings or system_settings.show_item_notes %}<div class="menu-note-details"><label for="note_{{ p.id }}">ملاحظة على هذا العنصر</label>{% form_value form_values 'note_' p.id '' as note_value %}<input class="hub-input" type="text" name="note_{{ p.id }}" id="note_{{ p.id }}" value="{{ note_value }}" placeholder="مثلاً: بدون سكر، سكر خفيف، بدون بصل"></div>{% endif %}
-                <div class="menu-qty-controls menu-item-modal-actions"><button class="hub-button hub-button-secondary menu-stepper-btn" type="button" data-action="minus" data-target="qty_{{ p.id }}" aria-label="تقليل {{ p.name_ar }}">-</button>{% form_value form_values 'qty_' p.id '0' as qty_value %}<input class="hub-input menu-qty-input hub-number" type="number" min="0" step="1" value="{{ qty_value }}" name="qty_{{ p.id }}" id="qty_{{ p.id }}" inputmode="numeric"><button class="hub-button hub-button-secondary menu-stepper-btn" type="button" data-action="plus" data-target="qty_{{ p.id }}" aria-label="زيادة {{ p.name_ar }}">+</button></div>
+                <div class="menu-qty-controls menu-item-modal-actions"><button class="hub-button hub-button-secondary menu-stepper-btn" type="button" data-action="minus" data-target="qty_{{ p.id }}" aria-label="تقليل {{ p.name_ar }}">-</button>{% form_value form_values 'qty_' p.id '0' as qty_value %}<input class="hub-input menu-qty-input hub-number latin-numbers" type="number" min="0" step="1" value="{{ qty_value }}" name="qty_{{ p.id }}" id="qty_{{ p.id }}" inputmode="numeric"><button class="hub-button hub-button-secondary menu-stepper-btn" type="button" data-action="plus" data-target="qty_{{ p.id }}" aria-label="زيادة {{ p.name_ar }}">+</button></div>
                 <button class="hub-button hub-button-primary menu-item-modal-add" type="button" data-menu-modal-close>إضافة إلى السلة</button>
               </div>
             </article>
@@ -73,7 +73,7 @@
               <div class="menu-product-main menu-list-body">
                 <h4 class="menu-product-name menu-list-title">{{ p.name_ar }}</h4>
                 {% if not system_settings or system_settings.show_product_descriptions and p.description_ar %}<p class="menu-product-desc menu-list-description{% if not system_settings.show_product_descriptions_mobile %} menu-product-desc--desktop{% endif %}">{{ p.description_ar }}</p>{% endif %}
-                {% if not system_settings or system_settings.show_product_prices %}<p class="menu-product-price menu-list-price hub-money" data-role="price"><span class="hub-money">{{ p.price_syp|format_syp }}</span></p>{% endif %}
+                {% if not system_settings or system_settings.show_product_prices %}<p class="menu-product-price menu-list-price hub-money" data-role="price"><span class="hub-money latin-numbers">{{ p.price_syp|format_syp }}</span></p>{% endif %}
               </div>
               {% if not system_settings or system_settings.show_product_badges %}<div class="menu-product-badges">
                 {% if p.is_alcoholic %}<span class="hub-badge hub-badge-warning">يحتوي على كحول</span>{% endif %}
@@ -84,7 +84,7 @@
               <div class="menu-qty-controls menu-list-actions">
                 <button class="hub-button hub-button-secondary menu-stepper-btn" type="button" data-action="plus" data-target="qty_{{ p.id }}" aria-label="زيادة {{ p.name_ar }}">+</button>
                 {% form_value form_values 'qty_' p.id '0' as qty_value %}
-                <input class="hub-input menu-qty-input hub-number" type="number" min="0" step="1" value="{{ qty_value }}" name="qty_{{ p.id }}" id="qty_{{ p.id }}" inputmode="numeric">
+                <input class="hub-input menu-qty-input hub-number latin-numbers" type="number" min="0" step="1" value="{{ qty_value }}" name="qty_{{ p.id }}" id="qty_{{ p.id }}" inputmode="numeric">
                 <button class="hub-button hub-button-secondary menu-stepper-btn" type="button" data-action="minus" data-target="qty_{{ p.id }}" aria-label="تقليل {{ p.name_ar }}">-</button>
               </div>
 
@@ -105,7 +105,7 @@
                               <label class="menu-option-chip">
                                 <input type="{% if group.selection_type == 'single' %}radio{% else %}checkbox{% endif %}" name="option_{{ p.id }}_{{ group.id }}{% if group.selection_type == 'multiple' %}[]{% endif %}" value="{{ option.id }}" data-option-input data-option-name="{{ option.name_ar }}" data-price-delta="{{ option.price_delta_syp }}" {% if checked %}checked{% endif %}>
                                 <span>{{ option.name_ar }}</span>
-                                {% if option.price_delta_syp %}<small>{% if option.price_delta_syp > 0 %}+{% endif %}<span class="hub-money">{{ option.price_delta_syp|format_syp }}</span></small>{% endif %}
+                                {% if option.price_delta_syp %}<small>{% if option.price_delta_syp > 0 %}+{% endif %}<span class="hub-money latin-numbers">{{ option.price_delta_syp|format_syp }}</span></small>{% endif %}
                               </label>
                             {% endfor %}
                           </div>
@@ -136,10 +136,10 @@
       <h3>مراجعة الطلب</h3>
       <p class="menu-cart-helper" data-cart-helper>اختر عناصر من القائمة</p>
       <ul class="menu-cart-list" data-cart-list></ul>
-      <p class="menu-cart-total">المجموع التقديري: <strong data-cart-total class="hub-money">0 ل.س</strong></p>
-      <p class="menu-cart-total" data-delivery-fee-row hidden>رسوم التوصيل: <strong data-delivery-fee class="hub-money">{{ settings.fixed_delivery_fee_syp|default:0|format_syp }}</strong></p>
-      <p class="menu-cart-total" data-total-with-delivery-row hidden>الإجمالي مع التوصيل: <strong data-total-with-delivery class="hub-money">0 ل.س</strong></p>
-      {% if settings.minimum_delivery_order_syp %}<p class="hub-help-text" data-delivery-minimum hidden>الحد الأدنى لطلب التوصيل <span class="hub-money">{{ settings.minimum_delivery_order_syp|format_syp }}</span>.</p>{% endif %}
+      <p class="menu-cart-total">المجموع التقديري: <strong data-cart-total class="hub-money latin-numbers">0 ل.س</strong></p>
+      <p class="menu-cart-total" data-delivery-fee-row hidden>رسوم التوصيل: <strong data-delivery-fee class="hub-money latin-numbers">{{ settings.fixed_delivery_fee_syp|default:0|format_syp }}</strong></p>
+      <p class="menu-cart-total" data-total-with-delivery-row hidden>الإجمالي مع التوصيل: <strong data-total-with-delivery class="hub-money latin-numbers">0 ل.س</strong></p>
+      {% if settings.minimum_delivery_order_syp %}<p class="hub-help-text" data-delivery-minimum hidden>الحد الأدنى لطلب التوصيل <span class="hub-money latin-numbers">{{ settings.minimum_delivery_order_syp|format_syp }}</span>.</p>{% endif %}
 
       <h4>طريقة الطلب</h4>
       <div class="menu-option-chips" data-fulfillment-selector>
@@ -172,8 +172,8 @@
     </section>
 
     {% if not system_settings or system_settings.show_sticky_cart %}<aside class="menu-sticky-cart" data-sticky-cart hidden>
-      <p><strong data-item-count class="hub-number">0</strong> عناصر</p>
-      <p data-sticky-total class="hub-money">0 ل.س</p>
+      <p><strong data-item-count class="hub-number latin-numbers">0</strong> عناصر</p>
+      <p data-sticky-total class="hub-money latin-numbers">0 ل.س</p>
       <a href="#cart-review" class="hub-button hub-button-primary">مراجعة الطلب</a>
     </aside>{% endif %}
 
