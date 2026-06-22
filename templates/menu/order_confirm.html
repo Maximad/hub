@@ -1,29 +1,65 @@
 {% extends "base.html" %}
+{% load menu_form %}
 {% block title %}تأكيد الطلب{% endblock %}
 {% block content %}
-<h2>تم استلام طلبك</h2>
-<p><strong>رقم الطلب:</strong> {{ order.display_number }}</p>
-{% if system_settings.show_internal_order_uuid %}<p><small>الرمز الداخلي: {{ order.public_code }}</small></p>{% endif %}
-<p><strong>الحالة:</strong> {{ order.get_status_display }}</p>
-<p><strong>طريقة الطلب:</strong> {{ order.get_fulfillment_label }}</p>
-{% if order.location_detail %}<p class="hub-location-detail">{{ order.location_detail }}</p>{% endif %}
-<img class="hub-qr" src="{{ qr_url }}" alt="QR رابط الطلب {{ order.display_number }}">
-<ul>
-  {% for item in order.items.all %}
-  <li>
-    {{ item.product_name_ar_snapshot }} × {{ item.quantity }} = {% widthratio item.quantity 1 item.unit_price_syp_snapshot %} ل.س
-    {% if item.selected_options_snapshot %}
-      <ul>
-        {% for group in item.selected_options_snapshot %}
-          {% for option in group.options %}<li>{{ option.name_ar }}{% if option.price_delta_syp %} ({% if option.price_delta_syp > 0 %}+{% endif %}{{ option.price_delta_syp }} ل.س){% endif %}</li>{% endfor %}
-        {% endfor %}
-      </ul>
-    {% endif %}
-    {% if item.item_note %}<br><small>ملاحظة: {{ item.item_note }}</small>{% endif %}
-  </li>
-  {% endfor %}
-</ul>
-<p><strong>مجموع العناصر:</strong> {{ subtotal }} ل.س</p>{% if order.delivery_fee_syp %}<p><strong>رسوم التوصيل:</strong> {{ order.delivery_fee_syp }} ل.س</p>{% endif %}<p><strong>المجموع:</strong> {{ total }} ل.س</p>{% if order.is_delivery %}<div class="hub-card"><strong>بيانات التوصيل:</strong><br>الحالة: {{ order.get_delivery_status_display }}{% if order.delivery_area %}<br>المنطقة: {{ order.delivery_area }}{% endif %}{% if order.delivery_address %}<br>العنوان: {{ order.delivery_address }}{% endif %}</div>{% endif %}
-<p>ملاحظة: الطلب بانتظار تأكيد الفريق</p>
-{% if needs_confirmation %}<p><strong>بعض العناصر تحتاج تأكيد من الفريق</strong></p>{% endif %}
+<section class="hub-card order-confirm" dir="rtl">
+  <header class="order-confirm__header">
+    <p class="hub-badge hub-badge-info">تم إرسال الطلب</p>
+    <h2>تم استلام طلبك</h2>
+    <p class="order-confirm__lead">طلبك بانتظار تأكيد الفريق. احتفظ برمز QR لمتابعة الطلب.</p>
+  </header>
+
+  <div class="order-confirm__meta">
+    <div>
+      <span>رقم الطلب</span>
+      <strong class="hub-order-number latin-numbers">{{ order.display_number }}</strong>
+    </div>
+    <div>
+      <span>الحالة</span>
+      <strong>{{ order.get_status_display }}</strong>
+    </div>
+    <div>
+      <span>طريقة الطلب</span>
+      <strong>{{ order.get_fulfillment_label }}</strong>
+    </div>
+  </div>
+  {% if system_settings.show_internal_order_uuid %}<p class="hub-help-text">الرمز الداخلي: <span class="hub-order-number latin-numbers">{{ order.public_code }}</span></p>{% endif %}
+  {% if order.location_detail %}<p class="hub-location-detail">{{ order.location_detail }}</p>{% endif %}
+
+  <div class="order-confirm__qr">
+    <img class="hub-qr" src="{{ qr_url }}" alt="QR رابط الطلب {{ order.display_number }}">
+  </div>
+
+  <section class="order-confirm__section">
+    <h3>عناصر الطلب</h3>
+    <ul class="order-confirm__items">
+      {% for item in order.items.all %}
+      <li class="order-confirm__item">
+        <div class="order-confirm__item-row">
+          <strong>{{ item.product_name_ar_snapshot }}</strong>
+          <span><span class="hub-number latin-numbers">{{ item.quantity }}</span> × <span class="hub-money latin-numbers">{{ item.unit_price_syp_snapshot|format_syp }}</span></span>
+        </div>
+        <p class="order-confirm__line-total">الإجمالي: <strong class="hub-money latin-numbers">{% widthratio item.quantity 1 item.unit_price_syp_snapshot %} ل.س</strong></p>
+        {% if item.selected_options_snapshot %}
+          <ul class="order-confirm__options">
+            {% for group in item.selected_options_snapshot %}
+              {% for option in group.options %}<li>{{ option.name_ar }}{% if option.price_delta_syp %} <span class="hub-money latin-numbers">({% if option.price_delta_syp > 0 %}+{% endif %}{{ option.price_delta_syp|format_syp }})</span>{% endif %}</li>{% endfor %}
+            {% endfor %}
+          </ul>
+        {% endif %}
+        {% if item.item_note %}<p class="order-confirm__note">ملاحظة: {{ item.item_note }}</p>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="order-confirm__totals">
+    <p><span>مجموع العناصر</span><strong class="hub-money latin-numbers">{{ subtotal|format_syp }}</strong></p>
+    {% if order.delivery_fee_syp %}<p><span>رسوم التوصيل</span><strong class="hub-money latin-numbers">{{ order.delivery_fee_syp|format_syp }}</strong></p>{% endif %}
+    <p class="order-confirm__grand-total"><span>المجموع</span><strong class="hub-money latin-numbers">{{ total|format_syp }}</strong></p>
+  </section>
+
+  {% if order.is_delivery %}<section class="hub-card order-confirm__delivery"><strong>بيانات التوصيل:</strong><br>الحالة: {{ order.get_delivery_status_display }}{% if order.delivery_area %}<br>المنطقة: {{ order.delivery_area }}{% endif %}{% if order.delivery_address %}<br>العنوان: {{ order.delivery_address }}{% endif %}</section>{% endif %}
+  {% if needs_confirmation %}<p class="hub-badge hub-badge-warning">بعض العناصر تحتاج تأكيد من الفريق</p>{% endif %}
+</section>
 {% endblock %}
