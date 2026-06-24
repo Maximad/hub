@@ -136,10 +136,10 @@
       <h3>مراجعة الطلب</h3>
       <p class="menu-cart-helper" data-cart-helper>اختر عناصر من القائمة</p>
       <ul class="menu-cart-list" data-cart-list></ul>
-      <p class="menu-cart-total">المجموع التقديري: <strong data-cart-total class="hub-money latin-numbers">0 ل.س</strong></p>
-      <p class="menu-cart-total" data-delivery-fee-row hidden>رسوم التوصيل: <strong data-delivery-fee class="hub-money latin-numbers">{{ settings.fixed_delivery_fee_syp|default:0|format_syp }}</strong></p>
+      <p class="menu-cart-total is-grand-total">المجموع التقديري: <strong data-cart-total class="hub-money latin-numbers">0 ل.س</strong></p>
+      {% if settings.effective_delivery_enabled %}<p class="menu-cart-total" data-delivery-fee-row hidden>رسوم التوصيل: <strong data-delivery-fee class="hub-money latin-numbers">{{ settings.fixed_delivery_fee_syp|default:0|format_syp }}</strong></p>
       <p class="menu-cart-total" data-total-with-delivery-row hidden>الإجمالي مع التوصيل: <strong data-total-with-delivery class="hub-money latin-numbers">0 ل.س</strong></p>
-      {% if settings.minimum_delivery_order_syp %}<p class="hub-help-text" data-delivery-minimum hidden>الحد الأدنى لطلب التوصيل <span class="hub-money latin-numbers">{{ settings.minimum_delivery_order_syp|format_syp }}</span>.</p>{% endif %}
+      {% if settings.minimum_delivery_order_syp %}<p class="hub-help-text" data-delivery-minimum hidden>الحد الأدنى لطلب التوصيل <span class="hub-money latin-numbers">{{ settings.minimum_delivery_order_syp|format_syp }}</span>.</p>{% endif %}{% endif %}
 
       <h4>طريقة الطلب</h4>
       <div class="menu-option-chips" data-fulfillment-selector>
@@ -152,14 +152,14 @@
         {% endif %}
       </div>
 
-      <div class="hub-card" data-delivery-fields hidden>
+      {% if settings.effective_delivery_enabled %}<div class="hub-card" data-delivery-fields hidden>
         <h4>بيانات التوصيل</h4>
         {% if settings.delivery_working_hours_text %}<p class="hub-help-text">ساعات التوصيل: {{ settings.delivery_working_hours_text }}</p>{% endif %}
         {% if settings.delivery_notes %}<p class="hub-help-text">{{ settings.delivery_notes }}</p>{% endif %}
         <label>منطقة التوصيل</label><input class="hub-input" type="text" name="delivery_area" value="{{ form_values.delivery_area|default:'' }}">
         <label>عنوان التوصيل{% if settings.require_address_for_delivery %} *{% endif %}</label><textarea class="hub-input" name="delivery_address" rows="3">{{ form_values.delivery_address|default:'' }}</textarea>
         <label>ملاحظات التوصيل</label><textarea class="hub-input" name="delivery_notes" rows="2">{{ form_values.delivery_notes|default:'' }}</textarea>
-      </div>
+      </div>{% endif %}
 
       <h4>بيانات الطلب</h4>
       {% if not system_settings or system_settings.show_customer_name_field %}<label>الاسم</label><input class="hub-input" type="text" name="customer_name" value="{{ form_values.customer_name|default:'' }}">{% endif %}
@@ -186,6 +186,6 @@
     </div>
   </form>
 </div>
-<script>window.HUB_DELIVERY_SETTINGS = {feeMode: '{{ settings.delivery_fee_mode|default:'none' }}', fixedFee: {{ settings.fixed_delivery_fee_syp|default:0 }}, minimum: {{ settings.minimum_delivery_order_syp|default:0 }}};</script>
+<script>window.HUB_DELIVERY_SETTINGS = {enabled: {% if settings.effective_delivery_enabled %}true{% else %}false{% endif %}, feeMode: '{{ settings.delivery_fee_mode|default:'none' }}', fixedFee: {{ settings.fixed_delivery_fee_syp|default:0 }}, minimum: {{ settings.minimum_delivery_order_syp|default:0 }}};</script>
 <script src="{% static 'js/menu_cart.js' %}"></script>
 {% endblock %}

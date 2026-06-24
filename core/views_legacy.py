@@ -563,7 +563,7 @@ def order_public(request, public_code):
         order = Order.objects.select_related('table').prefetch_related('items__product').get(public_code=public_code)
     except Order.DoesNotExist as exc:
         raise Http404('الطلب غير موجود') from exc
-    total = order.total_with_delivery_syp
+    total = order.total_with_delivery_syp if order.is_delivery else max(order.subtotal_syp + order.service_fee_syp - order.discount_syp, 0)
     needs_confirmation = any(item.product.requires_staff_confirmation for item in order.items.all() if item.product_id)
     qr_url = reverse('order_qr', kwargs={'public_code': order.public_code})
     return render(request, 'menu/order_confirm.html', {'order': order, 'subtotal': order.subtotal_syp, 'total': total, 'needs_confirmation': needs_confirmation, 'qr_url': qr_url})

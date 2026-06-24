@@ -18,7 +18,7 @@
   const totalWithDeliveryRow = form.querySelector('[data-total-with-delivery-row]');
   const totalWithDeliveryNode = form.querySelector('[data-total-with-delivery]');
   const deliveryMinimum = form.querySelector('[data-delivery-minimum]');
-  const deliverySettings = window.HUB_DELIVERY_SETTINGS || { feeMode: 'none', fixedFee: 0, minimum: 0 };
+  const deliverySettings = window.HUB_DELIVERY_SETTINGS || { enabled: false, feeMode: 'none', fixedFee: 0, minimum: 0 };
 
   const modal = form.querySelector('[data-menu-modal]');
   const modalBody = form.querySelector('[data-menu-modal-body]');
@@ -119,7 +119,7 @@
       })
       .join('');
 
-    const isDelivery = currentFulfillmentMode() === 'delivery';
+    const isDelivery = deliverySettings.enabled !== false && currentFulfillmentMode() === 'delivery';
     const deliveryFee = isDelivery && deliverySettings.feeMode === 'fixed' ? Math.max(Number(deliverySettings.fixedFee || 0), 0) : 0;
     if (deliveryFields) deliveryFields.hidden = !isDelivery;
     if (deliveryFeeRow) deliveryFeeRow.hidden = !isDelivery || deliveryFee <= 0;
