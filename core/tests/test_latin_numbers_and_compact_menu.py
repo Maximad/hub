@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
 from catalog.models import MenuSection, ProductOption, ProductOptionGroup, ProductOptionGroupAssignment
-from core.models import Category, Product, SystemSetting
+from core.models import Category, Order, OrderItem, Product, SystemSetting
 from core.settings_helpers import get_system_settings
 from core.templatetags.hub_numbers import format_syp, latin_digits
 
@@ -76,6 +76,44 @@ class CompactMenuRenderingTests(TestCase):
         response = self.client.get('/menu/')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'public-menu-layout-comfortable')
+
+
+    @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
+    def test_public_menu_hides_delivery_rows_when_delivery_disabled(self):
+        self._settings(delivery_enabled=False, enable_delivery=False)
+        response = self.client.get('/menu/')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'data-delivery-fee-row')
+        self.assertNotContains(response, 'الإجمالي مع التوصيل')
+        self.assertNotContains(response, 'data-delivery-fields')
+
+    @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
+    def test_public_menu_renders_delivery_rows_when_delivery_enabled(self):
+        self._settings(delivery_enabled=True, delivery_fee_mode=SystemSetting.DeliveryFeeMode.FIXED, fixed_delivery_fee_syp=3000)
+        response = self.client.get('/menu/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-delivery-fee-row')
+        self.assertContains(response, 'رسوم التوصيل')
+        self.assertContains(response, '3,000 ل.س')
+        self.assertNotContains(response, '٣,٠٠٠')
+
+    @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
+    def test_order_confirmation_delivery_fee_is_delivery_only_and_latin_digits(self):
+        order = Order.objects.create(fulfillment_mode=Order.FulfillmentMode.INSIDE_SPACE, service_mode=Order.ServiceMode.DINE_IN, subtotal_syp=25000, delivery_fee_syp=3000)
+        OrderItem.objects.create(order=order, product=self.product, product_name_ar_snapshot=self.product.name_ar, quantity=1, unit_price_syp_snapshot=25000)
+        response = self.client.get(f'/order/{order.public_code}/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '25,000 ل.س')
+        self.assertNotContains(response, 'رسوم التوصيل')
+        self.assertNotContains(response, '٢٥')
+
+        delivery_order = Order.objects.create(fulfillment_mode=Order.FulfillmentMode.DELIVERY, service_mode=Order.ServiceMode.DINE_IN, subtotal_syp=25000, delivery_fee_syp=3000)
+        OrderItem.objects.create(order=delivery_order, product=self.product, product_name_ar_snapshot=self.product.name_ar, quantity=1, unit_price_syp_snapshot=25000)
+        delivery_response = self.client.get(f'/order/{delivery_order.public_code}/')
+        self.assertEqual(delivery_response.status_code, 200)
+        self.assertContains(delivery_response, 'رسوم التوصيل')
+        self.assertContains(delivery_response, '28,000 ل.س')
+        self.assertNotContains(delivery_response, '٢٨')
 
     @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
     def test_staff_pos_contains_latin_digit_prices_and_core_staff_pages_load(self):

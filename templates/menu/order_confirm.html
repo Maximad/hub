@@ -55,7 +55,7 @@
 
   <section class="order-confirm__totals">
     <p><span>مجموع العناصر</span><strong class="hub-money latin-numbers">{{ subtotal|format_syp }}</strong></p>
-    {% if order.delivery_fee_syp %}<p><span>رسوم التوصيل</span><strong class="hub-money latin-numbers">{{ order.delivery_fee_syp|format_syp }}</strong></p>{% endif %}
+    {% if order.is_delivery and order.delivery_fee_syp %}<p><span>رسوم التوصيل</span><strong class="hub-money latin-numbers">{{ order.delivery_fee_syp|format_syp }}</strong></p>{% endif %}
     <p class="order-confirm__grand-total"><span>المجموع</span><strong class="hub-money latin-numbers">{{ total|format_syp }}</strong></p>
   </section>
 
