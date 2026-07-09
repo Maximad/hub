@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.contrib.staticfiles import finders
 from django.test import TestCase, override_settings
 
 from catalog.models import MenuSection, ProductOption, ProductOptionGroup, ProductOptionGroupAssignment
@@ -51,6 +52,31 @@ class CompactMenuRenderingTests(TestCase):
         get_system_settings.cache_clear()
         return setting
 
+
+    def test_global_numeric_assets_are_loaded_from_base_template(self):
+        response = self.client.get('/menu/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'js/hub_numbers.js')
+
+    def test_global_numeric_css_covers_raw_tables_badges_and_inputs(self):
+        css_path = finders.find('css/hub.css')
+        self.assertIsNotNone(css_path)
+        css = open(css_path, encoding='utf-8').read()
+        for selector in ['.hub-money', '.hub-order-number', 'input[type="number"]', 'input[inputmode="numeric"]', 'input[type="tel"]', '.hub-table td', '.hub-badge']:
+            with self.subTest(selector=selector):
+                self.assertIn(selector, css)
+        self.assertIn('unicode-bidi:isolate', css)
+        self.assertIn('font-variant-numeric:tabular-nums', css)
+
+    def test_global_numeric_script_normalizes_text_nodes_and_inputs(self):
+        js_path = finders.find('js/hub_numbers.js')
+        self.assertIsNotNone(js_path)
+        js = open(js_path, encoding='utf-8').read()
+        self.assertIn('window.HubNumbers', js)
+        self.assertIn('input[type="number"], input[inputmode="numeric"], input[type="tel"]', js)
+        self.assertIn('.hub-table td', js)
+        self.assertIn('MutationObserver', js)
+
     @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
     def test_public_menu_compact_list_uses_clickable_rows_and_modal_controls(self):
         self._settings(public_menu_layout=SystemSetting.PublicMenuLayout.COMPACT_LIST, show_item_notes=True)
@@ -58,6 +84,7 @@ class CompactMenuRenderingTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'menu-layout-compact_list')
         self.assertContains(response, '25,000 ل.س')
+        self.assertContains(response, 'js/hub_numbers.js')
         self.assertNotContains(response, '٢٥')
         self.assertContains(response, 'data-menu-item-open')
         self.assertContains(response, 'role="button"')
@@ -113,10 +140,12 @@ class CompactMenuRenderingTests(TestCase):
         self.assertEqual(delivery_response.status_code, 200)
         self.assertContains(delivery_response, 'رسوم التوصيل')
         self.assertContains(delivery_response, '28,000 ل.س')
+        self.assertContains(delivery_response, 'js/hub_numbers.js')
         self.assertNotContains(delivery_response, '٢٨')
 
     @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
     def test_staff_pos_contains_latin_digit_prices_and_core_staff_pages_load(self):
+        Order.objects.create(fulfillment_mode=Order.FulfillmentMode.INSIDE_SPACE, service_mode=Order.ServiceMode.DINE_IN, subtotal_syp=25000)
         self.client.force_login(self.user)
         for path in ['/staff/pos/', '/staff/orders/', '/staff/cashier/']:
             with self.subTest(path=path):
@@ -124,3 +153,23 @@ class CompactMenuRenderingTests(TestCase):
                 self.assertLess(response.status_code, 500)
         response = self.client.get('/staff/pos/')
         self.assertContains(response, '25,000 ل.س')
+        self.assertContains(response, 'js/hub_numbers.js')
+
+    @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
+    def test_staff_raw_order_board_values_are_covered_by_global_layer(self):
+        order = Order.objects.create(fulfillment_mode=Order.FulfillmentMode.INSIDE_SPACE, service_mode=Order.ServiceMode.DINE_IN, subtotal_syp=25000)
+        OrderItem.objects.create(order=order, product=self.product, product_name_ar_snapshot=self.product.name_ar, quantity=2, unit_price_syp_snapshot=25000)
+        self.client.force_login(self.user)
+        response = self.client.get('/staff/orders/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'رقم الطلب:')
+        self.assertContains(response, order.display_number)
+        self.assertContains(response, 'js/hub_numbers.js')
+
+    @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
+    def test_input_rendering_case_loads_global_normalizer(self):
+        self.client.force_login(self.user)
+        response = self.client.get('/staff/reservations/new/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'type="number"')
+        self.assertContains(response, 'js/hub_numbers.js')
