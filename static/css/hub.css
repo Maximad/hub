@@ -368,3 +368,38 @@ a{color:var(--hub-primary-strong)}
   .menu-sticky-cart{gap:.4rem .65rem;padding:.62rem;border-radius:18px;grid-template-columns:1fr auto}.menu-sticky-cart p{margin:0}.menu-sticky-cart p:first-child{font-size:.84rem}.menu-sticky-cart [data-sticky-total]{font-size:.95rem}.menu-sticky-cart .hub-button{min-height:40px;font-size:.88rem;border-radius:13px}
   .menu-item-modal-content{padding:1rem}.menu-item-modal-heading h3{font-size:1.05rem}.menu-item-modal-heading .menu-product-desc{font-size:.84rem}.menu-item-modal-actions{grid-template-columns:46px minmax(64px,1fr) 46px;margin-top:.85rem}.menu-item-modal-actions .hub-button,.menu-item-modal-actions .hub-input{min-height:46px}.menu-item-modal-add{min-height:48px;font-size:.94rem}
 }
+
+/* Site-wide numeric typography: keep Arabic text RTL, but render numeric runs predictably. */
+.hub-money,
+.hub-number,
+.hub-price,
+.hub-order-number,
+.latin-numbers,
+input[type="number"],
+input[inputmode="numeric"],
+input[type="tel"],
+.hub-table td,
+.hub-table th,
+.print-table td,
+.print-table th,
+.print-totals dd,
+.hub-badge,
+.hub-stat-card,
+.menu-cart-total,
+.menu-product-price,
+.menu-list-price,
+.order-confirm__line-total,
+[data-cart-total],
+[data-delivery-fee],
+[data-total-with-delivery],
+[data-sticky-total]{
+  font-variant-numeric:tabular-nums;
+  unicode-bidi:isolate;
+}
+
+input[type="number"],
+input[inputmode="numeric"],
+input[type="tel"]{
+  direction:ltr;
+  text-align:end;
+}
