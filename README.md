@@ -52,6 +52,75 @@ DJANGO_ALLOWED_HOSTS=hubsweida.jwtalenthouse.com,72.62.52.167,localhost,127.0.0.
 DJANGO_CSRF_TRUSTED_ORIGINS=https://hubsweida.jwtalenthouse.com,http://hubsweida.jwtalenthouse.com
 ```
 
+### Infrastructure access plan
+
+Current target topology is **public Traefik plus optional VPN/private operations access**:
+
+* Public users reach Django through the existing Traefik reverse proxy on the external Docker network named `proxy`; Traefik terminates HTTPS and forwards requests to the `web` service on container port `8000`.
+* Direct host access is limited to the existing localhost bind, `127.0.0.1:8899:8000`, for SSH tunnel or same-host maintenance only. Do not expose this bind on `0.0.0.0` unless the firewall and Django host/origin settings are updated intentionally.
+* If VPN access is required, prefer **VPN to reverse proxy**: publish a private DNS name through the VPN and route it through Traefik to the same `web` service on the `proxy` Docker network. Use Tailscale/Headscale, WireGuard, or OpenVPN according to the operations team's standard.
+* Direct VPN-to-host access may be allowed only for approved admin/staff maintenance clients and should use either a private Traefik router or the localhost tunnel pattern; do not bypass Traefik unless Django proxy/header behavior and CSRF origins are tested.
+* The deployment is **IPv4-only by default**. Enable dual-stack IPv4/IPv6 only after the server, Traefik entrypoints, Docker networking, firewall, DNS, and chosen VPN product all support IPv6 end-to-end.
+
+Final access inventory:
+
+* Public URL: `https://hubsweida.jwtalenthouse.com`
+* Private VPN hostname: `hub-vpn.internal` placeholder; replace with the real split-DNS name before enabling VPN access.
+* Private VPN IP: not assigned by default. If direct access is intentionally allowed, document the approved VPN interface IP here and add it to firewall rules and `DJANGO_ALLOWED_HOSTS`.
+
+Environment guidance for access changes:
+
+* `DJANGO_ALLOWED_HOSTS` must include every hostname or literal IP used by browsers or health checks, including the public domain, any private VPN hostname, and any approved private VPN IP.
+* `DJANGO_CSRF_TRUSTED_ORIGINS` must include the full scheme and host for every HTTPS/HTTP browser origin that can submit staff/admin forms, including any private VPN hostname such as `https://hub-vpn.internal`.
+* If future trusted-proxy/CIDR hardening is added, document the trusted Traefik container/network CIDR and approved VPN subnets before enabling it. Do not trust arbitrary `X-Forwarded-*` headers from unapproved networks.
+
+Traefik/VPN behavior to verify before enabling VPN access:
+
+* Django is configured to trust `X-Forwarded-Proto` for HTTPS detection and to use `X-Forwarded-Host`; Traefik must continue forwarding `X-Forwarded-Proto` and `X-Forwarded-Host` to the app.
+* Confirm client IP handling in Traefik access logs and application logs before relying on IP-based auditing or rate limiting; if exact VPN client IPs are required, configure and test Traefik forwarded-header trust for only the VPN/proxy subnets.
+* The app should remain reached through the existing `proxy` Docker network. A separate private Traefik router/entrypoint is needed only if VPN traffic must have a distinct hostname, middleware, TLS policy, or access controls.
+
+Firewall and DNS plan:
+
+* Keep `127.0.0.1:8899:8000` private. Allow external ingress only to public Traefik ports `80/tcp` and `443/tcp`, SSH from approved admin IPs, and the approved VPN interface/subnets.
+* Document allowed IPv4 ranges before opening VPN access, for example `100.64.0.0/10` for Tailscale CGNAT or the chosen WireGuard/OpenVPN tunnel CIDR.
+* Document allowed IPv6 ranges only if dual-stack is enabled; otherwise do not publish AAAA records and block unsolicited IPv6 ingress.
+* Public DNS should point `hubsweida.jwtalenthouse.com` to the public Traefik endpoint. Use private/split DNS for the VPN hostname if needed. Publish AAAA records only after IPv6 works across the server, Traefik, firewall, Docker, and VPN.
+
+Manual verification commands after access or VPN changes:
+
+```bash
+# Public HTTPS route
+curl -I https://hubsweida.jwtalenthouse.com/menu/
+
+# VPN/private hostname route, after split DNS is configured
+curl -I https://hub-vpn.internal/menu/
+
+# Admin login GET
+curl -I https://hubsweida.jwtalenthouse.com/admin/login/
+
+# Admin login POST path/CSRF flow; replace credentials only in a secure shell history context
+curl -c /tmp/hub-cookies.txt -s https://hubsweida.jwtalenthouse.com/admin/login/ -o /tmp/hub-login.html
+python - <<'PY'
+from pathlib import Path
+import re
+html = Path('/tmp/hub-login.html').read_text()
+print(re.search(r'name="csrfmiddlewaretoken" value="([^"]+)"', html).group(1))
+PY
+curl -b /tmp/hub-cookies.txt -c /tmp/hub-cookies.txt -X POST https://hubsweida.jwtalenthouse.com/admin/login/ \
+  -H 'Referer: https://hubsweida.jwtalenthouse.com/admin/login/' \
+  -d 'username=ADMIN_USER&password=ADMIN_PASSWORD&csrfmiddlewaretoken=CSRF_TOKEN&next=/admin/' -I
+
+# CSRF-protected staff action; authenticate first, then use a safe test item/session in staging when possible
+curl -b /tmp/hub-cookies.txt -c /tmp/hub-cookies.txt -X POST https://hubsweida.jwtalenthouse.com/staff/kitchen/item/ITEM_ID/status/ \
+  -H 'Referer: https://hubsweida.jwtalenthouse.com/staff/kitchen/' \
+  -d 'status=accepted&csrfmiddlewaretoken=CSRF_TOKEN' -I
+
+# Static and media assets
+curl -I https://hubsweida.jwtalenthouse.com/static/css/hub.css
+curl -I https://hubsweida.jwtalenthouse.com/media/products/normal-tea.png
+```
+
 ### Windows PowerShell SSH
 ```powershell
 ssh -i "C:\Users\USER\.ssh\hub_vps" deploy@72.62.52.167
