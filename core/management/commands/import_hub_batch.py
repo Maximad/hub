@@ -145,7 +145,7 @@ class Command(BaseCommand):
             if section not in only:
                 continue
             method(path, plan)
-            if execute and not plan.errors:
+            if execute:
                 for op in plan.ops[executed:]:
                     op()
                 executed = len(plan.ops)
@@ -237,25 +237,59 @@ class Command(BaseCommand):
         return p
 
     def options(self,path,plan):
+        planned_groups = {}
+        planned_options = set()
+        planned_assignments = set()
         for row,r in read_rows(path,SHEETS['options'],OPTION_HEADERS):
             act=_text(r['إجراء الاستيراد']);
             if act=='SKIP': plan.inc('options','skipped'); continue
+            op_mark = len(plan.ops)
+            added_group_code = None
+            added_option_key = None
+            added_assignment_keys = []
             try:
-                group=ProductOptionGroup.objects.filter(code=_text(r['كود المجموعة'])).first()
+                group_code = _text(r['كود المجموعة'])
+                option_code = _text(r['كود الخيار'])
+                group=ProductOptionGroup.objects.filter(code=group_code).first()
+                if not group:
+                    group = planned_groups.get(group_code)
                 if act=='MATCH_ONLY' and not group: raise BlockingError('Option group missing')
                 if not group and act=='CREATE_INACTIVE':
-                    g=ProductOptionGroup(code=_text(r['كود المجموعة']),name_ar=_text(r['اسم المجموعة']),selection_type=map_choice(r['نوع الاختيار'],SELECTION_LABELS,'selection type'),is_required=boolean(r['إلزامي'],blank=False),min_selected=integer(r['الحد الأدنى']),max_selected=dec(r['الحد الأقصى']),is_active=False)
-                    plan.inc('options','groups_created_inactive'); plan.ops.append(lambda g=g: self.save_obj(g))
+                    group=ProductOptionGroup(code=group_code,name_ar=_text(r['اسم المجموعة']),selection_type=map_choice(r['نوع الاختيار'],SELECTION_LABELS,'selection type'),is_required=boolean(r['إلزامي'],blank=False),min_selected=integer(r['الحد الأدنى']),max_selected=dec(r['الحد الأقصى']),is_active=False)
+                    planned_groups[group_code] = group
+                    added_group_code = group_code
+                    plan.inc('options','groups_created_inactive'); plan.ops.append(lambda g=group: self.save_obj(g))
                 else: plan.inc('options','groups_matched')
-                opt_exists = group and ProductOption.objects.filter(group=group,code=_text(r['كود الخيار'])).exists()
+
+                option_key = (group_code, option_code)
+                db_group = group if getattr(group, 'pk', None) else None
+                opt_exists = bool(db_group and ProductOption.objects.filter(group=db_group,code=option_code).exists())
                 if act=='MATCH_ONLY' and not opt_exists: raise BlockingError('Option missing')
-                if opt_exists: plan.inc('options','options_matched')
-                else: plan.inc('options','options_created_inactive'); plan.ops.append(lambda r=r: self.create_option(r))
+                if opt_exists or option_key in planned_options:
+                    plan.inc('options','options_matched')
+                else:
+                    planned_options.add(option_key)
+                    added_option_key = option_key
+                    plan.inc('options','options_created_inactive'); plan.ops.append(lambda r=r: self.create_option(r))
                 for key in [x.strip() for x in _text(r['مفاتيح المنتجات']).split(',') if x.strip()]:
                     p=resolve_product_key(key)
-                    if group and ProductOptionGroupAssignment.objects.filter(product=p,group=group).exists(): plan.inc('options','assignments_matched')
-                    else: plan.inc('options','assignments_created'); plan.ops.append(lambda pk=p.pk,code=_text(r['كود المجموعة']),active=(boolean(r['نشط'],blank=False) if act=='MATCH_ONLY' else False): self.create_assignment(pk,code,active))
-            except (BlockingError, ValidationError, ValueError) as e: plan.error(row,str(e),'options')
+                    assignment_key = (p.pk, group_code)
+                    assignment_exists = bool(db_group and ProductOptionGroupAssignment.objects.filter(product=p,group=db_group).exists())
+                    if assignment_exists or assignment_key in planned_assignments:
+                        plan.inc('options','assignments_matched')
+                    else:
+                        planned_assignments.add(assignment_key)
+                        added_assignment_keys.append(assignment_key)
+                        plan.inc('options','assignments_created'); plan.ops.append(lambda pk=p.pk,code=group_code,active=(boolean(r['نشط'],blank=False) if act=='MATCH_ONLY' else False): self.create_assignment(pk,code,active))
+            except (BlockingError, ValidationError, ValueError) as e:
+                del plan.ops[op_mark:]
+                if added_group_code:
+                    planned_groups.pop(added_group_code, None)
+                if added_option_key:
+                    planned_options.discard(added_option_key)
+                for assignment_key in added_assignment_keys:
+                    planned_assignments.discard(assignment_key)
+                plan.error(row,str(e),'options')
 
     def recipes(self,path,plan):
         for row,r in read_rows(path,SHEETS['recipes'],RECIPE_HEADERS):

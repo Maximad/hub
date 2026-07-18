@@ -67,8 +67,8 @@ def inv_row(action='CREATE_INACTIVE', code='ING-SUGAR', name='سكر', qty='99')
 def prod_row(action='CREATE_INACTIVE', key='P1', name='قهوة', cat='مشروبات'):
     return [action,'بحاجة مراجعة',key,name,'Coffee','','',cat,'مشروب','beverage','coffee','5000','نعم','نعم','نعم','نعم','نعم','نعم','bar','لا','لا','نعم','3','desc','','']
 
-def opt_row(action='CREATE_INACTIVE', key='P1'):
-    return [action,'بحاجة مراجعة','size','الحجم','single','لا','0','1','large','كبير','500','لا','نعم',key,'']
+def opt_row(action='CREATE_INACTIVE', key='P1', option_code='large', option_name='كبير'):
+    return [action,'بحاجة مراجعة','size','الحجم','single','لا','0','1',option_code,option_name,'500','لا','نعم',key,'']
 
 def rec_row(action='UPSERT_INACTIVE', key='P1', code='ING-SUGAR', qty='1500', unit='غ', waste='1.234'):
     return [action,'بحاجة مراجعة',key,'',code,'',qty,unit,'','','{}'.format(waste),'نعم','','','','']
@@ -104,6 +104,46 @@ class ImportHubBatchCommandTests(TestCase):
         recipe = ProductRecipeItem.objects.get()
         self.assertEqual(recipe.quantity_per_unit, Decimal('1.500')); self.assertEqual(recipe.waste_factor_percent, Decimal('1.23'))
         self.assertEqual(StockMovement.objects.count(), 0)
+
+
+    def test_duplicate_planned_option_group_rows_create_once_and_idempotent(self):
+        option_rows = [
+            opt_row(key='P1'),
+            opt_row(key='P1', option_code='small', option_name='صغير'),
+            opt_row(key='P1'),
+        ]
+        sheets = base_sheets(categories=[cat_row()], products=[prod_row()], options=option_rows)
+
+        out, _ = self.run_book(sheets, '--apply')
+
+        self.assertIn('groups_created_inactive=1', out)
+        self.assertEqual(ProductOptionGroup.objects.filter(code='size').count(), 1)
+        group = ProductOptionGroup.objects.get(code='size')
+        self.assertEqual(set(ProductOption.objects.filter(group=group).values_list('code', flat=True)), {'large', 'small'})
+        product = Product.objects.get(metadata__masharib_menu_code='P1')
+        self.assertEqual(ProductOptionGroupAssignment.objects.filter(product=product, group=group).count(), 1)
+
+        self.run_book(sheets, '--apply')
+
+        self.assertEqual(ProductOptionGroup.objects.filter(code='size').count(), 1)
+        self.assertEqual(ProductOption.objects.filter(group=group).count(), 2)
+        self.assertEqual(ProductOptionGroupAssignment.objects.filter(product=product, group=group).count(), 1)
+
+    def test_validation_errors_do_not_block_valid_planned_rows_for_later_sheets(self):
+        sheets = base_sheets(
+            categories=[
+                cat_row(action='BOGUS', cat='فئة سيئة'),
+                cat_row(cat='مشروبات'),
+            ],
+            products=[prod_row()],
+        )
+
+        with self.assertRaises(CommandError) as ctx:
+            self.run_book(sheets)
+
+        self.assertIn('Blocking validation errors: 1', str(ctx.exception))
+        self.assertEqual(Category.objects.count(), 0)
+        self.assertEqual(Product.objects.count(), 0)
 
     def test_match_only_never_changes_existing_inventory_quantity_or_product(self):
         c = Category.objects.create(name_ar='مشروبات'); MenuSection.objects.create(name_ar='مشروبات')
