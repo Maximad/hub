@@ -18,6 +18,15 @@ class MembershipSubscriptionAdmin(admin.ModelAdmin):
 
 @admin.register(MemberCreditLedger)
 class MemberCreditLedgerAdmin(admin.ModelAdmin):
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def get_readonly_fields(self, request, obj=None):
+        return tuple(f.name for f in self.model._meta.fields)
+
     list_display = ('member', 'subscription', 'change_type', 'minutes_delta', 'credit_delta_syp', 'created_by', 'created_at')
     list_filter = ('change_type',)
     search_fields = ('member__name_ar', 'member__phone', 'notes')

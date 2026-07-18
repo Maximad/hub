@@ -49,7 +49,7 @@ class ProductOptionGroupAdmin(admin.ModelAdmin):
 
 @admin.register(MediaAsset)
 class MediaAssetAdmin(admin.ModelAdmin):
-    list_display = ('thumbnail_preview', 'title_ar', 'title_en', 'media_type', 'is_active', 'uploaded_by', 'created_at', 'updated_at')
+    list_display = ('thumbnail_preview', 'title_ar', 'media_type', 'is_active', 'source_indicator', 'uploaded_by', 'created_at')
     list_filter = ('media_type', 'is_active', 'created_at')
     search_fields = ('title_ar', 'title_en', 'alt_text_ar', 'caption_ar', 'file', 'external_url')
     readonly_fields = ('thumbnail_preview', 'file_link', 'uuid', 'created_at', 'updated_at')
@@ -65,6 +65,14 @@ class MediaAssetAdmin(admin.ModelAdmin):
     @admin.display(description='معاينة')
     def thumbnail_preview(self, obj):
         return safe_media_preview(obj)
+
+    @admin.display(description='المصدر')
+    def source_indicator(self, obj):
+        if obj.file:
+            return 'ملف مرفوع'
+        if obj.external_url:
+            return 'رابط خارجي'
+        return '—'
 
     @admin.display(description='رابط الملف')
     def file_link(self, obj):

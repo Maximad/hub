@@ -1,0 +1,4 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'admin/css/hub_admin.css' %}">{% endblock %}
+{% block extrahead %}{{ block.super }}<meta name="viewport" content="width=device-width, initial-scale=1">{% endblock %}
