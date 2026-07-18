@@ -1,0 +1,23 @@
+{% extends "admin/base_site.html" %}
+{% load i18n log %}
+{% block content %}
+<div class="hub-admin-dashboard" dir="rtl">
+  <section class="hub-hero">
+    <div><h1>لوحة إدارة Hub / Masharib</h1><p>استخدم صفحات التشغيل اليومية للطلبات والكاشير والتحضير. لوحة الإدارة مخصصة للإعدادات والمراجعة والتصحيح.</p></div>
+  </section>
+  <section class="hub-quick-actions" aria-label="إجراءات سريعة">
+    {% for action in hub_quick_actions %}<a class="hub-action" href="{{ action.url }}">{{ action.label }}</a>{% endfor %}
+  </section>
+  <h2>التشغيل اليومي</h2>
+  <section class="hub-staff-links">
+    {% for link in hub_staff_links %}<a href="{{ link.url }}">{{ link.label }}</a>{% endfor %}
+  </section>
+  <section class="hub-section-grid">
+    {% for section in hub_dashboard_sections %}
+      <article class="hub-card"><h2>{{ section.title }}</h2><ul>{% for item in section.items %}<li><a href="{{ item.url }}">{{ item.label }}</a>{% if item.add_url %}<a class="hub-mini-add" href="{{ item.add_url }}">إضافة</a>{% endif %}</li>{% endfor %}</ul></article>
+    {% endfor %}
+  </section>
+  <details class="hub-recent-actions"><summary>آخر الإجراءات</summary>{% get_admin_log 8 as admin_log for_user user %}{% if admin_log %}<ul>{% for entry in admin_log %}<li>{{ entry.action_time|date:"Y-m-d H:i" }} — {{ entry.object_repr }} <span>{{ entry.content_type.name }}</span></li>{% endfor %}</ul>{% else %}<p>لا توجد إجراءات حديثة.</p>{% endif %}</details>
+</div>
+{% endblock %}
+{% block sidebar %}{% endblock %}

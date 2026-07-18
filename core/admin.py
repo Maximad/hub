@@ -32,11 +32,46 @@ from .models import (
 )
 
 
+class SuperuserEditOnlyAdmin(admin.ModelAdmin):
+    workflow_help_url = ''
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(super().get_readonly_fields(request, obj))
+        if not request.user.is_superuser:
+            fields.extend(f.name for f in self.model._meta.fields)
+            fields.extend(f.name for f in self.model._meta.many_to_many)
+        return tuple(dict.fromkeys(fields))
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    @admin.display(description='صفحة التشغيل')
+    def workflow_link(self, obj):
+        if not self.workflow_help_url:
+            return '—'
+        return format_html('<a class="button" href="{}">فتح صفحة التشغيل</a>', self.workflow_help_url)
+
+
+class ReadOnlyWorkflowAdmin(admin.ModelAdmin):
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser or super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = [f.name for f in self.model._meta.fields] + [f.name for f in self.model._meta.many_to_many]
+        return tuple(dict.fromkeys(list(super().get_readonly_fields(request, obj)) + fields))
+
+
 class ProductMediaInline(admin.TabularInline):
     model = ProductMedia
     extra = 1
     verbose_name = 'ربط صورة من مكتبة الوسائط'
-    verbose_name_plural = 'وسائط المنتج — ارفع الصورة في مكتبة الوسائط ثم اربطها بالمنتج هنا.'
+    verbose_name_plural = 'ربط المنتج بوسائط من مكتبة الوسائط'
     fields = ('media_asset', 'media_type', 'url', 'alt_text_ar', 'is_primary', 'is_active', 'display_on_public_menu', 'display_on_pos', 'sort_order', 'media_preview')
     readonly_fields = ('media_preview',)
 
@@ -183,7 +218,7 @@ class SystemSettingAdminForm(forms.ModelForm):
 class SystemSettingAdmin(admin.ModelAdmin):
     form = SystemSettingAdminForm
     fieldsets = (
-        ('الهوية العامة', {
+        ('الهوية والعلامة', {
             'fields': (
                 'system_title_ar', 'system_title_en', 'public_brand_title_ar', 'public_brand_title_en',
                 'header_subtitle_ar', 'header_subtitle_en', 'public_menu_title', 'public_menu_subtitle', 'default_language', 'brand_logo_media', 'brand_icon_media', 'public_menu_banner_media', 'pos_logo_media', 'receipt_logo_media', 'custom_font_name', 'custom_font_file',
@@ -193,7 +228,7 @@ class SystemSettingAdmin(admin.ModelAdmin):
         ('الطلبات', {
             'fields': ('enable_table_orders', 'enable_general_in_space_orders', 'show_internal_order_uuid', 'default_order_mode'),
         }),
-        ('خيارات الطلب والتوصيل', {
+        ('التوصيل', {
             'fields': (
                 'delivery_enabled', 'takeaway_enabled', 'enable_delivery', 'enable_takeaway', 'default_fulfillment_mode',
                 'require_delivery_phone', 'require_delivery_address', 'allow_unpaid_delivery', 'require_phone_for_delivery', 'require_address_for_delivery',
@@ -202,14 +237,15 @@ class SystemSettingAdmin(admin.ModelAdmin):
             ),
             'description': 'التوصيل والتيك أواي يبقيان مخفيين عن المنيو العام ونقطة البيع ما لم يتم تفعيلهما هنا. إذا كان الوضع الافتراضي غير متاح فسيعود النظام إلى طلب داخل المكان.',
         }),
-        ('الألوان', {
+        ('الألوان والخطوط', {
             'fields': (
                 'primary_color', 'header_color', 'accent_color', 'background_color', 'surface_color', 'card_background_color',
                 'text_color', 'muted_text_color', 'border_color', 'button_color',
             ),
             'description': 'استخدم ألوان HEX آمنة مثل #0f5f57. لا حاجة لمعرفة CSS.',
         }),
-        ('الخطوط والأحجام', {
+        ('الإعدادات المتقدمة', {
+            'classes': ('collapse',),
             'fields': (
                 'base_font_size_px', 'heading_font_size_px', 'small_font_size_px', 'button_font_size_px',
                 'button_padding_scale', 'input_size', 'border_radius_px', 'border_radius', 'card_style', 'card_shadow_level',
@@ -217,20 +253,20 @@ class SystemSettingAdmin(admin.ModelAdmin):
             ),
             'description': 'القيم محددة بنطاقات آمنة حتى لا تنكسر الواجهة على الجوال أو التابلت.',
         }),
-        ('تخطيط المنيو', {
+        ('المنيو العام', {
             'fields': (
                 'public_menu_layout', 'mobile_product_density', 'product_image_ratio', 'show_product_descriptions_mobile', 'show_banner_on_public_menu', 'menu_layout_preset', 'menu_mobile_layout', 'menu_tablet_columns', 'menu_desktop_columns',
                 'product_card_style', 'sticky_cart_style', 'cart_review_position',
             ),
             'description': 'تحكم بطريقة عرض المنيو العام دون تغيير حقول إرسال الطلب.',
         }),
-        ('تخطيط نقطة البيع', {
+        ('نقطة البيع', {
             'fields': (
                 'staff_home_layout', 'pos_layout_preset', 'auto_deduct_inventory_on_sale', 'stock_deduction_mode', 'strict_stock_deduction', 'pos_mobile_columns', 'pos_tablet_columns',
                 'pos_desktop_columns', 'pos_cart_position', 'order_board_density', 'cashier_layout',
             ),
         }),
-        ('إعدادات الإنترنت والعمل', {
+        ('الإشعارات', {
             'fields': (
                 'internet_metered_enabled', 'default_internet_billing_mode', 'default_rate_per_hour_syp', 'default_minimum_minutes',
                 'default_rounding_increment_minutes', 'default_minimum_charge_syp', 'default_free_grace_minutes', 'default_daily_cap_syp', 'allow_guest_internet_sessions',
@@ -239,7 +275,8 @@ class SystemSettingAdmin(admin.ModelAdmin):
             ),
             'description': 'هذه الإعدادات للفوترة اليدوية فقط. التحكم الآلي بالراوتر/الشبكة/الكابتف بورتال غير مفعّل في هذه المرحلة.',
         }),
-        ('عناصر الإظهار والإخفاء', {
+        ('الإعدادات المتقدمة', {
+            'classes': ('collapse',),
             'fields': (
                 'show_public_header', 'show_brand_name', 'show_header_subtitle', 'show_table_banner',
                 'show_section_chips', 'show_product_images', 'show_product_descriptions', 'show_product_prices',
@@ -281,13 +318,23 @@ class PageSettingAdmin(admin.ModelAdmin):
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     actions = ('update_estimated_cost_from_recipe',)
-    list_display = ('name_ar', 'name_en', 'category', 'product_type', 'price_syp', 'estimated_unit_cost_syp', 'estimated_margin_display', 'estimated_margin_percent_display', 'cost_warning', 'track_margin', 'requires_preparation', 'prep_station_ref', 'visible_on_pos', 'visible_on_qr', 'orderable_on_qr', 'requires_staff_confirmation', 'vendor', 'is_available')
-    list_filter = ('track_margin', 'is_available', 'category', 'menu_sections', 'visible_on_pos', 'orderable_on_pos', 'visible_on_qr', 'orderable_on_qr', 'product_type', 'requires_preparation', 'item_type', 'prep_station_ref', 'is_alcoholic', 'requires_staff_confirmation', 'beverage_type', 'food_type', 'service_type', 'vendor', 'tags')
+    list_display = ('image_thumbnail', 'name_ar', 'price_syp', 'section_list', 'product_type', 'estimated_unit_cost_syp', 'estimated_margin_display', 'estimated_margin_percent_display', 'cost_warning', 'track_margin', 'requires_preparation', 'prep_station_ref', 'visible_on_pos', 'visible_on_qr', 'orderable_on_qr', 'orderable_on_pos', 'requires_staff_confirmation', 'vendor', 'is_available')
+    list_filter = ('menu_sections', 'product_type', 'is_available', 'visible_on_qr', 'orderable_on_qr', 'orderable_on_pos', 'prep_station_ref')
+    list_editable = ('is_available', 'visible_on_qr', 'orderable_on_qr', 'orderable_on_pos')
     search_fields = ('name_ar', 'name_en', 'description_ar', 'category__name_ar', 'menu_sections__name_ar')
     autocomplete_fields = ('category', 'vendor', 'prep_station_ref', 'cost_updated_by')
     readonly_fields = ('cost_updated_at', 'recipe_cost_preview', 'recipe_cost_difference')
     inlines = (ProductMediaInline, ProductOptionGroupAssignmentInline, ProductRecipeItemInline)
 
+
+    @admin.display(description='الصورة')
+    def image_thumbnail(self, obj):
+        media = obj.media.filter(is_active=True).order_by('-is_primary', 'sort_order').first() if obj.pk else None
+        return safe_media_preview(media, width=52) if media else '—'
+
+    @admin.display(description='القسم')
+    def section_list(self, obj):
+        return '، '.join(obj.menu_sections.values_list('name_ar', flat=True)[:3]) or str(obj.category or '—')
 
     @admin.display(description='الكلفة من الوصفة')
     def recipe_cost_preview(self, obj):
@@ -374,13 +421,14 @@ class OrderItemInline(admin.TabularInline):
 
 
 @admin.register(Order)
-class OrderAdmin(admin.ModelAdmin):
-    list_display = ('display_number', 'fulfillment_mode', 'delivery_status', 'customer_summary', 'total_amount', 'discount_amount', 'paid_amount', 'remaining_amount', 'status', 'created_at', 'public_code')
+class OrderAdmin(SuperuserEditOnlyAdmin):
+    workflow_help_url = '/staff/orders/'
+    list_display = ('display_number', 'staff_order_link', 'fulfillment_mode', 'delivery_status', 'customer_summary', 'total_amount', 'discount_amount', 'paid_amount', 'remaining_amount', 'status', 'created_at', 'public_code')
     list_filter = ('fulfillment_mode', 'delivery_status', 'status', 'created_at')
     search_fields = ('public_code', 'notes', 'table__name_ar', 'delivery_phone', 'delivery_address', 'delivery_area', 'assigned_driver_name', 'assigned_driver_phone')
-    readonly_fields = ('public_code', 'display_number', 'created_at', 'updated_at')
+    readonly_fields = ('public_code', 'display_number', 'item_summary', 'workflow_link', 'created_at', 'updated_at')
     fieldsets = (
-        ('بيانات الطلب', {'fields': ('public_code', 'display_number', 'status', 'table', 'service_mode', 'fulfillment_mode', 'notes')}),
+        ('بيانات الطلب', {'fields': ('public_code', 'display_number', 'workflow_link', 'item_summary', 'status', 'table', 'service_mode', 'fulfillment_mode', 'notes'), 'description': 'التعامل اليومي مع الطلبات يتم من /staff/orders/. لوحة الإدارة للمراجعة والتصحيح المحدود.'}),
         ('بيانات التوصيل', {'fields': ('delivery_status', 'delivery_customer_name', 'delivery_phone', 'delivery_area', 'delivery_address', 'delivery_landmark', 'delivery_notes', 'delivery_fee_syp', 'delivery_eta_minutes', 'assigned_to', 'assigned_driver_name', 'assigned_driver_phone', 'delivery_created_at', 'delivery_confirmed_at', 'delivery_out_at', 'delivery_delivered_at', 'delivery_cancelled_at')}),
         ('التواريخ', {'fields': ('created_at', 'updated_at')}),
     )
@@ -408,6 +456,16 @@ class OrderAdmin(admin.ModelAdmin):
     def paid_amount(self, obj):
         return obj.paid_syp
 
+    @admin.display(description='رابط الطلب')
+    def staff_order_link(self, obj):
+        return format_html('<a href="/staff/orders/{}/">فتح</a>', obj.public_code) if obj and obj.public_code else '—'
+
+    @admin.display(description='ملخص الأصناف')
+    def item_summary(self, obj):
+        if not obj or not obj.pk:
+            return '—'
+        return format_html('<br>'.join(f'{item.quantity} × {item.product_name_ar_snapshot or item.product}' for item in obj.items.all()[:20]) or 'لا توجد أصناف')
+
     @admin.display(description='المتبقي')
     def remaining_amount(self, obj):
         return obj.remaining_syp
@@ -425,7 +483,7 @@ class OrderItemAdmin(admin.ModelAdmin):
 
 
 @admin.register(OrderDiscount)
-class OrderDiscountAdmin(admin.ModelAdmin):
+class OrderDiscountAdmin(ReadOnlyWorkflowAdmin):
     list_display = ('order', 'amount_syp', 'discount_type', 'reason', 'created_by', 'approved_by', 'created_at', 'is_active')
     list_filter = ('discount_type', 'created_at', 'is_active', 'created_by', 'approved_by')
     search_fields = ('order__public_code', 'order__id', 'reason', 'notes', 'created_by__username', 'approved_by__username')
@@ -451,7 +509,7 @@ class ExpenseAdmin(admin.ModelAdmin):
 
 
 @admin.register(CashMovement)
-class CashMovementAdmin(admin.ModelAdmin):
+class CashMovementAdmin(SuperuserEditOnlyAdmin):
     list_display = ('business_date', 'movement_type', 'direction', 'amount_syp', 'title', 'created_by', 'created_at')
     list_filter = ('business_date', 'movement_type', 'direction', 'is_cancelled')
     search_fields = ('title', 'notes')
@@ -459,7 +517,7 @@ class CashMovementAdmin(admin.ModelAdmin):
 
 
 @admin.register(DailyClose)
-class DailyCloseAdmin(admin.ModelAdmin):
+class DailyCloseAdmin(SuperuserEditOnlyAdmin):
     list_display = ('business_date', 'expected_cash_syp', 'actual_cash_counted_syp', 'cash_difference_syp', 'closed_by', 'closed_at', 'is_finalized')
     list_filter = ('business_date', 'is_finalized', 'closed_by')
     search_fields = ('business_date', 'notes', 'closed_by__username')
@@ -467,11 +525,20 @@ class DailyCloseAdmin(admin.ModelAdmin):
 
 
 @admin.register(Payment)
-class PaymentAdmin(admin.ModelAdmin):
-    list_display = ('order', 'amount_syp', 'method', 'created_by', 'is_active', 'is_reversed', 'created_at')
+class PaymentAdmin(SuperuserEditOnlyAdmin):
+    workflow_help_url = '/staff/cashier/'
+    list_display = ('order_number', 'order_link', 'amount_syp', 'method', 'created_by', 'is_active', 'is_reversed', 'created_at')
     list_filter = ('method', 'is_active', 'is_reversed', 'created_at')
     search_fields = ('order__public_code', 'notes', 'created_by__username')
     autocomplete_fields = ('order', 'created_by', 'reversed_by')
+
+    @admin.display(description='رقم الطلب')
+    def order_number(self, obj):
+        return obj.order.display_number
+
+    @admin.display(description='الطلب')
+    def order_link(self, obj):
+        return format_html('<a href="/admin/core/order/{}/change/">{}</a>', obj.order_id, obj.order.display_number)
 
 
 @admin.register(Member)
@@ -489,7 +556,7 @@ class InternetPackageAdmin(admin.ModelAdmin):
 
 
 @admin.register(InternetSession)
-class InternetSessionAdmin(admin.ModelAdmin):
+class InternetSessionAdmin(SuperuserEditOnlyAdmin):
     list_display = ('id', 'customer_label', 'session_type', 'billing_mode', 'status', 'started_at', 'ended_at', 'duration_minutes', 'billable_minutes', 'calculated_total_syp', 'linked_order')
     list_filter = ('session_type', 'billing_mode', 'status', 'network_provider', 'started_at')
     search_fields = ('guest_name', 'guest_phone', 'customer_name', 'customer_phone', 'member__name_ar', 'member__name_en', 'member__phone', 'access_code', 'network_session_id', 'linked_order__display_number')
@@ -521,7 +588,7 @@ class ActivityLogAdmin(admin.ModelAdmin):
 
 
 @admin.register(NotificationEvent)
-class NotificationEventAdmin(admin.ModelAdmin):
+class NotificationEventAdmin(ReadOnlyWorkflowAdmin):
     list_display = ('event_type', 'title_ar', 'order', 'order_item', 'target_station', 'target_role', 'created_at', 'is_active')
     list_filter = ('event_type', 'target_station', 'target_role', 'is_active', 'created_at')
     search_fields = ('title_ar', 'message_ar', 'order__public_code', 'order__id')
@@ -529,7 +596,7 @@ class NotificationEventAdmin(admin.ModelAdmin):
 
 
 @admin.register(NotificationRecipient)
-class NotificationRecipientAdmin(admin.ModelAdmin):
+class NotificationRecipientAdmin(ReadOnlyWorkflowAdmin):
     def get_model_perms(self, request):
         return {}
 
@@ -539,7 +606,7 @@ class NotificationRecipientAdmin(admin.ModelAdmin):
 
 
 @admin.register(NotificationLog)
-class NotificationLogAdmin(admin.ModelAdmin):
+class NotificationLogAdmin(ReadOnlyWorkflowAdmin):
     def get_model_perms(self, request):
         return {}
 
@@ -552,3 +619,6 @@ class NotificationLogAdmin(admin.ModelAdmin):
 class NotificationPreferenceAdmin(admin.ModelAdmin):
     list_display = ('user', 'enable_sound', 'enable_browser_notifications', 'updated_at')
     autocomplete_fields = ('user',)
+
+from .admin_dashboard import install_hub_admin
+install_hub_admin()
