@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% block title %}المالية{% endblock %}{% block content %}
+{% extends "staff/finance_base.html" %}{% block title %}المالية{% endblock %}{% block finance_content %}
 <h2>المالية</h2><p><a href="{% url 'staff_home' %}">العودة</a> | <a href="{% url 'staff_finance_expenses' %}">المصاريف</a> | <a href="{% url 'staff_finance_cashbox' %}">الصندوق</a> | <a href="{% url 'staff_finance_expenses_csv' %}">تصدير CSV المصاريف</a> | <a href="{% url 'staff_finance_cashbox_csv' %}">تصدير CSV الصندوق</a></p>
 <form><label>تاريخ العمل <input class="hub-input" type="date" name="date" value="{{ report_date|date:'Y-m-d' }}"></label><button class="hub-button">عرض</button></form>
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem">
