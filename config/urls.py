@@ -13,7 +13,7 @@ from core.views.staff_import import (
     staff_import_home, staff_import_upload, staff_import_template, staff_import_preview, staff_import_confirm,
 )
 from core.views.kitchen import staff_kitchen, staff_kitchen_partial, staff_kitchen_order, staff_kitchen_item_status, staff_prep, staff_prep_station
-from core.views.staff_finance import staff_finance_home, staff_expenses, staff_expense_new, staff_cashbox, staff_cashbox_new, staff_expenses_csv, staff_cashbox_csv
+from core.views.staff_finance import *
 from core.views import staff_inventory
 from core.views_notifications import staff_notifications, staff_notifications_poll, staff_notifications_mark_read, staff_notifications_preferences
 from accounts.views_staff import (
@@ -75,9 +75,18 @@ urlpatterns = [
     path('staff/cashier/<uuid:public_code>/pay/', menu.staff_cashier_pay, name='staff_cashier_pay'),
     path('staff/cashier/<uuid:public_code>/discount/', menu.staff_cashier_discount, name='staff_cashier_discount'),
     path('staff/finance/', staff_finance_home, name='staff_finance_home'),
+    path('staff/finance/daily-closes/', staff_daily_closes, name='staff_daily_closes'),
+    path('staff/finance/daily-closes/<int:close_id>/', staff_daily_close_detail, name='staff_daily_close_detail'),
+    path('staff/finance/daily-closes/<int:close_id>/reopen/', staff_daily_close_reopen, name='staff_daily_close_reopen'),
+    path('staff/finance/daily-closes/<int:close_id>/close/', staff_daily_close_close, name='staff_daily_close_close'),
+    path('staff/finance/purchases/', staff_purchases, name='staff_purchases'),
+    path('staff/finance/purchases/new/', staff_purchase_new, name='staff_purchase_new'),
+    path('staff/finance/purchases/<int:purchase_id>/', staff_purchase_detail, name='staff_purchase_detail'),
+    path('staff/finance/purchases/<int:purchase_id>/edit/', staff_purchase_edit, name='staff_purchase_edit'),
     path('staff/finance/expenses/', staff_expenses, name='staff_finance_expenses'),
     path('staff/finance/expenses/new/', staff_expense_new, name='staff_finance_expense_new'),
     path('staff/finance/expenses.csv', staff_expenses_csv, name='staff_finance_expenses_csv'),
+    path('staff/finance/cash-movements/', staff_cashbox, name='staff_finance_cash_movements'),
     path('staff/finance/cashbox/', staff_cashbox, name='staff_finance_cashbox'),
     path('staff/finance/cashbox/new/', staff_cashbox_new, name='staff_finance_cashbox_new'),
     path('staff/finance/cashbox.csv', staff_cashbox_csv, name='staff_finance_cashbox_csv'),

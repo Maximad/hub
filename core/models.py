@@ -594,6 +594,7 @@ class Expense(TimeStampedModel):
     cancellation_reason = models.TextField('سبب الإلغاء', blank=True)
     class Meta:
         ordering = ['-business_date','-created_at']
+        permissions = [('add_expense_staff','Can add expense from staff finance')]
     def clean(self):
         if self.status == self.Status.PAID and not self.payment_method:
             raise ValidationError({'payment_method':'طريقة الدفع مطلوبة للمصروف المدفوع.'})
@@ -628,6 +629,7 @@ class CashMovement(TimeStampedModel):
     cancellation_reason = models.TextField('سبب الإلغاء', blank=True)
     class Meta:
         ordering = ['-business_date','-created_at']
+        permissions = [('add_cashmovement_staff','Can add cash movement from staff finance')]
     def clean(self):
         if self.movement_type == self.MovementType.CASH_CORRECTION and not (self.notes or '').strip():
             raise ValidationError({'notes':'سبب التصحيح مطلوب.'})
@@ -675,6 +677,7 @@ class Purchase(TimeStampedModel):
     vendor = models.ForeignKey('vendors.Vendor', on_delete=models.SET_NULL, null=True, blank=True, related_name='purchases', verbose_name='المورد')
     supplier_name = models.CharField('المورد', max_length=160, blank=True)
     invoice_number = models.CharField('رقم الفاتورة', max_length=80, blank=True)
+    invoice_date = models.DateField('تاريخ الفاتورة', null=True, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     payment_method = models.CharField('طريقة الدفع', max_length=30, choices=PaymentMethod.choices, default=PaymentMethod.CREDIT)
     paid_from = models.CharField('مدفوع من', max_length=20, choices=PaidFrom.choices, default=PaidFrom.UNPAID)
@@ -691,7 +694,9 @@ class Purchase(TimeStampedModel):
     received_at = models.DateTimeField(null=True, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
     cancellation_reason = models.TextField('سبب الإلغاء', blank=True)
-    class Meta: ordering=['-business_date','-created_at']; verbose_name='عملية شراء'; verbose_name_plural='المشتريات'
+    class Meta:
+        ordering=['-business_date','-created_at']; verbose_name='عملية شراء'; verbose_name_plural='المشتريات'
+        permissions = [('receive_purchase','Can receive purchase')]
     @property
     def remaining_syp(self): return max(self.total_syp - self.amount_paid_syp, 0)
     @property
@@ -821,7 +826,10 @@ class ProductionBatchIngredient(TimeStampedModel):
 
 
 class DailyClose(TimeStampedModel):
+    class Status(models.TextChoices):
+        OPEN='open','مفتوح'; CLOSED='closed','مغلق'; REOPENED='reopened','أعيد فتحه'
     business_date = models.DateField(unique=True, verbose_name='تاريخ العمل')
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.CLOSED)
     opening_cash_syp = models.PositiveIntegerField(default=0, verbose_name='النقد الافتتاحي')
     cash_sales_syp = models.PositiveIntegerField(default=0, verbose_name='مبيعات نقدية')
     non_cash_sales_syp = models.PositiveIntegerField(default=0, verbose_name='مبيعات غير نقدية')
@@ -838,12 +846,30 @@ class DailyClose(TimeStampedModel):
     closed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='daily_closes')
     closed_at = models.DateTimeField(null=True, blank=True)
     is_finalized = models.BooleanField(default=True)
+    reopened_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='reopened_daily_closes')
+    reopened_at = models.DateTimeField(null=True, blank=True)
+    reopen_reason = models.TextField(blank=True)
 
     class Meta:
+        permissions = [('view_finance_dashboard','Can view finance dashboard'), ('close_business_day','Can close business day'), ('reopen_business_day','Can reopen business day')]
         constraints = [models.UniqueConstraint(fields=['business_date'], condition=Q(is_finalized=True), name='unique_finalized_daily_close_per_date')]
 
     def __str__(self):
         return f'إغلاق اليوم {self.business_date}'
+
+
+class DailyCloseRevision(TimeStampedModel):
+    daily_close = models.ForeignKey(DailyClose, on_delete=models.CASCADE, related_name='revisions')
+    revision_type = models.CharField(max_length=30)
+    snapshot = models.JSONField(default=dict, blank=True)
+    reason = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='daily_close_revisions')
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.daily_close.business_date} — {self.revision_type}'
 
 
 class Member(TimeStampedModel, PublicCodeModel):
