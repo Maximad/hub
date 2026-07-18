@@ -1,1 +1,35 @@
 :root{--hub-admin-primary:#0f5f57;--hub-admin-accent:#d9a441;--hub-admin-border:#d7dedb;--hub-admin-bg:#f7faf9;--hub-admin-card:#fff;--hub-admin-text:#16211f}html[dir],body{direction:rtl}body{font-family:"Tajawal","Noto Sans Arabic",system-ui,sans-serif;background:var(--hub-admin-bg);color:var(--hub-admin-text)}#header{background:var(--hub-admin-primary);color:#fff}#branding h1,#branding h1 a:link,#branding h1 a:visited{color:#fff}.module caption,.inline-group h2{background:var(--hub-admin-primary)}div.breadcrumbs{background:#0b4b45}.hub-admin-dashboard{max-width:1220px;margin:0 auto;padding:10px}.hub-hero,.hub-card,.hub-recent-actions{background:var(--hub-admin-card);border:1px solid var(--hub-admin-border);border-radius:18px;padding:18px}.hub-hero{border-inline-start:6px solid var(--hub-admin-accent);margin-bottom:16px}.hub-hero h1{margin:0 0 8px;font-size:1.7rem}.hub-hero p{margin:0;color:#52615d}.hub-quick-actions,.hub-staff-links{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0 22px}.hub-action,.hub-staff-links a,.hub-mini-add{background:var(--hub-admin-primary);color:#fff!important;border-radius:999px;padding:10px 14px;text-decoration:none;font-weight:700}.hub-staff-links a{background:#fff;color:var(--hub-admin-primary)!important;border:1px solid var(--hub-admin-border)}.hub-section-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.hub-card h2{margin-top:0;color:var(--hub-admin-primary)}.hub-card ul{list-style:none;margin:0;padding:0}.hub-card li{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid #edf1ef;padding:10px 0}.hub-card li:first-child{border-top:0}.hub-card a{font-weight:700}.hub-mini-add{font-size:.82rem;padding:5px 9px;background:#eef7f5;color:var(--hub-admin-primary)!important;border:1px solid #cae2dd}.hub-recent-actions{margin-top:18px}.hub-recent-actions summary{cursor:pointer;font-weight:800;color:var(--hub-admin-primary)}.hub-recent-actions li{margin:8px 0}.submit-row{position:sticky;bottom:0;z-index:20;border-top:1px solid var(--hub-admin-border)}.results table{font-size:.92rem}th,td{text-align:right}@media(max-width:900px){.hub-section-grid{grid-template-columns:1fr}.hub-action,.hub-staff-links a{flex:1 1 44%;text-align:center}#content{padding:12px}}@media(prefers-color-scheme:dark){:root{--hub-admin-bg:#0f1715;--hub-admin-card:#17211f;--hub-admin-border:#31423e;--hub-admin-text:#eef7f4}.hub-hero p{color:#b7c7c2}.hub-staff-links a{background:#17211f}.hub-card li{border-color:#263632}}
+
+/* Hub Arabic-first admin RTL repairs. Keep Django admin structure; only normalize direction and spacing. */
+html[lang="ar"], html[dir="rtl"], html[dir="rtl"] body { direction: rtl; }
+html[dir="rtl"] body, html[dir="rtl"] input, html[dir="rtl"] textarea, html[dir="rtl"] select, html[dir="rtl"] button { text-align: start; }
+html[dir="rtl"] #container, html[dir="rtl"] #content, html[dir="rtl"] #content-main { direction: rtl; }
+html[dir="rtl"] #header { flex-direction: row; gap: 1rem; }
+html[dir="rtl"] #branding { margin-inline-end: auto; margin-inline-start: 0; }
+html[dir="rtl"] #user-tools { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; text-align: start; }
+html[dir="rtl"] #user-tools a, html[dir="rtl"] #logout-form button { margin: 0; }
+html[dir="rtl"] div.breadcrumbs { text-align: start; padding-inline: 40px; }
+html[dir="rtl"] #content h1 { margin-inline-end: 0; margin-inline-start: 1rem; }
+html[dir="rtl"] .object-tools { float: inline-end; padding-inline-start: 0; padding-inline-end: 0; margin-inline-start: 0; display: flex; flex-wrap: wrap; gap: .5rem; }
+html[dir="rtl"] .object-tools li { padding: 0; }
+html[dir="rtl"] #nav-sidebar { inset-inline-start: auto; inset-inline-end: 0; border-inline-start: 1px solid var(--hairline-color); border-inline-end: 0; text-align: start; }
+html[dir="rtl"] .main.shifted > #nav-sidebar + .content { margin-inline-start: 0; margin-inline-end: 275px; }
+html[dir="rtl"] #nav-filter { direction: rtl; text-align: start; }
+html[dir="rtl"] #toolbar form, html[dir="rtl"] .actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; direction: rtl; }
+html[dir="rtl"] #toolbar form input[type="submit"], html[dir="rtl"] .actions button { margin-inline-start: 0; margin-inline-end: .25rem; }
+html[dir="rtl"] #changelist { display: flex; flex-direction: row; align-items: flex-start; gap: 1rem; }
+html[dir="rtl"] #changelist #changelist-form { flex: 1 1 auto; min-width: 0; }
+html[dir="rtl"] #changelist-filter { flex: 0 0 240px; order: -1; margin: 0; position: static; text-align: start; }
+html[dir="rtl"] .results { overflow-x: auto; width: 100%; }
+html[dir="rtl"] .results table { min-width: max-content; border-collapse: collapse; }
+html[dir="rtl"] th, html[dir="rtl"] td, html[dir="rtl"] .results th, html[dir="rtl"] .results td { text-align: start; vertical-align: middle; }
+html[dir="rtl"] .results th.action-checkbox-column, html[dir="rtl"] .results td.action-checkbox { text-align: center; }
+html[dir="rtl"] .results th.column-name_ar a, html[dir="rtl"] .results td.field-name_ar a { color: var(--link-fg); font-weight: 700; text-decoration: underline; text-underline-offset: .18em; }
+html[dir="rtl"] .results td.field-name_ar a:hover, html[dir="rtl"] .results td.field-name_ar a:focus { color: var(--link-hover-color); outline: 2px solid currentColor; outline-offset: 2px; border-radius: 3px; }
+html[dir="rtl"] .field-price_syp, html[dir="rtl"] .field-estimated_unit_cost_syp, html[dir="rtl"] .field-estimated_margin_display, html[dir="rtl"] .field-estimated_margin_percent_display, html[dir="rtl"] .field-current_quantity, html[dir="rtl"] .field-low_stock_threshold, html[dir="rtl"] .field-quantity, html[dir="rtl"] .field-phone, html[dir="rtl"] .field-code, html[dir="rtl"] .field-public_code, html[dir="rtl"] .field-qr_token, html[dir="rtl"] .field-created_at, html[dir="rtl"] .field-updated_at { direction: ltr; unicode-bidi: isolate; text-align: start; }
+.hub-admin-number, .hub-admin-code { direction: ltr; unicode-bidi: isolate; }
+html[dir="rtl"] .paginator, html[dir="rtl"] .submit-row, html[dir="rtl"] .messagelist, html[dir="rtl"] .form-row, html[dir="rtl"] fieldset.module, html[dir="rtl"] .inline-group, html[dir="rtl"] .selector, html[dir="rtl"] .related-widget-wrapper { direction: rtl; text-align: start; }
+html[dir="rtl"] .submit-row { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: .5rem; }
+html[dir="rtl"] .submit-row input, html[dir="rtl"] .submit-row a { margin: 0; }
+html[dir="rtl"] .select2-container, html[dir="rtl"] .select2-results, html[dir="rtl"] .calendarbox, html[dir="rtl"] .clockbox { direction: rtl; text-align: start; }
+@media (max-width: 1024px) { html[dir="rtl"] #changelist { flex-direction: column; } html[dir="rtl"] #changelist-filter { order: 2; width: 100%; flex-basis: auto; } html[dir="rtl"] .main.shifted > #nav-sidebar + .content { margin-inline-end: 0; } }

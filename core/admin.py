@@ -319,6 +319,7 @@ class PageSettingAdmin(admin.ModelAdmin):
 class ProductAdmin(admin.ModelAdmin):
     actions = ('update_estimated_cost_from_recipe',)
     list_display = ('image_thumbnail', 'name_ar', 'price_syp', 'section_list', 'product_type', 'estimated_unit_cost_syp', 'estimated_margin_display', 'estimated_margin_percent_display', 'cost_warning', 'track_margin', 'requires_preparation', 'prep_station_ref', 'visible_on_pos', 'visible_on_qr', 'orderable_on_qr', 'orderable_on_pos', 'requires_staff_confirmation', 'vendor', 'is_available')
+    list_display_links = ('name_ar',)
     list_filter = ('menu_sections', 'product_type', 'is_available', 'visible_on_qr', 'orderable_on_qr', 'orderable_on_pos', 'prep_station_ref')
     list_editable = ('is_available', 'visible_on_qr', 'orderable_on_qr', 'orderable_on_pos')
     search_fields = ('name_ar', 'name_en', 'description_ar', 'category__name_ar', 'menu_sections__name_ar')
