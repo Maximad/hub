@@ -62,9 +62,19 @@ class TableArea(TimeStampedModel, PublicCodeModel):
     name_en = models.CharField(max_length=120, blank=True)
     qr_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
 
+    @property
+    def display_name(self):
+        return _arabic_first(self, 'name_ar', 'name_en', fallback=str(self.qr_token)[:8])
+
+    @property
+    def room_display_name(self):
+        if not self.room_id:
+            return ''
+        return _arabic_first(self.room, 'name_ar', 'name_en', fallback=str(self.room.public_code)[:8])
+
     def __str__(self):
-        table_name = _arabic_first(self, 'name_ar', 'name_en', fallback=str(self.qr_token)[:8])
-        room_name = str(self.room) if self.room_id else ''
+        table_name = self.display_name
+        room_name = self.room_display_name
         return f'{table_name} — {room_name}' if room_name else table_name
 
 
@@ -234,9 +244,21 @@ class Order(TimeStampedModel, PublicCodeModel):
         return f'#{str(self.public_code)[:8].upper()}'
 
     @property
+    def table_display_name(self):
+        if not self.table_id:
+            return ''
+        return self.table.display_name
+
+    @property
+    def table_room_display_name(self):
+        if not self.table_id or not self.table.room_id:
+            return ''
+        return self.table.room_display_name
+
+    @property
     def location_label(self):
         if self.fulfillment_mode == self.FulfillmentMode.TABLE or self.table_id:
-            return f'الطاولة: {self.table.name_ar}' if self.table_id else 'طاولة'
+            return f'الطاولة: {self.table_display_name}' if self.table_id else 'طاولة'
         if self.fulfillment_mode == self.FulfillmentMode.DELIVERY:
             return 'توصيل'
         if self.fulfillment_mode == self.FulfillmentMode.TAKEAWAY or self.service_mode == self.ServiceMode.TAKEAWAY:
@@ -245,15 +267,15 @@ class Order(TimeStampedModel, PublicCodeModel):
 
     @property
     def location_detail(self):
-        if self.table_id and self.table.room_id:
-            return f'المساحة: {self.table.room.name_ar}'
+        if self.table_id and self.table_room_display_name:
+            return f'المساحة: {self.table_room_display_name}'
         if self.is_delivery and self.delivery_area:
             return self.delivery_area
         return ''
 
     def get_fulfillment_label(self):
         if self.is_table_order and self.table_id:
-            return f'الطاولة: {self.table.name_ar}'
+            return f'الطاولة: {self.table_display_name}'
         return self.FulfillmentMode(self.fulfillment_mode).label if self.fulfillment_mode in self.FulfillmentMode.values else 'طلب داخل المكان'
 
     @property
@@ -363,6 +385,14 @@ class OrderItem(TimeStampedModel):
                 )
         if self.prep_status in {'', self.PrepStatus.NO_PREP}:
             self.prep_status = self.PrepStatus.NEW
+
+    @property
+    def prep_station_label(self):
+        if self.prep_station_id:
+            return self.prep_station.name_ar or self.prep_station.name_en or 'عام'
+        if self.product_id and self.product.prep_station_ref_id:
+            return self.product.prep_station_ref.name_ar or self.product.prep_station_ref.name_en or 'عام'
+        return 'عام'
 
     def save(self, *args, **kwargs):
         if self.product_id and (not self.prep_station_id or not self.prep_status):

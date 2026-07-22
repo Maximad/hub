@@ -188,7 +188,7 @@ def _parse_nonnegative_int(raw_value, default=0, maximum=None):
 def _build_day_report(report_date):
     start_utc, end_utc = _day_range_utc(report_date)
     orders = (
-        Order.objects.select_related('table')
+        Order.objects.select_related('table', 'table__room')
         .prefetch_related('items', 'payments')
         .filter(created_at__gte=start_utc, created_at__lt=end_utc)
         .order_by('-created_at')
@@ -369,7 +369,7 @@ def menu_public(request):
 
 
 def menu_table(request, qr_token):
-    table = get_object_or_404(TableArea, qr_token=qr_token)
+    table = get_object_or_404(TableArea.objects.select_related('room'), qr_token=qr_token)
     if request.method == 'POST':
         return _create_order_from_menu(request, table=table)
     return render(request, 'menu/menu.html', _menu_context(table=table))
@@ -560,7 +560,7 @@ def _create_order_from_menu(request, table=None):
 
 def order_public(request, public_code):
     try:
-        order = Order.objects.select_related('table').prefetch_related('items__product').get(public_code=public_code)
+        order = Order.objects.select_related('table', 'table__room').prefetch_related('items__product').get(public_code=public_code)
     except Order.DoesNotExist as exc:
         raise Http404('الطلب غير موجود') from exc
     total = order.total_with_delivery_syp if order.is_delivery else max(order.subtotal_syp + order.service_fee_syp - order.discount_syp, 0)
@@ -846,7 +846,7 @@ def staff_qr_print(request):
 
 @login_required
 def table_qr(request, qr_token):
-    table = get_object_or_404(TableArea, qr_token=qr_token)
+    table = get_object_or_404(TableArea.objects.select_related('room'), qr_token=qr_token)
     path = reverse('menu_table', kwargs={'qr_token': table.qr_token})
     return _qr_svg_response(request.build_absolute_uri(path))
 
@@ -1006,7 +1006,7 @@ def _staff_menu_tools_context(request, products):
 def staff_orders(request):
     statuses = [choice[0] for choice in Order.Status.choices]
     orders = (
-        Order.objects.select_related('table')
+        Order.objects.select_related('table', 'table__room')
         .prefetch_related('items', 'payments')
         .order_by('-created_at')
     )
@@ -1101,7 +1101,7 @@ def staff_order_status(request, public_code):
 @require_staff_capability('order_edit')
 def staff_order_edit(request, public_code):
     order = get_object_or_404(
-        Order.objects.select_related('table').prefetch_related('items__product', 'payments'),
+        Order.objects.select_related('table', 'table__room').prefetch_related('items__product', 'payments'),
         public_code=public_code,
     )
     block_reason, _total, _paid, _remaining = _order_edit_block_reason(order)
@@ -1258,7 +1258,7 @@ def staff_delivery(request):
 @require_staff_capability('cashier')
 def staff_cashier(request):
     query = request.GET.get('q', '').strip()
-    orders = Order.objects.select_related('table').prefetch_related('items', 'payments').order_by('-created_at')
+    orders = Order.objects.select_related('table', 'table__room').prefetch_related('items', 'payments').order_by('-created_at')
     if query:
         normalized = query.strip().lstrip('#')
         if normalized.isdigit():
@@ -1277,7 +1277,7 @@ def staff_cashier(request):
 
 @require_staff_capability('cashier')
 def staff_cashier_order(request, public_code):
-    order = get_object_or_404(Order.objects.select_related('table').prefetch_related('items', 'payments', 'discounts'), public_code=public_code)
+    order = get_object_or_404(Order.objects.select_related('table', 'table__room').prefetch_related('items', 'payments', 'discounts'), public_code=public_code)
     total, paid, remaining, payment_label = _order_financials(order)
     methods = Payment.Method.choices
     return render(request, 'staff/cashier_order.html', {'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods, 'discount_types': OrderDiscount.DiscountType.choices, 'can_manage_discounts': _can_approve_partial_payment(request.user), 'payment_amount_default': remaining, 'qr_url': reverse('order_qr', kwargs={'public_code': order.public_code})})
