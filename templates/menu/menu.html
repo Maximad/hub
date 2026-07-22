@@ -11,7 +11,7 @@
     {% if system_settings.public_menu_subtitle or page_setting.subtitle %}<p>{% if system_settings.public_menu_subtitle %}{{ system_settings.public_menu_subtitle }}{% else %}{{ page_setting.subtitle }}{% endif %}</p>{% endif %}
     {% if not system_settings or system_settings.show_table_banner and not table %}<p class="menu-public__table-banner">المكان: <strong>طلب عام داخل المكان</strong></p>{% endif %}
     {% if not system_settings or system_settings.show_table_banner and table %}
-      <p class="menu-public__table-banner">الطلب مرتبط بالطاولة: <strong>{{ table.name_ar }}</strong>{% if table.room %} — المساحة: {{ table.room.name_ar }}{% endif %}</p>
+      <p class="menu-public__table-banner">الطلب مرتبط بالطاولة: <strong>{{ table.display_name }}</strong>{% if table.room_display_name %} — المساحة: {{ table.room_display_name }}{% endif %}</p>
     {% endif %}
     {% if error %}<p class="hub-badge hub-badge-danger">{{ error }}</p>{% endif %}
   </header>{% endif %}
