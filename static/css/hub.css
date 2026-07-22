@@ -403,3 +403,25 @@ input[type="tel"]{
   direction:ltr;
   text-align:end;
 }
+
+/* Focused ordering/POS controls: keep actionable targets visible and touch-safe. */
+.menu-stepper-btn,
+.menu-list-add,
+.menu-item-modal-add,
+.staff-pos__add,
+.staff-pos__tap-zone {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.menu-list-add,
+.staff-pos__add {
+  width: 100%;
+  margin-block: 0.5rem;
+  justify-content: center;
+}
+
+.menu-qty-input {
+  min-width: 4.5rem;
+  text-align: center;
+}

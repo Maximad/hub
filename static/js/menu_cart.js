@@ -18,6 +18,11 @@
   const totalWithDeliveryRow = form.querySelector('[data-total-with-delivery-row]');
   const totalWithDeliveryNode = form.querySelector('[data-total-with-delivery]');
   const deliveryMinimum = form.querySelector('[data-delivery-minimum]');
+  const common = window.HubCartCommon || {};
+  const parseQuantity = common.parseQuantity || ((value) => Math.max(0, parseInt(value || '0', 10) || 0));
+  const stepQuantity = common.stepQuantity || ((value, delta) => Math.max(0, (parseInt(value || '0', 10) || 0) + delta));
+  const formatMoney = common.formatMoney || ((value) => `${(Number(value) || 0).toLocaleString('en-US')} ل.س`);
+  const dispatchCartUpdated = common.dispatchCartUpdated || (() => {});
   const deliverySettings = window.HUB_DELIVERY_SETTINGS || { enabled: false, feeMode: 'none', fixedFee: 0, minimum: 0 };
 
   const modal = form.querySelector('[data-menu-modal]');
@@ -93,7 +98,7 @@
     cards.forEach((card) => {
       const id = card.dataset.productId;
       const qtyInput = form.querySelector('#qty_' + id);
-      const qty = Math.max(0, parseInt(qtyInput.value || '0', 10) || 0);
+      const qty = parseQuantity(qtyInput.value);
       qtyInput.value = qty;
       card.classList.toggle('is-selected', qty > 0);
       if (qty < 1) return;
@@ -115,7 +120,7 @@
           ? `<ul class="menu-cart-options">${line.options.map((option) => `<li>${escapeHtml(option.name)}</li>`).join('')}</ul>`
           : '';
         const noteHtml = line.note ? `<small>ملاحظة: ${escapeHtml(line.note)}</small>` : '';
-        return `<li><strong>${escapeHtml(line.name)}</strong> × <span class="hub-number latin-numbers">${line.qty}</span> — <span class="hub-money latin-numbers">${line.lineTotal.toLocaleString('en-US')} ل.س</span> ${optionHtml}${noteHtml}<div class="menu-cart-actions"><button class="hub-button hub-button-secondary" type="button" data-action="minus" data-target="qty_${line.id}">-</button><button class="hub-button hub-button-secondary" type="button" data-action="plus" data-target="qty_${line.id}">+</button><button class="hub-button hub-button-secondary" type="button" data-action="edit" data-target="qty_${line.id}">تعديل</button><button class="hub-button hub-button-danger" type="button" data-action="remove" data-target="qty_${line.id}">حذف</button></div></li>`;
+        return `<li><strong>${escapeHtml(line.name)}</strong> × <span class="hub-number latin-numbers">${line.qty}</span> — <span class="hub-money latin-numbers">${formatMoney(line.lineTotal)}</span> ${optionHtml}${noteHtml}<div class="menu-cart-actions"><button class="hub-button hub-button-secondary" type="button" data-cart-action="decrement" data-action="minus" data-target="qty_${line.id}">-</button><button class="hub-button hub-button-secondary" type="button" data-cart-action="increment" data-action="plus" data-target="qty_${line.id}">+</button><button class="hub-button hub-button-secondary" type="button" data-cart-action="edit" data-action="edit" data-target="qty_${line.id}">تعديل</button><button class="hub-button hub-button-danger" type="button" data-cart-action="remove" data-action="remove" data-target="qty_${line.id}">حذف</button></div></li>`;
       })
       .join('');
 
@@ -123,11 +128,11 @@
     const deliveryFee = isDelivery && deliverySettings.feeMode === 'fixed' ? Math.max(Number(deliverySettings.fixedFee || 0), 0) : 0;
     if (deliveryFields) deliveryFields.hidden = !isDelivery;
     if (deliveryFeeRow) deliveryFeeRow.hidden = !isDelivery || deliveryFee <= 0;
-    if (deliveryFeeNode) deliveryFeeNode.textContent = `${deliveryFee.toLocaleString('en-US')} ل.س`;
+    if (deliveryFeeNode) deliveryFeeNode.textContent = formatMoney(deliveryFee);
     if (totalWithDeliveryRow) totalWithDeliveryRow.hidden = !isDelivery || deliveryFee <= 0;
-    if (totalWithDeliveryNode) totalWithDeliveryNode.textContent = `${(totalPrice + deliveryFee).toLocaleString('en-US')} ل.س`;
+    if (totalWithDeliveryNode) totalWithDeliveryNode.textContent = formatMoney(totalPrice + deliveryFee);
     if (deliveryMinimum) deliveryMinimum.hidden = !(isDelivery && Number(deliverySettings.minimum || 0) > 0 && totalPrice < Number(deliverySettings.minimum || 0));
-    const totalText = `${totalPrice.toLocaleString('en-US')} ل.س`;
+    const totalText = formatMoney(totalPrice);
     cartTotal.textContent = totalText;
     stickyTotalNodes.forEach((node) => { node.textContent = totalText; });
     itemCountNodes.forEach((node) => { node.textContent = totalQty.toLocaleString('en-US'); });
@@ -135,10 +140,23 @@
     const hasItems = totalQty > 0;
     cartHelper.hidden = hasItems;
     if (stickyCart) stickyCart.hidden = !hasItems;
-    if (submitBtn) submitBtn.disabled = !hasItems;
+    if (submitBtn) { submitBtn.disabled = !hasItems; if (submitBtn.textContent.trim() === 'إرسال الطلب') submitBtn.textContent = form.classList.contains('staff-pos__form') ? 'إتمام الطلب' : 'إرسال الطلب'; }
+    dispatchCartUpdated(form, { totalQty, totalPrice });
   }
 
   form.addEventListener('click', (event) => {
+    const addButton = event.target.closest('[data-add-to-cart]');
+    if (addButton) {
+      event.preventDefault();
+      const input = form.querySelector('#' + addButton.dataset.target);
+      if (input) {
+        const current = parseQuantity(input.value);
+        input.value = current > 0 ? stepQuantity(current, 1) : 1;
+        update();
+      }
+      if (event.target.closest('[data-menu-modal-close]')) closeItemModal();
+      return;
+    }
     const button = event.target.closest('[data-action]');
     if (event.target.closest('[data-menu-modal-close]')) {
       closeItemModal();
@@ -152,14 +170,15 @@
     if (!button) return;
     const input = form.querySelector('#' + button.dataset.target);
     if (!input) return;
-    const current = Math.max(0, parseInt(input.value || '0', 10) || 0);
+    event.preventDefault();
+    const current = parseQuantity(input.value);
     if (button.dataset.action === 'edit') {
       const productId = button.dataset.target?.replace('qty_', '');
       const card = cards.find((item) => item.dataset.productId === productId) || input.closest('[data-product-card]');
       if (card) openItemModal(card);
       return;
     }
-    const next = button.dataset.action === 'plus' ? current + 1 : button.dataset.action === 'remove' ? 0 : Math.max(0, current - 1);
+    const next = button.dataset.action === 'plus' ? stepQuantity(current, 1) : button.dataset.action === 'remove' ? 0 : stepQuantity(current, -1);
     input.value = next;
     update();
   });
@@ -183,12 +202,16 @@
 
   form.addEventListener('input', (event) => {
     if (event.target === posSearch) filterProducts();
+    if (event.target.matches('.menu-qty-input')) event.target.value = parseQuantity(event.target.value);
     if (event.target.matches('input, textarea')) update();
   });
   form.addEventListener('change', (event) => {
+    if (event.target.matches('.menu-qty-input')) event.target.value = parseQuantity(event.target.value);
     if (event.target.matches('input, textarea, select')) update();
   });
 
   filterProducts();
+  const originalSubmit = submitBtn;
+  form.addEventListener('submit', () => { if (originalSubmit) common.setLoading?.(originalSubmit, true, 'جارٍ الإرسال...'); });
   update();
 })();

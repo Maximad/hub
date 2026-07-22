@@ -5,6 +5,9 @@ from urllib.parse import urlparse
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.files.base import ContentFile
+import importlib
+import importlib.util
 from django.db import models
 from django.utils import timezone
 from django.utils.text import get_valid_filename
@@ -47,6 +50,25 @@ def validate_media_asset_file(value):
     max_size = getattr(settings, 'MEDIA_ASSET_MAX_UPLOAD_SIZE', 10 * 1024 * 1024)
     if value.size and value.size > max_size:
         raise ValidationError('حجم الملف أكبر من الحد المسموح')
+    if extension in {'jpg', 'jpeg', 'png', 'webp', 'gif'} and importlib.util.find_spec('PIL') is not None:
+        image_module = importlib.import_module('PIL.Image')
+        try:
+            value.seek(0)
+            with image_module.open(value) as image:
+                image.verify()
+                width, height = image.size
+            max_dimension = getattr(settings, 'MEDIA_ASSET_MAX_SOURCE_DIMENSION', 6000)
+            if width > max_dimension or height > max_dimension:
+                raise ValidationError('أبعاد الصورة أكبر من الحد المسموح')
+        except ValidationError:
+            raise
+        except Exception:
+            raise ValidationError('ملف الصورة غير صالح')
+        finally:
+            try:
+                value.seek(0)
+            except Exception:
+                pass
 
 
 class MediaAsset(CatalogTimeStampedModel):
@@ -85,6 +107,66 @@ class MediaAsset(CatalogTimeStampedModel):
             raise ValidationError('لا يمكن استخدام ملف ورابط معاً')
         if not self.file and not self.external_url:
             raise ValidationError('يجب اختيار ملف أو رابط')
+
+
+    def _thumbnail_storage_name(self, width=320):
+        if not self.file:
+            return ''
+        source = Path(self.file.name)
+        return str(source.with_name(f'{source.stem}-card-{int(width)}w.webp'))
+
+    def thumbnail_url(self, width=320):
+        if not self.file or self.media_type not in {self.MediaType.IMAGE, self.MediaType.GIF}:
+            return self.safe_url
+        try:
+            name = self._thumbnail_storage_name(width)
+            storage = self.file.storage
+            if not storage.exists(name):
+                self.generate_thumbnail(width=width)
+            if storage.exists(name):
+                return storage.url(name)
+        except Exception:
+            return self.safe_url
+        return self.safe_url
+
+    def thumbnail_srcset(self):
+        urls = []
+        for width in (320, 640):
+            url = self.thumbnail_url(width=width)
+            if url:
+                urls.append(f'{url} {width}w')
+        return ', '.join(dict.fromkeys(urls))
+
+    def generate_thumbnail(self, width=320):
+        if importlib.util.find_spec('PIL') is None:
+            return False
+        if not self.file or self.media_type not in {self.MediaType.IMAGE, self.MediaType.GIF}:
+            return False
+        image_module = importlib.import_module('PIL.Image')
+        image_ops = importlib.import_module('PIL.ImageOps')
+        storage = self.file.storage
+        name = self._thumbnail_storage_name(width)
+        if storage.exists(name):
+            return False
+        try:
+            self.file.open('rb')
+            with image_module.open(self.file) as image:
+                image = image_ops.exif_transpose(image)
+                image.thumbnail((int(width), int(width) * 4), image_module.Resampling.LANCZOS)
+                if image.mode not in {'RGB', 'RGBA'}:
+                    image = image.convert('RGBA' if 'A' in image.getbands() else 'RGB')
+                import io
+                buffer = io.BytesIO()
+                image.save(buffer, format='WEBP', quality=80, method=6)
+            storage.save(name, ContentFile(buffer.getvalue()))
+            return True
+        except Exception:
+            return False
+        finally:
+            try:
+                self.file.close()
+            except Exception:
+                pass
 
     @property
     def filename(self):
@@ -249,6 +331,17 @@ class ProductMedia(CatalogTimeStampedModel):
     @property
     def url_for_display(self):
         return self.resolved_url
+
+    def card_image_url(self, width=320):
+        if self.media_asset_id and hasattr(self.media_asset, 'thumbnail_url'):
+            return self.media_asset.thumbnail_url(width=width)
+        return self.resolved_url
+
+    def card_image_srcset(self):
+        if self.media_asset_id and hasattr(self.media_asset, 'thumbnail_srcset'):
+            return self.media_asset.thumbnail_srcset()
+        url = self.resolved_url
+        return f'{url} 320w' if url else ''
 
 
 class ProductAvailability(CatalogTimeStampedModel):
