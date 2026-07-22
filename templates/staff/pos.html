@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load static menu_form %}
+{% load static menu_form product_media %}
 {% block title %}نقطة البيع / POS{% endblock %}
 {% block content %}
 <div class="staff-pos pos-layout-{{ system_settings.pos_layout_preset|default:'fast_touch' }} pos-cart-{{ system_settings.pos_cart_position|default:'side' }} {{ system_settings.pos_mobile_layout_class|default:'layout-grid-2' }} {{ system_settings.pos_tablet_layout_class|default:'layout-tablet-3' }} {{ system_settings.pos_desktop_layout_class|default:'layout-grid-4' }}" dir="rtl">
@@ -101,7 +101,7 @@
                   {% if not system_settings or system_settings.pos_show_product_images %}<div class="hub-media menu-product-media product-media-frame staff-pos__media{% if not p.primary_media %} menu-product-media--placeholder product-media-placeholder{% endif %}">
                     {% if p.primary_media %}
                       {% if p.primary_media.is_visual_media %}
-                        <img src="{{ p.primary_media.resolved_url }}" alt="{{ p.primary_media.display_alt_text }}" loading="lazy">
+                        {% product_card_image p.primary_media 320 as card_img_url %}{% product_card_srcset p.primary_media as card_img_srcset %}<img src="{{ card_img_url }}" srcset="{{ card_img_srcset }}" sizes="(max-width: 640px) 45vw, 240px" alt="{{ p.primary_media.display_alt_text }}" loading="lazy" decoding="async" width="320" height="400">
                       {% elif p.primary_media.media_type == 'video' %}
                         <video src="{{ p.primary_media.resolved_url }}" aria-label="{{ p.primary_media.display_alt_text }}" muted playsinline preload="metadata"></video>
                       {% else %}
@@ -111,16 +111,17 @@
                       <span>{{ p.name_ar|slice:":1" }}</span>
                     {% endif %}
                   </div>{% endif %}
-                  <button class="staff-pos__tap-zone" type="button" data-action="plus" data-target="qty_{{ p.id }}" aria-label="إضافة {{ p.name_ar }}">
+                  <button class="staff-pos__tap-zone" type="button" data-cart-action="increment" data-action="plus" data-target="qty_{{ p.id }}" aria-label="إضافة {{ p.name_ar }}">
                     <span class="menu-product-name">{{ p.name_ar }}</span>
                     {% if p.name_en %}<small>{{ p.name_en }}</small>{% endif %}
                     {% if not system_settings or system_settings.pos_show_prices %}<strong data-role="price"><span class="hub-money">{{ p.price_syp|format_syp }}</span></strong>{% endif %}
                   </button>
+                  <button class="hub-button hub-button-primary staff-pos__add" type="button" data-add-to-cart data-cart-action="add" data-target="qty_{{ p.id }}">إضافة</button>
                   <div class="menu-qty-controls staff-pos__qty">
-                    <button class="hub-button hub-button-secondary menu-stepper-btn" type="button" data-action="minus" data-target="qty_{{ p.id }}" aria-label="تقليل {{ p.name_ar }}">-</button>
+                    <button class="hub-button hub-button-secondary menu-stepper-btn" type="button" data-cart-action="decrement" data-action="minus" data-target="qty_{{ p.id }}" aria-label="تقليل {{ p.name_ar }}">-</button>
                     {% form_value form_values 'qty_' p.id '0' as qty_value %}
                     <input class="hub-input menu-qty-input hub-number" type="number" min="0" step="1" value="{{ qty_value }}" name="qty_{{ p.id }}" id="qty_{{ p.id }}" inputmode="numeric" aria-label="كمية {{ p.name_ar }}">
-                    <button class="hub-button hub-button-secondary menu-stepper-btn" type="button" data-action="plus" data-target="qty_{{ p.id }}" aria-label="زيادة {{ p.name_ar }}">+</button>
+                    <button class="hub-button hub-button-secondary menu-stepper-btn" type="button" data-cart-action="increment" data-action="plus" data-target="qty_{{ p.id }}" aria-label="زيادة {{ p.name_ar }}">+</button>
                   </div>
 
                   {% if p.valid_option_assignments %}
@@ -169,13 +170,13 @@
         <h3>السلة</h3>
         <span class="hub-badge hub-badge-info"><strong data-item-count class="hub-number">0</strong> عنصر</span>
       </div>
-      <p class="menu-cart-helper" data-cart-helper>اضغط على منتج لإضافته.</p>
+      <p class="menu-cart-helper" data-cart-helper>السلة فارغة</p>
       <ul class="menu-cart-list" data-cart-list></ul>
       <p class="menu-cart-total">المجموع: <strong data-cart-total class="hub-money">0 ل.س</strong></p>
       <label for="general_note"><strong>ملاحظة عامة</strong></label>
       <textarea class="hub-input" name="general_note" id="general_note" rows="3" placeholder="تعليمات عامة للطلب">{{ form_values.general_note|default:'' }}</textarea>
       <div class="hub-sticky-actions staff-pos__submit">
-        <button class="hub-button hub-button-primary" type="submit" data-submit-btn>إرسال الطلب</button>
+        <button class="hub-button hub-button-primary" type="submit" data-submit-btn>إتمام الطلب</button>
       </div>
     </aside>
 
@@ -188,5 +189,6 @@
 </div>
 <form method="get" id="staff-pos-member-search" action="{% url 'staff_pos' %}"></form>
 <script>window.HUB_DELIVERY_SETTINGS = {feeMode: '{{ settings.delivery_fee_mode|default:'none' }}', fixedFee: {{ settings.fixed_delivery_fee_syp|default:0 }}, minimum: {{ settings.minimum_delivery_order_syp|default:0 }}};</script>
-<script src="{% static 'js/menu_cart.js' %}"></script>
+<script src="{% static 'js/hub_cart_common.js' %}" defer></script>
+<script src="{% static 'js/menu_cart.js' %}" defer></script>
 {% endblock %}
