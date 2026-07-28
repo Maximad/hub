@@ -14,6 +14,7 @@ from django.utils import timezone
 import re
 
 from members.models import MembershipBenefitRule, MembershipPlan, MembershipSubscription, MemberCreditLedger
+from members.services import evaluate_membership_benefit, get_active_member_context, resolve_member_from_request
 from internet.models import WifiNetwork
 from catalog.models import MenuSection, PrepStation, ProductMedia, ProductOption, ProductOptionGroup, ProductOptionGroupAssignment, Tag
 from core.settings_helpers import get_page_setting, get_system_settings
@@ -350,7 +351,7 @@ def _section_products_for_ordering(product_filter=None, section_filter=None, inc
     return section_products
 
 
-def _menu_context(table=None):
+def _menu_context(table=None, request=None):
     settings = get_system_settings()
     section_products = _section_products_for_ordering(
         product_filter={'is_available': True, 'visible_on_qr': True},
@@ -359,20 +360,27 @@ def _menu_context(table=None):
     )
     page = get_page_setting('public_menu', 'القائمة العامة', 'Public menu', 'اختر طلبك داخل المكان.', 'Choose your in-space order.')
     default_fulfillment_mode = Order.FulfillmentMode.TABLE if table else Order.FulfillmentMode.INSIDE_SPACE
-    return {'table': table, 'section_products': section_products, 'settings': settings, 'page_setting': page, 'default_fulfillment_mode': default_fulfillment_mode, 'fulfillment_choices': settings.available_fulfillment_modes(include_table=False)}
+    member_context = resolve_member_from_request(request) if request else None
+    if member_context:
+        for _section, products in section_products:
+            for product in products:
+                result = evaluate_membership_benefit(member_context, product)
+                product.member_price_syp = result.final_total
+                product.member_discount_syp = result.discount
+    return {'table': table, 'section_products': section_products, 'settings': settings, 'page_setting': page, 'default_fulfillment_mode': default_fulfillment_mode, 'fulfillment_choices': settings.available_fulfillment_modes(include_table=False), 'member_context': member_context}
 
 
 def menu_public(request):
     if request.method == 'POST':
         return _create_order_from_menu(request, table=None)
-    return render(request, 'menu/menu.html', _menu_context())
+    return render(request, 'menu/menu.html', _menu_context(request=request))
 
 
 def menu_table(request, qr_token):
     table = get_object_or_404(TableArea.objects.select_related('room'), qr_token=qr_token)
     if request.method == 'POST':
         return _create_order_from_menu(request, table=table)
-    return render(request, 'menu/menu.html', _menu_context(table=table))
+    return render(request, 'menu/menu.html', _menu_context(table=table, request=request))
 
 
 def _selected_option_values(request, product_id, group_id):
@@ -495,7 +503,7 @@ def _prep_defaults_for_product(product):
             station = None
     return station, OrderItem.PrepStatus.NEW
 
-def _create_order_from_selected_items(table, selected, note_parts, status=None, service_mode=None, fulfillment_mode=None, delivery_data=None):
+def _create_order_from_selected_items(table, selected, note_parts, status=None, service_mode=None, fulfillment_mode=None, delivery_data=None, member_context=None):
     note = '\n'.join([part for part in note_parts if part])
     if table and service_mode is None:
         service_mode = Order.ServiceMode.TABLE
@@ -503,7 +511,9 @@ def _create_order_from_selected_items(table, selected, note_parts, status=None, 
     fulfillment_mode = fulfillment_mode or (Order.FulfillmentMode.TABLE if table else Order.FulfillmentMode.INSIDE_SPACE)
     delivery_data = delivery_data or {}
     with transaction.atomic():
-        order = Order.objects.create(table=table, service_mode=service_mode, fulfillment_mode=fulfillment_mode, status=status or Order.Status.NEW, notes=note, **delivery_data)
+        order = Order.objects.create(table=table, member=member_context.member if member_context else None, service_mode=service_mode, fulfillment_mode=fulfillment_mode, status=status or Order.Status.NEW, notes=note, **delivery_data)
+        membership_discount = 0
+        benefit_snapshots = []
         for product, qty, item_note, selected_options_snapshot, option_delta in selected:
             unit_price = max(product.price_syp + option_delta, 0)
             prep_station, prep_status = _prep_defaults_for_product(product)
@@ -520,7 +530,14 @@ def _create_order_from_selected_items(table, selected, note_parts, status=None, 
                 prep_station=prep_station,
                 prep_status=prep_status,
             )
+            benefit = evaluate_membership_benefit(member_context, product, qty, unit_price)
+            if benefit.discount:
+                membership_discount += benefit.discount
+                benefit_snapshots.append({'rule_uuid': str(benefit.rule.uuid), 'label': str(benefit.rule), 'product': product.name_ar, 'subtotal_before': benefit.original_total, 'discount': benefit.discount, 'subtotal_after': benefit.final_total, 'plan': member_context.plan.name_ar})
             transaction.on_commit(lambda item_id=item.pk: deduct_order_item_stock(OrderItem.objects.select_related('order','product').get(pk=item_id)))
+        if membership_discount:
+            import json
+            OrderDiscount.objects.create(order=order, discount_type=OrderDiscount.DiscountType.MEMBER, amount_syp=membership_discount, reason='خصم العضوية', notes=json.dumps(benefit_snapshots, ensure_ascii=False))
     transaction.on_commit(lambda: notify_order_created(order))
     return order
 
@@ -530,7 +547,7 @@ def _create_order_from_menu(request, table=None):
     selected, validation_errors = _selected_order_items_from_post(request, products)
 
     if not selected:
-        context = _menu_context(table)
+        context = _menu_context(table, request)
         context['error'] = 'يرجى اختيار عنصر واحد على الأقل.'
         context['form_values'] = request.POST
         return render(request, 'menu/menu.html', context)
@@ -548,14 +565,15 @@ def _create_order_from_menu(request, table=None):
     if errors:
         validation_errors.append(errors['رقم الهاتف'])
     if validation_errors:
-        context = _menu_context(table)
+        context = _menu_context(table, request)
         context['error'] = ' '.join(validation_errors)
         context['form_values'] = request.POST
         return render(request, 'menu/menu.html', context)
     general_note = request.POST.get('general_note', '').strip()
     service_mode = Order.ServiceMode.TABLE if fulfillment_mode == Order.FulfillmentMode.TABLE else (Order.ServiceMode.TAKEAWAY if fulfillment_mode == Order.FulfillmentMode.TAKEAWAY else Order.ServiceMode.DINE_IN)
     note_parts = [f'الاسم: {customer_name}' if customer_name else '', f'الهاتف: {customer_phone}' if customer_phone else '', f'المكان: {_order_location_note(table, service_mode, fulfillment_mode)}', general_note]
-    order = _create_order_from_selected_items(table, selected, note_parts, service_mode=service_mode, fulfillment_mode=fulfillment_mode, delivery_data=delivery_data)
+    member_context = resolve_member_from_request(request)
+    order = _create_order_from_selected_items(table, selected, note_parts, service_mode=service_mode, fulfillment_mode=fulfillment_mode, delivery_data=delivery_data, member_context=member_context)
     return redirect(reverse('order_public', kwargs={'public_code': order.public_code}))
 
 def order_public(request, public_code):
@@ -777,6 +795,7 @@ def staff_pos(request):
             member = Member.objects.filter(pk=int(member_id)).first()
         if member_id and not member:
             validation_errors.append('العضو المحدد غير صالح.')
+        member_context = get_active_member_context(member) if member else None
         if validation_errors:
             context.update({'error': ' '.join(validation_errors), 'form_values': request.POST, 'selected_table_id': table_id})
             return render(request, 'staff/pos.html', context)
@@ -792,7 +811,7 @@ def staff_pos(request):
             f'العضو: {member.name_ar} / {member.phone}' if member else '',
             general_note,
         ]
-        order = _create_order_from_selected_items(table, selected, note_parts, status=Order.Status.NEW, service_mode=service_mode, fulfillment_mode=fulfillment_mode, delivery_data=delivery_data)
+        order = _create_order_from_selected_items(table, selected, note_parts, status=Order.Status.NEW, service_mode=service_mode, fulfillment_mode=fulfillment_mode, delivery_data=delivery_data, member_context=member_context)
         ActivityLog.objects.create(
             actor=request.user,
             action='staff_pos_order_created',
@@ -1667,7 +1686,11 @@ def staff_member_detail(request, member_id):
     subscriptions = member.subscriptions.select_related('plan').order_by('-created_at')
     ledger = member.credit_ledger.select_related('subscription', 'created_by').order_by('-created_at')[:100]
     sessions = member.internet_sessions.select_related('package').order_by('-start_time')[:50]
-    return render(request, 'staff/member_detail.html', {'member': member, 'subscriptions': subscriptions, 'ledger': ledger, 'sessions': sessions})
+    active_subscription = get_active_member_context(member)
+    devices = member.device_tokens.filter(revoked_at__isnull=True).order_by('-last_used_at', '-created_at')
+    activation_url = request.session.pop('member_activation_url', None)
+    recent_orders = member.orders.prefetch_related('discounts').order_by('-created_at')[:20]
+    return render(request, 'staff/member_detail.html', {'member': member, 'subscriptions': subscriptions, 'ledger': ledger, 'sessions': sessions, 'active_subscription': active_subscription, 'devices': devices, 'activation_url': activation_url, 'recent_orders': recent_orders})
 
 
 @login_required

@@ -19,6 +19,7 @@ from core.views_notifications import staff_notifications, staff_notifications_po
 from accounts.views_staff import (
     staff_users_list, staff_user_new, staff_user_detail, staff_user_edit, staff_user_password, staff_user_toggle_active,
 )
+from members import views as member_device_views
 
 
 urlpatterns = [
@@ -26,6 +27,8 @@ urlpatterns = [
     path('', menu.dashboard, name='dashboard'),
     path('menu/', menu.menu_public, name='menu_public'),
     path('menu/table/<uuid:qr_token>/', menu.menu_table, name='menu_table'),
+    path('member/activate/<str:token>/', member_device_views.activate_member_device, name='member_activate'),
+    path('member/device/deactivate/', member_device_views.deactivate_member_device, name='member_device_deactivate'),
     path('order/<uuid:public_code>/', menu.order_public, name='order_public'),
     path('order/<uuid:public_code>/qr.svg', menu.order_qr, name='order_qr'),
     path('table/<uuid:qr_token>/qr.svg', menu.table_qr, name='table_qr'),
@@ -123,6 +126,10 @@ urlpatterns = [
     path('staff/members/new/', staff_member_new, name='staff_member_new'),
     path('staff/members/<str:member_id>/', staff_member_detail, name='staff_member_detail'),
     path('staff/members/<str:member_id>/subscribe/', staff_member_subscribe, name='staff_member_subscribe'),
+    path('staff/members/<str:member_id>/activation/', member_device_views.generate_activation, name='staff_member_activation'),
+    path('staff/members/<str:member_id>/activation/qr.svg', member_device_views.activation_qr, name='staff_member_activation_qr'),
+    path('staff/members/<str:member_id>/devices/revoke/', member_device_views.revoke_device, name='staff_member_devices_revoke'),
+    path('staff/members/<str:member_id>/devices/<uuid:device_id>/revoke/', member_device_views.revoke_device, name='staff_member_device_revoke'),
     path('staff/internet/', staff_internet, name='staff_internet'),
     path('staff/internet/start/', staff_internet_start, name='staff_internet_start'),
     path('staff/internet/session/<int:session_id>/', staff_internet_session, name='staff_internet_session'),
