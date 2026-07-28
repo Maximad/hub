@@ -3,6 +3,7 @@ from django.contrib import admin
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.utils.html import format_html
+from django.template.response import TemplateResponse
 from catalog.admin_media import safe_media_preview
 from catalog.models import ProductMedia, ProductOptionGroupAssignment
 from .settings_helpers import get_system_settings
@@ -190,8 +191,9 @@ class SystemSettingAdminForm(forms.ModelForm):
     COLOR_FIELDS = (
         'primary_color', 'header_color', 'accent_color', 'background_color', 'surface_color',
         'card_background_color', 'text_color', 'muted_text_color', 'border_color', 'button_color',
+        'secondary_surface_color', 'success_color', 'warning_color', 'danger_color', 'info_color',
     )
-    NUMBER_FIELDS = ('base_font_size_px', 'heading_font_size_px', 'small_font_size_px', 'button_font_size_px', 'border_radius_px', 'border_radius', 'page_max_width_px')
+    NUMBER_FIELDS = ('base_font_size_px', 'heading_font_size_px', 'small_font_size_px', 'button_font_size_px', 'border_radius_px', 'border_radius', 'page_max_width_px', 'line_height_percent', 'small_control_radius_px', 'panel_radius_px', 'button_radius_px', 'border_width_px', 'control_height_px', 'sidebar_width_px')
 
     class Meta:
         model = SystemSetting
@@ -242,19 +244,21 @@ class SystemSettingAdmin(admin.ModelAdmin):
             ),
             'description': 'التوصيل والتيك أواي يبقيان مخفيين عن المنيو العام ونقطة البيع ما لم يتم تفعيلهما هنا. إذا كان الوضع الافتراضي غير متاح فسيعود النظام إلى طلب داخل المكان.',
         }),
-        ('الألوان والخطوط', {
+        ('الواجهة والتصميم', {
             'fields': (
                 'primary_color', 'header_color', 'accent_color', 'background_color', 'surface_color', 'card_background_color',
-                'text_color', 'muted_text_color', 'border_color', 'button_color',
+                'secondary_surface_color', 'text_color', 'muted_text_color', 'border_color', 'button_color',
+                'success_color', 'warning_color', 'danger_color', 'info_color',
+                'base_font_size_px', 'small_font_size_px', 'heading_font_size_px', 'button_font_size_px', 'line_height_percent', 'font_fallback',
+                'small_control_radius_px', 'panel_radius_px', 'button_radius_px', 'border_width_px', 'control_height_px',
+                'ui_density', 'show_interface_icons', 'enable_flat_shadows', 'page_max_width_px', 'sidebar_width_px', 'sticky_header_enabled',
             ),
-            'description': 'استخدم ألوان HEX آمنة مثل #0f5f57. لا حاجة لمعرفة CSS.',
+            'description': 'نظام بصري مسطح مشترك للمنيو وواجهات الفريق ولوحة الإدارة. تُقبل ألوان HEX والقيم الواقعة ضمن النطاقات الآمنة فقط.',
         }),
         ('الإعدادات المتقدمة', {
             'classes': ('collapse',),
             'fields': (
-                'base_font_size_px', 'heading_font_size_px', 'small_font_size_px', 'button_font_size_px',
                 'button_padding_scale', 'input_size', 'border_radius_px', 'border_radius', 'card_style', 'card_shadow_level',
-                'page_max_width_px', 'ui_density',
             ),
             'description': 'القيم محددة بنطاقات آمنة حتى لا تنكسر الواجهة على الجوال أو التابلت.',
         }),
@@ -293,6 +297,25 @@ class SystemSettingAdmin(admin.ModelAdmin):
     )
     autocomplete_fields = ('brand_logo_media', 'brand_icon_media', 'public_menu_banner_media', 'pos_logo_media', 'receipt_logo_media', 'internet_service_product', 'default_workspace_product')
     readonly_fields = ('branding_preview',)
+    actions = ('reset_theme_defaults',)
+
+    @admin.action(description='استعادة الإعدادات الافتراضية للتصميم')
+    def reset_theme_defaults(self, request, queryset):
+        if not self.has_change_permission(request):
+            raise PermissionError
+        if request.POST.get('confirm_theme_reset') != 'yes':
+            return TemplateResponse(request, 'admin/core/systemsetting/reset_theme.html', {
+                **self.admin_site.each_context(request), 'opts': self.model._meta,
+                'queryset': queryset, 'action_checkbox_name': admin.helpers.ACTION_CHECKBOX_NAME,
+            })
+        theme_fields = set(SystemSetting.SAFE_COLOR_DEFAULTS) | set(SystemSetting.SAFE_NUMBER_DEFAULTS) | {
+            'font_fallback', 'ui_density', 'show_interface_icons', 'enable_flat_shadows',
+            'sticky_header_enabled', 'card_shadow_level', 'card_style',
+        }
+        defaults = {field.name: field.get_default() for field in SystemSetting._meta.fields if field.name in theme_fields}
+        queryset.update(**defaults)
+        get_system_settings.cache_clear()
+        self.message_user(request, 'تمت استعادة إعدادات التصميم فقط؛ لم تتغير إعدادات التشغيل.')
 
     def branding_preview(self, obj):
         logo = obj.brand_logo_url if obj else ''
@@ -300,7 +323,7 @@ class SystemSettingAdmin(admin.ModelAdmin):
         logo_html = f'<img src="{logo}" style="width:72px;height:72px;object-fit:contain;border:1px solid #ddd;border-radius:12px;background:#fff">' if logo else '<strong>لا يوجد شعار محدد</strong>'
         banner_html = f'<img src="{banner}" style="width:260px;max-width:100%;height:90px;object-fit:cover;border-radius:16px">' if banner else '<span>لا يوجد بانر محدد</span>'
         font_preview = '<div style="font-family:var(--hub-font-body);border:1px dashed #777;border-radius:10px;padding:10px;background:#fff">معاينة الخط النشط: مشاريب Hub Custom Font 123</div>'
-        return format_html('<div style="display:grid;gap:12px;max-width:520px"><div>{}</div><div>{}</div>{}<div style="border:1px solid {};border-radius:{}px;padding:12px;background:{};color:{}"><strong>بطاقة منتج تجريبية</strong><p>زر ولون وهوية قبل الحفظ النهائي.</p><button type="button" style="background:{};color:white;border:0;border-radius:10px;padding:8px 14px;font-family:var(--hub-font-body)">زر تجريبي</button></div><div style="text-align:center;border:1px dashed #999;padding:10px;font-family:var(--hub-font-body)">رأس إيصال تجريبي<br>{}</div></div>', logo_html, banner_html, font_preview, obj.safe_border_color, obj.safe_border_radius_px, obj.safe_surface_color, obj.safe_text_color, obj.safe_primary_color, logo_html)
+        return format_html('<div class="hub-theme-preview"><div>{}</div><div>{}</div>{}<header>Hub / Masharib — 123</header><nav>الرئيسية · الطلبات · التقارير</nav><section><strong>بطاقة / Panel</strong><p>نص عربي و English <bdi>1,250 SYP</bdi></p><label>حقل تجريبي <input value="بحث وتجربة" readonly></label><div><button type="button" class="button default">زر أساسي</button> <button type="button" class="button">ثانوي</button> <button type="button" class="deletelink">حذف</button></div><table><tr><th>المنتج</th><th>الحالة</th></tr><tr><td>مشروب تجريبي</td><td><span class="hub-preview-badge">متاح</span></td></tr></table><p class="messagelist">تم الحفظ بنجاح</p></section></div>', logo_html, banner_html, font_preview)
     branding_preview.short_description = 'معاينة الهوية'
 
     list_display = ('system_title_ar', 'default_language', 'menu_layout_preset', 'pos_layout_preset', 'ui_density', 'updated_at')

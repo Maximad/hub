@@ -1,0 +1,18 @@
+{% comment %}Validated semantic tokens shared by public, staff, print, and Django admin.{% endcomment %}
+{% if system_settings.safe_custom_font_url %}<style>@font-face{font-family:"HubCustomFont";src:url("{{ system_settings.safe_custom_font_url }}") format("{{ system_settings.custom_font_format }}");font-display:swap}</style>{% endif %}
+<style id="hub-theme-tokens">
+:root{
+ --hub-color-primary:{{ system_settings.safe_primary_color }};--hub-color-primary-hover:color-mix(in srgb,var(--hub-color-primary),#000 12%);--hub-color-primary-contrast:#fff;
+ --hub-color-accent:{{ system_settings.safe_accent_color }};--hub-color-accent-contrast:#211707;
+ --hub-color-background:{{ system_settings.safe_background_color }};--hub-color-surface:{{ system_settings.safe_surface_color }};--hub-color-surface-secondary:{{ system_settings.safe_secondary_surface_color }};--hub-color-surface-hover:color-mix(in srgb,var(--hub-color-surface),var(--hub-color-primary) 6%);
+ --hub-color-text:{{ system_settings.safe_text_color }};--hub-color-text-muted:{{ system_settings.safe_muted_text_color }};--hub-color-border:{{ system_settings.safe_border_color }};
+ --hub-color-success:{{ system_settings.safe_success_color }};--hub-color-warning:{{ system_settings.safe_warning_color }};--hub-color-danger:{{ system_settings.safe_danger_color }};--hub-color-info:{{ system_settings.safe_info_color }};
+ --hub-radius-small:{{ hub_theme_numbers.small_control_radius_px }}px;--hub-radius-medium:{{ hub_theme_numbers.panel_radius_px }}px;--hub-radius-large:{{ system_settings.safe_border_radius_px }}px;--hub-button-radius:{{ hub_theme_numbers.button_radius_px }}px;
+ --hub-space-1:.25rem;--hub-space-2:.5rem;--hub-space-3:.75rem;--hub-space-4:1rem;--hub-space-5:1.5rem;--hub-space-6:2rem;
+ --hub-control-height:{{ hub_theme_numbers.control_height_px }}px;--hub-font-size-base:{{ system_settings.safe_base_font_size_px }}px;--hub-font-size-small:{{ system_settings.safe_small_font_size_px }}px;--hub-font-size-heading:{{ system_settings.safe_heading_font_size_px }}px;--hub-line-height:{{ hub_theme_numbers.line_height_percent }}%;
+ --hub-border-width:{{ hub_theme_numbers.border_width_px }}px;--hub-content-max-width:{{ system_settings.safe_page_max_width_px }}px;--hub-sidebar-width:{{ hub_theme_numbers.sidebar_width_px }}px;
+ --hub-flat-shadow:{% if system_settings.enable_flat_shadows %}0 4px 16px rgb(22 33 31 / .10){% else %}none{% endif %};--hub-font-body:{% if system_settings.safe_custom_font_url %}"HubCustomFont",{% endif %}{{ system_settings.safe_font_stack|safe }};
+ /* Compatibility aliases used by established templates and JavaScript-neutral CSS. */
+ --hub-primary:var(--hub-color-primary);--hub-header:{{ system_settings.safe_header_color }};--hub-button:{{ system_settings.safe_button_color }};--hub-accent:var(--hub-color-accent);--hub-bg:var(--hub-color-background);--hub-card:var(--hub-color-surface);--hub-surface:var(--hub-color-surface);--hub-text:var(--hub-color-text);--hub-muted:var(--hub-color-text-muted);--hub-border:var(--hub-color-border);--hub-radius:var(--hub-radius-medium);--hub-card-radius:var(--hub-radius-medium);--hub-page-max-width:var(--hub-content-max-width);--hub-font-size:var(--hub-font-size-base);--hub-heading-font-size:var(--hub-font-size-heading);--hub-small-font-size:var(--hub-font-size-small);--hub-input-min-height:var(--hub-control-height);--hub-card-shadow:var(--hub-flat-shadow);
+}
+</style>
