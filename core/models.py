@@ -211,6 +211,7 @@ class Order(TimeStampedModel, PublicCodeModel):
         CANCELLED = 'cancelled', 'ملغى'
 
     table = models.ForeignKey(TableArea, on_delete=models.PROTECT, related_name='orders', null=True, blank=True)
+    member = models.ForeignKey('Member', on_delete=models.PROTECT, related_name='orders', null=True, blank=True)
     service_mode = models.CharField(max_length=20, choices=ServiceMode.choices, default=ServiceMode.DINE_IN)
     fulfillment_mode = models.CharField(max_length=20, choices=FulfillmentMode.choices, default=FulfillmentMode.INSIDE_SPACE, verbose_name='وضع الاستلام/التنفيذ')
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.NEW)

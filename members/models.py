@@ -1,5 +1,6 @@
 import uuid
 from django.db import models
+from django.conf import settings
 
 
 class MembershipPlan(models.Model):
@@ -82,3 +83,29 @@ class MemberCreditLedger(models.Model):
     def __str__(self):
         delta = self.minutes_delta if self.minutes_delta is not None else self.credit_delta_syp
         return f'{self.member} — {self.change_type} — {delta}'
+
+
+class MemberActivationToken(models.Model):
+    """A short-lived, one-time credential. Only its SHA-256 digest is persisted."""
+    member = models.ForeignKey('core.Member', on_delete=models.CASCADE, related_name='activation_tokens')
+    token_hash = models.CharField(max_length=64, unique=True, editable=False)
+    expires_at = models.DateTimeField()
+    consumed_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class MemberDeviceToken(models.Model):
+    """Revocable browser recognition credential; the raw secret is cookie-only."""
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    member = models.ForeignKey('core.Member', on_delete=models.CASCADE, related_name='device_tokens')
+    token_hash = models.CharField(max_length=64, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    device_label = models.CharField(max_length=120, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['uuid', 'token_hash'], name='unique_member_device_secret')]

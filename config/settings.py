@@ -119,3 +119,10 @@ AUTH_USER_MODEL = 'accounts.User'
 LOGIN_URL = '/admin/login/'
 LOGIN_REDIRECT_URL = '/staff/'
 LOGOUT_REDIRECT_URL = '/admin/login/'
+
+# Persistent membership recognition (raw credentials are never stored server-side).
+MEMBER_DEVICE_COOKIE_NAME = os.getenv('MEMBER_DEVICE_COOKIE_NAME', 'hub_member_device')
+MEMBER_DEVICE_COOKIE_AGE = int(os.getenv('MEMBER_DEVICE_COOKIE_AGE', 60 * 60 * 24 * 365))
+MEMBER_ACTIVATION_TOKEN_AGE = int(os.getenv('MEMBER_ACTIVATION_TOKEN_AGE', 60 * 60 * 24 * 7))
+MEMBER_DEVICE_COOKIE_SECURE = os.getenv('MEMBER_DEVICE_COOKIE_SECURE', str(not DEBUG)).lower() == 'true'
+PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', '')

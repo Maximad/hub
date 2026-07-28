@@ -2,6 +2,7 @@
 {% load menu_form %}
 {% block title %}تأكيد الطلب{% endblock %}
 {% block content %}
+{% if order.member %}<p class="hub-card"><strong>تم تطبيق خصم العضوية</strong><br>{{ order.member.name_ar }} — خصم العضوية: {{ order.discount_syp }} ل.س</p>{% endif %}
 <section class="hub-card order-confirm" dir="rtl">
   <header class="order-confirm__header">
     <p class="hub-badge hub-badge-info">تم إرسال الطلب</p>
