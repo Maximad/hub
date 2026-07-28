@@ -425,3 +425,6 @@ input[type="tel"]{
   min-width: 4.5rem;
   text-align: center;
 }
+.hub-select-search{display:block;inline-size:100%;min-block-size:44px;margin-block-end:.35rem;padding-inline:.65rem;border:1px solid var(--hub-border,#bbb);border-radius:var(--hub-radius,6px);background:var(--hub-card,#fff);color:var(--hub-text,#111)}
+.hub-select-search:focus-visible,select[data-hub-searchable-select="true"]:focus-visible{outline:3px solid color-mix(in srgb,var(--hub-primary,#2563eb) 45%,transparent);outline-offset:2px}
+[data-reservation-group][hidden]{display:none!important}

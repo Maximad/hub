@@ -3,7 +3,7 @@
 {% block content %}
 <h2>إضافة اشتراك للعضو {{ member.name_ar }}</h2>
 <form method="post">{% csrf_token %}
-<label>الخطة</label><select name="plan" required style="display:block; width:100%; margin-bottom:.5rem;">{% for p in plans %}<option value="{{ p.id }}">{{ p.name_ar }} ({{ p.code }})</option>{% endfor %}</select>
+<label>الخطة</label><select data-hub-searchable-select="true" name="plan" required style="display:block; width:100%; margin-bottom:.5rem;">{% for p in plans %}<option value="{{ p.id }}">{{ p.name_ar }} ({{ p.code }})</option>{% endfor %}</select>
 <label>يبدأ في</label><input type="datetime-local" name="starts_at" style="display:block; width:100%; margin-bottom:.5rem;">
 <label>ينتهي في</label><input type="datetime-local" name="ends_at" style="display:block; width:100%; margin-bottom:.5rem;">
 <label>الدقائق المتبقية</label><input type="number" name="remaining_internet_minutes" style="display:block; width:100%; margin-bottom:.5rem;">
