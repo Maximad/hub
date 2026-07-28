@@ -1106,6 +1106,11 @@ class SystemSetting(TimeStampedModel):
         COMFORTABLE = 'comfortable', 'مريح'
         LARGE_TOUCH = 'large_touch', 'لمس كبير'
 
+    class FontFallback(models.TextChoices):
+        SYSTEM = 'system', 'خط النظام'
+        ARABIC = 'arabic', 'عربي حديث'
+        CLASSIC = 'classic', 'عربي تقليدي'
+
     class MenuLayoutPreset(models.TextChoices):
         DEFAULT_MASHARIB = 'default_masharib', 'مشاريب الافتراضي'
         MINIMAL_FAST = 'minimal_fast', 'سريع وبسيط'
@@ -1239,6 +1244,11 @@ class SystemSetting(TimeStampedModel):
     border_color = models.CharField(max_length=20, default='#ddd2c0', validators=[validate_hex_color], verbose_name='لون الحدود')
     button_color = models.CharField(max_length=20, default='#0f5f57', validators=[validate_hex_color], verbose_name='لون الأزرار')
     accent_color = models.CharField(max_length=20, default='#c88a2b', validators=[validate_hex_color], verbose_name='لون التمييز')
+    secondary_surface_color = models.CharField(max_length=20, default='#f1ece3', validators=[validate_hex_color], verbose_name='لون السطح الثانوي')
+    success_color = models.CharField(max_length=20, default='#287a57', validators=[validate_hex_color], verbose_name='لون النجاح')
+    warning_color = models.CharField(max_length=20, default='#9a650f', validators=[validate_hex_color], verbose_name='لون التحذير')
+    danger_color = models.CharField(max_length=20, default='#b4232f', validators=[validate_hex_color], verbose_name='لون الخطر')
+    info_color = models.CharField(max_length=20, default='#27658a', validators=[validate_hex_color], verbose_name='لون المعلومات')
 
     base_font_size_px = models.PositiveIntegerField(default=18, validators=[MinValueValidator(13), MaxValueValidator(22)], verbose_name='حجم الخط الأساسي')
     heading_font_size_px = models.PositiveIntegerField(default=34, validators=[MinValueValidator(18), MaxValueValidator(44)], verbose_name='حجم العناوين')
@@ -1254,6 +1264,17 @@ class SystemSetting(TimeStampedModel):
     ui_density = models.CharField(max_length=20, choices=UIDensity.choices, default=UIDensity.COMFORTABLE, verbose_name='كثافة الواجهة')
     custom_font_name = models.CharField(max_length=120, blank=True, verbose_name='اسم الخط المخصص')
     custom_font_file = models.FileField(upload_to='system/fonts/', blank=True, validators=[validate_font_upload], verbose_name='ملف الخط المخصص')
+    font_fallback = models.CharField(max_length=20, choices=FontFallback.choices, default=FontFallback.ARABIC, verbose_name='الخط البديل')
+    line_height_percent = models.PositiveSmallIntegerField(default=155, validators=[MinValueValidator(130), MaxValueValidator(190)], verbose_name='ارتفاع السطر (%)')
+    small_control_radius_px = models.PositiveSmallIntegerField(default=6, validators=[MinValueValidator(0), MaxValueValidator(24)], verbose_name='استدارة التحكم الصغير')
+    panel_radius_px = models.PositiveSmallIntegerField(default=10, validators=[MinValueValidator(0), MaxValueValidator(24)], verbose_name='استدارة اللوحة')
+    button_radius_px = models.PositiveSmallIntegerField(default=6, validators=[MinValueValidator(0), MaxValueValidator(24)], verbose_name='استدارة الزر')
+    border_width_px = models.PositiveSmallIntegerField(default=1, validators=[MinValueValidator(0), MaxValueValidator(3)], verbose_name='سماكة الحدود')
+    control_height_px = models.PositiveSmallIntegerField(default=44, validators=[MinValueValidator(40), MaxValueValidator(60)], verbose_name='ارتفاع عناصر التحكم')
+    sidebar_width_px = models.PositiveSmallIntegerField(default=270, validators=[MinValueValidator(220), MaxValueValidator(360)], verbose_name='عرض الشريط الجانبي')
+    show_interface_icons = models.BooleanField(default=True, verbose_name='إظهار الأيقونات في الواجهة')
+    enable_flat_shadows = models.BooleanField(default=False, verbose_name='تفعيل ظل وظيفي خفيف')
+    sticky_header_enabled = models.BooleanField(default=False, verbose_name='تثبيت الهيدر')
 
     public_menu_layout = models.CharField(max_length=20, choices=PublicMenuLayout.choices, default=PublicMenuLayout.COMFORTABLE, verbose_name='تخطيط المنيو العام', help_text='قائمة تطبيق مدمجة تعرض المنتجات كسطور صغيرة لتسهيل التصفح على الموبايل.')
     mobile_product_density = models.CharField(max_length=20, choices=MobileProductDensity.choices, default=MobileProductDensity.COMPACT, verbose_name='كثافة العرض على الموبايل')
@@ -1342,6 +1363,11 @@ class SystemSetting(TimeStampedModel):
         'text_color': '#262626',
         'muted_text_color': '#6b6b6b',
         'border_color': '#ddd2c0',
+        'secondary_surface_color': '#f1ece3',
+        'success_color': '#287a57',
+        'warning_color': '#9a650f',
+        'danger_color': '#b4232f',
+        'info_color': '#27658a',
     }
     SAFE_NUMBER_DEFAULTS = {
         'border_radius_px': (18, 0, 40),
@@ -1351,8 +1377,21 @@ class SystemSetting(TimeStampedModel):
         'small_font_size_px': (15, 11, 20),
         'button_font_size_px': (16, 12, 24),
         'page_max_width_px': (1200, 360, 1600),
+        'line_height_percent': (155, 130, 190),
+        'small_control_radius_px': (6, 0, 24),
+        'panel_radius_px': (10, 0, 24),
+        'button_radius_px': (6, 0, 24),
+        'border_width_px': (1, 0, 3),
+        'control_height_px': (44, 40, 60),
+        'sidebar_width_px': (270, 220, 360),
     }
     SAFE_HEX_COLOR_RE = re.compile(r'^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$')
+
+    def delete(self, *args, **kwargs):
+        result = super().delete(*args, **kwargs)
+        from .settings_helpers import get_system_settings
+        get_system_settings.cache_clear()
+        return result
 
     @classmethod
     def safe_color_value(cls, value, fallback):
@@ -1433,6 +1472,33 @@ class SystemSetting(TimeStampedModel):
     @property
     def safe_border_color(self):
         return self._safe_color_field('border_color')
+
+    @property
+    def safe_secondary_surface_color(self): return self._safe_color_field('secondary_surface_color')
+    @property
+    def safe_success_color(self): return self._safe_color_field('success_color')
+    @property
+    def safe_warning_color(self): return self._safe_color_field('warning_color')
+    @property
+    def safe_danger_color(self): return self._safe_color_field('danger_color')
+    @property
+    def safe_info_color(self): return self._safe_color_field('info_color')
+
+    @property
+    def safe_font_stack(self):
+        stacks = {
+            self.FontFallback.SYSTEM: 'system-ui,-apple-system,"Segoe UI",Arial,sans-serif',
+            self.FontFallback.ARABIC: 'Tahoma,"Noto Sans Arabic","Segoe UI",Arial,sans-serif',
+            self.FontFallback.CLASSIC: '"Noto Naskh Arabic",Tahoma,Arial,sans-serif',
+        }
+        return stacks.get(self.font_fallback, stacks[self.FontFallback.ARABIC])
+
+    @property
+    def safe_theme_numbers(self):
+        return {name: self._safe_number_field(name) for name in (
+            'line_height_percent', 'small_control_radius_px', 'panel_radius_px',
+            'button_radius_px', 'border_width_px', 'control_height_px', 'sidebar_width_px',
+        )}
 
     @property
     def safe_border_radius_px(self):
@@ -1603,6 +1669,9 @@ class SystemSetting(TimeStampedModel):
         if not self.pk and SystemSetting.objects.exists():
             self.pk = SystemSetting.objects.order_by('-updated_at', '-pk').first().pk
         super().save(*args, **kwargs)
+        # Make admin/API theme changes visible immediately without deployment.
+        from .settings_helpers import get_system_settings
+        get_system_settings.cache_clear()
 
     def available_fulfillment_modes(self, include_table=True):
         modes = [Order.FulfillmentMode.INSIDE_SPACE]

@@ -8,7 +8,9 @@ def get_system_settings():
     settings = SystemSetting.objects.order_by('-updated_at', '-pk').first()
     if settings:
         return settings
-    return SystemSetting.objects.create()
+    # Rendering must remain safe before migrations/database initialization and must
+    # never create data as a side effect of a GET request.
+    return SystemSetting()
 
 
 def get_page_setting(key, title_ar='', title_en='', subtitle_ar='', subtitle_en=''):

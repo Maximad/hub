@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "base.html" %}{% load hub_icons %}
 {% load static menu_form product_media %}
 {% block title %}نقطة البيع / POS{% endblock %}
 {% block content %}
@@ -62,7 +62,7 @@
       </div>
       <div class="staff-pos__member-query">
         <input class="hub-input" type="search" name="member_q" value="{{ member_query }}" placeholder="اسم العضو أو الهاتف" form="staff-pos-member-search">
-        <button class="hub-button" type="submit" form="staff-pos-member-search">بحث</button>
+        <button class="hub-button" type="submit" form="staff-pos-member-search">{% hub_icon "search" %} بحث</button>
       </div>
       {% if member_rows %}
         <div class="staff-pos__member-results">
@@ -167,7 +167,7 @@
 
     <aside class="hub-card staff-pos__cart" id="cart-review" aria-live="polite">
       <div class="staff-pos__cart-head">
-        <h3>السلة</h3>
+        <h3>{% hub_icon "shopping-cart" %} السلة</h3>
         <span class="hub-badge hub-badge-info"><strong data-item-count class="hub-number">0</strong> عنصر</span>
       </div>
       <p class="menu-cart-helper" data-cart-helper>السلة فارغة</p>
@@ -176,7 +176,7 @@
       <label for="general_note"><strong>ملاحظة عامة</strong></label>
       <textarea class="hub-input" name="general_note" id="general_note" rows="3" placeholder="تعليمات عامة للطلب">{{ form_values.general_note|default:'' }}</textarea>
       <div class="hub-sticky-actions staff-pos__submit">
-        <button class="hub-button hub-button-primary" type="submit" data-submit-btn>إتمام الطلب</button>
+        <button class="hub-button hub-button-primary" type="submit" data-submit-btn>{% hub_icon "check" %} إتمام الطلب</button>
       </div>
     </aside>
 
