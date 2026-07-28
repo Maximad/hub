@@ -15,7 +15,7 @@ class Event(models.Model):
     description_ar = models.TextField(blank=True)
     starts_at = models.DateTimeField()
     ends_at = models.DateTimeField(null=True, blank=True)
-    location_area = models.ForeignKey('core.TableArea', on_delete=models.SET_NULL, null=True, blank=True)
+    room = models.ForeignKey('core.Room', on_delete=models.SET_NULL, null=True, blank=True, related_name='events')
     capacity = models.PositiveIntegerField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     is_public = models.BooleanField(default=True)

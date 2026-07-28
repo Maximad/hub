@@ -97,6 +97,7 @@ class ProductRecipeItemInline(admin.TabularInline):
     model = ProductRecipeItem
     extra = 0
     fields = ('inventory_item', 'quantity_per_unit', 'unit', 'waste_factor_percent', 'is_active', 'notes')
+    autocomplete_fields = ('inventory_item',)
 
 
 @admin.register(InventoryItem)
@@ -116,6 +117,7 @@ class PurchaseItemInline(admin.TabularInline):
     extra = 1
     fields = ('inventory_item', 'quantity', 'unit', 'unit_cost_syp', 'line_total_syp', 'notes')
     readonly_fields = ('line_total_syp',)
+    autocomplete_fields = ('inventory_item',)
 
 
 @admin.register(Purchase)
@@ -124,6 +126,7 @@ class PurchaseAdmin(admin.ModelAdmin):
     list_filter = ('business_date', 'status', 'payment_method', 'paid_from')
     search_fields = ('supplier_name', 'invoice_number', 'notes')
     inlines = (PurchaseItemInline,)
+    autocomplete_fields = ('vendor', 'receipt_media', 'created_by')
 
     @admin.display(description='المتبقي')
     def remaining_display(self, obj):
@@ -153,6 +156,7 @@ class ProductRecipeItemAdmin(admin.ModelAdmin):
     list_display = ('product', 'inventory_item', 'quantity_per_unit', 'unit', 'waste_factor_percent', 'is_active')
     list_filter = ('unit', 'is_active')
     search_fields = ('product__name_ar', 'inventory_item__name_ar')
+    autocomplete_fields = ('product', 'inventory_item')
 
 
 class ProductionBatchIngredientInline(admin.TabularInline):
@@ -160,6 +164,7 @@ class ProductionBatchIngredientInline(admin.TabularInline):
     extra = 1
     fields = ('inventory_item', 'planned_quantity', 'actual_quantity', 'unit', 'estimated_unit_cost_syp_snapshot', 'estimated_line_cost_syp_snapshot', 'notes')
     readonly_fields = ('estimated_line_cost_syp_snapshot',)
+    autocomplete_fields = ('inventory_item',)
 
 
 @admin.register(ProductionBatch)

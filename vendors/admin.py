@@ -41,3 +41,4 @@ class VendorParticipationAdmin(admin.ModelAdmin):
     list_display = ('title_ar', 'vendor', 'starts_at', 'ends_at', 'location_area', 'status')
     list_filter = ('status', 'starts_at', 'vendor')
     search_fields = ('title_ar', 'notes', 'vendor__name_ar')
+    autocomplete_fields = ('vendor', 'event', 'location_area')

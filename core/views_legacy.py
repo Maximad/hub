@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 from django.db.models import Exists, OuterRef, Prefetch, Q
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.contrib import messages
 from django.contrib.auth import authenticate
 from django.contrib.auth.decorators import login_required
@@ -26,7 +26,7 @@ from accounts.permissions import (
     require_staff_capability, user_has_capability,
 )
 from core.stock_recipes import deduct_order_item_stock
-from core.models import ActivityLog, CancellationReason, CashMovement, Category, DailyClose, Expense, InternetPackage, InternetSession, Member, Order, OrderDiscount, OrderItem, Payment, Product, SystemSetting, TableArea
+from core.models import ActivityLog, CancellationReason, CashMovement, Category, DailyClose, Expense, InternetPackage, InternetSession, Member, Order, OrderDiscount, OrderItem, Payment, Product, Room, SystemSetting, TableArea
 from events.models import Event
 from reservations.models import Reservation
 from vendors.models import Vendor, VendorParticipation
@@ -1979,19 +1979,19 @@ def staff_wifi(request):
 @login_required
 def staff_events(request):
     _assert_staff_capability(request.user, 'events')
-    events = Event.objects.select_related('location_area').order_by('starts_at', '-created_at')
+    events = Event.objects.select_related('room').order_by('starts_at', '-created_at')
     return render(request, 'staff/events.html', {'events': events})
 
 
 @login_required
 def staff_event_new(request):
     _assert_staff_capability(request.user, 'events')
-    table_areas = TableArea.objects.order_by('name_ar')
+    rooms = Room.objects.order_by('name_ar')
     if request.method == 'POST':
         title_ar = request.POST.get('title_ar', '').strip()
         starts_at_raw = request.POST.get('starts_at', '').strip()
         if not title_ar or not starts_at_raw:
-            return render(request, 'staff/event_form.html', {'table_areas': table_areas, 'statuses': Event.Status.choices, 'error': 'الاسم ووقت البداية مطلوبان.'})
+            return render(request, 'staff/event_form.html', {'rooms': rooms, 'statuses': Event.Status.choices, 'error': 'الاسم ووقت البداية مطلوبان.'})
         errors = {}
         starts_at = _parse_local_dt_or_error(starts_at_raw, 'وقت البداية', errors, required=True)
         ends_at = _parse_local_dt_or_error(request.POST.get('ends_at', ''), 'وقت النهاية', errors, default=None)
@@ -1999,7 +1999,7 @@ def staff_event_new(request):
             errors['ends_at'] = 'وقت النهاية يجب أن يكون بعد أو يساوي وقت البداية.'
         capacity = _parse_int_or_error(request.POST.get('capacity'), 'السعة', errors, default=0, min_value=0)
         if errors:
-            return render(request, 'staff/event_form.html', {'table_areas': table_areas, 'statuses': Event.Status.choices, 'errors': errors, 'form_values': request.POST})
+            return render(request, 'staff/event_form.html', {'rooms': rooms, 'statuses': Event.Status.choices, 'errors': errors, 'form_values': request.POST})
         event = Event(
             title_ar=title_ar,
             title_en=request.POST.get('title_en', '').strip(),
@@ -2009,18 +2009,18 @@ def staff_event_new(request):
             capacity=capacity or None,
             status=request.POST.get('status') or Event.Status.DRAFT,
         )
-        location_area_id = request.POST.get('location_area')
-        if location_area_id:
-            event.location_area = TableArea.objects.filter(pk=location_area_id).first()
+        room_id = request.POST.get('room')
+        if room_id:
+            event.room = Room.objects.filter(pk=room_id).first()
         event.save()
         return redirect('staff_event_detail', event_id=event.id)
-    return render(request, 'staff/event_form.html', {'table_areas': table_areas, 'statuses': Event.Status.choices})
+    return render(request, 'staff/event_form.html', {'rooms': rooms, 'statuses': Event.Status.choices})
 
 
 @login_required
 def staff_event_detail(request, event_id):
     _assert_staff_capability(request.user, 'events')
-    event = get_object_or_404(Event.objects.select_related('location_area'), pk=event_id)
+    event = get_object_or_404(Event.objects.select_related('room'), pk=event_id)
     reservations = Reservation.objects.filter(event=event).select_related('table_area').order_by('reservation_date', 'start_time')
     participations = VendorParticipation.objects.filter(event=event).select_related('vendor', 'location_area', 'event').order_by('starts_at')
     legacy_participations = VendorParticipation.objects.filter(event__isnull=True, notes__icontains=event.title_ar).select_related('vendor', 'location_area').order_by('starts_at')
@@ -2031,32 +2031,37 @@ def staff_event_detail(request, event_id):
 def staff_reservations(request):
     _assert_staff_capability(request.user, 'reservations')
     today = timezone.localdate()
-    all_rows = Reservation.objects.select_related('table_area', 'event').order_by('reservation_date', 'start_time')
-    today_rows = all_rows.filter(reservation_date=today).exclude(status=Reservation.Status.CANCELLED)
-    upcoming_rows = all_rows.filter(reservation_date__gt=today).exclude(status__in=[Reservation.Status.CANCELLED, Reservation.Status.COMPLETED])
-    past_cancelled_rows = all_rows.filter(Q(reservation_date__lt=today) | Q(status__in=[Reservation.Status.CANCELLED, Reservation.Status.COMPLETED]))
+    all_rows = Reservation.objects.select_related('room', 'table_area__room', 'event__room').order_by('reservation_date', 'start_time')
+    active = all_rows.exclude(status=Reservation.Status.CANCELLED)
+    today_rows = active.filter(Q(reservation_type=Reservation.ReservationType.EVENT, event__starts_at__date=today) | Q(reservation_type=Reservation.ReservationType.REGULAR, reservation_date=today))
+    upcoming_rows = active.exclude(status=Reservation.Status.COMPLETED).filter(Q(reservation_type=Reservation.ReservationType.EVENT, event__starts_at__date__gt=today) | Q(reservation_type=Reservation.ReservationType.REGULAR, reservation_date__gt=today))
+    past_cancelled_rows = all_rows.filter(Q(status__in=[Reservation.Status.CANCELLED, Reservation.Status.COMPLETED]) | Q(reservation_type=Reservation.ReservationType.EVENT, event__starts_at__date__lt=today) | Q(reservation_type=Reservation.ReservationType.REGULAR, reservation_date__lt=today))
     return render(request, 'staff/reservations.html', {'today_rows': today_rows, 'upcoming_rows': upcoming_rows, 'past_cancelled_rows': past_cancelled_rows})
 
 
 @login_required
 def staff_reservation_new(request):
     _assert_staff_capability(request.user, 'reservations')
-    events = Event.objects.order_by('starts_at')
-    table_areas = TableArea.objects.order_by('name_ar')
+    events = Event.objects.select_related('room').order_by('starts_at')
+    rooms = Room.objects.order_by('name_ar')
+    selected_room = request.POST.get('room') or request.GET.get('room')
+    table_areas = TableArea.objects.select_related('room').filter(room_id=selected_room).order_by('name_ar') if selected_room else TableArea.objects.none()
+    context = {'events': events, 'rooms': rooms, 'table_areas': table_areas, 'types': Reservation.ReservationType.choices, 'statuses': Reservation.Status.choices}
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
         errors = {}
         phone = _validate_phone_input(request.POST.get('phone', ''), 'رقم الهاتف', errors, required=True)
-        reservation_date_raw = request.POST.get('reservation_date', '').strip()
-        start_time_raw = request.POST.get('start_time', '').strip()
-        if not (name and phone and reservation_date_raw and start_time_raw):
-            return render(request, 'staff/reservation_form.html', {'events': events, 'table_areas': table_areas, 'types': Reservation.ReservationType.choices, 'error': 'الاسم والهاتف والتاريخ ووقت البداية مطلوبة.'})
+        reservation_type = request.POST.get('reservation_type') or Reservation.ReservationType.REGULAR
+        reservation_date_raw = request.POST.get('reservation_date', '').strip() or None
+        start_time_raw = request.POST.get('start_time', '').strip() or None
+        if not (name and phone):
+            return render(request, 'staff/reservation_form.html', {**context, 'error': 'الاسم والهاتف مطلوبان.', 'form_values': request.POST})
         party_size = _parse_int_or_error(request.POST.get('party_size') or 1, 'عدد الأشخاص', errors, default=1, min_value=1)
         if errors:
-            return render(request, 'staff/reservation_form.html', {'events': events, 'table_areas': table_areas, 'types': Reservation.ReservationType.choices, 'statuses': Reservation.Status.choices, 'errors': errors, 'form_values': request.POST})
+            return render(request, 'staff/reservation_form.html', {**context, 'errors': errors, 'form_values': request.POST})
         reservation = Reservation(
             name=name, phone=phone, reservation_date=reservation_date_raw, start_time=start_time_raw,
-            reservation_type=request.POST.get('reservation_type') or Reservation.ReservationType.TABLE,
+            reservation_type=reservation_type,
             party_size=party_size,
             status=request.POST.get('status') or Reservation.Status.PENDING,
             notes=request.POST.get('notes', '').strip(),
@@ -2065,21 +2070,38 @@ def staff_reservation_new(request):
         end_time = request.POST.get('end_time', '').strip()
         if end_time:
             reservation.end_time = end_time
+        room_id = request.POST.get('room')
+        if room_id:
+            reservation.room = Room.objects.filter(pk=room_id).first()
         area_id = request.POST.get('table_area')
         if area_id:
             reservation.table_area = TableArea.objects.filter(pk=area_id).first()
         event_id = request.POST.get('event')
         if event_id:
             reservation.event = Event.objects.filter(pk=event_id).first()
+        try:
+            reservation.full_clean()
+        except ValidationError as exc:
+            return render(request, 'staff/reservation_form.html', {**context, 'errors': exc.message_dict, 'form_values': request.POST})
         reservation.save()
         return redirect('staff_reservation_detail', reservation_id=reservation.id)
-    return render(request, 'staff/reservation_form.html', {'events': events, 'table_areas': table_areas, 'types': Reservation.ReservationType.choices, 'statuses': Reservation.Status.choices})
+    initial_type = Reservation.ReservationType.EVENT if request.GET.get('event') else Reservation.ReservationType.REGULAR
+    return render(request, 'staff/reservation_form.html', {**context, 'form_values': {'reservation_type': initial_type, 'event': request.GET.get('event', '')}})
+
+
+@login_required
+def staff_reservation_tables(request):
+    """Small, permission-protected dependency endpoint for a selected room."""
+    _assert_staff_capability(request.user, 'reservations')
+    room_id = request.GET.get('room')
+    rows = TableArea.objects.filter(room_id=room_id).order_by('name_ar')[:50] if room_id else []
+    return JsonResponse({'results': [{'id': row.pk, 'text': str(row)} for row in rows], 'pagination': {'more': False}})
 
 
 @login_required
 def staff_reservation_detail(request, reservation_id):
     _assert_staff_capability(request.user, 'reservations')
-    reservation = get_object_or_404(Reservation.objects.select_related('table_area', 'event'), pk=reservation_id)
+    reservation = get_object_or_404(Reservation.objects.select_related('room', 'table_area__room', 'event__room'), pk=reservation_id)
     return render(request, 'staff/reservation_detail.html', {'reservation': reservation, 'statuses': Reservation.Status.choices})
 
 
