@@ -1,12 +1,13 @@
 from datetime import timedelta
 
+from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from core.models import Category, Member, OrderDiscount, Product
 from members.models import MemberActivationToken, MemberDeviceToken, MembershipBenefitRule, MembershipPlan, MembershipSubscription
-from members.services import create_activation_token, evaluate_membership_benefit, get_active_member_context, resolve_member_from_request
+from members.services import consume_activation_token, create_activation_token, evaluate_membership_benefit, get_active_member_context, resolve_member_from_request
 
 
 @override_settings(MEMBER_DEVICE_COOKIE_SECURE=True)
@@ -81,3 +82,107 @@ class MemberRecognitionTests(TestCase):
         response = self.client.post(reverse('member_device_deactivate'))
         self.assertEqual(response.cookies['hub_member_device']['max-age'], 0)
         self.assertIsNotNone(MemberDeviceToken.objects.get().revoked_at)
+
+
+@override_settings(STORAGES={'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
+class MemberDeviceStaffPermissionTests(TestCase):
+    def setUp(self):
+        self.member = Member.objects.create(name_ar='عضو الصلاحيات', phone='0888888888')
+        user_model = get_user_model()
+        self.superuser = user_model.objects.create_superuser(
+            username='member-superuser', password='pass', phone='+963900000001')
+        self.users = {
+            role: user_model.objects.create_user(
+                username=f'member-{role}', password='pass', phone=f'+96390000000{index}', role=role)
+            for index, role in enumerate(('admin', 'cashier', 'waiter', 'kitchen'), start=2)
+        }
+
+    def activation_url(self):
+        return reverse('staff_member_activation', kwargs={'member_id': self.member.public_code})
+
+    def login(self, user):
+        self.client.force_login(user)
+
+    def test_superuser_can_generate_activation_link(self):
+        self.login(self.superuser)
+        response = self.client.post(self.activation_url())
+        self.assertRedirects(
+            response,
+            reverse('staff_member_detail', kwargs={'member_id': self.member.public_code}),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(MemberActivationToken.objects.filter(member=self.member, created_by=self.superuser).count(), 1)
+
+    def test_admin_can_generate_activation_link(self):
+        self.login(self.users['admin'])
+        self.assertEqual(self.client.post(self.activation_url()).status_code, 302)
+        self.assertEqual(MemberActivationToken.objects.filter(member=self.member, created_by=self.users['admin']).count(), 1)
+
+    def test_cashier_can_generate_activation_link(self):
+        self.login(self.users['cashier'])
+        self.assertEqual(self.client.post(self.activation_url()).status_code, 302)
+        self.assertEqual(MemberActivationToken.objects.filter(member=self.member, created_by=self.users['cashier']).count(), 1)
+
+    def test_waiter_cannot_generate_activation_link(self):
+        self.login(self.users['waiter'])
+        self.assertEqual(self.client.post(self.activation_url()).status_code, 404)
+        self.assertFalse(MemberActivationToken.objects.exists())
+
+    def test_kitchen_user_cannot_generate_activation_link(self):
+        self.login(self.users['kitchen'])
+        self.assertEqual(self.client.post(self.activation_url()).status_code, 404)
+        self.assertFalse(MemberActivationToken.objects.exists())
+
+    def test_authorized_user_can_load_activation_qr(self):
+        self.login(self.users['admin'])
+        self.client.post(self.activation_url())
+        response = self.client.get(reverse(
+            'staff_member_activation_qr', kwargs={'member_id': self.member.public_code}))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'image/svg+xml')
+
+    def create_devices(self):
+        devices = []
+        for label in ('first', 'second'):
+            _, raw = create_activation_token(self.member)
+            device, _ = consume_activation_token(raw, label)
+            devices.append(device)
+        return devices
+
+    def test_authorized_user_can_revoke_one_device(self):
+        first, second = self.create_devices()
+        self.login(self.users['cashier'])
+        url = reverse('staff_member_device_revoke', kwargs={
+            'member_id': self.member.public_code, 'device_id': first.uuid})
+        self.assertEqual(self.client.post(url).status_code, 302)
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertIsNotNone(first.revoked_at)
+        self.assertIsNone(second.revoked_at)
+
+    def test_authorized_user_can_revoke_all_devices(self):
+        devices = self.create_devices()
+        self.login(self.users['admin'])
+        url = reverse('staff_member_devices_revoke', kwargs={'member_id': self.member.public_code})
+        self.assertEqual(self.client.post(url).status_code, 302)
+        self.assertFalse(MemberDeviceToken.objects.filter(
+            pk__in=[device.pk for device in devices], revoked_at__isnull=True).exists())
+
+    def test_activation_and_revoke_actions_remain_post_only(self):
+        device = self.create_devices()[0]
+        self.login(self.users['admin'])
+        urls = (
+            self.activation_url(),
+            reverse('staff_member_devices_revoke', kwargs={'member_id': self.member.public_code}),
+            reverse('staff_member_device_revoke', kwargs={
+                'member_id': self.member.public_code, 'device_id': device.uuid}),
+        )
+        for url in urls:
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, 405)
+
+    def test_existing_staff_member_pages_continue_working(self):
+        self.login(self.users['admin'])
+        self.assertEqual(self.client.get(reverse('staff_members')).status_code, 200)
+        self.assertEqual(self.client.get(reverse(
+            'staff_member_detail', kwargs={'member_id': self.member.public_code})).status_code, 200)

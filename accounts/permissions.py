@@ -108,6 +108,7 @@ CAPABILITY_CHECKS = {
     'users': can_access_users,
     'modifiers': can_access_modifiers,
     'internet_billing': can_access_internet_billing,
+    'members/internet': can_access_internet_billing,
     'kitchen_board': can_access_kitchen_board,
     'partial_payment_approval': can_approve_partial_payment,
     'order_edit': can_edit_order,
