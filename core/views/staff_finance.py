@@ -8,7 +8,9 @@ from django.shortcuts import redirect, render, get_object_or_404
 from django.utils import timezone
 from accounts.permissions import require_staff_capability, can_approve_partial_payment
 from catalog.models import MediaAsset
-from core.finance import finance_summary_for_date, sync_cash_expense_movement, current_business_date, finalize_daily_close, reopen_daily_close
+from core.finance import finance_summary_for_date, current_business_date
+from core.services.posting.context import PostingContext
+from core.services.posting import expenses as expense_posting, purchases as purchase_posting, closing as closing_posting
 from core.models import ActivityLog, CashMovement, DailyClose, Expense, ExpenseCategory, InventoryItem, Purchase, PurchaseItem, StockMovement
 from core.views_legacy import DAMASCUS_TZ, _build_day_report, _parse_report_date
 from vendors.models import Vendor
@@ -31,6 +33,14 @@ def _positive_int(raw):
         return int(raw or 0)
     except (TypeError, ValueError):
         return 0
+
+def _posting_context(request, business_date=None, approver=None):
+    import hashlib
+    supplied=request.headers.get('Idempotency-Key') or request.POST.get('idempotency_key')
+    digest=hashlib.sha256(repr(sorted((key, request.POST.getlist(key)) for key in request.POST)).encode()).hexdigest()[:24]
+    return PostingContext(actor=request.user,approver=approver,business_date=business_date,
+        idempotency_key=supplied or f'{request.path}:{request.user.pk}:{digest}',channel='staff',
+        request_metadata={'path':request.path,'remote_addr':request.META.get('REMOTE_ADDR','')})
 
 @require_staff_capability('finance')
 def staff_finance_home(request):
@@ -63,7 +73,7 @@ def staff_expense_new(request):
         try: exp.full_clean()
         except ValidationError as e: errors += sum(e.message_dict.values(), []) if hasattr(e,'message_dict') else e.messages
         if not errors:
-            exp.save(); sync_cash_expense_movement(exp, request.user); _log(request.user,'expense_created',{'expense_id':exp.id,'amount_syp':exp.amount_syp})
+            expense_posting.create(exp, _posting_context(request, exp.business_date))
             messages.success(request,'تم حفظ المصروف.'); return redirect('staff_finance_expenses')
     return render(request,'staff/finance_expense_form.html',{'categories':ExpenseCategory.objects.filter(is_active=True),'vendors':Vendor.objects.all(),'media_assets':MediaAsset.objects.order_by('-created_at')[:50],'methods':Expense.PaymentMethod.choices,'paid_froms':Expense.PaidFrom.choices,'statuses':Expense.Status.choices,'today':timezone.now().date(),'errors':errors,'form_values':request.POST})
 
@@ -82,7 +92,7 @@ def staff_cashbox_new(request):
         try: mv.full_clean()
         except ValidationError as e: errors += sum(e.message_dict.values(), []) if hasattr(e,'message_dict') else e.messages
         if not errors:
-            mv.save(); _log(request.user,'cash_movement_created',{'cash_movement_id':mv.id,'amount_syp':mv.amount_syp})
+            expense_posting.post_cash_movement(mv, _posting_context(request, mv.business_date))
             messages.success(request,'تم حفظ حركة الصندوق.'); return redirect('staff_finance_cashbox')
     return render(request,'staff/finance_cashbox_form.html',{'types':CashMovement.MovementType.choices,'directions':CashMovement.Direction.choices,'vendors':Vendor.objects.all(),'expenses':Expense.objects.exclude(status=Expense.Status.CANCELLED)[:100],'today':timezone.now().date(),'errors':errors,'form_values':request.POST})
 
@@ -125,7 +135,7 @@ def staff_daily_close_reopen(request, close_id):
     errors=[]
     if request.method=='POST':
         try:
-            reopen_daily_close(close, request.user, request.POST.get('reason',''))
+            closing_posting.reopen(close, _posting_context(request, close.business_date), request.POST.get('reason',''))
             messages.success(request,'تمت إعادة فتح تاريخ العمل للتصحيح.'); return redirect('staff_daily_close_detail', close_id=close.pk)
         except Exception as e: errors.append(str(e))
     return render(request,'staff/finance_confirm.html',{'title':'إعادة فتح الإغلاق','message':f'إعادة فتح {close.business_date}','require_reason':True,'errors':errors,'business_date':current_business_date()})
@@ -137,7 +147,7 @@ def staff_daily_close_close(request, close_id):
     errors=[]
     if request.method=='POST':
         try:
-            close,_=finalize_daily_close(close.business_date, request.user, _positive_int(request.POST.get('actual_cash_counted_syp')), request.POST.get('notes',''), _positive_int(request.POST.get('opening_cash_syp')))
+            close=closing_posting.close(close, _posting_context(request, close.business_date), _positive_int(request.POST.get('actual_cash_counted_syp')), request.POST.get('notes',''), _positive_int(request.POST.get('opening_cash_syp')))
             messages.success(request,'تم إغلاق تاريخ العمل.'); return redirect('staff_daily_close_detail', close_id=close.pk)
         except Exception as e: errors.append(str(e))
     return render(request,'staff/finance_close_form.html',{'close':close,'errors':errors,'business_date':current_business_date()})
@@ -190,18 +200,11 @@ def staff_purchase_edit(request,purchase_id):
 
 def _receive_purchase(request,p):
     if p.stock_movements.exists() or p.received_at: messages.info(request,'تم استلام الشراء مسبقاً.'); return redirect('staff_purchase_detail', purchase_id=p.pk)
-    with transaction.atomic():
-        for pi in p.items.select_related('inventory_item'):
-            mv=StockMovement(inventory_item=pi.inventory_item,business_date=p.business_date,movement_type=StockMovement.MovementType.PURCHASE_RECEIVED,direction=StockMovement.Direction.IN,quantity=pi.quantity,unit=pi.unit,unit_cost_syp=pi.unit_cost_syp,total_value_syp=pi.line_total_syp,related_purchase=p,related_purchase_item=pi,reason='استلام شراء من المالية',created_by=request.user); mv.full_clean(); mv.save(); mv.apply_to_stock()
-        p.received_by=request.user; p.received_at=timezone.now(); p.status=Purchase.Status.PAID if p.remaining_syp==0 and p.amount_paid_syp>0 else (Purchase.Status.PARTIALLY_PAID if p.amount_paid_syp>0 else Purchase.Status.RECEIVED); p.save(); _log(request.user,'purchase_received',{'purchase_id':p.id})
+    purchase_posting.receive(p, _posting_context(request, p.business_date))
     messages.success(request,'تم الاستلام وتحديث المخزون.'); return redirect('staff_purchase_detail', purchase_id=p.pk)
 
 def _cancel_purchase(request,p):
     reason=request.POST.get('reason','').strip()
     if not reason: messages.error(request,'سبب الإلغاء مطلوب.'); return redirect('staff_purchase_detail', purchase_id=p.pk)
-    with transaction.atomic():
-        if p.status != Purchase.Status.CANCELLED:
-            for mv0 in p.stock_movements.filter(direction=StockMovement.Direction.IN, is_cancelled=False):
-                mv=StockMovement(inventory_item=mv0.inventory_item,business_date=p.business_date,movement_type=StockMovement.MovementType.RETURN_TO_VENDOR,direction=StockMovement.Direction.OUT,quantity=mv0.quantity,unit=mv0.unit,unit_cost_syp=mv0.unit_cost_syp,total_value_syp=mv0.total_value_syp,related_purchase=p,reason='عكس شراء ملغى: '+reason,created_by=request.user); mv.full_clean(); mv.save(); mv.apply_to_stock()
-            p.status=Purchase.Status.CANCELLED; p.cancellation_reason=reason; p.cancelled_at=timezone.now(); p.save(); _log(request.user,'purchase_cancelled',{'purchase_id':p.id,'reason':reason})
+    purchase_posting.cancel(p, _posting_context(request, p.business_date), reason)
     messages.success(request,'تم إلغاء الشراء بحركات عكسية.'); return redirect('staff_purchase_detail', purchase_id=p.pk)

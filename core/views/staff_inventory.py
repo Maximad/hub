@@ -14,6 +14,8 @@ from catalog.models import MediaAsset
 from vendors.models import Vendor
 from core.finance import sync_cash_expense_movement
 from core.models import CashMovement, Expense, ExpenseCategory, InventoryItem, Purchase, PurchaseItem, StockMovement, Product, ProductRecipeItem
+from core.services.posting.context import PostingContext
+from core.services.posting import purchases as purchase_posting
 
 
 def _dec(value, default='0'):
@@ -25,6 +27,12 @@ def _dec(value, default='0'):
 
 def _can_manage(user): return is_owner_or_admin(user) or is_cashier(user)
 def _can_inventory(user): return _can_manage(user) or is_kitchen(user)
+
+def _posting_context(request, day):
+    import hashlib
+    digest=hashlib.sha256(repr(sorted((key, request.POST.getlist(key)) for key in request.POST)).encode()).hexdigest()[:24]
+    key=request.headers.get('Idempotency-Key') or request.POST.get('idempotency_key') or f'{request.path}:{request.user.pk}:{digest}'
+    return PostingContext(actor=request.user,business_date=day,idempotency_key=key,channel='staff-inventory',request_metadata={'path':request.path})
 
 
 def _expense_category_for_purchase(purchase):
@@ -123,13 +131,7 @@ def staff_inventory_purchase_receive(request,purchase_id):
         if p.status==Purchase.Status.CANCELLED: messages.error(request,'لا يمكن استلام شراء ملغى.'); return redirect('staff_inventory_purchase_detail',purchase_id=p.pk)
         if p.received_at or p.stock_movements.exists(): messages.error(request,'تم استلام هذا الشراء مسبقاً ولا يمكن تكرار الاستلام.'); return redirect('staff_inventory_purchase_detail',purchase_id=p.pk)
         try:
-            with transaction.atomic():
-                for pi in p.items.select_related('inventory_item'):
-                    mv=StockMovement(inventory_item=pi.inventory_item,business_date=p.business_date,movement_type=StockMovement.MovementType.PURCHASE_RECEIVED,direction=StockMovement.Direction.IN,quantity=pi.quantity,unit=pi.unit,unit_cost_syp=pi.unit_cost_syp,total_value_syp=pi.line_total_syp,related_purchase=p,related_purchase_item=pi,reason='استلام شراء',created_by=request.user)
-                    mv.full_clean(); mv.save(); mv.apply_to_stock()
-                p.status = Purchase.Status.PAID if p.remaining_syp==0 and p.amount_paid_syp>0 else (Purchase.Status.PARTIALLY_PAID if p.amount_paid_syp>0 else Purchase.Status.RECEIVED)
-                p.received_by=request.user; p.received_at=timezone.now(); p.save()
-                _sync_purchase_expense(p, request.user)
+            purchase_posting.receive(p, _posting_context(request, p.business_date))
             messages.success(request,'تم استلام الشراء وتحديث المخزون.')
         except Exception as e: messages.error(request,f'تعذر إكمال الربط المالي أو المخزني: {e}')
     return redirect('staff_inventory_purchase_detail',purchase_id=p.pk)
@@ -152,7 +154,7 @@ def staff_inventory_movement_new(request):
         item=get_object_or_404(InventoryItem,pk=request.POST.get('inventory_item'))
         mv=StockMovement(inventory_item=item,business_date=request.POST.get('business_date') or timezone.now().date(),movement_type=typ,direction=direction,quantity=_dec(request.POST.get('quantity')),unit=item.unit,reason=request.POST.get('reason',''),created_by=request.user)
         try:
-            mv.total_value_syp=(item.estimated_unit_cost_syp or 0)*mv.quantity; mv.full_clean(); mv.save(); mv.apply_to_stock(); messages.success(request,'تم حفظ حركة المخزون.'); return redirect('staff_inventory_movements')
+            mv.total_value_syp=(item.estimated_unit_cost_syp or 0)*mv.quantity; purchase_posting.adjust_stock(mv, _posting_context(request, mv.business_date)); messages.success(request,'تم حفظ حركة المخزون.'); return redirect('staff_inventory_movements')
         except ValidationError as e: messages.error(request,e.messages[0])
     return render(request,'staff/inventory_movement_form.html',{'items':InventoryItem.objects.filter(is_active=True),'types':StockMovement.MovementType.choices,'directions':StockMovement.Direction.choices,'today':timezone.now().date()})
 

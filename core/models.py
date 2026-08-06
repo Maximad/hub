@@ -903,6 +903,33 @@ class DailyCloseRevision(TimeStampedModel):
         return f'{self.daily_close.business_date} — {self.revision_type}'
 
 
+class PostingCommand(TimeStampedModel):
+    """Durable idempotency receipt for a financially meaningful command."""
+    key = models.CharField(max_length=160, unique=True)
+    command = models.CharField(max_length=80)
+    source_type = models.CharField(max_length=80, blank=True)
+    source_id = models.CharField(max_length=80, blank=True)
+    result_type = models.CharField(max_length=80, blank=True)
+    result_id = models.CharField(max_length=80, blank=True)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    channel = models.CharField(max_length=40, blank=True)
+    request_metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+
+class PostingReconciliationFailure(TimeStampedModel):
+    """Records a discovered write which bypassed the posting service."""
+    record_type = models.CharField(max_length=80)
+    record_id = models.CharField(max_length=80)
+    reason = models.TextField()
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['record_type', 'record_id'], name='unique_posting_bypass_failure')]
+
+
 class Member(TimeStampedModel, PublicCodeModel):
     name_ar = models.CharField(max_length=120)
     name_en = models.CharField(max_length=120, blank=True)
