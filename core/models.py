@@ -3,6 +3,8 @@ import uuid
 from pathlib import Path
 
 from django.conf import settings
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
@@ -928,6 +930,184 @@ class PostingReconciliationFailure(TimeStampedModel):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['record_type', 'record_id'], name='unique_posting_bypass_failure')]
+
+
+class FinancialAccount(TimeStampedModel):
+    """Stable-code ledger account; display names are deliberately not identifiers."""
+
+    class AccountType(models.TextChoices):
+        ASSET = 'asset', 'Asset'
+        LIABILITY = 'liability', 'Liability'
+        EQUITY = 'equity', 'Equity'
+        REVENUE = 'revenue', 'Revenue'
+        EXPENSE = 'expense', 'Expense'
+        CLEARING = 'clearing', 'Clearing'
+
+    class NegativeBalancePolicy(models.TextChoices):
+        ALLOW = 'allow', 'Allow'
+        WARN = 'warn', 'Warn'
+        FORBID = 'forbid', 'Forbid'
+
+    code = models.CharField(max_length=80, unique=True)
+    name_ar = models.CharField(max_length=160)
+    name_en = models.CharField(max_length=160, blank=True)
+    account_type = models.CharField(max_length=20, choices=AccountType.choices)
+    scope = models.CharField(max_length=80, blank=True)
+    business_unit = models.CharField(max_length=80, blank=True)
+    is_active = models.BooleanField(default=False)
+    currency = models.CharField(max_length=3, default='SYP')
+    negative_balance_policy = models.CharField(
+        max_length=10, choices=NegativeBalancePolicy.choices, default=NegativeBalancePolicy.FORBID
+    )
+
+    class Meta:
+        ordering = ['code']
+
+    def __str__(self):
+        return f'{self.code} — {self.name_ar or self.name_en}'
+
+
+class PostingBatch(TimeStampedModel):
+    class Status(models.TextChoices):
+        DRAFT = 'draft', 'Draft'
+        PENDING = 'pending', 'Pending approval'
+        POSTED = 'posted', 'Posted'
+        REVERSED = 'reversed', 'Reversed'
+        CANCELLED = 'cancelled', 'Cancelled'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    operation_type = models.CharField(max_length=80)
+    source_content_type = models.ForeignKey(ContentType, on_delete=models.PROTECT, null=True, blank=True)
+    source_object_id = models.CharField(max_length=80, null=True, blank=True)
+    source = GenericForeignKey('source_content_type', 'source_object_id')
+    business_date = models.DateField()
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.DRAFT)
+    idempotency_key = models.CharField(max_length=160, unique=True)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='posting_batches')
+    approver = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_posting_batches')
+    posted_at = models.DateTimeField(null=True, blank=True)
+    reversed_at = models.DateTimeField(null=True, blank=True)
+    reversal_of = models.OneToOneField('self', on_delete=models.PROTECT, null=True, blank=True, related_name='reversal')
+    reason = models.TextField(blank=True)
+    channel = models.CharField(max_length=40, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        constraints = [
+            models.CheckConstraint(
+                condition=(Q(source_content_type__isnull=True, source_object_id__isnull=True) |
+                           Q(source_content_type__isnull=False, source_object_id__isnull=False)),
+                name='posting_source_complete_or_empty',
+            ),
+            models.CheckConstraint(
+                condition=(Q(status='posted', posted_at__isnull=False, reversed_at__isnull=True) |
+                           Q(status='reversed', posted_at__isnull=False, reversed_at__isnull=False) |
+                           Q(status__in=['draft', 'pending', 'cancelled'], posted_at__isnull=True, reversed_at__isnull=True)),
+                name='posting_batch_valid_state_times',
+            ),
+            models.CheckConstraint(
+                condition=Q(reversal_of__isnull=True) | Q(status='posted'),
+                name='posting_reversal_is_posted',
+            ),
+            models.UniqueConstraint(
+                fields=['source_content_type', 'source_object_id', 'operation_type'],
+                condition=Q(status__in=['pending', 'posted']),
+                name='unique_active_posting_per_source',
+            ),
+        ]
+
+    def is_balanced(self):
+        totals = self.entries.aggregate(debits=models.Sum('debit'), credits=models.Sum('credit'))
+        return (totals['debits'] or Decimal('0')) == (totals['credits'] or Decimal('0'))
+
+    def clean(self):
+        super().clean()
+        if self.status in {self.Status.POSTED, self.Status.REVERSED} and self.pk and not self.is_balanced():
+            raise ValidationError({'status': 'Posted batches must have balanced debit and credit entries.'})
+
+
+class PostingEntry(TimeStampedModel):
+    class EntryRole(models.TextChoices):
+        PRINCIPAL = 'principal', 'Principal'
+        TAX = 'tax', 'Tax'
+        FEE = 'fee', 'Fee'
+        DISCOUNT = 'discount', 'Discount'
+        ROUNDING = 'rounding', 'Rounding'
+        CLEARING = 'clearing', 'Clearing'
+        OTHER = 'other', 'Other'
+
+    batch = models.ForeignKey(PostingBatch, on_delete=models.PROTECT, related_name='entries')
+    account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, related_name='entries')
+    debit = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
+    credit = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
+    entry_role = models.CharField(max_length=20, choices=EntryRole.choices, default=EntryRole.PRINCIPAL)
+    description = models.CharField(max_length=240, blank=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=(Q(debit__gt=0, credit__isnull=True) | Q(credit__gt=0, debit__isnull=True)),
+                name='posting_entry_one_positive_side',
+            ),
+        ]
+
+    @property
+    def signed_amount(self):
+        return (self.debit or Decimal('0')) - (self.credit or Decimal('0'))
+
+
+class Transfer(TimeStampedModel):
+    class State(models.TextChoices):
+        DRAFT = 'draft', 'Draft'
+        POSTED = 'posted', 'Posted'
+        REVERSED = 'reversed', 'Reversed'
+        CANCELLED = 'cancelled', 'Cancelled'
+
+    source_account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, related_name='outgoing_transfers')
+    destination_account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, related_name='incoming_transfers')
+    amount = models.DecimalField(max_digits=20, decimal_places=2)
+    state = models.CharField(max_length=12, choices=State.choices, default=State.DRAFT)
+    business_date = models.DateField()
+    posting_batch = models.OneToOneField(PostingBatch, on_delete=models.PROTECT, null=True, blank=True, related_name='transfer')
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(condition=Q(amount__gt=0), name='transfer_amount_positive'),
+            models.CheckConstraint(condition=~Q(source_account=models.F('destination_account')), name='transfer_accounts_distinct'),
+            models.CheckConstraint(
+                condition=(Q(state__in=['posted', 'reversed'], posting_batch__isnull=False) |
+                           Q(state__in=['draft', 'cancelled'], posting_batch__isnull=True)),
+                name='transfer_valid_state_batch',
+            ),
+        ]
+
+
+class AuditEvent(models.Model):
+    """Append-only audit record for financial and operational corrections."""
+    created_at = models.DateTimeField(auto_now_add=True)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_events')
+    approver = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_audit_events')
+    action = models.CharField(max_length=120)
+    source_content_type = models.ForeignKey(ContentType, on_delete=models.PROTECT, null=True, blank=True)
+    source_object_id = models.CharField(max_length=80, blank=True)
+    source = GenericForeignKey('source_content_type', 'source_object_id')
+    before_snapshot = models.JSONField(default=dict, blank=True)
+    after_snapshot = models.JSONField(default=dict, blank=True)
+    request_key = models.CharField(max_length=160, blank=True, db_index=True)
+    channel = models.CharField(max_length=40, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True)
+    reversal_of = models.OneToOneField('self', on_delete=models.PROTECT, null=True, blank=True, related_name='reversal_event')
+    correction_of = models.ForeignKey('self', on_delete=models.PROTECT, null=True, blank=True, related_name='correction_events')
+
+    def save(self, *args, **kwargs):
+        if self.pk and type(self).objects.filter(pk=self.pk).exists():
+            raise ValidationError('Audit events are immutable; append a correction or reversal instead.')
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError('Audit events are immutable and cannot be deleted.')
 
 
 class Member(TimeStampedModel, PublicCodeModel):
