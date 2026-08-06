@@ -534,6 +534,18 @@ class Payment(TimeStampedModel, PublicCodeModel):
     reversed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='reversed_payments')
     reversed_at = models.DateTimeField(null=True, blank=True)
 
+    class Meta:
+        constraints = [
+            models.CheckConstraint(condition=Q(amount_syp__gt=0), name='payment_amount_positive', violation_error_message='مبلغ الدفعة يجب أن يكون موجباً.'),
+            models.CheckConstraint(condition=Q(method__in=['cash', 'manual_transfer', 'unpaid', 'free', 'member_discount']), name='payment_method_valid', violation_error_message='طريقة الدفع غير صالحة.'),
+            models.CheckConstraint(
+                condition=(Q(is_reversed=False, reversed_at__isnull=True, reversed_by__isnull=True, reversal_reason='') |
+                           Q(is_reversed=True, is_active=False, reversed_at__isnull=False, reversal_reason__gt='')),
+                name='payment_reversal_fields_consistent',
+                violation_error_message='حقول عكس الدفعة غير متناسقة.',
+            ),
+        ]
+
     def clean(self):
         super().clean()
         if not self.order_id or self.method == self.Method.UNPAID or self.is_reversed or not self.is_active:
@@ -628,6 +640,7 @@ class Expense(TimeStampedModel):
     class Meta:
         ordering = ['-business_date','-created_at']
         permissions = [('add_expense_staff','Can add expense from staff finance')]
+        constraints = [models.CheckConstraint(condition=Q(amount_syp__gt=0), name='expense_amount_positive', violation_error_message='مبلغ المصروف يجب أن يكون موجباً.')]
     def clean(self):
         if self.status == self.Status.PAID and not self.payment_method:
             raise ValidationError({'payment_method':'طريقة الدفع مطلوبة للمصروف المدفوع.'})
@@ -663,6 +676,12 @@ class CashMovement(TimeStampedModel):
     class Meta:
         ordering = ['-business_date','-created_at']
         permissions = [('add_cashmovement_staff','Can add cash movement from staff finance')]
+        constraints = [
+            models.CheckConstraint(condition=Q(amount_syp__gt=0), name='cash_movement_amount_positive', violation_error_message='مبلغ حركة الصندوق يجب أن يكون موجباً.'),
+            models.CheckConstraint(condition=Q(direction__in=['in', 'out']), name='cash_movement_direction_valid', violation_error_message='اتجاه حركة الصندوق غير صالح.'),
+            models.CheckConstraint(condition=Q(is_cancelled=False, cancellation_reason='') | Q(is_cancelled=True, cancellation_reason__gt=''), name='cash_movement_cancel_fields_consistent', violation_error_message='حقول إلغاء حركة الصندوق غير متناسقة.'),
+            models.UniqueConstraint(fields=['related_expense'], condition=Q(related_expense__isnull=False, is_cancelled=False), name='unique_active_expense_cash_movement', violation_error_message='يوجد بالفعل قيد صندوق نشط لهذا المصروف.'),
+        ]
     def clean(self):
         if self.movement_type == self.MovementType.CASH_CORRECTION and not (self.notes or '').strip():
             raise ValidationError({'notes':'سبب التصحيح مطلوب.'})
@@ -751,7 +770,9 @@ class PurchaseItem(TimeStampedModel):
     unit_cost_syp = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
     line_total_syp = models.DecimalField(max_digits=14, decimal_places=2, default=0, validators=[MinValueValidator(0)])
     notes = models.TextField(blank=True)
-    class Meta: verbose_name='بند شراء'; verbose_name_plural='بنود الشراء'
+    class Meta:
+        verbose_name='بند شراء'; verbose_name_plural='بنود الشراء'
+        constraints = [models.CheckConstraint(condition=Q(quantity__gt=0), name='purchase_item_quantity_positive', violation_error_message='كمية بند الشراء يجب أن تكون موجبة.')]
     def save(self,*args,**kwargs):
         self.line_total_syp = self.quantity * self.unit_cost_syp
         super().save(*args,**kwargs)
@@ -781,7 +802,14 @@ class StockMovement(TimeStampedModel):
     approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_stock_movements')
     is_cancelled = models.BooleanField(default=False)
     cancellation_reason = models.TextField('سبب الإلغاء', blank=True)
-    class Meta: ordering=['-business_date','-created_at']; verbose_name='حركة مخزون'; verbose_name_plural='حركات المخزون'
+    class Meta:
+        ordering=['-business_date','-created_at']; verbose_name='حركة مخزون'; verbose_name_plural='حركات المخزون'
+        constraints = [
+            models.CheckConstraint(condition=Q(quantity__gt=0), name='stock_movement_quantity_positive', violation_error_message='كمية حركة المخزون يجب أن تكون موجبة.'),
+            models.CheckConstraint(condition=Q(direction__in=['in', 'out']), name='stock_movement_direction_valid', violation_error_message='اتجاه حركة المخزون غير صالح.'),
+            models.CheckConstraint(condition=Q(is_cancelled=False, cancellation_reason='') | Q(is_cancelled=True, cancellation_reason__gt=''), name='stock_movement_cancel_fields_consistent', violation_error_message='حقول إلغاء حركة المخزون غير متناسقة.'),
+            models.UniqueConstraint(fields=['related_purchase_item'], condition=Q(related_purchase_item__isnull=False, movement_type='purchase_received', is_cancelled=False), name='unique_stock_receipt_per_purchase_line', violation_error_message='تم استلام بند الشراء هذا مسبقاً.'),
+        ]
     def clean(self):
         if self.movement_type in {self.MovementType.WASTE,self.MovementType.CORRECTION} and not (self.reason or '').strip(): raise ValidationError({'reason':'سبب الحركة مطلوب للهدر أو التصحيح.'})
         if self.direction == self.Direction.OUT and self.inventory_item_id and self.quantity and self.inventory_item.current_quantity < self.quantity and not self.is_cancelled: raise ValidationError({'quantity':'لا يمكن إخراج كمية أكبر من المخزون الحالي.'})
@@ -987,7 +1015,7 @@ class PostingBatch(TimeStampedModel):
     approver = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_posting_batches')
     posted_at = models.DateTimeField(null=True, blank=True)
     reversed_at = models.DateTimeField(null=True, blank=True)
-    reversal_of = models.OneToOneField('self', on_delete=models.PROTECT, null=True, blank=True, related_name='reversal')
+    reversal_of = models.ForeignKey('self', on_delete=models.PROTECT, null=True, blank=True, related_name='reversals')
     reason = models.TextField(blank=True)
     channel = models.CharField(max_length=40, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
@@ -1015,6 +1043,7 @@ class PostingBatch(TimeStampedModel):
                 condition=Q(status__in=['pending', 'posted']),
                 name='unique_active_posting_per_source',
             ),
+            models.UniqueConstraint(fields=['reversal_of'], condition=Q(reversal_of__isnull=False), name='unique_reversal_per_posting_batch', violation_error_message='تم إنشاء عكس لهذا القيد مسبقاً.'),
         ]
 
     def is_balanced(self):
@@ -1024,7 +1053,7 @@ class PostingBatch(TimeStampedModel):
     def clean(self):
         super().clean()
         if self.status in {self.Status.POSTED, self.Status.REVERSED} and self.pk and not self.is_balanced():
-            raise ValidationError({'status': 'Posted batches must have balanced debit and credit entries.'})
+            raise ValidationError({'status': 'يجب أن يتساوى مجموع المدين والدائن قبل ترحيل القيد.'})
 
 
 class PostingEntry(TimeStampedModel):
@@ -1098,8 +1127,11 @@ class AuditEvent(models.Model):
     channel = models.CharField(max_length=40, blank=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.TextField(blank=True)
-    reversal_of = models.OneToOneField('self', on_delete=models.PROTECT, null=True, blank=True, related_name='reversal_event')
+    reversal_of = models.ForeignKey('self', on_delete=models.PROTECT, null=True, blank=True, related_name='reversal_events')
     correction_of = models.ForeignKey('self', on_delete=models.PROTECT, null=True, blank=True, related_name='correction_events')
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['reversal_of'], condition=Q(reversal_of__isnull=False), name='unique_reversal_per_audit_event', violation_error_message='تم تسجيل عكس لهذا الحدث مسبقاً.')]
 
     def save(self, *args, **kwargs):
         if self.pk and type(self).objects.filter(pk=self.pk).exists():

@@ -1,4 +1,5 @@
 from django.utils import timezone
+from django.db.models import Sum
 from core.models import ActivityLog, InventoryItem, Purchase, StockMovement
 from .engine import dispatch, lock_accounts
 from .exceptions import InvalidTransition
@@ -7,10 +8,23 @@ from .exceptions import InvalidTransition
 def receive(purchase, context):
     def handle(source):
         if source.status == Purchase.Status.CANCELLED: raise InvalidTransition('لا يمكن استلام شراء ملغى.')
-        if source.received_at or source.stock_movements.exists(): return source
-        items=list(source.items.select_related('inventory_item'))
+        # Lock receipt lines as well as the purchase. This makes the quantity check
+        # authoritative even if another worker attempts receipt concurrently.
+        items=list(source.items.select_for_update().select_related('inventory_item').order_by('pk'))
+        if not items: raise InvalidTransition('لا يمكن استلام شراء بلا بنود.')
         lock_accounts(InventoryItem.objects.filter(pk__in=[x.inventory_item_id for x in items]))
         for item in items:
+            received = StockMovement.objects.filter(
+                related_purchase_item=item,
+                movement_type=StockMovement.MovementType.PURCHASE_RECEIVED,
+                is_cancelled=False,
+            ).aggregate(total=Sum('quantity'))['total'] or 0
+            if received:
+                if received != item.quantity:
+                    raise InvalidTransition(f'كمية الاستلام للبند {item.pk} لا تطابق كمية الشراء.')
+                continue
+            if item.quantity <= 0:
+                raise InvalidTransition(f'كمية بند الشراء {item.pk} يجب أن تكون موجبة.')
             movement=StockMovement(inventory_item=item.inventory_item,business_date=source.business_date,movement_type=StockMovement.MovementType.PURCHASE_RECEIVED,direction=StockMovement.Direction.IN,quantity=item.quantity,unit=item.unit,unit_cost_syp=item.unit_cost_syp,total_value_syp=item.line_total_syp,related_purchase=source,related_purchase_item=item,reason='استلام شراء',created_by=context.actor,approved_by=context.approver)
             movement.full_clean(); movement.save(); movement.apply_to_stock()
         source.received_by=context.actor; source.received_at=timezone.now()
