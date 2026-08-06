@@ -27,6 +27,8 @@ from accounts.permissions import (
 )
 from core.stock_recipes import deduct_order_item_stock
 from core.models import ActivityLog, CancellationReason, CashMovement, Category, DailyClose, Expense, InternetPackage, InternetSession, Member, Order, OrderDiscount, OrderItem, Payment, Product, Room, SystemSetting, TableArea
+from core.services.posting.context import PostingContext
+from core.services.posting.order_payments import collect as collect_order_payment
 from events.models import Event
 from reservations.models import Reservation
 from vendors.models import Vendor, VendorParticipation
@@ -1352,7 +1354,10 @@ def staff_cashier_pay(request, public_code):
     if not method:
         messages.error(request, 'طريقة الدفع مطلوبة.')
         return redirect('staff_cashier_order', public_code=order.public_code)
-    payment = Payment.objects.create(order=order, amount_syp=amount_val, method=method, notes=request.POST.get('notes', '').strip(), created_by=request.user)
+    import hashlib
+    digest=hashlib.sha256(repr(sorted((key, request.POST.getlist(key)) for key in request.POST)).encode()).hexdigest()[:24]
+    posting_key=request.headers.get('Idempotency-Key') or request.POST.get('idempotency_key') or f'cashier:{order.pk}:{request.user.pk}:{digest}'
+    payment = collect_order_payment(order, PostingContext(actor=request.user,approver=locals().get('approving_manager'),business_date=timezone.localdate(),idempotency_key=posting_key,channel='cashier',request_metadata={'path':request.path}), amount_val, method, request.POST.get('notes', '').strip())
     if order.remaining_syp > 0:
         create_notification('payment_pending', f'الدفع بانتظار الكاشير {order.display_number}', f'المتبقي {order.remaining_syp} ل.س', order=order, target_role='cashier', created_by=request.user)
     try:
@@ -1935,7 +1940,7 @@ def _create_order_for_internet_session(request, session, mark_paid=False):
         existing_paid = _paid_total(order.payments.all())
         amount = max(session.payable_total_syp - existing_paid, 0)
         if amount:
-            payment = Payment.objects.create(order=order, amount_syp=amount, method=Payment.Method.CASH)
+            payment = collect_order_payment(order, PostingContext(business_date=timezone.localdate(),idempotency_key=f'internet-session:{session.pk}:payment:{amount}',channel='internet'), amount, Payment.Method.CASH)
             session.linked_payment = payment
             session.status = InternetSession.Status.PAID
             session.save(update_fields=['linked_payment', 'status', 'updated_at'])

@@ -15,7 +15,7 @@ from .models import (
     Category,
     InternetPackage,
     InternetSession,
-    DailyClose,
+    DailyClose, PostingCommand, PostingReconciliationFailure,
     ExpenseCategory, Expense, CashMovement,
     InventoryItem, Purchase, PurchaseItem, StockMovement, ProductRecipeItem, ProductionBatch, ProductionBatchIngredient,
     Member,
@@ -115,14 +115,17 @@ class InventoryItemAdmin(admin.ModelAdmin):
 
 class PurchaseItemInline(admin.TabularInline):
     model = PurchaseItem
-    extra = 1
     fields = ('inventory_item', 'quantity', 'unit', 'unit_cost_syp', 'line_total_syp', 'notes')
     readonly_fields = ('line_total_syp',)
     autocomplete_fields = ('inventory_item',)
+    extra = 0
+    def has_add_permission(self, request, obj=None): return False
+    def has_delete_permission(self, request, obj=None): return False
+    def get_readonly_fields(self, request, obj=None): return tuple(f.name for f in self.model._meta.fields)
 
 
 @admin.register(Purchase)
-class PurchaseAdmin(admin.ModelAdmin):
+class PurchaseAdmin(ReadOnlyWorkflowAdmin):
     list_display = ('business_date', 'supplier_label', 'status', 'total_syp', 'amount_paid_syp', 'remaining_display', 'paid_from', 'created_by')
     list_filter = ('business_date', 'status', 'payment_method', 'paid_from')
     search_fields = ('supplier_name', 'invoice_number', 'notes')
@@ -143,7 +146,7 @@ class PurchaseItemAdmin(admin.ModelAdmin):
 
 
 @admin.register(StockMovement)
-class StockMovementAdmin(admin.ModelAdmin):
+class StockMovementAdmin(ReadOnlyWorkflowAdmin):
     def get_model_perms(self, request):
         return {}
 
@@ -527,7 +530,7 @@ class ExpenseCategoryAdmin(admin.ModelAdmin):
 
 
 @admin.register(Expense)
-class ExpenseAdmin(admin.ModelAdmin):
+class ExpenseAdmin(ReadOnlyWorkflowAdmin):
     list_display = ('business_date', 'title', 'category', 'amount_syp', 'payment_method', 'paid_from', 'status', 'vendor_supplier', 'created_by')
     list_filter = ('business_date', 'category', 'payment_method', 'paid_from', 'status')
     search_fields = ('title', 'description', 'supplier_name', 'receipt_number')
@@ -538,7 +541,7 @@ class ExpenseAdmin(admin.ModelAdmin):
 
 
 @admin.register(CashMovement)
-class CashMovementAdmin(SuperuserEditOnlyAdmin):
+class CashMovementAdmin(ReadOnlyWorkflowAdmin):
     list_display = ('business_date', 'movement_type', 'direction', 'amount_syp', 'title', 'created_by', 'created_at')
     list_filter = ('business_date', 'movement_type', 'direction', 'is_cancelled')
     search_fields = ('title', 'notes')
@@ -546,7 +549,7 @@ class CashMovementAdmin(SuperuserEditOnlyAdmin):
 
 
 @admin.register(DailyClose)
-class DailyCloseAdmin(SuperuserEditOnlyAdmin):
+class DailyCloseAdmin(ReadOnlyWorkflowAdmin):
     list_display = ('business_date', 'expected_cash_syp', 'actual_cash_counted_syp', 'cash_difference_syp', 'closed_by', 'closed_at', 'is_finalized')
     list_filter = ('business_date', 'is_finalized', 'closed_by')
     search_fields = ('business_date', 'notes', 'closed_by__username')
@@ -554,7 +557,7 @@ class DailyCloseAdmin(SuperuserEditOnlyAdmin):
 
 
 @admin.register(Payment)
-class PaymentAdmin(SuperuserEditOnlyAdmin):
+class PaymentAdmin(ReadOnlyWorkflowAdmin):
     workflow_help_url = '/staff/cashier/'
     list_display = ('order_number', 'order_link', 'amount_syp', 'method', 'created_by', 'is_active', 'is_reversed', 'created_at')
     list_filter = ('method', 'is_active', 'is_reversed', 'created_at')
