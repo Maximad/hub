@@ -1,4 +1,5 @@
 from django.utils import timezone
+from django.db.models import Sum
 
 from core.models import ActivityLog, CashMovement, Payment
 from .engine import dispatch
@@ -7,6 +8,13 @@ from .exceptions import InvalidTransition
 
 def collect(order, context, amount, method, notes=''):
     def handle(source):
+        # ``dispatch`` holds an order row lock, so concurrent collectors cannot both
+        # validate against the same remaining balance.
+        paid = source.payments.filter(is_active=True, is_reversed=False).exclude(method=Payment.Method.UNPAID).aggregate(total=Sum('amount_syp'))['total'] or 0
+        if amount <= 0:
+            raise InvalidTransition('مبلغ الدفعة يجب أن يكون موجباً.')
+        if paid + amount > source.total_syp:
+            raise InvalidTransition('المبلغ لا يجوز أن يتجاوز المتبقي على الطلب.')
         payment=Payment(order=source, amount_syp=amount, method=method, notes=notes, created_by=context.actor)
         payment.full_clean(); payment.save()
         if method == Payment.Method.CASH:

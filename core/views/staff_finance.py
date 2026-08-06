@@ -34,6 +34,14 @@ def _positive_int(raw):
     except (TypeError, ValueError):
         return 0
 
+def _validation_messages(error):
+    """Preserve the Arabic, field-level messages emitted by posting services."""
+    if isinstance(error, ValidationError):
+        if hasattr(error, 'message_dict'):
+            return [message for messages_for_field in error.message_dict.values() for message in messages_for_field]
+        return list(error.messages)
+    return [str(error)]
+
 def _posting_context(request, business_date=None, approver=None):
     import hashlib
     supplied=request.headers.get('Idempotency-Key') or request.POST.get('idempotency_key')
@@ -73,8 +81,12 @@ def staff_expense_new(request):
         try: exp.full_clean()
         except ValidationError as e: errors += sum(e.message_dict.values(), []) if hasattr(e,'message_dict') else e.messages
         if not errors:
-            expense_posting.create(exp, _posting_context(request, exp.business_date))
-            messages.success(request,'تم حفظ المصروف.'); return redirect('staff_finance_expenses')
+            try:
+                expense_posting.create(exp, _posting_context(request, exp.business_date))
+            except ValidationError as error:
+                errors.extend(_validation_messages(error))
+            else:
+                messages.success(request,'تم حفظ المصروف.'); return redirect('staff_finance_expenses')
     return render(request,'staff/finance_expense_form.html',{'categories':ExpenseCategory.objects.filter(is_active=True),'vendors':Vendor.objects.all(),'media_assets':MediaAsset.objects.order_by('-created_at')[:50],'methods':Expense.PaymentMethod.choices,'paid_froms':Expense.PaidFrom.choices,'statuses':Expense.Status.choices,'today':timezone.now().date(),'errors':errors,'form_values':request.POST})
 
 @require_staff_capability('finance')
@@ -92,8 +104,12 @@ def staff_cashbox_new(request):
         try: mv.full_clean()
         except ValidationError as e: errors += sum(e.message_dict.values(), []) if hasattr(e,'message_dict') else e.messages
         if not errors:
-            expense_posting.post_cash_movement(mv, _posting_context(request, mv.business_date))
-            messages.success(request,'تم حفظ حركة الصندوق.'); return redirect('staff_finance_cashbox')
+            try:
+                expense_posting.post_cash_movement(mv, _posting_context(request, mv.business_date))
+            except ValidationError as error:
+                errors.extend(_validation_messages(error))
+            else:
+                messages.success(request,'تم حفظ حركة الصندوق.'); return redirect('staff_finance_cashbox')
     return render(request,'staff/finance_cashbox_form.html',{'types':CashMovement.MovementType.choices,'directions':CashMovement.Direction.choices,'vendors':Vendor.objects.all(),'expenses':Expense.objects.exclude(status=Expense.Status.CANCELLED)[:100],'today':timezone.now().date(),'errors':errors,'form_values':request.POST})
 
 @require_staff_capability('finance')
@@ -137,7 +153,7 @@ def staff_daily_close_reopen(request, close_id):
         try:
             closing_posting.reopen(close, _posting_context(request, close.business_date), request.POST.get('reason',''))
             messages.success(request,'تمت إعادة فتح تاريخ العمل للتصحيح.'); return redirect('staff_daily_close_detail', close_id=close.pk)
-        except Exception as e: errors.append(str(e))
+        except Exception as e: errors.extend(_validation_messages(e))
     return render(request,'staff/finance_confirm.html',{'title':'إعادة فتح الإغلاق','message':f'إعادة فتح {close.business_date}','require_reason':True,'errors':errors,'business_date':current_business_date()})
 
 @require_staff_capability('finance')
@@ -149,7 +165,7 @@ def staff_daily_close_close(request, close_id):
         try:
             close=closing_posting.close(close, _posting_context(request, close.business_date), _positive_int(request.POST.get('actual_cash_counted_syp')), request.POST.get('notes',''), _positive_int(request.POST.get('opening_cash_syp')))
             messages.success(request,'تم إغلاق تاريخ العمل.'); return redirect('staff_daily_close_detail', close_id=close.pk)
-        except Exception as e: errors.append(str(e))
+        except Exception as e: errors.extend(_validation_messages(e))
     return render(request,'staff/finance_close_form.html',{'close':close,'errors':errors,'business_date':current_business_date()})
 
 @require_staff_capability('finance')
@@ -178,7 +194,7 @@ def staff_purchase_new(request):
     errors=[]
     if request.method=='POST':
         try: p=_save_purchase_from_post(request); messages.success(request,'تم حفظ الشراء.'); return redirect('staff_purchase_detail', purchase_id=p.pk)
-        except Exception as e: errors.append(str(e))
+        except Exception as e: errors.extend(_validation_messages(e))
     return render(request,'staff/finance_purchase_form.html',{'purchase':None,'items':InventoryItem.objects.filter(is_active=True),'vendors':Vendor.objects.all(),'statuses':Purchase.Status.choices,'methods':Purchase.PaymentMethod.choices,'paid_froms':Purchase.PaidFrom.choices,'units':InventoryItem.Unit.choices,'today':current_business_date(),'errors':errors,'business_date':current_business_date()})
 
 @require_staff_capability('finance')
@@ -195,16 +211,26 @@ def staff_purchase_edit(request,purchase_id):
     p=get_object_or_404(Purchase, pk=purchase_id); errors=[]
     if request.method=='POST':
         try: p=_save_purchase_from_post(request,p); messages.success(request,'تم تعديل الشراء بدون تكرار المخزون.'); return redirect('staff_purchase_detail', purchase_id=p.pk)
-        except Exception as e: errors.append(str(e))
+        except Exception as e: errors.extend(_validation_messages(e))
     return render(request,'staff/finance_purchase_form.html',{'purchase':p,'items':InventoryItem.objects.filter(is_active=True),'vendors':Vendor.objects.all(),'statuses':Purchase.Status.choices,'methods':Purchase.PaymentMethod.choices,'paid_froms':Purchase.PaidFrom.choices,'units':InventoryItem.Unit.choices,'today':current_business_date(),'errors':errors,'business_date':current_business_date()})
 
 def _receive_purchase(request,p):
     if p.stock_movements.exists() or p.received_at: messages.info(request,'تم استلام الشراء مسبقاً.'); return redirect('staff_purchase_detail', purchase_id=p.pk)
-    purchase_posting.receive(p, _posting_context(request, p.business_date))
-    messages.success(request,'تم الاستلام وتحديث المخزون.'); return redirect('staff_purchase_detail', purchase_id=p.pk)
+    try:
+        purchase_posting.receive(p, _posting_context(request, p.business_date))
+    except ValidationError as error:
+        for message in _validation_messages(error): messages.error(request, message)
+    else:
+        messages.success(request,'تم الاستلام وتحديث المخزون.')
+    return redirect('staff_purchase_detail', purchase_id=p.pk)
 
 def _cancel_purchase(request,p):
     reason=request.POST.get('reason','').strip()
     if not reason: messages.error(request,'سبب الإلغاء مطلوب.'); return redirect('staff_purchase_detail', purchase_id=p.pk)
-    purchase_posting.cancel(p, _posting_context(request, p.business_date), reason)
-    messages.success(request,'تم إلغاء الشراء بحركات عكسية.'); return redirect('staff_purchase_detail', purchase_id=p.pk)
+    try:
+        purchase_posting.cancel(p, _posting_context(request, p.business_date), reason)
+    except ValidationError as error:
+        for message in _validation_messages(error): messages.error(request, message)
+    else:
+        messages.success(request,'تم إلغاء الشراء بحركات عكسية.')
+    return redirect('staff_purchase_detail', purchase_id=p.pk)
