@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
+from django.urls import resolve, reverse as url_reverse
 
 from core.models import CashMovement, FinancialAccount, PostingBatch, Transfer
 from core.services.posting.context import PostingContext
@@ -49,3 +50,22 @@ class TransferPostingTests(TestCase):
         self.assertTrue(transfer.reversal_batch.is_balanced())
         self.assertEqual(transfer.movement_projections.count(), 4)
         self.assertEqual(PostingBatch.objects.filter(reversal_of=transfer.posting_batch).count(), 1)
+
+    def test_staff_transfer_routes_use_integer_primary_keys(self):
+        transfer = post(
+            Transfer(
+                source_account=self.source, destination_account=self.destination,
+                amount=Decimal('100'), business_date=date(2026, 8, 7), reason='مناقلة',
+            ),
+            self.context('transfer:routes'),
+        )
+        self.client.force_login(self.approver)
+
+        detail_url = url_reverse('staff_finance_transfer_detail', args=[transfer.pk])
+        reverse_url = url_reverse('staff_finance_transfer_reverse', args=[transfer.pk])
+        self.assertEqual(detail_url, f'/staff/finance/transfers/{transfer.pk}/')
+        self.assertEqual(reverse_url, f'/staff/finance/transfers/{transfer.pk}/reverse/')
+        self.assertEqual(resolve(detail_url).kwargs['transfer_id'], transfer.pk)
+        self.assertEqual(resolve(reverse_url).kwargs['transfer_id'], transfer.pk)
+        self.assertEqual(self.client.get('/staff/finance/transfers/999999999/').status_code, 404)
+        self.assertEqual(self.client.get('/staff/finance/transfers/not-an-integer/').status_code, 404)
