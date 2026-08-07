@@ -17,8 +17,12 @@ def _decimal(value):
 
 class FinanceReconciler:
     """Read-only integrity scan. Writes occur only in :meth:`apply_backfill`."""
-    def __init__(self, start=None, end=None, account=None):
-        self.start, self.end, self.account = start, end, account
+    SCOPES = ('all', 'expenses')
+
+    def __init__(self, start=None, end=None, account=None, scope='all'):
+        if scope not in self.SCOPES:
+            raise ValueError(f'Unsupported reconciliation scope: {scope}')
+        self.start, self.end, self.account, self.scope = start, end, account, scope
         self.findings = []
 
     def add(self, code, obj, message, *, severity='error', review=False, **details):
@@ -31,7 +35,11 @@ class FinanceReconciler:
         return qs
 
     def run(self):
-        self._expenses(); self._payments(); self._keys_and_batches(); self._orphans()
+        self._expenses(); self._keys_and_batches(); self._orphans()
+        if self.scope == 'expenses':
+            self._audits(source_model=Expense)
+            return sorted(self.findings, key=lambda x: (x['code'], x['model'], x['record_id']))
+        self._payments()
         self._purchases(); self._transfers(); self._periods(); self._audits()
         return sorted(self.findings, key=lambda x: (x['code'], x['model'], x['record_id']))
 
@@ -71,26 +79,39 @@ class FinanceReconciler:
 
     def _keys_and_batches(self):
         key_rows = []
-        for obj in PostingCommand.objects.all(): key_rows.append((obj.key, obj))
-        for obj in self.dated(PostingBatch.objects.all()): key_rows.append((obj.idempotency_key, obj))
-        for model in (PurchaseReceipt, PurchasePayment, PurchaseReturn):
+        commands = PostingCommand.objects.all()
+        if self.scope == 'expenses':
+            commands = commands.filter(source_type=Expense._meta.label)
+        for obj in commands: key_rows.append((obj.key, obj))
+        batches_qs = PostingBatch.objects.all()
+        if self.scope == 'expenses':
+            batches_qs = batches_qs.filter(operation_type__startswith='expense.')
+        for obj in self.dated(batches_qs): key_rows.append((obj.idempotency_key, obj))
+        for model in (() if self.scope == 'expenses' else (PurchaseReceipt, PurchasePayment, PurchaseReturn)):
             for obj in self.dated(model.objects.all()): key_rows.append((obj.idempotency_key, obj))
         counts = Counter(key for key, _ in key_rows if key)
         for key, obj in key_rows:
             if key and counts[key] > 1: self.add('duplicate_source_key', obj, 'Idempotency/source key is reused.', key=key, occurrences=counts[key])
-        batches = self.dated(PostingBatch.objects.annotate(debits=Sum('entries__debit'), credits=Sum('entries__credit')))
+        batches = self.dated(batches_qs.annotate(debits=Sum('entries__debit'), credits=Sum('entries__credit')))
         if self.account: batches = batches.filter(entries__account=self.account).distinct()
         for batch in batches:
             if _decimal(batch.debits) != _decimal(batch.credits):
                 self.add('unbalanced_posting_batch', batch, 'Posting batch debits and credits do not balance.', debits=str(batch.debits or 0), credits=str(batch.credits or 0))
 
     def _orphans(self):
-        for batch in self.dated(PostingBatch.objects.select_related('source_content_type', 'reversal_of')):
+        batches = PostingBatch.objects.select_related('source_content_type', 'reversal_of')
+        movements = CashMovement.objects.filter(is_generated=True)
+        if self.scope == 'expenses':
+            batches = batches.filter(operation_type__startswith='expense.')
+            movements = movements.filter(related_expense__isnull=False)
+        for batch in self.dated(batches):
             if batch.source_content_type_id and batch.source is None: self.add('orphaned_posting', batch, 'Posting source no longer exists.')
             if batch.reversal_of_id and batch.reversal_of is None: self.add('orphaned_reversal', batch, 'Reversal has no original posting.')
-        for movement in self.dated(CashMovement.objects.filter(is_generated=True)):
+        for movement in self.dated(movements):
             if not any((movement.related_expense_id, movement.related_order_id, movement.related_payment_id, movement.transfer_id)):
                 self.add('orphaned_cash_movement', movement, 'Generated cash movement has no source.')
+        if self.scope == 'expenses':
+            return
         for movement in self.dated(StockMovement.objects.filter(movement_type__in=['purchase_received', 'return_to_vendor'])):
             if movement.movement_type == 'purchase_received' and not movement.purchase_receipt_line_id: self.add('orphaned_stock_movement', movement, 'Purchase receipt stock movement has no receipt line.')
             if movement.movement_type == 'return_to_vendor' and not movement.purchase_return_line_id: self.add('orphaned_stock_movement', movement, 'Return stock movement has no return line.')
@@ -146,8 +167,11 @@ class FinanceReconciler:
             comparable = {k: close.close_snapshot.get(k) for k in expected}
             if comparable != expected: self.add('close_snapshot_mismatch', close, 'Close snapshot is inconsistent with current postings.', expected=expected, actual=comparable)
 
-    def _audits(self):
-        for event in AuditEvent.objects.select_related('source_content_type'):
+    def _audits(self, source_model=None):
+        events = AuditEvent.objects.select_related('source_content_type')
+        if source_model is not None:
+            events = events.filter(source_content_type=ContentType.objects.get_for_model(source_model))
+        for event in events:
             if not event.actor_id: self.add('audit_missing_actor', event, 'Audit event has no actor.')
             if not event.request_key or not event.source_content_type_id or not event.source_object_id or event.source is None:
                 self.add('audit_missing_operation', event, 'Audit event is not linked to a durable request and source operation.')
