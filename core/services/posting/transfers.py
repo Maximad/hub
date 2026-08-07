@@ -28,6 +28,8 @@ def _validate(source, context):
         raise InvalidTransition('يجب أن يختلف حساب المصدر عن حساب الوجهة.')
     if not source.source_account.is_active or not source.destination_account.is_active:
         raise InvalidTransition('يجب أن يكون حسابا المصدر والوجهة فعالين.')
+    if source.source_account.currency != source.destination_account.currency:
+        raise InvalidTransition('لا يمكن تحويل الرقم نفسه بين حسابين بعملتين مختلفتين. استخدم سير عمل تحويل عملة مصرحاً يحفظ المبلغين وسعر الصرف.')
     if source.amount <= 0:
         raise InvalidTransition('مبلغ التحويل يجب أن يكون موجباً.')
     if not source.business_date:
