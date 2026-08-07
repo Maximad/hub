@@ -56,14 +56,21 @@ def dispatch(command, source, context, handler, *, allow_closed=False):
             else:
                 ensure_period_open(context.date_for(locked))
         try:
-            receipt = PostingCommand.objects.create(
-                key=context.idempotency_key, command=command,
-                source_type=locked._meta.label, source_id=str(locked.pk or ''),
-                actor=context.actor, channel=context.channel,
-                request_metadata=dict(context.request_metadata),
-            )
+            # Keep the insert in a savepoint.  PostgreSQL marks a transaction as
+            # broken after a uniqueness error until its savepoint is rolled back;
+            # without this inner atomic block a concurrent duplicate could not
+            # read and return the winning command below.
+            with transaction.atomic():
+                receipt = PostingCommand.objects.create(
+                    key=context.idempotency_key, command=command,
+                    source_type=locked._meta.label, source_id=str(locked.pk or ''),
+                    actor=context.actor, channel=context.channel,
+                    request_metadata=dict(context.request_metadata),
+                )
         except IntegrityError:
             receipt = PostingCommand.objects.select_for_update().get(key=context.idempotency_key)
+            if receipt.command != command:
+                raise IdempotencyConflict('مفتاح idempotency مستخدم لأمر آخر.')
             return _existing(receipt)
         result = handler(locked)
         receipt.result_type = result._meta.label
