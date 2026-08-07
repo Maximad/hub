@@ -11,7 +11,7 @@ from catalog.models import MediaAsset
 from core.finance import finance_summary_for_date, current_business_date
 from core.services.posting.context import PostingContext
 from core.services.posting import expenses as expense_posting, purchases as purchase_posting, closing as closing_posting
-from core.models import ActivityLog, CashMovement, DailyClose, Expense, ExpenseCategory, InventoryItem, Purchase, PurchaseItem, StockMovement
+from core.models import ActivityLog, CashMovement, DailyClose, Expense, ExpenseCategory, FinancialAccount, InventoryItem, Purchase, PurchaseItem, StockMovement
 from core.views_legacy import DAMASCUS_TZ, _build_day_report, _parse_report_date
 from vendors.models import Vendor
 
@@ -74,20 +74,26 @@ def staff_expenses(request):
 def staff_expense_new(request):
     errors=[]
     if request.method=='POST':
-        exp=Expense(business_date=_parse_report_date(request.POST.get('business_date')), category_id=request.POST.get('category'), vendor_id=request.POST.get('vendor') or None, supplier_name=request.POST.get('supplier_name','').strip(), title=request.POST.get('title','').strip(), description=request.POST.get('description','').strip(), amount_syp=_positive_int(request.POST.get('amount_syp')), payment_method=request.POST.get('payment_method',''), paid_from=request.POST.get('paid_from') or Expense.PaidFrom.UNPAID, status=request.POST.get('status') or Expense.Status.DRAFT, receipt_media_id=request.POST.get('receipt_media') or None, receipt_number=request.POST.get('receipt_number','').strip(), created_by=request.user)
-        if exp.status in {Expense.Status.APPROVED, Expense.Status.CANCELLED} and not can_approve_partial_payment(request.user): errors.append('الاعتماد أو الإلغاء يحتاج صلاحية المدير.')
-        if exp.status==Expense.Status.PAID: exp.paid_by=request.user; exp.paid_at=timezone.now()
-        if exp.status==Expense.Status.APPROVED: exp.approved_by=request.user; exp.approved_at=timezone.now()
+        requested_status=request.POST.get('status') or Expense.Status.DRAFT
+        exp=Expense(business_date=_parse_report_date(request.POST.get('business_date')), category_id=request.POST.get('category'), vendor_id=request.POST.get('vendor') or None, payee_type=request.POST.get('payee_type') or (Expense.PayeeType.VENDOR if request.POST.get('vendor') else Expense.PayeeType.MANUAL), supplier_name=request.POST.get('supplier_name','').strip(), title=request.POST.get('title','').strip(), description=request.POST.get('description','').strip(), amount_syp=_positive_int(request.POST.get('amount_syp')), payment_method=request.POST.get('payment_method',''), paid_from=request.POST.get('paid_from') or Expense.PaidFrom.UNPAID, status=Expense.Status.DRAFT, financial_account_id=request.POST.get('financial_account') or None, liability_account_id=request.POST.get('liability_account') or None, receipt_media_id=request.POST.get('receipt_media') or None, receipt_number=request.POST.get('receipt_number','').strip(), created_by=request.user)
+        if requested_status in {Expense.Status.APPROVED, Expense.Status.CANCELLED} and not can_approve_partial_payment(request.user): errors.append('الاعتماد أو الإلغاء يحتاج صلاحية المدير.')
         try: exp.full_clean()
         except ValidationError as e: errors += sum(e.message_dict.values(), []) if hasattr(e,'message_dict') else e.messages
         if not errors:
             try:
-                expense_posting.create(exp, _posting_context(request, exp.business_date))
+                context=_posting_context(request, exp.business_date)
+                context.idempotency_key += ':draft'
+                exp=expense_posting.create_draft(exp, context)
+                context.idempotency_key=context.idempotency_key.removesuffix(':draft') + ':post'
+                if requested_status == Expense.Status.APPROVED:
+                    expense_posting.approve_liability(exp, context, exp.liability_account)
+                elif requested_status == Expense.Status.PAID:
+                    expense_posting.pay_immediately(exp, context, exp.financial_account, exp.payment_method)
             except ValidationError as error:
                 errors.extend(_validation_messages(error))
             else:
                 messages.success(request,'تم حفظ المصروف.'); return redirect('staff_finance_expenses')
-    return render(request,'staff/finance_expense_form.html',{'categories':ExpenseCategory.objects.filter(is_active=True),'vendors':Vendor.objects.all(),'media_assets':MediaAsset.objects.order_by('-created_at')[:50],'methods':Expense.PaymentMethod.choices,'paid_froms':Expense.PaidFrom.choices,'statuses':Expense.Status.choices,'today':timezone.now().date(),'errors':errors,'form_values':request.POST})
+    return render(request,'staff/finance_expense_form.html',{'categories':ExpenseCategory.objects.filter(is_active=True),'vendors':Vendor.objects.all(),'financial_accounts':FinancialAccount.objects.filter(is_active=True),'liability_accounts':FinancialAccount.objects.filter(is_active=True, account_type=FinancialAccount.AccountType.LIABILITY),'payee_types':Expense.PayeeType.choices,'media_assets':MediaAsset.objects.order_by('-created_at')[:50],'methods':Expense.PaymentMethod.choices,'paid_froms':Expense.PaidFrom.choices,'statuses':Expense.Status.choices,'today':timezone.now().date(),'errors':errors,'form_values':request.POST})
 
 @require_staff_capability('finance')
 def staff_cashbox(request):
