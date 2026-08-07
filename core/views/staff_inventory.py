@@ -78,7 +78,7 @@ def inventory_required(view):
 @inventory_required
 def staff_inventory_home(request):
     low_ids=[i.pk for i in InventoryItem.objects.filter(is_active=True, low_stock_threshold__isnull=False) if i.is_low_stock]
-    ctx={'active_count':InventoryItem.objects.filter(is_active=True).count(),'low_items':InventoryItem.objects.filter(pk__in=low_ids),'recent_purchases':Purchase.objects.select_related('vendor').order_by('-business_date','-created_at')[:10],'recent_movements':StockMovement.objects.select_related('inventory_item').order_by('-business_date','-created_at')[:10],'unpaid_purchases':Purchase.objects.exclude(status=Purchase.Status.CANCELLED).filter(Q(paid_from=Purchase.PaidFrom.UNPAID)|Q(amount_paid_syp__lt=F('total_syp')))[:10],'waste_value':StockMovement.objects.filter(movement_type=StockMovement.MovementType.WASTE,is_cancelled=False).aggregate(v=Sum('total_value_syp'))['v'] or 0}
+    ctx={'active_count':InventoryItem.objects.filter(is_active=True).count(),'low_items':InventoryItem.objects.filter(pk__in=low_ids),'recent_purchases':Purchase.objects.select_related('vendor').order_by('-business_date','-created_at')[:10],'recent_movements':StockMovement.objects.select_related('inventory_item').order_by('-business_date','-created_at')[:10],'unpaid_purchases':[p for p in Purchase.objects.exclude(status=Purchase.Status.CANCELLED) if p.remaining_syp][:10],'waste_value':StockMovement.objects.filter(movement_type=StockMovement.MovementType.WASTE,is_cancelled=False).aggregate(v=Sum('total_value_syp'))['v'] or 0}
     return render(request,'staff/inventory_home.html',ctx)
 
 
@@ -110,7 +110,7 @@ def staff_inventory_purchase_new(request):
     if not _can_manage(request.user): messages.error(request,'لا تملك صلاحية إنشاء المشتريات.'); return redirect('staff_inventory_purchases')
     if request.method=='POST':
         with transaction.atomic():
-            p=Purchase.objects.create(business_date=request.POST.get('business_date') or timezone.now().date(),vendor_id=request.POST.get('vendor') or None,supplier_name=request.POST.get('supplier_name',''),invoice_number=request.POST.get('invoice_number',''),status=request.POST.get('status') or Purchase.Status.DRAFT,payment_method=request.POST.get('payment_method') or Purchase.PaymentMethod.CREDIT,paid_from=request.POST.get('paid_from') or Purchase.PaidFrom.UNPAID,discount_syp=_dec(request.POST.get('discount_syp')),amount_paid_syp=_dec(request.POST.get('amount_paid_syp')),receipt_media_id=request.POST.get('receipt_media') or None,notes=request.POST.get('notes',''),created_by=request.user)
+            p=Purchase.objects.create(business_date=request.POST.get('business_date') or timezone.now().date(),vendor_id=request.POST.get('vendor') or None,supplier_name=request.POST.get('supplier_name',''),invoice_number=request.POST.get('invoice_number',''),status=request.POST.get('status') or Purchase.Status.DRAFT,payment_method=request.POST.get('payment_method') or Purchase.PaymentMethod.CREDIT,paid_from=request.POST.get('paid_from') or Purchase.PaidFrom.UNPAID,discount_syp=_dec(request.POST.get('discount_syp')),receipt_media_id=request.POST.get('receipt_media') or None,notes=request.POST.get('notes',''),created_by=request.user)
             for item_id, qty, cost in zip(request.POST.getlist('inventory_item'), request.POST.getlist('quantity'), request.POST.getlist('unit_cost_syp')):
                 if item_id and _dec(qty)>0:
                     inv=InventoryItem.objects.get(pk=item_id); PurchaseItem.objects.create(purchase=p,inventory_item=inv,quantity=_dec(qty),unit=inv.unit,unit_cost_syp=_dec(cost))
@@ -129,9 +129,9 @@ def staff_inventory_purchase_receive(request,purchase_id):
     if request.method=='POST':
         if not _can_manage(request.user): messages.error(request,'استلام الشراء يحتاج صلاحية الكاشير أو المدير.'); return redirect('staff_inventory_purchase_detail',purchase_id=p.pk)
         if p.status==Purchase.Status.CANCELLED: messages.error(request,'لا يمكن استلام شراء ملغى.'); return redirect('staff_inventory_purchase_detail',purchase_id=p.pk)
-        if p.received_at or p.stock_movements.exists(): messages.error(request,'تم استلام هذا الشراء مسبقاً ولا يمكن تكرار الاستلام.'); return redirect('staff_inventory_purchase_detail',purchase_id=p.pk)
         try:
-            purchase_posting.receive(p, _posting_context(request, p.business_date))
+            quantities={int(key[9:]): _dec(value) for key,value in request.POST.items() if key.startswith('quantity_')}
+            purchase_posting.receive(p, _posting_context(request, p.business_date), quantities or None)
             messages.success(request,'تم استلام الشراء وتحديث المخزون.')
         except Exception as e: messages.error(request,f'تعذر إكمال الربط المالي أو المخزني: {e}')
     return redirect('staff_inventory_purchase_detail',purchase_id=p.pk)
@@ -166,7 +166,7 @@ def staff_inventory_low_stock(request):
 @inventory_required
 def staff_inventory_reports(request):
     purchases=Purchase.objects.exclude(status=Purchase.Status.CANCELLED)
-    return render(request,'staff/inventory_reports.html',{'purchase_total':purchases.aggregate(v=Sum('total_syp'))['v'] or 0,'paid_total':purchases.aggregate(v=Sum('amount_paid_syp'))['v'] or 0,'unpaid_total':sum(p.remaining_syp for p in purchases),'by_method':purchases.values('payment_method').annotate(total=Sum('total_syp')),'by_type':PurchaseItem.objects.values('inventory_item__item_type').annotate(total=Sum('line_total_syp')),'stock_items':InventoryItem.objects.filter(is_active=True),'waste':StockMovement.objects.filter(movement_type=StockMovement.MovementType.WASTE)[:100]})
+    return render(request,'staff/inventory_reports.html',{'purchase_total':purchases.aggregate(v=Sum('total_syp'))['v'] or 0,'paid_total':sum(p.amount_paid_syp for p in purchases),'unpaid_total':sum(p.remaining_syp for p in purchases),'by_method':purchases.values('payment_method').annotate(total=Sum('total_syp')),'by_type':PurchaseItem.objects.values('inventory_item__item_type').annotate(total=Sum('line_total_syp')),'stock_items':InventoryItem.objects.filter(is_active=True),'waste':StockMovement.objects.filter(movement_type=StockMovement.MovementType.WASTE)[:100]})
 
 def _csv_response(name, headers, rows):
     r=HttpResponse(content_type='text/csv; charset=utf-8'); r['Content-Disposition']=f'attachment; filename="{name}"'; w=csv.writer(r); w.writerow(headers); [w.writerow(row) for row in rows]; return r

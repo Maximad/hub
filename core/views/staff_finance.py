@@ -183,7 +183,7 @@ def staff_purchases(request):
 def _save_purchase_from_post(request, purchase=None):
     purchase = purchase or Purchase(created_by=request.user)
     purchase.business_date=_parse_report_date(request.POST.get('business_date')); purchase.invoice_date=_parse_report_date(request.POST.get('invoice_date')) if request.POST.get('invoice_date') else None
-    purchase.vendor_id=request.POST.get('vendor') or None; purchase.supplier_name=request.POST.get('supplier_name','').strip(); purchase.invoice_number=request.POST.get('invoice_number','').strip(); purchase.status=request.POST.get('status') or Purchase.Status.DRAFT; purchase.payment_method=request.POST.get('payment_method') or Purchase.PaymentMethod.CREDIT; purchase.paid_from=request.POST.get('paid_from') or Purchase.PaidFrom.UNPAID; purchase.discount_syp=_dec(request.POST.get('discount_syp')); purchase.amount_paid_syp=_dec(request.POST.get('amount_paid_syp')); purchase.notes=request.POST.get('notes','')
+    purchase.vendor_id=request.POST.get('vendor') or None; purchase.supplier_name=request.POST.get('supplier_name','').strip(); purchase.invoice_number=request.POST.get('invoice_number','').strip(); purchase.status=request.POST.get('status') or Purchase.Status.DRAFT; purchase.payment_method=request.POST.get('payment_method') or Purchase.PaymentMethod.CREDIT; purchase.paid_from=request.POST.get('paid_from') or Purchase.PaidFrom.UNPAID; purchase.discount_syp=_dec(request.POST.get('discount_syp')); purchase.notes=request.POST.get('notes','')
     with transaction.atomic():
         purchase.full_clean(); purchase.save()
         if purchase.status == Purchase.Status.DRAFT or not purchase.stock_movements.exists():
@@ -221,9 +221,9 @@ def staff_purchase_edit(request,purchase_id):
     return render(request,'staff/finance_purchase_form.html',{'purchase':p,'items':InventoryItem.objects.filter(is_active=True),'vendors':Vendor.objects.all(),'statuses':Purchase.Status.choices,'methods':Purchase.PaymentMethod.choices,'paid_froms':Purchase.PaidFrom.choices,'units':InventoryItem.Unit.choices,'today':current_business_date(),'errors':errors,'business_date':current_business_date()})
 
 def _receive_purchase(request,p):
-    if p.stock_movements.exists() or p.received_at: messages.info(request,'تم استلام الشراء مسبقاً.'); return redirect('staff_purchase_detail', purchase_id=p.pk)
     try:
-        purchase_posting.receive(p, _posting_context(request, p.business_date))
+        quantities={int(key[9:]): _dec(value) for key,value in request.POST.items() if key.startswith('quantity_')}
+        purchase_posting.receive(p, _posting_context(request, p.business_date), quantities or None)
     except ValidationError as error:
         for message in _validation_messages(error): messages.error(request, message)
     else:
