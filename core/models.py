@@ -1194,7 +1194,6 @@ class Transfer(TimeStampedModel):
         REVERSED = 'reversed', 'Reversed'
         CANCELLED = 'cancelled', 'Cancelled'
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     source_account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, related_name='outgoing_transfers')
     destination_account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, related_name='incoming_transfers')
     amount = models.DecimalField(max_digits=20, decimal_places=2)
