@@ -13,9 +13,26 @@ from .exceptions import InvalidTransition
 
 
 def _account(code, account_type):
-    account, _ = FinancialAccount.objects.get_or_create(
-        code=code, defaults={'name_ar': code, 'name_en': code, 'account_type': account_type,
-                             'is_active': True, 'negative_balance_policy': 'allow'})
+    """Resolve an explicitly configured account; never invent an accounting choice.
+
+    Account creation and activation are deployment/finance-owner decisions.  Posting
+    must stop when either has not happened, rather than silently creating a live
+    account (the previous behaviour made an ambiguous chart-of-accounts decision).
+    """
+    try:
+        account = FinancialAccount.objects.get(code=code)
+    except FinancialAccount.DoesNotExist as exc:
+        raise InvalidTransition(
+            f'الحساب {code} غير معرّف؛ يجب أن يعتمده مسؤول المالية قبل الترحيل.'
+        ) from exc
+    if not account.is_active:
+        raise InvalidTransition(
+            f'الحساب {code} غير فعّال؛ الترحيل موقوف حتى اعتماد مسؤول المالية.'
+        )
+    if account.account_type != account_type:
+        raise InvalidTransition(
+            f'نوع الحساب {code} لا يطابق قاعدة الترحيل المعتمدة.'
+        )
     return account
 
 
