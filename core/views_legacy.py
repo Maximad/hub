@@ -1559,28 +1559,10 @@ def staff_product_margin_csv(request):
 
 @require_staff_capability('reports')
 def staff_close_day(request):
-    today = datetime.now(DAMASCUS_TZ).date()
-    _rows, sums = _build_day_report(today)
-    existing_close = DailyClose.objects.filter(business_date=today, is_finalized=True).first()
-    if request.method == 'POST':
-        if not _can_approve_partial_payment(request.user):
-            messages.error(request, 'إغلاق اليوم النهائي يحتاج صلاحية المدير.')
-            return redirect('staff_close_day')
-        if existing_close:
-            messages.error(request, 'يوجد إغلاق نهائي لهذا التاريخ بالفعل.')
-            return redirect('staff_close_day')
-        opening = _parse_nonnegative_int(request.POST.get('opening_cash_syp'), default=0, maximum=100_000_000)
-        actual = _parse_nonnegative_int(request.POST.get('actual_cash_counted_syp'), default=0, maximum=100_000_000)
-        expected = opening + sums['cash_total'] + sums.get('non_sales_cash_in_syp', 0) - sums.get('cash_out_syp', 0) - sums.get('cash_expenses_syp', 0)
-        close = DailyClose.objects.create(business_date=today, opening_cash_syp=opening, cash_sales_syp=sums['cash_total'], non_cash_sales_syp=sums['non_cash_sales_syp'], total_payments_syp=sums['paid_total'], unpaid_orders_syp=sums['remaining_total'], partial_payments_syp=sums['partial_payments_syp'], discounts_syp=sums['discounts_syp'], cancelled_orders_syp=sums['cancelled_value'], refunds_or_reversals_syp=0, expected_cash_syp=expected, actual_cash_counted_syp=actual, cash_difference_syp=actual - expected, notes=request.POST.get('notes', '').strip(), closed_by=request.user, closed_at=timezone.now())
-        try:
-            ActivityLog.objects.create(actor=request.user, action='close_day_finalized', details={'business_date': today.isoformat(), 'daily_close_id': close.id, 'expected_cash_syp': expected, 'cash_expenses_syp': sums.get('cash_expenses_syp', 0), 'cash_out_syp': sums.get('cash_out_syp', 0)})
-        except Exception:
-            pass
-        create_notification('close_day_finalized', 'تم إغلاق اليوم', today.isoformat(), target_role='cashier', created_by=request.user)
-        messages.success(request, 'تم إغلاق اليوم.')
-        return redirect('staff_close_day')
-    return render(request, 'staff/close_day.html', {'report_date': today, 'sums': sums, 'existing_close': existing_close, 'can_finalize_close': _can_approve_partial_payment(request.user)})
+    # This historical endpoint is intentionally read/write incapable. Account
+    # period closes are managed exclusively by core.services.posting.closing.
+    messages.info(request, 'تم نقل إغلاق اليوم إلى إغلاقات الحسابات.')
+    return redirect('staff_daily_closes')
 
 
 def _get_member_or_404(member_id):

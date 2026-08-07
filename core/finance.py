@@ -12,19 +12,24 @@ def finance_summary_for_date(day, base_sums=None):
     cash_in = movements.filter(direction=CashMovement.Direction.IN).exclude(movement_type=CashMovement.MovementType.OPENING_CASH).aggregate(v=Sum('amount_syp'))['v'] or 0
     cash_out_movements = movements.filter(direction=CashMovement.Direction.OUT).exclude(related_expense__isnull=False).aggregate(v=Sum('amount_syp'))['v'] or 0
     cash_expenses = paid_cash_expenses.aggregate(v=Sum('amount_syp'))['v'] or 0
-    expected = opening_cash + (base_sums.get('cash_total') or 0) + cash_in - cash_out_movements - cash_expenses
     latest_close = None
     try:
         from core.models import DailyClose
-        latest_close = DailyClose.objects.filter(business_date=day, is_finalized=True).first()
+        latest_close = DailyClose.objects.filter(business_date=day, is_finalized=True).select_related('account').first()
     except Exception:
         latest_close = None
+    expected = 0
+    if latest_close and latest_close.account_id:
+        from core.services.posting.closing import close_totals
+        ledger = close_totals(latest_close.account, day)
+        expected = (latest_close.opening_cash_syp + ledger['cash_receipts'] + ledger['transfers_in']
+                    - ledger['cash_payments'] - ledger['transfers_out'] - ledger['refunds_or_reversals'])
     return {
         'opening_cash_syp': opening_cash,
         'non_sales_cash_in_syp': cash_in,
         'cash_out_syp': cash_out_movements,
         'cash_expenses_syp': cash_expenses,
-        'expected_cash_syp': max(expected, 0),
+        'expected_cash_syp': expected,
         'actual_cash_counted_syp': latest_close.actual_cash_counted_syp if latest_close else None,
         'cash_difference_syp': latest_close.cash_difference_syp if latest_close else None,
         'expenses_total_syp': expenses.exclude(status=Expense.Status.CANCELLED).aggregate(v=Sum('amount_syp'))['v'] or 0,
@@ -82,56 +87,56 @@ def purchase_totals_for_date(day):
 
 
 def build_close_values(day, actual_cash_counted_syp=0, notes='', opening_cash_syp=None):
-    from core.views_legacy import _build_day_report
-    _rows, sums = _build_day_report(day)
+    """Deprecated read facade using the same posted-ledger calculation as closes."""
+    from core.models import FinancialAccount
+    from core.services.posting.closing import close_totals
+    account = FinancialAccount.objects.filter(scope='cashbox', is_active=True).order_by('pk').first()
+    totals = close_totals(account, day) if account else {key: Decimal('0') for key in
+        ('cash_receipts', 'transfers_in', 'cash_payments', 'transfers_out', 'refunds_or_reversals')}
     if opening_cash_syp is None:
-        opening_cash_syp = sums.get('opening_cash_syp') or 0
-    purchases = purchase_totals_for_date(day).get('total') or Decimal('0')
-    expected = int(opening_cash_syp) + int(sums.get('cash_total') or 0) + int(sums.get('non_sales_cash_in_syp') or 0) - int(sums.get('cash_out_syp') or 0) - int(sums.get('cash_expenses_syp') or 0)
+        opening_cash_syp = 0
+    expected = (Decimal(opening_cash_syp) + totals['cash_receipts'] + totals['transfers_in']
+                - totals['cash_payments'] - totals['transfers_out'] - totals['refunds_or_reversals'])
     actual = int(actual_cash_counted_syp or 0)
     return {
         'opening_cash_syp': int(opening_cash_syp or 0),
-        'cash_sales_syp': int(sums.get('cash_total') or 0),
-        'non_cash_sales_syp': int(sums.get('non_cash_sales_syp') or 0),
-        'total_payments_syp': int(sums.get('paid_total') or 0),
-        'unpaid_orders_syp': int(sums.get('remaining_total') or 0),
-        'partial_payments_syp': int(sums.get('partial_payments_syp') or 0),
-        'discounts_syp': int(sums.get('discounts_syp') or 0),
-        'cancelled_orders_syp': int(sums.get('cancelled_value') or 0),
-        'refunds_or_reversals_syp': 0,
-        'expected_cash_syp': max(expected, 0),
+        'cash_sales_syp': int(totals['cash_receipts']), 'non_cash_sales_syp': 0,
+        'total_payments_syp': int(totals['cash_receipts']), 'unpaid_orders_syp': 0,
+        'partial_payments_syp': 0, 'discounts_syp': 0, 'cancelled_orders_syp': 0,
+        'refunds_or_reversals_syp': int(totals['refunds_or_reversals']),
+        'expected_cash_syp': int(expected),
         'actual_cash_counted_syp': actual,
-        'cash_difference_syp': actual - max(expected, 0),
+        'cash_difference_syp': actual - int(expected),
         'notes': notes,
     }
 
 
 def finalize_daily_close(day, user, actual_cash_counted_syp, notes='', opening_cash_syp=None):
-    from core.models import ActivityLog, DailyClose, DailyCloseRevision
+    """Compatibility facade; all close writes are owned by posting.closing."""
+    from core.models import DailyClose, FinancialAccount
+    from core.services.posting import closing
+    from core.services.posting.context import PostingContext
     with transaction.atomic():
-        close, created = DailyClose.objects.select_for_update().get_or_create(business_date=day, defaults={'status': DailyClose.Status.OPEN, 'is_finalized': True})
+        account = FinancialAccount.objects.filter(scope='cashbox', is_active=True).order_by('pk').first()
+        if account is None:
+            account, _ = FinancialAccount.objects.get_or_create(code='cash:default', defaults={
+                'name_ar': 'الصندوق', 'name_en': 'Default cashbox', 'account_type': FinancialAccount.AccountType.ASSET,
+                'scope': 'cashbox', 'is_active': True, 'negative_balance_policy': FinancialAccount.NegativeBalancePolicy.ALLOW})
+        close, created = DailyClose.objects.select_for_update().get_or_create(
+            account=account, business_date=day, is_finalized=True,
+            defaults={'status': DailyClose.Status.OPEN})
         if close.status == DailyClose.Status.CLOSED and close.closed_at:
             return close, False
-        if not created:
-            DailyCloseRevision.objects.create(daily_close=close, revision_type='before_reclose', snapshot=close_snapshot(close), created_by=user)
-        values = build_close_values(day, actual_cash_counted_syp, notes, opening_cash_syp)
-        for k,v in values.items(): setattr(close,k,v)
-        close.status = DailyClose.Status.CLOSED; close.is_finalized=True; close.closed_by=user; close.closed_at=timezone.now()
-        close.full_clean(); close.save()
-        DailyCloseRevision.objects.create(daily_close=close, revision_type='closed', snapshot=close_snapshot(close), created_by=user)
-        ActivityLog.objects.create(actor=user, action='daily_close_closed', details={'daily_close_id': close.id, 'business_date': day.isoformat()})
-        return close, True
+        context = PostingContext(actor=user, approver=user, business_date=day,
+                                 idempotency_key=f'compat-close:{account.pk}:{day}:{close.pk}')
+        return closing.close(close, context, actual_cash_counted_syp, notes, opening_cash_syp), True
 
 
 def reopen_daily_close(close, user, reason):
-    from core.models import ActivityLog, DailyClose, DailyCloseRevision
-    reason = (reason or '').strip()
-    if not reason:
+    from core.services.posting import closing
+    from core.services.posting.context import PostingContext
+    if not (reason or '').strip():
         raise ValueError('سبب إعادة الفتح مطلوب.')
-    with transaction.atomic():
-        close = DailyClose.objects.select_for_update().get(pk=close.pk)
-        DailyCloseRevision.objects.create(daily_close=close, revision_type='before_reopen', snapshot=close_snapshot(close), reason=reason, created_by=user)
-        close.status = DailyClose.Status.REOPENED; close.reopened_by=user; close.reopened_at=timezone.now(); close.reopen_reason=reason
-        close.save(update_fields=['status','reopened_by','reopened_at','reopen_reason','updated_at'])
-        ActivityLog.objects.create(actor=user, action='daily_close_reopened', details={'daily_close_id': close.id, 'business_date': close.business_date.isoformat(), 'reason': reason})
-        return close
+    context = PostingContext(actor=user, approver=user, business_date=close.business_date,
+                             idempotency_key=f'compat-reopen:{close.pk}:{close.updated_at.isoformat()}')
+    return closing.reopen(close, context, reason)

@@ -1,13 +1,19 @@
 from django.apps import apps
 from django.db import IntegrityError, transaction
 
-from core.models import DailyClose, PostingCommand
+from core.models import DailyClose, FinancialAccount, PostingCommand
 from .exceptions import ClosedPeriodError, IdempotencyConflict
 
 
-def ensure_period_open(business_date):
-    close = DailyClose.objects.select_for_update().filter(business_date=business_date).first()
-    if close and close.status == DailyClose.Status.CLOSED and close.is_finalized:
+def ensure_period_open(business_date, account=None):
+    """Lock the relevant account and its period close before allowing a posting."""
+    account_id = getattr(account, 'pk', account)
+    if account_id:
+        FinancialAccount.objects.select_for_update().get(pk=account_id)
+    closes = DailyClose.objects.select_for_update().filter(business_date=business_date, is_finalized=True)
+    if account_id:
+        closes = closes.filter(account_id=account_id)
+    if closes.filter(status=DailyClose.Status.CLOSED).exists():
         raise ClosedPeriodError(f'تاريخ العمل {business_date} مغلق.')
 
 
@@ -40,7 +46,14 @@ def dispatch(command, source, context, handler, *, allow_closed=False):
             return _existing(receipt)
         locked = lock_instance(source) if getattr(source, 'pk', None) else source
         if not allow_closed:
-            ensure_period_open(context.date_for(locked))
+            accounts = [getattr(locked, name, None) for name in
+                        ('financial_account', 'source_account', 'destination_account', 'account')]
+            accounts = [account for account in accounts if account is not None]
+            if accounts:
+                for account in accounts:
+                    ensure_period_open(context.date_for(locked), account)
+            else:
+                ensure_period_open(context.date_for(locked))
         try:
             receipt = PostingCommand.objects.create(
                 key=context.idempotency_key, command=command,
