@@ -676,6 +676,8 @@ class CashMovement(TimeStampedModel):
     class Direction(models.TextChoices):
         IN='in','دخول'; OUT='out','خروج'
     business_date = models.DateField('تاريخ العمل')
+    financial_account = models.ForeignKey('FinancialAccount', on_delete=models.PROTECT, null=True, blank=True,
+                                          related_name='cash_movements')
     movement_type = models.CharField(max_length=30, choices=MovementType.choices)
     direction = models.CharField(max_length=5, choices=Direction.choices)
     amount_syp = models.DecimalField('المبلغ', max_digits=20, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
@@ -957,9 +959,11 @@ class ProductionBatchIngredient(TimeStampedModel):
 class DailyClose(TimeStampedModel):
     class Status(models.TextChoices):
         OPEN='open','مفتوح'; CLOSED='closed','مغلق'; REOPENED='reopened','أعيد فتحه'
-    business_date = models.DateField(unique=True, verbose_name='تاريخ العمل')
+    account = models.ForeignKey('FinancialAccount', on_delete=models.PROTECT, null=True, blank=True,
+                                related_name='period_closes', verbose_name='الحساب المالي')
+    business_date = models.DateField(verbose_name='تاريخ العمل')
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.CLOSED)
-    opening_cash_syp = models.PositiveIntegerField(default=0, verbose_name='النقد الافتتاحي')
+    opening_cash_syp = models.IntegerField(default=0, verbose_name='النقد الافتتاحي')
     cash_sales_syp = models.PositiveIntegerField(default=0, verbose_name='مبيعات نقدية')
     non_cash_sales_syp = models.PositiveIntegerField(default=0, verbose_name='مبيعات غير نقدية')
     total_payments_syp = models.PositiveIntegerField(default=0, verbose_name='إجمالي الدفعات')
@@ -968,20 +972,22 @@ class DailyClose(TimeStampedModel):
     discounts_syp = models.PositiveIntegerField(default=0, verbose_name='الخصومات')
     cancelled_orders_syp = models.PositiveIntegerField(default=0, verbose_name='قيمة الطلبات الملغاة')
     refunds_or_reversals_syp = models.PositiveIntegerField(default=0, verbose_name='المسترد/المعكوس')
-    expected_cash_syp = models.PositiveIntegerField(default=0, verbose_name='النقد المتوقع')
+    expected_cash_syp = models.IntegerField(default=0, verbose_name='النقد المتوقع')
     actual_cash_counted_syp = models.PositiveIntegerField(default=0, verbose_name='النقد الفعلي')
     cash_difference_syp = models.IntegerField(default=0, verbose_name='الفرق')
     notes = models.TextField(blank=True)
     closed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='daily_closes')
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_daily_closes')
     closed_at = models.DateTimeField(null=True, blank=True)
     is_finalized = models.BooleanField(default=True)
     reopened_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='reopened_daily_closes')
     reopened_at = models.DateTimeField(null=True, blank=True)
     reopen_reason = models.TextField(blank=True)
+    close_snapshot = models.JSONField(default=dict, blank=True, editable=False)
 
     class Meta:
         permissions = [('view_finance_dashboard','Can view finance dashboard'), ('close_business_day','Can close business day'), ('reopen_business_day','Can reopen business day')]
-        constraints = [models.UniqueConstraint(fields=['business_date'], condition=Q(is_finalized=True), name='unique_finalized_daily_close_per_date')]
+        constraints = [models.UniqueConstraint(fields=['account', 'business_date'], condition=Q(is_finalized=True), name='unique_active_close_per_account_date')]
 
     def __str__(self):
         return f'إغلاق اليوم {self.business_date}'
@@ -1366,6 +1372,9 @@ class InternetSession(TimeStampedModel, PublicCodeModel):
 
 
 class Shift(TimeStampedModel, PublicCodeModel):
+    cashbox = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, null=True, blank=True, related_name='shifts')
+    opening_amount_syp = models.IntegerField(null=True, blank=True)
+    counted_amount_syp = models.IntegerField(null=True, blank=True)
     opened_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='opened_shifts')
     closed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='closed_shifts', null=True, blank=True)
     opened_at = models.DateTimeField()
