@@ -33,7 +33,38 @@ from .models import (
     Shift,
     SystemSetting,
     TableArea,
+    ExchangeRate, CurrencyEntrySnapshot,
 )
+
+
+@admin.register(ExchangeRate)
+class ExchangeRateAdmin(admin.ModelAdmin):
+    list_display = ('direction', 'effective_date', 'source', 'created_by', 'created_at', 'superseded_by')
+    list_filter = ('effective_date', 'foreign_currency')
+    readonly_fields = ('base_currency', 'created_by', 'created_at', 'updated_at', 'direction')
+    fields = ('direction', 'base_currency', 'foreign_currency', 'rate_to_base', 'effective_date', 'source', 'note',
+              'superseded_by', 'created_by', 'created_at', 'updated_at')
+
+    @admin.display(description='اتجاه سعر الصرف')
+    def direction(self, obj):
+        return f'1 USD = {obj.rate_to_base if obj else "___"} ل.س جديدة'
+
+    def save_model(self, request, obj, form, change):
+        if change:
+            raise ValidationError('لا تعدّل السعر التاريخي؛ أنشئ سجلاً جديداً واربط القديم عبر «تم استبداله بـ».')
+        obj.created_by = request.user
+        obj.full_clean()
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(CurrencyEntrySnapshot)
+class CurrencyEntrySnapshotAdmin(admin.ModelAdmin):
+    list_display = ('operation', 'source_object_id', 'original_amount', 'transaction_currency',
+                    'exchange_rate_to_base', 'base_amount_syp', 'risk_level', 'confirmed_by', 'created_at')
+    list_filter = ('transaction_currency', 'risk_level', 'operation', 'created_at')
+    readonly_fields = tuple(f.name for f in CurrencyEntrySnapshot._meta.fields)
+    def has_add_permission(self, request): return False
+    def has_delete_permission(self, request, obj=None): return False
 
 
 class SuperuserEditOnlyAdmin(admin.ModelAdmin):

@@ -129,3 +129,16 @@ PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', '')
 
 # A second, manager-level user must approve transfers at or above this amount.
 TRANSFER_APPROVAL_LIMIT_SYP = int(os.getenv('TRANSFER_APPROVAL_LIMIT_SYP', '1000000'))
+
+# Currency safety values are reporting values in the new Syrian pound.  They are
+# review levels, not transaction limits, and may be overridden per operation.
+CURRENCY_RATE_MAX_AGE_DAYS = int(os.getenv('CURRENCY_RATE_MAX_AGE_DAYS', '3'))
+CURRENCY_RISK_THRESHOLDS = {
+    'default': {'warning': '5000', 'acknowledgment': '10000', 'manager': '50000'},
+    'product': {'warning': '5000', 'acknowledgment': '10000', 'manager': '50000'},
+    'payment': {'warning': '5000', 'acknowledgment': '10000', 'manager': '50000'},
+    'purchase': {'warning': '5000', 'acknowledgment': '10000', 'manager': '50000'},
+    'expense': {'warning': '5000', 'acknowledgment': '10000', 'manager': '50000'},
+    'transfer': {'warning': '5000', 'acknowledgment': '10000', 'manager': '50000'},
+    'cash_closing': {'warning': '5000', 'acknowledgment': '10000', 'manager': '50000'},
+}

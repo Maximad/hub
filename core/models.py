@@ -1257,6 +1257,84 @@ class AuditEvent(models.Model):
         raise ValidationError('Audit events are immutable and cannot be deleted.')
 
 
+class ExchangeRate(TimeStampedModel):
+    """Append-only published rate, expressed as new SYP for one foreign unit."""
+    base_currency = models.CharField(max_length=8, default='SYP_NEW', editable=False)
+    foreign_currency = models.CharField(max_length=8, default='USD')
+    rate_to_base = models.DecimalField(max_digits=20, decimal_places=8)
+    effective_date = models.DateField(db_index=True)
+    source = models.CharField(max_length=200, blank=True)
+    note = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+                                   related_name='created_exchange_rates')
+    superseded_by = models.OneToOneField('self', on_delete=models.PROTECT, null=True, blank=True,
+                                        related_name='supersedes')
+
+    class Meta:
+        ordering = ['-effective_date', '-created_at']
+        permissions = [
+            ('view_exchange_rates', 'Can view exchange rates'),
+            ('create_today_exchange_rate', "Can create today's exchange rate"),
+            ('correct_exchange_rate', 'Can supersede an exchange rate'),
+            ('use_stale_exchange_rate', 'Can use a stale exchange rate'),
+            ('approve_high_risk_amount', 'Can approve high-risk amounts'),
+            ('perform_currency_conversion', 'Can perform currency conversions'),
+            ('view_usd_balances', 'Can view USD balances'),
+        ]
+        constraints = [models.CheckConstraint(condition=Q(rate_to_base__gte=1), name='exchange_rate_not_reciprocal')]
+
+    def clean(self):
+        if self.base_currency != 'SYP_NEW' or self.foreign_currency != 'USD':
+            raise ValidationError('الاتجاه المدعوم هو: 1 USD = ___ ل.س جديدة.')
+        if self.rate_to_base is None or self.rate_to_base < 1:
+            raise ValidationError({'rate_to_base': 'أدخل عدد الليرات الجديدة لكل دولار؛ السعر الصفري أو المقلوب غير مقبول.'})
+        if self.pk and type(self).objects.filter(pk=self.pk).exists():
+            old = type(self).objects.get(pk=self.pk)
+            immutable = ('rate_to_base', 'effective_date', 'source', 'note', 'foreign_currency')
+            if any(getattr(old, f) != getattr(self, f) for f in immutable):
+                raise ValidationError('سجل السعر تاريخي وغير قابل للتعديل؛ أنشئ تصحيحاً يسجّل كسجل جديد.')
+
+    def __str__(self):
+        return f'1 USD = {self.rate_to_base.normalize()} ل.س جديدة ({self.effective_date})'
+
+
+class CurrencyEntrySnapshot(TimeStampedModel):
+    """Immutable currency facts attached to any source transaction without another posting."""
+    source_content_type = models.ForeignKey(ContentType, on_delete=models.PROTECT)
+    source_object_id = models.CharField(max_length=80)
+    source = GenericForeignKey('source_content_type', 'source_object_id')
+    operation = models.CharField(max_length=60)
+    field_name = models.CharField(max_length=80)
+    transaction_currency = models.CharField(max_length=8, default='SYP_NEW')
+    settlement_currency = models.CharField(max_length=8, default='SYP_NEW')
+    original_amount = models.DecimalField(max_digits=20, decimal_places=2)
+    exchange_rate_to_base = models.DecimalField(max_digits=20, decimal_places=8, default=1)
+    base_amount_syp = models.DecimalField(max_digits=20, decimal_places=2)
+    exchange_rate_record = models.ForeignKey(ExchangeRate, on_delete=models.PROTECT, null=True, blank=True)
+    rate_effective_date = models.DateField(null=True, blank=True)
+    rate_source_snapshot = models.CharField(max_length=200, blank=True)
+    rate_selected_automatically = models.BooleanField(default=True)
+    confirmed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+                                     related_name='confirmed_currency_entries')
+    risk_level = models.CharField(max_length=32, default='normal')
+    risk_reason_codes = models.JSONField(default=list, blank=True)
+    suggested_amount = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
+    equivalent_old_syp = models.DecimalField(max_digits=22, decimal_places=2, null=True, blank=True)
+    thresholds_applied = models.JSONField(default=dict, blank=True)
+    acknowledged = models.BooleanField(default=False)
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+                                    related_name='approved_currency_entries')
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['source_content_type', 'source_object_id', 'operation', 'field_name'],
+                                                name='one_currency_snapshot_per_source_field')]
+
+    def save(self, *args, **kwargs):
+        if self.pk and type(self).objects.filter(pk=self.pk).exists():
+            raise ValidationError('لقطة العملة غير قابلة للتعديل.')
+        return super().save(*args, **kwargs)
+
+
 class Member(TimeStampedModel, PublicCodeModel):
     name_ar = models.CharField(max_length=120)
     name_en = models.CharField(max_length=120, blank=True)
