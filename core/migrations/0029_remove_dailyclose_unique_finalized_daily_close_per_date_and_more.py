@@ -17,16 +17,15 @@ class Migration(migrations.Migration):
             model_name="dailyclose",
             name="unique_finalized_daily_close_per_date",
         ),
-        migrations.AddField(
-            model_name="cashmovement",
-            name="financial_account",
-            field=models.ForeignKey(
-                blank=True,
-                null=True,
-                on_delete=django.db.models.deletion.PROTECT,
-                related_name="cash_movements",
-                to="core.financialaccount",
-            ),
+        # The sibling transfer migration creates this same database column. Keep
+        # this branch's historical model state without attempting a duplicate ADD.
+        migrations.SeparateDatabaseAndState(
+            database_operations=[],
+            state_operations=[migrations.AddField(
+                model_name="cashmovement", name="financial_account",
+                field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT,
+                    related_name="cash_movements", to="core.financialaccount"),
+            )],
         ),
         migrations.AddField(
             model_name="dailyclose",

@@ -1034,6 +1034,33 @@ class PostingReconciliationFailure(TimeStampedModel):
         constraints = [models.UniqueConstraint(fields=['record_type', 'record_id'], name='unique_posting_bypass_failure')]
 
 
+class FinanceReconciliationState(TimeStampedModel):
+    """Durable cursor for an explicitly requested reconciliation backfill."""
+    operation = models.CharField(max_length=80)
+    record_type = models.CharField(max_length=80)
+    record_id = models.CharField(max_length=80)
+    status = models.CharField(max_length=20, default='completed')
+    details = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(
+            fields=['operation', 'record_type', 'record_id'], name='unique_finance_reconciliation_step')]
+
+
+class FinanceReviewItem(TimeStampedModel):
+    """Persistent human review queue; reconciliation never guesses identities."""
+    issue_code = models.CharField(max_length=80)
+    record_type = models.CharField(max_length=80)
+    record_id = models.CharField(max_length=80)
+    reason = models.TextField()
+    details = models.JSONField(default=dict, blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(
+            fields=['issue_code', 'record_type', 'record_id'], name='unique_open_finance_review_item')]
+
+
 class FinancialAccount(TimeStampedModel):
     """Stable-code ledger account; display names are deliberately not identifiers."""
 
