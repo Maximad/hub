@@ -1,5 +1,6 @@
 import csv
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q, Sum
@@ -10,8 +11,8 @@ from accounts.permissions import require_staff_capability, can_approve_partial_p
 from catalog.models import MediaAsset
 from core.finance import finance_summary_for_date, current_business_date
 from core.services.posting.context import PostingContext
-from core.services.posting import expenses as expense_posting, purchases as purchase_posting, closing as closing_posting
-from core.models import ActivityLog, CashMovement, DailyClose, Expense, ExpenseCategory, FinancialAccount, InventoryItem, Purchase, PurchaseItem, StockMovement
+from core.services.posting import expenses as expense_posting, purchases as purchase_posting, closing as closing_posting, transfers as transfer_posting
+from core.models import ActivityLog, CashMovement, DailyClose, Expense, ExpenseCategory, FinancialAccount, InventoryItem, Purchase, PurchaseItem, StockMovement, Transfer
 from core.views_legacy import DAMASCUS_TZ, _build_day_report, _parse_report_date
 from vendors.models import Vendor
 
@@ -117,6 +118,46 @@ def staff_cashbox_new(request):
             else:
                 messages.success(request,'تم حفظ حركة الصندوق.'); return redirect('staff_finance_cashbox')
     return render(request,'staff/finance_cashbox_form.html',{'types':CashMovement.MovementType.choices,'directions':CashMovement.Direction.choices,'vendors':Vendor.objects.all(),'expenses':Expense.objects.exclude(status=Expense.Status.CANCELLED)[:100],'today':timezone.now().date(),'errors':errors,'form_values':request.POST})
+
+@require_staff_capability('finance')
+def staff_transfers(request):
+    transfers=Transfer.objects.select_related('source_account','destination_account','actor','approver').order_by('-business_date','-created_at')[:300]
+    return render(request,'staff/finance_transfers.html',{'transfers':transfers,'business_date':current_business_date()})
+
+@require_staff_capability('finance')
+def staff_transfer_new(request):
+    errors=[]
+    if request.method == 'POST':
+        transfer=Transfer(source_account_id=request.POST.get('source_account'), destination_account_id=request.POST.get('destination_account'), amount=_dec(request.POST.get('amount')), business_date=_parse_report_date(request.POST.get('business_date')), reason=request.POST.get('reason','').strip(), actor=request.user)
+        approver=get_user_model().objects.filter(pk=request.POST.get('approver') or None).first()
+        try:
+            transfer_posting.post(transfer, _posting_context(request, transfer.business_date, approver))
+        except Exception as error:
+            errors.extend(_validation_messages(error))
+        else:
+            messages.success(request,'تم ترحيل التحويل بقيد متوازن وحركتين مترابطتين.')
+            return redirect('staff_finance_transfer_detail', transfer_id=transfer.pk)
+    accounts=FinancialAccount.objects.filter(is_active=True).order_by('code')
+    approvers=get_user_model().objects.filter(Q(is_superuser=True)|Q(role='admin'), is_active=True).exclude(pk=request.user.pk).order_by('username')
+    return render(request,'staff/finance_transfer_form.html',{'accounts':accounts,'approvers':approvers,'approval_limit':transfer_posting.approval_limit(),'today':current_business_date(),'errors':errors,'form_values':request.POST,'business_date':current_business_date()})
+
+@require_staff_capability('finance')
+def staff_transfer_detail(request, transfer_id):
+    transfer=get_object_or_404(Transfer.objects.select_related('source_account','destination_account','actor','approver','posting_batch','reversal_batch').prefetch_related('movement_projections'), pk=transfer_id)
+    return render(request,'staff/finance_transfer_detail.html',{'transfer':transfer,'business_date':current_business_date()})
+
+@require_staff_capability('finance')
+def staff_transfer_reverse(request, transfer_id):
+    transfer=get_object_or_404(Transfer, pk=transfer_id); errors=[]
+    if request.method == 'POST':
+        try:
+            transfer_posting.reverse(transfer, _posting_context(request, transfer.business_date), request.POST.get('reason',''))
+        except Exception as error:
+            errors.extend(_validation_messages(error))
+        else:
+            messages.success(request,'تم عكس التحويل كاملاً بقيد عكسي واحد.')
+            return redirect('staff_finance_transfer_detail', transfer_id=transfer.pk)
+    return render(request,'staff/finance_confirm.html',{'title':'عكس التحويل','message':'سيُعكس طرفا التحويل معاً بقيد واحد، ولا يمكن إلغاء طرف منفرد.','require_reason':True,'errors':errors,'business_date':current_business_date()})
 
 @require_staff_capability('finance')
 def staff_expenses_csv(request):

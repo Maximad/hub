@@ -126,3 +126,6 @@ MEMBER_DEVICE_COOKIE_AGE = int(os.getenv('MEMBER_DEVICE_COOKIE_AGE', 60 * 60 * 2
 MEMBER_ACTIVATION_TOKEN_AGE = int(os.getenv('MEMBER_ACTIVATION_TOKEN_AGE', 60 * 60 * 24 * 7))
 MEMBER_DEVICE_COOKIE_SECURE = os.getenv('MEMBER_DEVICE_COOKIE_SECURE', str(not DEBUG)).lower() == 'true'
 PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', '')
+
+# A second, manager-level user must approve transfers at or above this amount.
+TRANSFER_APPROVAL_LIMIT_SYP = int(os.getenv('TRANSFER_APPROVAL_LIMIT_SYP', '1000000'))
