@@ -753,7 +753,6 @@ class Purchase(TimeStampedModel):
     subtotal_syp = models.DecimalField(max_digits=14, decimal_places=2, default=0, validators=[MinValueValidator(0)])
     discount_syp = models.DecimalField(max_digits=14, decimal_places=2, default=0, validators=[MinValueValidator(0)])
     total_syp = models.DecimalField(max_digits=14, decimal_places=2, default=0, validators=[MinValueValidator(0)])
-    amount_paid_syp = models.DecimalField('المبلغ المدفوع', max_digits=14, decimal_places=2, default=0, validators=[MinValueValidator(0)])
     related_expense = models.ForeignKey(Expense, on_delete=models.SET_NULL, null=True, blank=True, related_name='inventory_purchases')
     receipt_media = models.ForeignKey('catalog.MediaAsset', on_delete=models.SET_NULL, null=True, blank=True, related_name='purchase_receipts', verbose_name='إيصال')
     notes = models.TextField(blank=True)
@@ -766,6 +765,9 @@ class Purchase(TimeStampedModel):
     class Meta:
         ordering=['-business_date','-created_at']; verbose_name='عملية شراء'; verbose_name_plural='المشتريات'
         permissions = [('receive_purchase','Can receive purchase')]
+    @property
+    def amount_paid_syp(self):
+        return self.payments.filter(reversed_at__isnull=True).aggregate(total=models.Sum('amount_syp'))['total'] or Decimal('0')
     @property
     def remaining_syp(self): return max(self.total_syp - self.amount_paid_syp, 0)
     @property
@@ -795,6 +797,48 @@ class PurchaseItem(TimeStampedModel):
         super().save(*args,**kwargs)
     def __str__(self): return f'{self.inventory_item} × {self.quantity}'
 
+class PurchaseReceipt(TimeStampedModel):
+    purchase = models.ForeignKey(Purchase, on_delete=models.PROTECT, related_name='receipts')
+    business_date = models.DateField()
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='purchase_receipts')
+    idempotency_key = models.CharField(max_length=160, unique=True)
+    reversed_at = models.DateTimeField(null=True, blank=True)
+    reversed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='reversed_purchase_receipts')
+    reversal_reason = models.TextField(blank=True)
+
+class PurchaseReceiptLine(TimeStampedModel):
+    receipt = models.ForeignKey(PurchaseReceipt, on_delete=models.PROTECT, related_name='lines')
+    purchase_item = models.ForeignKey(PurchaseItem, on_delete=models.PROTECT, related_name='receipt_lines')
+    received_quantity = models.DecimalField(max_digits=12, decimal_places=3, validators=[MinValueValidator(Decimal('0.001'))])
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['receipt', 'purchase_item'], name='unique_purchase_item_per_receipt')]
+
+class PurchasePayment(TimeStampedModel):
+    purchase = models.ForeignKey(Purchase, on_delete=models.PROTECT, related_name='payments')
+    amount_syp = models.DecimalField(max_digits=14, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
+    source_account = models.ForeignKey('FinancialAccount', on_delete=models.PROTECT, related_name='purchase_payments')
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='purchase_payments')
+    approver = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_purchase_payments')
+    business_date = models.DateField()
+    idempotency_key = models.CharField(max_length=160, unique=True)
+    posting_batch = models.OneToOneField('PostingBatch', on_delete=models.PROTECT, related_name='purchase_payment')
+    reversed_at = models.DateTimeField(null=True, blank=True)
+    reversal_batch = models.OneToOneField('PostingBatch', on_delete=models.PROTECT, null=True, blank=True, related_name='reversed_purchase_payment')
+
+class PurchaseReturn(TimeStampedModel):
+    purchase = models.ForeignKey(Purchase, on_delete=models.PROTECT, related_name='returns')
+    business_date = models.DateField()
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='purchase_returns')
+    idempotency_key = models.CharField(max_length=160, unique=True)
+    reason = models.TextField()
+    reversed_at = models.DateTimeField(null=True, blank=True)
+
+class PurchaseReturnLine(TimeStampedModel):
+    purchase_return = models.ForeignKey(PurchaseReturn, on_delete=models.PROTECT, related_name='lines')
+    receipt_line = models.ForeignKey(PurchaseReceiptLine, on_delete=models.PROTECT, null=True, blank=True, related_name='return_lines')
+    purchase_item = models.ForeignKey(PurchaseItem, on_delete=models.PROTECT, related_name='return_lines')
+    returned_quantity = models.DecimalField(max_digits=12, decimal_places=3, validators=[MinValueValidator(Decimal('0.001'))])
+
 class StockMovement(TimeStampedModel):
     class MovementType(models.TextChoices):
         PURCHASE_RECEIVED='purchase_received','استلام شراء'; MANUAL_ADJUSTMENT='manual_adjustment','تعديل يدوي'; WASTE='waste','هدر'; INTERNAL_USE='internal_use','استخدام داخلي'; RETURN_TO_VENDOR='return_to_vendor','إرجاع للمورد'; CORRECTION='correction','تصحيح'; OPENING_BALANCE='opening_balance','رصيد افتتاحي'; SALE_DEDUCTION='sale_deduction','خصم بيع'; PRODUCTION_CONSUMPTION='production_consumption','استهلاك تحضير'; PRODUCTION_OUTPUT='production_output','إنتاج تحضير'; SALE_RETURN='sale_return','إرجاع خصم بيع'; OTHER='other','أخرى'
@@ -809,6 +853,8 @@ class StockMovement(TimeStampedModel):
     total_value_syp = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
     related_purchase = models.ForeignKey(Purchase, on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
     related_purchase_item = models.ForeignKey(PurchaseItem, on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
+    purchase_receipt_line = models.OneToOneField(PurchaseReceiptLine, on_delete=models.PROTECT, null=True, blank=True, related_name='stock_movement')
+    purchase_return_line = models.OneToOneField(PurchaseReturnLine, on_delete=models.PROTECT, null=True, blank=True, related_name='stock_movement')
     related_expense = models.ForeignKey(Expense, on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
     related_order = models.ForeignKey(Order, on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
     related_order_item = models.ForeignKey('OrderItem', on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
@@ -825,7 +871,6 @@ class StockMovement(TimeStampedModel):
             models.CheckConstraint(condition=Q(quantity__gt=0), name='stock_movement_quantity_positive', violation_error_message='كمية حركة المخزون يجب أن تكون موجبة.'),
             models.CheckConstraint(condition=Q(direction__in=['in', 'out']), name='stock_movement_direction_valid', violation_error_message='اتجاه حركة المخزون غير صالح.'),
             models.CheckConstraint(condition=Q(is_cancelled=False, cancellation_reason='') | Q(is_cancelled=True, cancellation_reason__gt=''), name='stock_movement_cancel_fields_consistent', violation_error_message='حقول إلغاء حركة المخزون غير متناسقة.'),
-            models.UniqueConstraint(fields=['related_purchase_item'], condition=Q(related_purchase_item__isnull=False, movement_type='purchase_received', is_cancelled=False), name='unique_stock_receipt_per_purchase_line', violation_error_message='تم استلام بند الشراء هذا مسبقاً.'),
         ]
     def clean(self):
         if self.movement_type in {self.MovementType.WASTE,self.MovementType.CORRECTION} and not (self.reason or '').strip(): raise ValidationError({'reason':'سبب الحركة مطلوب للهدر أو التصحيح.'})

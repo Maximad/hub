@@ -44,7 +44,7 @@ class Command(BaseCommand):
         self.report('cash_movements_invalid_amount', CashMovement.objects.filter(amount_syp__lt=1))
         self.report('inventory_negative_quantity', InventoryItem.objects.filter(current_quantity__lt=0))
         self.report('stock_movements_invalid_quantity', StockMovement.objects.filter(quantity__lte=0))
-        self.report('purchases_invalid_totals', Purchase.objects.filter(Q(total_syp__lt=0) | Q(discount_syp__gt=F('subtotal_syp')) | Q(amount_paid_syp__lt=0)))
+        self.report('purchases_invalid_totals', Purchase.objects.filter(Q(total_syp__lt=0) | Q(discount_syp__gt=F('subtotal_syp'))))
         self.report('notifications_without_event_context', NotificationEvent.objects.filter(order__isnull=True, order_item__isnull=True, target_role='', target_station__isnull=True))
         self.report('delivery_orders_missing_phone_or_address', Order.objects.filter(fulfillment_mode=Order.FulfillmentMode.DELIVERY).filter(Q(delivery_phone='') | Q(delivery_address='')))
         self.report('products_sold_missing_cost_when_costing_enabled', OrderItem.objects.filter(product__estimated_unit_cost_syp__isnull=True).values('product').distinct() if costing_enabled else 0)

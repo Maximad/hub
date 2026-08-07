@@ -77,7 +77,8 @@ def close_snapshot(close):
 def purchase_totals_for_date(day):
     from core.models import Purchase
     qs = Purchase.objects.filter(business_date=day).exclude(status=Purchase.Status.CANCELLED)
-    return qs.aggregate(total=Sum('total_syp'), paid=Sum('amount_paid_syp'))
+    purchases = list(qs)
+    return {'total': sum((p.total_syp for p in purchases), 0), 'paid': sum((p.amount_paid_syp for p in purchases), 0)}
 
 
 def build_close_values(day, actual_cash_counted_syp=0, notes='', opening_cash_syp=None):
