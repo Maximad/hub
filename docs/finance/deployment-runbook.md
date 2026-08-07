@@ -123,6 +123,7 @@ totals by account and business date. Then run read-only checks:
 
 ```bash
 $DC exec -T web python manage.py reconcile_postings
+$DC exec -T web python manage.py reconcile_finance --scope=expenses --check --format=json
 $DC exec -T web python manage.py reconcile_finance --check --format=json \
   | tee reconciliation-before.json
 ```
