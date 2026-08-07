@@ -678,7 +678,7 @@ class CashMovement(TimeStampedModel):
     business_date = models.DateField('تاريخ العمل')
     movement_type = models.CharField(max_length=30, choices=MovementType.choices)
     direction = models.CharField(max_length=5, choices=Direction.choices)
-    amount_syp = models.PositiveIntegerField('المبلغ', validators=[MinValueValidator(1)])
+    amount_syp = models.DecimalField('المبلغ', max_digits=20, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
     related_expense = models.ForeignKey(Expense, on_delete=models.SET_NULL, null=True, blank=True, related_name='cash_movements')
     related_order = models.ForeignKey(Order, on_delete=models.SET_NULL, null=True, blank=True, related_name='cash_movements')
     related_payment = models.ForeignKey(Payment, on_delete=models.SET_NULL, null=True, blank=True, related_name='cash_movements')
@@ -687,6 +687,9 @@ class CashMovement(TimeStampedModel):
     notes = models.TextField(blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_cash_movements')
     approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_cash_movements')
+    transfer = models.ForeignKey('Transfer', on_delete=models.PROTECT, null=True, blank=True, related_name='movement_projections')
+    financial_account = models.ForeignKey('FinancialAccount', on_delete=models.PROTECT, null=True, blank=True, related_name='cash_movement_projections')
+    transfer_leg = models.CharField(max_length=20, blank=True)
     is_cancelled = models.BooleanField(default=False)
     is_generated = models.BooleanField(default=False)
     cancellation_reason = models.TextField('سبب الإلغاء', blank=True)
@@ -698,8 +701,11 @@ class CashMovement(TimeStampedModel):
             models.CheckConstraint(condition=Q(direction__in=['in', 'out']), name='cash_movement_direction_valid', violation_error_message='اتجاه حركة الصندوق غير صالح.'),
             models.CheckConstraint(condition=Q(is_cancelled=False, cancellation_reason='') | Q(is_cancelled=True, cancellation_reason__gt=''), name='cash_movement_cancel_fields_consistent', violation_error_message='حقول إلغاء حركة الصندوق غير متناسقة.'),
             models.UniqueConstraint(fields=['related_expense'], condition=Q(related_expense__isnull=False, is_cancelled=False, is_generated=True), name='unique_active_generated_expense_cash_movement', violation_error_message='يوجد بالفعل قيد صندوق مولد نشط لهذا المصروف.'),
+            models.UniqueConstraint(fields=['transfer', 'transfer_leg'], condition=Q(transfer__isnull=False), name='unique_transfer_movement_leg'),
         ]
     def clean(self):
+        if self.transfer_id and (not self.is_generated or not self.financial_account_id or self.transfer_leg not in {'outgoing', 'incoming', 'reversal_outgoing', 'reversal_incoming'}):
+            raise ValidationError('حركة التحويل يجب أن تكون إسقاطاً مولداً مرتبطاً بحساب وطرف تحويل صالح.')
         if self.movement_type == self.MovementType.CASH_CORRECTION and not (self.notes or '').strip():
             raise ValidationError({'notes':'سبب التصحيح مطلوب.'})
         if self.is_cancelled and not (self.cancellation_reason or '').strip():
@@ -1155,12 +1161,17 @@ class Transfer(TimeStampedModel):
         REVERSED = 'reversed', 'Reversed'
         CANCELLED = 'cancelled', 'Cancelled'
 
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     source_account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, related_name='outgoing_transfers')
     destination_account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, related_name='incoming_transfers')
     amount = models.DecimalField(max_digits=20, decimal_places=2)
     state = models.CharField(max_length=12, choices=State.choices, default=State.DRAFT)
     business_date = models.DateField()
+    reason = models.TextField(blank=True)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name='created_transfers')
+    approver = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name='approved_transfers')
     posting_batch = models.OneToOneField(PostingBatch, on_delete=models.PROTECT, null=True, blank=True, related_name='transfer')
+    reversal_batch = models.OneToOneField(PostingBatch, on_delete=models.PROTECT, null=True, blank=True, related_name='reversed_transfer')
 
     class Meta:
         constraints = [
@@ -1172,6 +1183,15 @@ class Transfer(TimeStampedModel):
                 name='transfer_valid_state_batch',
             ),
         ]
+
+    def clean(self):
+        super().clean()
+        if self.source_account_id and not self.source_account.is_active:
+            raise ValidationError({'source_account': 'يجب أن يكون حساب المصدر فعالاً.'})
+        if self.destination_account_id and not self.destination_account.is_active:
+            raise ValidationError({'destination_account': 'يجب أن يكون حساب الوجهة فعالاً.'})
+        if not (self.reason or '').strip():
+            raise ValidationError({'reason': 'سبب التحويل مطلوب.'})
 
 
 class AuditEvent(models.Model):

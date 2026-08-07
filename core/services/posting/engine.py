@@ -38,7 +38,8 @@ def dispatch(command, source, context, handler, *, allow_closed=False):
             if receipt.command != command:
                 raise IdempotencyConflict('مفتاح idempotency مستخدم لأمر آخر.')
             return _existing(receipt)
-        locked = lock_instance(source) if getattr(source, 'pk', None) else source
+        # UUID primary keys exist before the first save; they are not lockable rows yet.
+        locked = lock_instance(source) if getattr(source, 'pk', None) and not source._state.adding else source
         if not allow_closed:
             ensure_period_open(context.date_for(locked))
         try:

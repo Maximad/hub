@@ -93,6 +93,10 @@ urlpatterns = [
     path('staff/finance/cashbox/', staff_cashbox, name='staff_finance_cashbox'),
     path('staff/finance/cashbox/new/', staff_cashbox_new, name='staff_finance_cashbox_new'),
     path('staff/finance/cashbox.csv', staff_cashbox_csv, name='staff_finance_cashbox_csv'),
+    path('staff/finance/transfers/', staff_transfers, name='staff_finance_transfers'),
+    path('staff/finance/transfers/new/', staff_transfer_new, name='staff_finance_transfer_new'),
+    path('staff/finance/transfers/<uuid:transfer_id>/', staff_transfer_detail, name='staff_finance_transfer_detail'),
+    path('staff/finance/transfers/<uuid:transfer_id>/reverse/', staff_transfer_reverse, name='staff_finance_transfer_reverse'),
 
     path('staff/inventory/', staff_inventory.staff_inventory_home, name='staff_inventory_home'),
     path('staff/inventory/items/', staff_inventory.staff_inventory_items, name='staff_inventory_items'),
