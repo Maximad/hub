@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib import admin
+from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.utils.html import format_html
@@ -9,6 +10,8 @@ from catalog.models import ProductMedia, ProductOptionGroupAssignment
 from .settings_helpers import get_system_settings
 from .stock_recipes import calculate_recipe_cost, update_product_cost_from_recipe
 from .services.margins import product_unit_margin
+from .services.posting.context import PostingContext
+from .services.posting import expenses as expense_posting
 from .models import (
     ActivityLog,
     CancellationReason,
@@ -531,10 +534,37 @@ class ExpenseCategoryAdmin(admin.ModelAdmin):
 
 @admin.register(Expense)
 class ExpenseAdmin(ReadOnlyWorkflowAdmin):
-    list_display = ('business_date', 'title', 'category', 'amount_syp', 'payment_method', 'paid_from', 'status', 'vendor_supplier', 'created_by')
+    list_display = ('business_date', 'title', 'category', 'amount_syp', 'financial_account', 'liability_account', 'posting_state', 'posting_version', 'status', 'vendor_supplier', 'created_by')
     list_filter = ('business_date', 'category', 'payment_method', 'paid_from', 'status')
     search_fields = ('title', 'description', 'supplier_name', 'receipt_number')
     autocomplete_fields = ('category', 'vendor', 'receipt_media', 'created_by', 'approved_by', 'paid_by')
+    actions = ('approve_liability_action', 'pay_action', 'reverse_action')
+
+    def _context(self, request, expense, operation):
+        return PostingContext(actor=request.user, approver=request.user, business_date=expense.business_date,
+            idempotency_key=f'admin:expense:{expense.pk}:{operation}:{expense.posting_version}', channel='admin')
+
+    @admin.action(description='اعتماد المصروفات المحددة كالتزام')
+    def approve_liability_action(self, request, queryset):
+        for expense in queryset:
+            try: expense_posting.approve_liability(expense, self._context(request, expense, 'approve'), expense.liability_account)
+            except (ValidationError, ValueError) as error: self.message_user(request, str(error), messages.ERROR)
+
+    @admin.action(description='دفع المصروفات المحددة')
+    def pay_action(self, request, queryset):
+        for expense in queryset:
+            try:
+                context=self._context(request, expense, 'pay')
+                if expense.status == Expense.Status.APPROVED:
+                    expense_posting.settle_liability(expense, context, expense.financial_account, expense.payment_method)
+                else: expense_posting.pay_immediately(expense, context, expense.financial_account, expense.payment_method)
+            except (ValidationError, ValueError) as error: self.message_user(request, str(error), messages.ERROR)
+
+    @admin.action(description='عكس المصروفات المرحلة المحددة')
+    def reverse_action(self, request, queryset):
+        for expense in queryset:
+            try: expense_posting.reverse_posted_expense(expense, self._context(request, expense, 'reverse'), 'عكس من إجراء الإدارة')
+            except (ValidationError, ValueError) as error: self.message_user(request, str(error), messages.ERROR)
     @admin.display(description='البائع/المورد')
     def vendor_supplier(self, obj):
         return obj.supplier_label

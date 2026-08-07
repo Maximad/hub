@@ -613,6 +613,10 @@ class ExpenseCategory(TimeStampedModel):
         return _arabic_first(self, 'name_ar', 'name_en', fallback=self.code)
 
 class Expense(TimeStampedModel):
+    class PayeeType(models.TextChoices):
+        VENDOR='vendor','مورد مسجل'; MANUAL='manual','مستفيد يدوي'
+    class PostingState(models.TextChoices):
+        DRAFT='draft','Draft'; POSTED='posted','Posted'; REVERSED='reversed','Reversed'; CANCELLED='cancelled','Cancelled'
     class PaymentMethod(models.TextChoices):
         CASH='cash','نقداً'; CARD='card','بطاقة'; BANK_TRANSFER='bank_transfer','حوالة بنكية'; MOBILE_TRANSFER='mobile_transfer','تحويل موبايل'; CREDIT='credit','آجل'; OTHER='other','أخرى'
     class PaidFrom(models.TextChoices):
@@ -622,12 +626,20 @@ class Expense(TimeStampedModel):
     business_date = models.DateField('تاريخ العمل')
     category = models.ForeignKey(ExpenseCategory, on_delete=models.PROTECT, related_name='expenses', verbose_name='تصنيف المصروف')
     vendor = models.ForeignKey('vendors.Vendor', on_delete=models.SET_NULL, null=True, blank=True, related_name='expenses', verbose_name='البائع/المورد')
+    payee_type = models.CharField(max_length=12, choices=PayeeType.choices, default=PayeeType.MANUAL)
     supplier_name = models.CharField('البائع/المورد', max_length=160, blank=True)
     title = models.CharField('مصروف', max_length=180)
     description = models.TextField(blank=True)
     amount_syp = models.PositiveIntegerField('المبلغ', validators=[MinValueValidator(1)])
     payment_method = models.CharField('طريقة الدفع', max_length=30, choices=PaymentMethod.choices, blank=True)
     paid_from = models.CharField('مدفوع من', max_length=20, choices=PaidFrom.choices, default=PaidFrom.UNPAID)
+    financial_account = models.ForeignKey('FinancialAccount', on_delete=models.PROTECT, null=True, blank=True, related_name='paid_expenses')
+    liability_account = models.ForeignKey('FinancialAccount', on_delete=models.PROTECT, null=True, blank=True, related_name='liability_expenses')
+    posting_state = models.CharField(max_length=12, choices=PostingState.choices, default=PostingState.DRAFT)
+    posting_version = models.PositiveIntegerField(default=0)
+    approval_batch = models.ForeignKey('PostingBatch', on_delete=models.PROTECT, null=True, blank=True, related_name='approved_expenses')
+    payment_batch = models.ForeignKey('PostingBatch', on_delete=models.PROTECT, null=True, blank=True, related_name='paid_expenses')
+    reversal_batch = models.ForeignKey('PostingBatch', on_delete=models.PROTECT, null=True, blank=True, related_name='reversed_expenses')
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     receipt_media = models.ForeignKey('catalog.MediaAsset', on_delete=models.SET_NULL, null=True, blank=True, related_name='expense_receipts', verbose_name='إيصال')
     receipt_number = models.CharField('رقم الفاتورة', max_length=80, blank=True)
@@ -642,6 +654,8 @@ class Expense(TimeStampedModel):
         permissions = [('add_expense_staff','Can add expense from staff finance')]
         constraints = [models.CheckConstraint(condition=Q(amount_syp__gt=0), name='expense_amount_positive', violation_error_message='مبلغ المصروف يجب أن يكون موجباً.')]
     def clean(self):
+        if self.liability_account_id and self.liability_account.account_type != FinancialAccount.AccountType.LIABILITY:
+            raise ValidationError({'liability_account':'يجب اختيار حساب التزام.'})
         if self.status == self.Status.PAID and not self.payment_method:
             raise ValidationError({'payment_method':'طريقة الدفع مطلوبة للمصروف المدفوع.'})
         if self.status == self.Status.CANCELLED and not (self.cancellation_reason or '').strip():
@@ -650,7 +664,9 @@ class Expense(TimeStampedModel):
     def supplier_label(self):
         return str(self.vendor) if self.vendor_id else (self.supplier_name or '—')
     def affects_cashbox(self):
-        return self.status == self.Status.PAID and self.paid_from == self.PaidFrom.CASHBOX and self.payment_method == self.PaymentMethod.CASH
+        return (self.status == self.Status.PAID and self.payment_method == self.PaymentMethod.CASH and
+                ((self.financial_account_id and self.financial_account.scope == 'cashbox') or
+                 (not self.financial_account_id and self.paid_from == self.PaidFrom.CASHBOX)))
     def __str__(self):
         return f'{self.title} — {self.amount_syp} ل.س'
 
@@ -672,6 +688,7 @@ class CashMovement(TimeStampedModel):
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_cash_movements')
     approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_cash_movements')
     is_cancelled = models.BooleanField(default=False)
+    is_generated = models.BooleanField(default=False)
     cancellation_reason = models.TextField('سبب الإلغاء', blank=True)
     class Meta:
         ordering = ['-business_date','-created_at']
@@ -680,7 +697,7 @@ class CashMovement(TimeStampedModel):
             models.CheckConstraint(condition=Q(amount_syp__gt=0), name='cash_movement_amount_positive', violation_error_message='مبلغ حركة الصندوق يجب أن يكون موجباً.'),
             models.CheckConstraint(condition=Q(direction__in=['in', 'out']), name='cash_movement_direction_valid', violation_error_message='اتجاه حركة الصندوق غير صالح.'),
             models.CheckConstraint(condition=Q(is_cancelled=False, cancellation_reason='') | Q(is_cancelled=True, cancellation_reason__gt=''), name='cash_movement_cancel_fields_consistent', violation_error_message='حقول إلغاء حركة الصندوق غير متناسقة.'),
-            models.UniqueConstraint(fields=['related_expense'], condition=Q(related_expense__isnull=False, is_cancelled=False), name='unique_active_expense_cash_movement', violation_error_message='يوجد بالفعل قيد صندوق نشط لهذا المصروف.'),
+            models.UniqueConstraint(fields=['related_expense'], condition=Q(related_expense__isnull=False, is_cancelled=False, is_generated=True), name='unique_active_generated_expense_cash_movement', violation_error_message='يوجد بالفعل قيد صندوق مولد نشط لهذا المصروف.'),
         ]
     def clean(self):
         if self.movement_type == self.MovementType.CASH_CORRECTION and not (self.notes or '').strip():
