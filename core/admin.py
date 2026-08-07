@@ -290,6 +290,10 @@ class SystemSettingAdmin(admin.ModelAdmin):
             ),
             'description': 'هذه الإعدادات للفوترة اليدوية فقط. التحكم الآلي بالراوتر/الشبكة/الكابتف بورتال غير مفعّل في هذه المرحلة.',
         }),
+        ('طرح دفتر القيود المالية', {
+            'fields': ('posting_ledger_writes_enabled', 'posting_dual_read_enabled', 'posting_reports_enabled'),
+            'description': 'فعّل المراحل بالترتيب وبعد مطابقة نظيفة. إيقاف الكتابة يعيد كل القراءات إلى المسار القديم ولا يحذف القيود الجديدة.',
+        }),
         ('الإعدادات المتقدمة', {
             'classes': ('collapse',),
             'fields': (
