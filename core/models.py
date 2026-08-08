@@ -1503,7 +1503,7 @@ class SystemSetting(TimeStampedModel):
     # Additive finance-ledger rollout controls.  These deliberately remain
     # independent so operators can stop new ledger writes and immediately fall
     # back to the legacy projections without deleting ledger history.
-    posting_ledger_writes_enabled = models.BooleanField(default=True, verbose_name='كتابة القيود المالية الجديدة')
+    posting_ledger_writes_enabled = models.BooleanField(default=False, verbose_name='كتابة القيود المالية الجديدة')
     posting_dual_read_enabled = models.BooleanField(default=False, verbose_name='مقارنة القراءات القديمة والجديدة')
     posting_reports_enabled = models.BooleanField(default=False, verbose_name='استخدام القيود الجديدة في التقارير')
     class Language(models.TextChoices):

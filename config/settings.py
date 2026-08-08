@@ -3,6 +3,31 @@ import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
+def optional_bool_env(name):
+    """Return an optional, strictly parsed boolean environment setting."""
+    value = os.getenv(name)
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if normalized in {'1', 'true', 'yes', 'on'}:
+        return True
+    if normalized in {'0', 'false', 'no', 'off'}:
+        return False
+    raise ValueError(
+        f'{name} must be one of: 1, true, yes, on, 0, false, no, off'
+    )
+
+
+for _setting_name in (
+    'POSTING_LEDGER_WRITES_ENABLED',
+    'POSTING_DUAL_READ_ENABLED',
+    'POSTING_REPORT_READS_ENABLED',
+):
+    _setting_value = optional_bool_env(_setting_name)
+    if _setting_value is not None:
+        globals()[_setting_name] = _setting_value
+
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'change-me-in-production')
 DEBUG = os.getenv('DJANGO_DEBUG', 'False').lower() == 'true'
 ALLOWED_HOSTS = [host.strip() for host in os.getenv('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost').split(',') if host.strip()]
