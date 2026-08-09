@@ -5,7 +5,7 @@ from django.urls import reverse
 from django.utils import translation
 
 from catalog.models import MediaAsset
-from core.models import ExpenseCategory, FinancialAccount
+from core.models import CashMovement, Expense, ExpenseCategory, FinancialAccount, PostingCommand
 from vendors.models import Vendor
 
 
@@ -93,6 +93,117 @@ class StaffExpenseFormStabilityTests(TestCase):
         self.assertEqual(self.missing_media.safe_url, '')
         response = self._get_as(self.admin)
         self.assertEqual(response.status_code, 200)
+
+
+@override_settings(STORAGES={
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+})
+class StaffExpensePostTests(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.admin = user_model.objects.create_user(
+            username='expense-post-admin', password='pass', phone='+9921', role='admin'
+        )
+        self.category = ExpenseCategory.objects.create(
+            name_ar='تشغيل', name_en='Operations', code='expense-post', is_active=True
+        )
+        self.cash_account = FinancialAccount.objects.create(
+            code='CASH-POST', name_ar='الصندوق', account_type=FinancialAccount.AccountType.ASSET,
+            scope='cashbox', currency='SYP', is_active=True,
+        )
+        self.liability_account = FinancialAccount.objects.create(
+            code='LIABILITY-POST', name_ar='ذمم دائنة',
+            account_type=FinancialAccount.AccountType.LIABILITY, currency='SYP', is_active=True,
+        )
+        self.client.force_login(self.admin)
+        self.url = reverse('staff_finance_expense_new')
+
+    def _payload(self, status, **overrides):
+        payload = {
+            'business_date': '2026-08-09',
+            'category': str(self.category.pk),
+            'payee_type': Expense.PayeeType.MANUAL,
+            'supplier_name': 'مورد الاختبار',
+            'title': 'مصروف اختبار POST',
+            'description': 'اختبار مسار الحفظ الحقيقي',
+            'amount_syp': '12500',
+            'payment_method': '',
+            'paid_from': Expense.PaidFrom.UNPAID,
+            'status': status,
+            'financial_account': '',
+            'liability_account': '',
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_draft_post_redirects_and_uses_deterministic_draft_key(self):
+        response = self.client.post(
+            self.url, self._payload(Expense.Status.DRAFT), HTTP_IDEMPOTENCY_KEY='expense-draft'
+        )
+
+        self.assertRedirects(
+            response, reverse('staff_finance_expenses'), fetch_redirect_response=False
+        )
+        expense = Expense.objects.get()
+        self.assertEqual(expense.status, Expense.Status.DRAFT)
+        self.assertEqual(PostingCommand.objects.get().key, 'expense-draft:draft')
+
+    def test_paid_post_retry_is_idempotent_for_expense_commands_and_cash_movement(self):
+        payload = self._payload(
+            Expense.Status.PAID,
+            payment_method=Expense.PaymentMethod.CASH,
+            paid_from=Expense.PaidFrom.CASHBOX,
+            financial_account=str(self.cash_account.pk),
+        )
+
+        first = self.client.post(self.url, payload, HTTP_IDEMPOTENCY_KEY='expense-paid')
+        second = self.client.post(self.url, payload, HTTP_IDEMPOTENCY_KEY='expense-paid')
+
+        self.assertRedirects(
+            first, reverse('staff_finance_expenses'), fetch_redirect_response=False
+        )
+        self.assertRedirects(
+            second, reverse('staff_finance_expenses'), fetch_redirect_response=False
+        )
+        self.assertEqual(Expense.objects.count(), 1)
+        self.assertEqual(Expense.objects.get().status, Expense.Status.PAID)
+        self.assertEqual(
+            set(PostingCommand.objects.values_list('key', flat=True)),
+            {'expense-paid:draft', 'expense-paid:payment'},
+        )
+        self.assertEqual(PostingCommand.objects.count(), 2)
+        self.assertEqual(CashMovement.objects.filter(is_generated=True).count(), 1)
+
+    def test_approved_post_uses_distinct_draft_and_approval_keys(self):
+        response = self.client.post(
+            self.url,
+            self._payload(
+                Expense.Status.APPROVED,
+                payment_method=Expense.PaymentMethod.CREDIT,
+                liability_account=str(self.liability_account.pk),
+            ),
+            HTTP_IDEMPOTENCY_KEY='expense-approved',
+        )
+
+        self.assertRedirects(
+            response, reverse('staff_finance_expenses'), fetch_redirect_response=False
+        )
+        self.assertEqual(Expense.objects.get().status, Expense.Status.APPROVED)
+        self.assertEqual(
+            set(PostingCommand.objects.values_list('key', flat=True)),
+            {'expense-approved:draft', 'expense-approved:approval'},
+        )
+
+    def test_invalid_post_renders_validation_errors_without_creating_expense(self):
+        response = self.client.post(
+            self.url, self._payload(Expense.Status.DRAFT, amount_syp='0', title='')
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['errors'])
+        self.assertEqual(Expense.objects.count(), 0)
+        self.assertEqual(PostingCommand.objects.count(), 0)
 
 
 class ProductionLoggingConfigurationTests(TestCase):

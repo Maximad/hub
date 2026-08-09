@@ -82,14 +82,19 @@ def staff_expense_new(request):
         except ValidationError as e: errors += sum(e.message_dict.values(), []) if hasattr(e,'message_dict') else e.messages
         if not errors:
             try:
-                context=_posting_context(request, exp.business_date)
-                context.idempotency_key += ':draft'
-                exp=expense_posting.create_draft(exp, context)
-                context.idempotency_key=context.idempotency_key.removesuffix(':draft') + ':post'
+                base_context = _posting_context(request, exp.business_date)
+                exp = expense_posting.create_draft(
+                    exp, base_context.with_key_suffix('draft')
+                )
                 if requested_status == Expense.Status.APPROVED:
-                    expense_posting.approve_liability(exp, context, exp.liability_account)
+                    expense_posting.approve_liability(
+                        exp, base_context.with_key_suffix('approval'), exp.liability_account
+                    )
                 elif requested_status == Expense.Status.PAID:
-                    expense_posting.pay_immediately(exp, context, exp.financial_account, exp.payment_method)
+                    expense_posting.pay_immediately(
+                        exp, base_context.with_key_suffix('payment'), exp.financial_account,
+                        exp.payment_method,
+                    )
             except ValidationError as error:
                 errors.extend(_validation_messages(error))
             else:
