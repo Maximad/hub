@@ -99,7 +99,7 @@ class MediaAsset(CatalogTimeStampedModel):
         verbose_name_plural = 'مكتبة الوسائط'
 
     def __str__(self):
-        return self.title_ar or self.title_en or self.filename or str(self.uuid)[:8]
+        return str(self.title_ar or self.title_en or self.filename or self.uuid or 'ملف وسائط')
 
     def clean(self):
         super().clean()

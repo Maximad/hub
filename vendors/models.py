@@ -27,7 +27,7 @@ class Vendor(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return self.name_ar or self.name_en or self.phone or str(self.uuid)[:8]
+        return str(self.name_ar or self.name_en or self.phone or self.uuid or 'مورد')
 
 
 class VendorParticipation(models.Model):

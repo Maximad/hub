@@ -17,7 +17,9 @@ def _arabic_first(obj, *fields, fallback='—'):
         value = getattr(obj, field, '')
         if value:
             return str(value)
-    return fallback
+    # Django requires ``__str__`` to return an actual string. Old imported rows
+    # can have NULL in every display column, including the nominal fallback.
+    return str(fallback) if fallback else '—'
 
 
 
@@ -1093,7 +1095,9 @@ class FinancialAccount(TimeStampedModel):
         ordering = ['code']
 
     def __str__(self):
-        return f'{self.code} — {self.name_ar or self.name_en}'
+        code = self.code or str(self.pk or '')
+        name = self.name_ar or self.name_en or 'حساب مالي'
+        return f'{code} — {name}' if code else str(name)
 
 
 class PostingBatch(TimeStampedModel):
