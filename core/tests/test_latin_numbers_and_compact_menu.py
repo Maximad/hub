@@ -95,13 +95,30 @@ class CompactMenuRenderingTests(TestCase):
         parser = _RenderedMenuParser()
         parser.feed(response.content.decode())
         elements = list(parser.root.descendants())
+        forms = [element for element in elements if element.attrs.get('id') == 'menu-order-form']
+        self.assertEqual(len(forms), 1)
+        form_elements = list(forms[0].descendants())
         cards = [element for element in elements if 'data-product-card' in element.attrs]
         self.assertEqual(len(cards), 1)
         card_elements = list(cards[0].descendants())
         sources = [element for element in card_elements if 'data-modal-source' in element.attrs]
         self.assertEqual(len(sources), 1)
         self.assertEqual(sources[0].attrs['data-modal-product-id'], str(self.product.id))
-        self.assertEqual(len([element for element in elements if 'data-menu-modal' in element.attrs]), 1)
+        modals = [element for element in elements if 'data-menu-modal' in element.attrs]
+        self.assertEqual(len(modals), 1)
+        self.assertIn(modals[0], form_elements)
+        modal_bodies = [element for element in elements if 'data-menu-modal-body' in element.attrs]
+        self.assertEqual(len(modal_bodies), 1)
+        self.assertIn(modal_bodies[0], list(modals[0].descendants()))
+        cart_sheets = [element for element in elements if 'data-cart-sheet' in element.attrs]
+        self.assertEqual(len(cart_sheets), 1)
+        self.assertIn(cart_sheets[0], form_elements)
+        sticky_carts = [element for element in elements if 'data-sticky-cart' in element.attrs]
+        self.assertEqual(len(sticky_carts), 1)
+        self.assertIn(sticky_carts[0], form_elements)
+        backdrops = [element for element in elements if 'public-menu-cart-backdrop' in element.attrs.get('class', '').split()]
+        self.assertEqual(len(backdrops), 1)
+        self.assertIn(backdrops[0], form_elements)
         quantity_inputs = [element for element in elements if element.attrs.get('name') == f'qty_{self.product.id}']
         self.assertEqual(len(quantity_inputs), 1)
         self.assertEqual(quantity_inputs[0].attrs.get('id'), f'qty_{self.product.id}')
