@@ -2,7 +2,7 @@
 {% block title %}خيارات المنتجات{% endblock %}
 {% block content %}
 <section class="hub-card" dir="rtl">
-  <h2 class="hub-section-title">خيارات المنتجات</h2>
+  <h2 class="hub-section-title hub-page-header__title">خيارات المنتجات</h2>
   <p><a class="hub-button hub-button-secondary" href="{% url 'staff_home' %}">العودة لصفحة الفريق</a> <a class="hub-button" href="{% url 'admin:catalog_productoptiongroup_changelist' %}">إدارة المجموعات في Django admin</a> <a class="hub-button" href="{% url 'admin:catalog_productoptiongroupassignment_changelist' %}">إدارة الربط في Django admin</a></p>
   {% if invalid_assignments %}
     <div class="hub-badge hub-badge-danger">يوجد {{ invalid_assignments|length }} ربط غير صالح. هذه الخيارات لن تظهر للزبائن حتى يتم تصحيحها.</div>
@@ -28,7 +28,7 @@
     </ul>
 
     <h4>المنتجات المرتبطة</h4>
-    <table style="width:100%">
+    <div class="hub-table-wrap"><table class="hub-table" style="width:100%">
       <thead><tr><th>المنتج</th><th>تصنيف المنتج</th><th>الحالة</th><th>تحذير</th><th>الإدارة</th></tr></thead>
       <tbody>
         {% for assignment in row.assignments %}
@@ -43,7 +43,7 @@
           <tr><td colspan="5">لا توجد منتجات مرتبطة.</td></tr>
         {% endfor %}
       </tbody>
-    </table>
+    </table></div>
   </section>
 {% empty %}
   <p class="hub-empty-state">لا توجد مجموعات خيارات.</p>

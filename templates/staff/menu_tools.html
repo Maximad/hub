@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% block title %}أدوات القائمة{% endblock %}
 {% block content %}
-<h2>أدوات متابعة القائمة</h2>
+<h2 class="hub-page-header__title">أدوات متابعة القائمة</h2>
 <p><a href="{% url 'staff_home' %}">العودة لصفحة الفريق</a></p>
 
 <section style="border:1px solid #ddd; border-radius:10px; padding:1rem; margin-bottom:1rem;">
   <h3>بحث وفلاتر</h3>
-  <form method="get" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:0.75rem; align-items:end;">
+  <form class="hub-form-section" method="get" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:0.75rem; align-items:end;">
     <label>بحث عربي/إنكليزي<br><input type="search" name="q" value="{{ filters.q }}" placeholder="اسم المنتج"></label>
     <label>القسم<br><select name="section"><option value="">كل الأقسام</option><option value="none" {% if filters.section == 'none' %}selected{% endif %}>بدون قسم</option>{% for section in sections %}<option value="{{ section.pk }}" {% if filters.section == section.pk|stringformat:'s' %}selected{% endif %}>{{ section.name_ar }}</option>{% endfor %}</select></label>
     <label>التوفر<br><select name="availability"><option value="">الكل</option><option value="available" {% if filters.availability == 'available' %}selected{% endif %}>متاح</option><option value="unavailable" {% if filters.availability == 'unavailable' %}selected{% endif %}>غير متاح</option></select></label>
@@ -21,7 +21,7 @@
   </form>
 </section>
 
-<form id="bulk-menu-tools-form" method="post" action="{% url 'staff_menu_tools_preview' %}">
+<form class="hub-form-section" id="bulk-menu-tools-form" method="post" action="{% url 'staff_menu_tools_preview' %}">
   {% csrf_token %}
   <input type="hidden" name="return_query" value="{{ return_query }}">
   <input type="hidden" name="bulk_value" id="bulk-value">
@@ -42,7 +42,7 @@
   {% for group in grouped %}
   <section style="border:1px solid #ddd; border-radius:10px; padding:0.75rem; margin-bottom:1rem; overflow-x:auto;">
     <h3>{{ group.section_name }}</h3>
-    <table style="width:100%; border-collapse:collapse; min-width:1100px;">
+    <div class="hub-table-wrap"><table class="hub-table" style="width:100%; border-collapse:collapse; min-width:1100px;">
       <thead><tr><th>اختيار</th><th>المنتج</th><th>السعر</th><th>النوع</th><th>القسم/الأقسام</th><th>محطة</th><th>مورّد</th><th>وسوم</th><th>صورة</th><th>مرئي QR</th><th>قابل للطلب QR</th><th>متاح</th></tr></thead>
       <tbody>
         {% for p in group.products %}
@@ -57,7 +57,7 @@
         </tr>
         {% empty %}<tr><td colspan="12">لا توجد منتجات مطابقة.</td></tr>{% endfor %}
       </tbody>
-    </table>
+    </table></div>
   </section>
   {% endfor %}
 </form>

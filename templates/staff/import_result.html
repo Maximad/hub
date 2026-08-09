@@ -4,7 +4,7 @@
 <section class="hub-section" dir="rtl">
   <div class="hub-section-header">
     <div>
-      <h2 class="hub-section-title">نتيجة {{ importer.title }}</h2>
+      <h2 class="hub-section-title hub-page-header__title">نتيجة {{ importer.title }}</h2>
       <p class="hub-muted">اكتمل تنفيذ وضع: {{ mode }}</p>
     </div>
     <a class="hub-button hub-button-secondary" href="{% url 'staff_import_home' %}">العودة للاستيراد</a>
@@ -15,12 +15,12 @@
     <div class="hub-card"><strong>تم التجاوز/المعاينة</strong><p>{{ summary.skipped }}</p></div>
   </div>
   <div class="hub-card">
-    <h3>ملخص الصفوف</h3>
+    <h3 class="hub-page-header__title">ملخص الصفوف</h3>
     <div class="hub-table-wrap">
-      <table class="hub-table">
+      <div class="hub-table-wrap"><table class="hub-table">
         <thead><tr><th>السطر</th><th>الإجراء</th><th>الاسم/المفتاح</th><th>تحذيرات</th></tr></thead>
         <tbody>{% for row in results %}<tr><td>{{ row.row_number }}</td><td>{{ row.action }}</td><td>{{ row.key_label }}</td><td>{% for warning in row.warnings %}{{ warning }}{% if not forloop.last %}<br>{% endif %}{% empty %}—{% endfor %}</td></tr>{% endfor %}</tbody>
-      </table>
+      </table></div>
     </div>
   </div>
 </section>

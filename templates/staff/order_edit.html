@@ -8,7 +8,7 @@
       <a class="hub-button hub-button-secondary" href="{% url 'staff_cashier_order' order.public_code %}">الكاشير</a>
     </div>
     <p class="menu-public__brand">Staff order editing</p>
-    <h2 class="hub-section-title">تعديل طلب مفتوح</h2>
+    <h2 class="hub-section-title hub-page-header__title">تعديل طلب مفتوح</h2>
     <div><strong>رقم الطلب:</strong> {{ order.display_number }}</div>
     <div><strong>المكان:</strong> {{ order.location_label }}{% if order.location_detail %}<div class="hub-location-detail">{{ order.location_detail }}</div>{% endif %}</div>
     <div><strong>الحالة:</strong> {{ order.get_status_display }}</div>
@@ -42,7 +42,7 @@
             </ul>
           {% endif %}
           {% if can_edit %}
-            <form method="post" action="{% url 'staff_order_edit_update_item' order.public_code item.id %}" class="hub-form">
+            <form method="post" action="{% url 'staff_order_edit_update_item' order.public_code item.id %}" class="hub-form hub-form-section">
               {% csrf_token %}
               <div class="hub-form-grid">
                 <label>الكمية
@@ -73,7 +73,7 @@
                 <button class="hub-button hub-button-primary" type="submit" name="edit_scope" value="basic">حفظ الكمية والملاحظة</button>
               </div>
             </form>
-            <form method="post" action="{% url 'staff_order_edit_remove_item' order.public_code item.id %}">
+            <form class="hub-form-section" method="post" action="{% url 'staff_order_edit_remove_item' order.public_code item.id %}">
               {% csrf_token %}
               <button class="hub-button hub-button-danger" type="submit">حذف العنصر</button>
             </form>
@@ -94,7 +94,7 @@
             <h4>{{ product.name_ar }}</h4>
             {% if product.name_en %}<small>{{ product.name_en }}</small>{% endif %}
             <p><strong>{{ product.price_syp }} ل.س</strong></p>
-            <form method="post" action="{% url 'staff_order_edit_add_item' order.public_code %}" class="hub-form">
+            <form method="post" action="{% url 'staff_order_edit_add_item' order.public_code %}" class="hub-form hub-form-section">
               {% csrf_token %}
               <input type="hidden" name="product_id" value="{{ product.id }}">
               <label>الكمية

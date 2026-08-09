@@ -22,7 +22,7 @@
 </section>
 
 <section class="hub-section hub-card">
-  <form method="get" class="hub-form">
+  <form method="get" class="hub-form hub-form-section">
     <div class="hub-grid hub-grid-3">
       <label>بحث<input class="hub-input" type="search" name="q" value="{{ filters.q }}" placeholder="اسم المستخدم، الاسم، البريد، الهاتف"></label>
       <label>الدور<select class="hub-input" name="role"><option value="">كل الأدوار</option>{% for value,label in role_choices %}<option value="{{ value }}" {% if filters.role == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
@@ -34,7 +34,7 @@
 </section>
 
 <section class="hub-section hub-table-wrap hub-card">
-  <table class="hub-table">
+  <div class="hub-table-wrap"><table class="hub-table">
     <thead><tr><th>الاسم / اسم المستخدم</th><th>البريد</th><th>الهاتف</th><th>الدور</th><th>نشط</th><th>is_staff</th><th>is_superuser</th><th>آخر دخول</th><th>تاريخ الإنشاء</th><th>إجراءات</th></tr></thead>
     <tbody>
       {% for u in users %}
@@ -48,6 +48,6 @@
       </tr>
       {% empty %}<tr><td colspan="10">لا يوجد مستخدمون مطابقون.</td></tr>{% endfor %}
     </tbody>
-  </table>
+  </table></div>
 </section>
 {% endblock %}

@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% block title %}تقرير المنتجات والهامش{% endblock %}
 {% block content %}
-<h2>تقرير المنتجات</h2>
+<h2 class="hub-page-header__title">تقرير المنتجات</h2>
 <p><a href="{% url 'staff_reports_home' %}">العودة للتقارير</a> | <a href="{% url 'staff_product_margin_csv' %}?{{ request.GET.urlencode }}">تصدير CSV</a></p>
-<form method="get" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;margin-bottom:1rem;">
+<form class="hub-form-section" method="get" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;margin-bottom:1rem;">
   <label>من تاريخ <input type="date" name="date_from" value="{{ date_from|date:'Y-m-d' }}"></label>
   <label>إلى تاريخ <input type="date" name="date_to" value="{{ date_to|date:'Y-m-d' }}"></label>
   <label>نوع المنتج <select name="product_type"><option value="">الكل</option>{% for value,label in product_types %}<option value="{{ value }}" {% if filters.product_type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
@@ -23,13 +23,13 @@
   <section><h3>منتجات بدون كلفة محددة</h3><ol>{% for row in cards.missing_cost %}<li>{{ row.product.name_ar }}</li>{% empty %}<li>لا يوجد</li>{% endfor %}</ol></section>
 </div>
 <h3>تقرير الهامش حسب المنتج</h3>
-<table style="width:100%;border-collapse:collapse;">
+<div class="hub-table-wrap"><table class="hub-table" style="width:100%;border-collapse:collapse;">
 <tr><th>المنتج</th><th>عدد المبيعات</th><th>المبيعات الإجمالية</th><th>الخصومات</th><th>صافي الإيراد</th><th>الكلفة التقديرية</th><th>الهامش التقديري</th><th>نسبة الهامش</th><th>ملغى</th><th>متوسط السعر</th></tr>
 {% for row in rows %}<tr><td>{{ row.product.name_ar }}</td><td>{{ row.units_sold }}</td><td>{{ row.gross_sales_syp }}</td><td>غير موزعة</td><td>{{ row.net_sales_syp }}</td><td>{% if row.missing_cost %}غير محدد{% else %}{{ row.estimated_cost_display }}{% endif %}</td><td>{% if row.estimated_margin_syp == None %}غير محدد{% else %}{{ row.estimated_margin_syp }}{% endif %}</td><td>{% if row.estimated_margin_percent == None %}غير محدد{% else %}{{ row.estimated_margin_percent }}%{% endif %}</td><td>{{ row.cancelled_units }} / {{ row.cancelled_value_syp }}</td><td>{{ row.avg_selling_price }}</td></tr>{% empty %}<tr><td colspan="10">لا توجد بيانات.</td></tr>{% endfor %}
-</table>
+</table></div>
 <h3>تقرير القسم/الفئة</h3>
-<table style="width:100%;border-collapse:collapse;">
+<div class="hub-table-wrap"><table class="hub-table" style="width:100%;border-collapse:collapse;">
 <tr><th>القسم/الفئة</th><th>عدد المبيعات</th><th>المبيعات الإجمالية</th><th>الكلفة التقديرية</th><th>الهامش التقديري</th><th>نسبة الهامش</th><th>عدد المنتجات</th></tr>
 {% for row in section_rows %}<tr><td>{{ row.name }}</td><td>{{ row.units_sold }}</td><td>{{ row.gross_sales_syp }}</td><td>{% if row.missing_cost %}غير محدد{% else %}{{ row.estimated_cost_syp }}{% endif %}</td><td>{% if row.estimated_margin_syp == None %}غير محدد{% else %}{{ row.estimated_margin_syp }}{% endif %}</td><td>{% if row.estimated_margin_percent == None %}غير محدد{% else %}{{ row.estimated_margin_percent }}%{% endif %}</td><td>{{ row.product_count }}</td></tr>{% empty %}<tr><td colspan="7">لا توجد بيانات.</td></tr>{% endfor %}
-</table>
+</table></div>
 {% endblock %}
