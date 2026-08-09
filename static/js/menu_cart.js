@@ -214,6 +214,21 @@
   });
 
   filterProducts();
+  const sectionLinks = Array.from(form.querySelectorAll('.menu-section-chip'));
+  const sections = sectionLinks.map((link) => document.querySelector(link.getAttribute('href'))).filter(Boolean);
+  if (sectionLinks.length) sectionLinks[0].classList.add('is-active');
+  if ('IntersectionObserver' in window && sections.length) {
+    const sectionObserver = new IntersectionObserver((entries) => {
+      const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+      if (!visible) return;
+      sectionLinks.forEach((link) => {
+        const active = link.getAttribute('href') === `#${visible.target.id}`;
+        link.classList.toggle('is-active', active);
+        if (active) link.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      });
+    }, { rootMargin: '-20% 0px -65% 0px', threshold: [0, 0.2] });
+    sections.forEach((section) => sectionObserver.observe(section));
+  }
   const originalSubmit = submitBtn;
   form.addEventListener('submit', (event) => {
     if (isSubmitting) {
