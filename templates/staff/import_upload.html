@@ -4,16 +4,16 @@
 <section class="hub-section" dir="rtl">
   <div class="hub-section-header">
     <div>
-      <h2 class="hub-section-title">{{ importer.title }}</h2>
+      <h2 class="hub-section-title hub-page-header__title">{{ importer.title }}</h2>
       <p class="hub-muted">{{ importer.description }}</p>
     </div>
     <a class="hub-button hub-button-secondary" href="{% url 'staff_import_home' %}">كل أدوات الاستيراد</a>
   </div>
   <div class="hub-card">
-    <h3>1) حمّل القالب ثم ارفع الملف</h3>
+    <h3 class="hub-page-header__title">1) حمّل القالب ثم ارفع الملف</h3>
     <p>يجب أن يكون الملف CSV بترميز UTF-8. لا يتم حفظ أي شيء قبل صفحة التأكيد.</p>
     <a class="hub-button hub-button-secondary" href="{% url 'staff_import_template' importer.slug %}">تحميل قالب CSV</a>
-    <form method="post" enctype="multipart/form-data" action="{% url 'staff_import_preview' importer.slug %}" class="hub-form" style="margin-top:1rem;">
+    <form method="post" enctype="multipart/form-data" action="{% url 'staff_import_preview' importer.slug %}" class="hub-form hub-form-section" style="margin-top:1rem;">
       {% csrf_token %}
       <label>وضع الاستيراد</label>
       <select name="mode">

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}تفاصيل الدفع{% endblock %}
 {% block content %}
-<h2>تفاصيل طلب للكاشير</h2>
+<h2 class="hub-page-header__title">تفاصيل طلب للكاشير</h2>
 <p><a href="{% url 'staff_cashier' %}">← العودة إلى الكاشير</a> | <a href="{% url 'staff_order_edit' order.public_code %}">تعديل الطلب</a></p><div class="hub-toolbar"><a class="hub-button hub-button-primary" href="{% url 'staff_order_receipt' order.public_code %}">طباعة إيصال</a><a class="hub-button" href="{% url 'staff_order_receipt_thermal' order.public_code %}">طباعة إيصال حراري</a><a class="hub-button" href="{% url 'staff_order_prep_ticket' order.public_code %}">طباعة تذكرة تحضير</a>{% if order.is_delivery %}<a class="hub-button" href="{% url 'staff_order_delivery_ticket' order.public_code %}">طباعة تذكرة توصيل</a>{% endif %}</div>
 {% if messages %}{% for message in messages %}<p class="hub-badge hub-badge-danger">{{ message }}</p>{% endfor %}{% endif %}
 <div class="hub-card hub-section">
@@ -15,7 +15,7 @@
 <ul>{% for item in order.items.all %}<li>{{ item.product_name_ar_snapshot }} × {{ item.quantity }} <span class="hub-badge hub-badge-info">{{ item.prep_station_label }}</span> <span class="hub-badge">{{ item.get_prep_status_display }}</span> = {% widthratio item.quantity 1 item.unit_price_syp_snapshot %} ل.س{% if item.selected_options_snapshot %}<ul>{% for group in item.selected_options_snapshot %}{% for option in group.options %}<li>{{ option.name_ar }}{% if option.price_delta_syp %} ({% if option.price_delta_syp > 0 %}+{% endif %}{{ option.price_delta_syp }} ل.س){% endif %}</li>{% endfor %}{% endfor %}</ul>{% endif %}{% if item.item_note %}<br><small>ملاحظة: {{ item.item_note }}</small>{% endif %}</li>{% endfor %}</ul>
 <p><strong>المجموع قبل الخصم:</strong> {{ order.subtotal_syp }} ل.س</p>{% if order.delivery_fee_syp %}<p><strong>رسوم التوصيل:</strong> {{ order.delivery_fee_syp }} ل.س</p>{% endif %}<p><strong>الخصم:</strong> {{ order.discount_syp }} ل.س</p><p><strong>المجموع بعد الخصم:</strong> {{ total }} ل.س</p><p><strong>المدفوع:</strong> {{ paid }} ل.س</p><p><strong>المتبقي:</strong> {{ remaining }} ل.س</p><p><strong>حالة الدفع:</strong> {{ payment_label }}</p>
 <h3>إضافة دفعة</h3>
-<form method="post" action="{% url 'staff_cashier_pay' order.public_code %}" class="hub-form" id="cashier-payment-form">{% csrf_token %}
+<form method="post" action="{% url 'staff_cashier_pay' order.public_code %}" class="hub-form hub-form-section" id="cashier-payment-form">{% csrf_token %}
 <label>المبلغ (ل.س): <input class="hub-input" type="number" min="1" max="{{ remaining }}" name="amount_syp" id="payment-amount" value="{{ payment_amount_default }}" required data-remaining="{{ remaining }}"></label>
 <p class="hub-help-text">الحقل مملوء تلقائياً بالمبلغ المتبقي. لتسجيل دفعة جزئية، أدخل مبلغاً أقل مع موافقة المدير.</p>
 <div class="hub-manager-approval" id="manager-approval" hidden>
@@ -38,7 +38,7 @@
 })();
 </script>
 <h3>الخصومات</h3>
-{% if can_manage_discounts %}<form method="post" action="{% url 'staff_cashier_discount' order.public_code %}" class="hub-form">{% csrf_token %}
+{% if can_manage_discounts %}<form method="post" action="{% url 'staff_cashier_discount' order.public_code %}" class="hub-form hub-form-section">{% csrf_token %}
 <label>نوع الخصم<select class="hub-input" name="discount_type">{% for value, label in discount_types %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
 <label>الخصم (ل.س)<input class="hub-input" type="number" min="1" max="{{ total }}" name="amount_syp" required></label>
 <label>سبب الخصم<input class="hub-input" name="reason" required></label>

@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% block title %}عضو جديد{% endblock %}
 {% block content %}
-<h2>تسجيل عضو جديد</h2>
+<h2 class="hub-page-header__title">تسجيل عضو جديد</h2>
 {% if error %}<p style="color:#b91c1c;">{{ error }}</p>{% endif %}
 {% if errors %}{% for msg in errors.values %}<p style="color:#b91c1c;">{{ msg }}</p>{% endfor %}{% endif %}
-<form method="post">{% csrf_token %}
+<form class="hub-form-section" method="post">{% csrf_token %}
   <label>الاسم</label><input name="name_ar" value="{{ form_values.name_ar|default:'' }}" required style="display:block; width:100%; margin-bottom:.5rem;">
   <label>الهاتف</label><input name="phone" value="{{ form_values.phone|default:'' }}" required style="display:block; width:100%; margin-bottom:.5rem;">
   <label>الخطة الافتراضية</label>

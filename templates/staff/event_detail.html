@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block content %}<h2>{{ event.title_ar }}</h2><p>{{ event.description_ar }}</p>
+{% block content %}<h2 class="hub-page-header__title">{{ event.title_ar }}</h2><p>{{ event.description_ar }}</p>
 <p>البداية: {{ event.starts_at }} | النهاية: {{ event.ends_at|default:'-' }}</p>
 <p>المساحة: {{ event.room|default:'-' }}</p>
 <p><a href="{% url 'staff_reservation_new' %}?event={{ event.id }}">حجز مرتبط</a></p>

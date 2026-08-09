@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}روابط الطاولات{% endblock %}
 {% block content %}
-<h2>روابط الطاولات / QR</h2>
+<h2 class="hub-page-header__title">روابط الطاولات / QR</h2>
 <p><a href="{% url 'staff_qr_print' %}" target="_blank">نسخة طباعة</a> | <a href="{% url 'staff_home' %}">العودة لصفحة الفريق</a></p>
 {% if rows %}
   {% for row in rows %}

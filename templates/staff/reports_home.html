@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}تقارير التشغيل{% endblock %}
 {% block content %}
-<h2>تقارير التشغيل اليومية</h2>
+<h2 class="hub-page-header__title">تقارير التشغيل اليومية</h2>
 <p><a href="{% url 'staff_home' %}">العودة لصفحة الفريق</a> | <a href="{% url 'staff_reports_day' %}?date={{ report_date|date:'Y-m-d' }}">تفاصيل اليوم</a> | <a href="{% url 'staff_product_margin_report' %}">تقرير المنتجات والهامش</a></p>
 <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:0.75rem;">
   <div style="border:1px solid #ddd;border-radius:10px;padding:.75rem;"><strong>مبيعات اليوم</strong><div>{{ sums.order_total }} ل.س</div></div>

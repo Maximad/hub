@@ -1,6 +1,6 @@
 {% extends "staff/finance_base.html" %}{% block title %}تحويل مالي جديد{% endblock %}{% block finance_content %}
-<h3>تحويل مالي جديد</h3><p class="hub-muted">يُنشئ الحفظ قيداً متوازناً وحركتي مصدر ووجهة تحملان رقم التحويل نفسه. حد الموافقة: {{ approval_limit }} ل.س.</p>
-{% for e in errors %}<p class="hub-error">{{ e }}</p>{% endfor %}<form method="post">{% csrf_token %}
+<h3 class="hub-page-header__title">تحويل مالي جديد</h3><p class="hub-muted">يُنشئ الحفظ قيداً متوازناً وحركتي مصدر ووجهة تحملان رقم التحويل نفسه. حد الموافقة: {{ approval_limit }} ل.س.</p>
+{% for e in errors %}<p class="hub-error">{{ e }}</p>{% endfor %}<form class="hub-form-section" method="post">{% csrf_token %}
 <label>تاريخ العمل <input type="date" name="business_date" value="{{ form_values.business_date|default:today|date:'Y-m-d' }}" required></label>
 <label>حساب المصدر <select name="source_account" required><option value="">— اختر —</option>{% for a in accounts %}<option value="{{ a.id }}" {% if form_values.source_account == a.id|stringformat:'s' %}selected{% endif %}>{{ a }}</option>{% endfor %}</select></label>
 <label>حساب الوجهة <select name="destination_account" required><option value="">— اختر —</option>{% for a in accounts %}<option value="{{ a.id }}" {% if form_values.destination_account == a.id|stringformat:'s' %}selected{% endif %}>{{ a }}</option>{% endfor %}</select></label>

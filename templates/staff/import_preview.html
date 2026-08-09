@@ -4,21 +4,21 @@
 <section class="hub-section" dir="rtl">
   <div class="hub-section-header">
     <div>
-      <h2 class="hub-section-title">معاينة {{ importer.title }}</h2>
+      <h2 class="hub-section-title hub-page-header__title">معاينة {{ importer.title }}</h2>
       <p class="hub-muted">وضع الاستيراد: {{ mode }}</p>
     </div>
     <a class="hub-button hub-button-secondary" href="{% url 'staff_import_upload' importer.slug %}">رفع ملف آخر</a>
   </div>
   {% if file_errors %}
     <div class="hub-card hub-alert hub-alert-error">
-      <h3>أخطاء في الملف</h3>
+      <h3 class="hub-page-header__title">أخطاء في الملف</h3>
       <ul>{% for error in file_errors %}<li>{{ error }}</li>{% endfor %}</ul>
     </div>
   {% endif %}
   <div class="hub-card">
     <h3>نتيجة التحقق</h3>
     <div class="hub-table-wrap">
-      <table class="hub-table">
+      <div class="hub-table-wrap"><table class="hub-table">
         <thead><tr><th>السطر</th><th>الإجراء</th><th>الاسم/المفتاح</th><th>الأخطاء</th><th>التحذيرات</th></tr></thead>
         <tbody>
           {% for row in results %}
@@ -33,9 +33,9 @@
             <tr><td colspan="5">لا توجد صفوف قابلة للمعاينة.</td></tr>
           {% endfor %}
         </tbody>
-      </table>
+      </table></div>
     </div>
-    <form method="post" action="{% url 'staff_import_confirm' importer.slug %}" class="hub-form" style="margin-top:1rem;">
+    <form method="post" action="{% url 'staff_import_confirm' importer.slug %}" class="hub-form hub-form-section" style="margin-top:1rem;">
       {% csrf_token %}
       {% if has_warnings and not has_errors %}
         <label><input type="checkbox" name="confirm_warnings" value="yes"> أؤكد المتابعة رغم التحذيرات الظاهرة.</label>

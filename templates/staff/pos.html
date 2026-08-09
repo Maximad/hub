@@ -6,7 +6,7 @@
   <header class="hub-card staff-pos__header">
     <div>
       {% if system_settings.pos_logo_url %}<img class="staff-pos__logo" src="{{ system_settings.pos_logo_url }}" alt="POS">{% endif %}<p class="menu-public__brand">Staff POS / نقطة البيع</p>
-      <h2 class="hub-section-title">{{ page_setting.title|default:"إدخال طلب سريع باللمس" }}</h2>
+      <h2 class="hub-section-title hub-page-header__title">{{ page_setting.title|default:"إدخال طلب سريع باللمس" }}</h2>
       {% if page_setting.subtitle %}<p>{{ page_setting.subtitle }}</p>{% else %}<p>اختر الطاولة أو طلب عام داخل المكان، اضغط المنتجات بسرعة، ثم أرسل الطلب إلى لوحة الطلبات والكاشير.</p>{% endif %}
     </div>
     <div class="hub-toolbar">
@@ -16,7 +16,7 @@
     {% if error %}<p class="hub-badge hub-badge-danger">{{ error }}</p>{% endif %}
   </header>
 
-  <form method="post" class="hub-form staff-pos__form" id="menu-order-form" data-show-modifier-summary="{% if not system_settings or system_settings.show_modifier_summary %}true{% else %}false{% endif %}">
+  <form method="post" class="hub-form staff-pos__form hub-form-section" id="menu-order-form" data-show-modifier-summary="{% if not system_settings or system_settings.show_modifier_summary %}true{% else %}false{% endif %}">
     {% csrf_token %}
     <section class="hub-card staff-pos__setup" aria-label="بيانات الطلب">
 
@@ -47,7 +47,7 @@
         <input class="hub-input" type="tel" name="customer_phone" id="customer_phone" value="{{ form_values.customer_phone|default:'' }}" inputmode="tel" autocomplete="off">
       </div>
       <div class="hub-card" data-delivery-fields hidden>
-        <h3>بيانات التوصيل</h3>
+        <h3 class="hub-page-header__title">بيانات التوصيل</h3>
         <label>منطقة التوصيل<input class="hub-input" type="text" name="delivery_area" value="{{ form_values.delivery_area|default:'' }}"></label>
         <label>عنوان التوصيل<textarea class="hub-input" name="delivery_address" rows="3">{{ form_values.delivery_address|default:'' }}</textarea></label>
         <label>ملاحظات التوصيل<textarea class="hub-input" name="delivery_notes" rows="2">{{ form_values.delivery_notes|default:'' }}</textarea></label>
@@ -187,7 +187,7 @@
     </aside>{% endif %}
   </form>
 </div>
-<form method="get" id="staff-pos-member-search" action="{% url 'staff_pos' %}"></form>
+<form class="hub-form-section" method="get" id="staff-pos-member-search" action="{% url 'staff_pos' %}"></form>
 <script>window.HUB_DELIVERY_SETTINGS = {feeMode: '{{ settings.delivery_fee_mode|default:'none' }}', fixedFee: {{ settings.fixed_delivery_fee_syp|default:0 }}, minimum: {{ settings.minimum_delivery_order_syp|default:0 }}};</script>
 <script src="{% static 'js/hub_cart_common.js' %}" defer></script>
 <script src="{% static 'js/menu_cart.js' %}" defer></script>

@@ -2,7 +2,7 @@
 {% block title %}الإنترنت والعمل{% endblock %}
 {% block content %}
 <section class="hub-section">
-  <h2 class="hub-section-title">الإنترنت والعمل</h2>
+  <h2 class="hub-section-title hub-page-header__title">الإنترنت والعمل</h2>
   <p class="hub-badge hub-badge-info">فوترة يدوية فقط — لا يوجد تحكم راوتر أو Captive Portal في هذه المرحلة.</p>
   {% if errors %}{% for msg in errors.values %}<p class="hub-badge hub-badge-danger">{{ msg }}</p>{% endfor %}{% endif %}
   {% for message in messages %}<p class="hub-badge hub-badge-info">{{ message }}</p>{% endfor %}
@@ -10,7 +10,7 @@
 
 <section class="hub-section hub-card">
   <h3 class="hub-section-title">جلسة جديدة — بدء الجلسة</h3>
-  <form class="hub-form" method="post" action="{% url 'staff_internet_start' %}" id="internet-start-form">{% csrf_token %}
+  <form class="hub-form hub-form-section" method="post" action="{% url 'staff_internet_start' %}" id="internet-start-form">{% csrf_token %}
     <div class="hub-grid hub-grid-2">
       <label>الزبون
         <select name="session_kind" id="session-kind">
@@ -61,7 +61,7 @@
       <td>{{ s.get_billing_mode_display }}</td>
       <td><span class="js-estimate" data-start="{{ s.effective_started_at|date:'c' }}" data-rate="{{ s.rate_per_hour_syp }}" data-minimum="{{ s.minimum_minutes }}" data-rounding="{{ s.rounding_increment_minutes }}" data-min-charge="{{ s.minimum_charge_syp }}" data-grace="{{ s.free_grace_minutes }}" data-cap="{{ s.daily_cap_syp|default:'' }}" data-free="{% if s.billing_mode == 'free' or s.billing_mode == 'prepaid' %}1{% else %}0{% endif %}">{{ row.estimated_total }}</span> ل.س</td>
       <td>{{ s.get_status_display }}</td>
-      <td class="hub-toolbar"><a class="hub-button hub-button-primary" href="{% url 'staff_internet_end' s.id %}">إنهاء</a>{% if can_cancel_sessions %}<form method="post" action="{% url 'staff_internet_cancel' s.id %}" onsubmit="var reason=prompt('سبب الإلغاء؟'); if(!reason) return false; this.querySelector('[name=cancellation_reason]').value=reason; return true;">{% csrf_token %}<input type="hidden" name="cancellation_reason"><button class="hub-button" type="submit">إلغاء</button></form>{% endif %}</td>
+      <td class="hub-toolbar"><a class="hub-button hub-button-primary" href="{% url 'staff_internet_end' s.id %}">إنهاء</a>{% if can_cancel_sessions %}<form class="hub-form-section" method="post" action="{% url 'staff_internet_cancel' s.id %}" onsubmit="var reason=prompt('سبب الإلغاء؟'); if(!reason) return false; this.querySelector('[name=cancellation_reason]').value=reason; return true;">{% csrf_token %}<input type="hidden" name="cancellation_reason"><button class="hub-button" type="submit">إلغاء</button></form>{% endif %}</td>
     </tr>{% endwith %}{% empty %}<tr><td colspan="10">لا توجد جلسات فعالة.</td></tr>{% endfor %}
   </table></div>
 </section>

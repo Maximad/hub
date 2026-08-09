@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% block content %}<h2>حجز جديد</h2>{% if error %}<p class="hub-message hub-message-error">{{ error }}</p>{% endif %}{% if errors %}{% for field,msgs in errors.items %}<p class="hub-message hub-message-error">{{ msgs|join:', ' }}</p>{% endfor %}{% endif %}
-<form method="post" data-reservation-form>{% csrf_token %}
+{% block content %}<h2 class="hub-page-header__title">حجز جديد</h2>{% if error %}<p class="hub-message hub-message-error">{{ error }}</p>{% endif %}{% if errors %}{% for field,msgs in errors.items %}<p class="hub-message hub-message-error">{{ msgs|join:', ' }}</p>{% endfor %}{% endif %}
+<form class="hub-form-section" method="post" data-reservation-form>{% csrf_token %}
 <label>نوع الحجز<select name="reservation_type" id="reservation-type">{% for v,l in types %}<option value="{{ v }}" {% if form_values.reservation_type == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></label>
 <input name="name" value="{{ form_values.name|default:'' }}" required placeholder="الاسم"><input name="phone" value="{{ form_values.phone|default:'' }}" required placeholder="الهاتف">
 <div data-reservation-group="regular"><input type="date" name="reservation_date" value="{{ form_values.reservation_date|default:'' }}" data-required-when-visible><input type="time" name="start_time" value="{{ form_values.start_time|default:'' }}" data-required-when-visible><input type="time" name="end_time" value="{{ form_values.end_time|default:'' }}">

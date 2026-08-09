@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% block content %}<h2>فعالية جديدة</h2>{% if error %}<p>{{ error }}</p>{% endif %}
-<form method="post">{% csrf_token %}
+{% block content %}<h2 class="hub-page-header__title">فعالية جديدة</h2>{% if error %}<p>{{ error }}</p>{% endif %}
+<form class="hub-form-section" method="post">{% csrf_token %}
 <input name="title_ar" placeholder="الاسم" required>
 <input name="title_en" placeholder="الاسم EN">
 <input type="datetime-local" name="starts_at" required>

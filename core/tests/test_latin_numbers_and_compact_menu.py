@@ -133,6 +133,58 @@ class CompactMenuRenderingTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'js/hub_numbers.js')
 
+    @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
+    def test_staff_shell_preserves_global_interaction_contracts(self):
+        self.client.force_login(self.user)
+        response = self.client.get('/staff/')
+        self.assertEqual(response.status_code, 200)
+        for expected in [
+            'id="hub-main-content"',
+            'id="staff-notifications"',
+            'id="staff-notification-toggle"',
+            'aria-controls="staff-notification-dropdown"',
+            'id="staff-notification-dropdown"',
+            'data-poll-url=',
+            'data-mark-read-url=',
+            'data-pref-url=',
+            'js/staff_notifications.js',
+            'js/hub_searchable_select.js',
+            'js/reservation_form.js',
+            'hub-page-header__title',
+        ]:
+            with self.subTest(expected=expected):
+                self.assertContains(response, expected)
+
+    @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
+    def test_finance_shell_uses_shared_navigation_without_changing_links(self):
+        self.client.force_login(self.user)
+        response = self.client.get('/staff/finance/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'class="hub-nav-tabs"')
+        for path in ['/staff/finance/', '/staff/finance/expenses/', '/staff/finance/transfers/']:
+            self.assertContains(response, f'href="{path}"')
+
+    @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
+    def test_unified_staff_frontend_major_routes_render(self):
+        self.client.force_login(self.user)
+        routes = [
+            '/staff/pos/', '/staff/orders/', '/staff/cashier/', '/staff/kitchen/',
+            '/staff/delivery/', '/staff/finance/', '/staff/finance/expenses/',
+            '/staff/finance/purchases/', '/staff/finance/transfers/', '/staff/inventory/',
+            '/staff/inventory/items/', '/staff/inventory/movements/', '/staff/reports/',
+            '/staff/members/', '/staff/internet/', '/staff/wifi/', '/staff/events/',
+            '/staff/reservations/', '/staff/reservations/new/', '/staff/vendors/',
+            '/staff/food-lab/', '/staff/users/', '/staff/import/', '/staff/modifiers/',
+            '/staff/qr/', '/staff/menu-tools/',
+        ]
+        for route in routes:
+            with self.subTest(route=route):
+                response = self.client.get(route)
+                self.assertLess(response.status_code, 500)
+                if response.status_code == 200:
+                    self.assertContains(response, 'id="hub-main-content"')
+                    self.assertContains(response, 'js/staff_notifications.js')
+
     def test_global_numeric_css_covers_raw_tables_badges_and_inputs(self):
         css_path = finders.find('css/hub.css')
         self.assertIsNotNone(css_path)

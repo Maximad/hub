@@ -2,7 +2,7 @@
 {% block title %}تفاصيل الجلسة{% endblock %}
 {% block content %}
 <section class="hub-section hub-card">
-  <h2>جلسة #{{ session.id }}</h2>
+  <h2 class="hub-page-header__title">جلسة #{{ session.id }}</h2>
   {% for message in messages %}<p class="hub-badge hub-badge-info">{{ message }}</p>{% endfor %}
   <div class="hub-grid hub-grid-2">
     <p><strong>الحالة:</strong> {{ session.get_status_display }}</p>
@@ -29,8 +29,8 @@
   <div class="hub-toolbar">
     {% if session.status == 'active' %}<a class="hub-button hub-button-primary" href="{% url 'staff_internet_end' session.id %}">إنهاء الجلسة</a>{% endif %}
     {% if session.linked_order %}<a class="hub-button" href="{% url 'staff_cashier_order' session.linked_order.public_code %}">فتح طلب الكاشير</a>{% endif %}
-    {% if can_cancel_sessions and session.status == 'active' %}<form method="post" action="{% url 'staff_internet_cancel' session.id %}" onsubmit="return confirm('إلغاء الجلسة؟');">{% csrf_token %}<input name="cancellation_reason" placeholder="سبب الإلغاء" required><button class="hub-button" type="submit">إلغاء</button></form>{% endif %}
+    {% if can_cancel_sessions and session.status == 'active' %}<form class="hub-form-section" method="post" action="{% url 'staff_internet_cancel' session.id %}" onsubmit="return confirm('إلغاء الجلسة؟');">{% csrf_token %}<input name="cancellation_reason" placeholder="سبب الإلغاء" required><button class="hub-button" type="submit">إلغاء</button></form>{% endif %}
   </div>
 </section>
-{% if ledger_entries %}<section class="hub-section"><h3>حركات رصيد العضو</h3><table class="hub-table"><tr><th>الوقت</th><th>النوع</th><th>الدقائق</th><th>ملاحظات</th></tr>{% for entry in ledger_entries %}<tr><td>{{ entry.created_at }}</td><td>{{ entry.change_type }}</td><td>{{ entry.minutes_delta }}</td><td>{{ entry.notes }}</td></tr>{% endfor %}</table></section>{% endif %}
+{% if ledger_entries %}<section class="hub-section"><h3>حركات رصيد العضو</h3><div class="hub-table-wrap"><table class="hub-table"><tr><th>الوقت</th><th>النوع</th><th>الدقائق</th><th>ملاحظات</th></tr>{% for entry in ledger_entries %}<tr><td>{{ entry.created_at }}</td><td>{{ entry.change_type }}</td><td>{{ entry.minutes_delta }}</td><td>{{ entry.notes }}</td></tr>{% endfor %}</table></div></section>{% endif %}
 {% endblock %}
