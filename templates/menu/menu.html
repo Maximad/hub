@@ -30,7 +30,7 @@
     {% csrf_token %}
 
     {% if section_products %}
-      {% if not system_settings or system_settings.show_section_chips %}<nav class="menu-sections-nav" aria-label="أقسام المنيو">
+      {% if not system_settings or system_settings.show_section_chips %}<nav class="menu-sections-nav" aria-label="أقسام المنيو" data-category-nav>
         {% for section, products in section_products %}
           <a class="menu-section-chip" href="#section-{{ section.id }}">{{ section.name_ar }}</a>
         {% endfor %}
@@ -141,11 +141,12 @@
         </section>
       {% endfor %}
       </div>
-    {% else %}<p class="hub-empty-state">لا توجد منتجات ظاهرة حالياً على المنيو.</p>{% endif %}
+    {% else %}<p class="hub-empty-state">لا توجد أصناف متاحة حالياً.</p>{% endif %}
 
-    <section class="hub-card menu-cart-review" id="cart-review" aria-live="polite">
-      <div class="menu-cart-review__heading"><span class="menu-cart-review__icon" aria-hidden="true">✓</span><div><p>طلبك</p><h3>مراجعة الطلب</h3></div></div>
-      <p class="menu-cart-helper" data-cart-helper>اختر عناصر من القائمة</p>
+    <section class="hub-card menu-cart-review" id="cart-review" aria-labelledby="cart-review-title">
+      <div class="menu-cart-review__heading"><span class="menu-cart-review__icon" aria-hidden="true">✓</span><div><p>طلبك</p><h3 id="cart-review-title">مراجعة الطلب</h3></div></div>
+      <p class="menu-cart-helper" data-cart-helper>طلبك ما زال فارغاً.</p>
+      <p class="hub-visually-hidden" data-cart-status role="status" aria-live="polite" aria-atomic="true"></p>
       <ul class="menu-cart-list" data-cart-list></ul>
       <p class="menu-cart-total is-grand-total">المجموع التقديري: <strong data-cart-total class="hub-money latin-numbers">0 ل.س</strong></p>
       {% if settings.effective_delivery_enabled %}<p class="menu-cart-total" data-delivery-fee-row hidden>رسوم التوصيل: <strong data-delivery-fee class="hub-money latin-numbers">{{ settings.fixed_delivery_fee_syp|default:0|format_syp }}</strong></p>

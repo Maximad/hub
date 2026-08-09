@@ -209,3 +209,15 @@ class CartScriptRegressionTests(SimpleTestCase):
         self.assertIn('.public-menu-redesign .menu-item-modal-content', stylesheet)
         self.assertIn('max-height:94dvh', stylesheet)
         self.assertNotIn('min-height:700px', stylesheet)
+
+    def test_public_menu_category_tracking_and_cart_announcements_are_accessible(self):
+        root = Path(__file__).resolve().parents[2]
+        template = (root / 'templates/menu/menu.html').read_text()
+        cart_script = (root / 'static/js/menu_cart.js').read_text()
+
+        self.assertIn('data-category-nav', template)
+        self.assertIn('data-cart-status role="status" aria-live="polite"', template)
+        self.assertIn("link.setAttribute('aria-current', 'true')", cart_script)
+        self.assertIn("'(prefers-reduced-motion: reduce)'", cart_script)
+        self.assertIn('manualNavigationUntil', cart_script)
+        self.assertIn('جارٍ إرسال الطلب...', cart_script)
