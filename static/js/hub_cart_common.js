@@ -30,6 +30,11 @@
     return clampQuantity(parseQuantity(current, { max }) + Number(delta || 0), max);
   }
 
+  function ensureQuantity(current, minimum, max) {
+    const required = clampQuantity(minimum ?? 1, max);
+    return Math.max(parseQuantity(current, { max }), required);
+  }
+
   function formatMoney(value) {
     return `${(Number(value) || 0).toLocaleString('en-US')} ل.س`;
   }
@@ -51,5 +56,5 @@
     }
   }
 
-  window.HubCartCommon = { MAX_QTY, normalizeDigits, parseQuantity, clampQuantity, stepQuantity, formatMoney, dispatchCartUpdated, setLoading };
+  window.HubCartCommon = { MAX_QTY, normalizeDigits, parseQuantity, clampQuantity, stepQuantity, ensureQuantity, formatMoney, dispatchCartUpdated, setLoading };
 })(window);

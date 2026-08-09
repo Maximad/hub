@@ -1,7 +1,8 @@
 import uuid
+from pathlib import Path
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
 from catalog.models import MenuSection, ProductOption, ProductOptionGroup, ProductOptionGroupAssignment
@@ -181,3 +182,12 @@ class TableMenuOrderContextTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.option_group.name_ar)
         self.assertEqual(Order.objects.count(), 0)
+
+
+class CartScriptRegressionTests(SimpleTestCase):
+    def test_add_action_preserves_an_existing_quantity_and_guards_resubmission(self):
+        cart_script = (Path(__file__).resolve().parents[2] / 'static/js/menu_cart.js').read_text()
+
+        self.assertIn('input.value = ensureQuantity(input.value);', cart_script)
+        self.assertNotIn('current > 0 ? stepQuantity(current, 1) : 1', cart_script)
+        self.assertIn('if (isSubmitting)', cart_script)
