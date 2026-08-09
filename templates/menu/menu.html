@@ -93,11 +93,17 @@
       </div>
     {% else %}<p class="hub-empty-state">لا توجد أصناف متاحة حالياً.</p>{% endif %}
 
-    <section class="hub-card menu-cart-review" id="cart-review" aria-labelledby="cart-review-title">
-      <div class="menu-cart-review__heading"><span class="menu-cart-review__icon" aria-hidden="true">✓</span><div><p>طلبك</p><h3 id="cart-review-title">مراجعة الطلب</h3></div></div>
+    <div class="public-menu-cart-backdrop" data-cart-sheet-close hidden></div>
+
+    <section class="hub-card menu-cart-review public-menu-review-sidebar public-menu-cart-sheet" id="cart-review" aria-labelledby="cart-review-title" tabindex="-1" data-cart-sheet>
+      <div class="public-menu-cart-handle" aria-hidden="true"></div>
+      <div class="menu-cart-review__heading public-menu-cart-header"><span class="menu-cart-review__icon" aria-hidden="true">✓</span><div><p>طلبك</p><h3 id="cart-review-title">مراجعة الطلب</h3></div><button class="public-menu-cart-close" type="button" data-cart-sheet-close aria-label="إغلاق مراجعة الطلب">×</button></div>
       <p class="menu-cart-helper" data-cart-helper>طلبك ما زال فارغاً.</p>
       <p class="hub-visually-hidden" data-cart-status role="status" aria-live="polite" aria-atomic="true"></p>
-      <ul class="menu-cart-list" data-cart-list></ul>
+      <div class="public-menu-cart-items">
+        <ul class="menu-cart-list" data-cart-list></ul>
+      </div>
+      <div class="public-menu-cart-summary">
       <p class="menu-cart-total is-grand-total">المجموع التقديري: <strong data-cart-total class="hub-money latin-numbers">0 ل.س</strong></p>
       {% if settings.effective_delivery_enabled %}<p class="menu-cart-total" data-delivery-fee-row hidden>رسوم التوصيل: <strong data-delivery-fee class="hub-money latin-numbers">{{ settings.fixed_delivery_fee_syp|default:0|format_syp }}</strong></p>
       <p class="menu-cart-total" data-total-with-delivery-row hidden>الإجمالي مع التوصيل: <strong data-total-with-delivery class="hub-money latin-numbers">0 ل.س</strong></p>
