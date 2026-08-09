@@ -21,6 +21,7 @@
   const common = window.HubCartCommon || {};
   const parseQuantity = common.parseQuantity || ((value) => Math.max(0, parseInt(value || '0', 10) || 0));
   const stepQuantity = common.stepQuantity || ((value, delta) => Math.max(0, (parseInt(value || '0', 10) || 0) + delta));
+  const ensureQuantity = common.ensureQuantity || ((value) => Math.max(parseQuantity(value), 1));
   const formatMoney = common.formatMoney || ((value) => `${(Number(value) || 0).toLocaleString('en-US')} ل.س`);
   const dispatchCartUpdated = common.dispatchCartUpdated || (() => {});
   const deliverySettings = window.HUB_DELIVERY_SETTINGS || { enabled: false, feeMode: 'none', fixedFee: 0, minimum: 0 };
@@ -29,6 +30,7 @@
   const modalBody = form.querySelector('[data-menu-modal-body]');
   let activeModalSource = null;
   let activeReturnFocus = null;
+  let isSubmitting = false;
 
   function openItemModal(card) {
     if (!modal || !modalBody) return;
@@ -150,8 +152,9 @@
       event.preventDefault();
       const input = form.querySelector('#' + addButton.dataset.target);
       if (input) {
-        const current = parseQuantity(input.value);
-        input.value = current > 0 ? stepQuantity(current, 1) : 1;
+        // The quantity controls already update the cart. "Add" only ensures the
+        // item is present; it must not count the selected quantity a second time.
+        input.value = ensureQuantity(input.value);
         update();
       }
       if (event.target.closest('[data-menu-modal-close]')) closeItemModal();
@@ -212,6 +215,13 @@
 
   filterProducts();
   const originalSubmit = submitBtn;
-  form.addEventListener('submit', () => { if (originalSubmit) common.setLoading?.(originalSubmit, true, 'جارٍ الإرسال...'); });
+  form.addEventListener('submit', (event) => {
+    if (isSubmitting) {
+      event.preventDefault();
+      return;
+    }
+    isSubmitting = true;
+    if (originalSubmit) common.setLoading?.(originalSubmit, true, 'جارٍ الإرسال...');
+  });
   update();
 })();
