@@ -23,7 +23,7 @@
     {% if not system_settings or system_settings.show_table_banner and table %}
       <p class="menu-public__table-banner">الطلب مرتبط بالطاولة: <strong>{{ table.display_name }}</strong>{% if table.room_display_name %} — المساحة: {{ table.room_display_name }}{% endif %}</p>
     {% endif %}
-    {% if error %}<p class="hub-badge hub-badge-danger">{{ error }}</p>{% endif %}
+    {% if error %}<p class="hub-badge hub-badge-danger" data-order-error>{{ error }}</p>{% endif %}
   </header>{% endif %}
 
   <form method="post" class="hub-form" id="menu-order-form" data-show-modifier-summary="{% if not system_settings or system_settings.show_modifier_summary %}true{% else %}false{% endif %}">
@@ -152,9 +152,11 @@
       {% if settings.effective_delivery_enabled %}<p class="menu-cart-total" data-delivery-fee-row hidden>رسوم التوصيل: <strong data-delivery-fee class="hub-money latin-numbers">{{ settings.fixed_delivery_fee_syp|default:0|format_syp }}</strong></p>
       <p class="menu-cart-total" data-total-with-delivery-row hidden>الإجمالي مع التوصيل: <strong data-total-with-delivery class="hub-money latin-numbers">0 ل.س</strong></p>
       {% if settings.minimum_delivery_order_syp %}<p class="hub-help-text" data-delivery-minimum hidden>الحد الأدنى لطلب التوصيل <span class="hub-money latin-numbers">{{ settings.minimum_delivery_order_syp|format_syp }}</span>.</p>{% endif %}{% endif %}
+      </div>
 
+      <div class="public-menu-checkout">
       <h4>طريقة الطلب</h4>
-      <div class="menu-option-chips" data-fulfillment-selector>
+      <div class="menu-option-chips public-menu-order-method" data-fulfillment-selector>
         {% if table %}
           <label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="table" checked> طاولة</label>
         {% else %}
@@ -173,21 +175,23 @@
         <label>ملاحظات التوصيل</label><textarea class="hub-input" name="delivery_notes" rows="2">{{ form_values.delivery_notes|default:'' }}</textarea>
       </div>{% endif %}
 
-      <h4>بيانات الطلب</h4>
-      {% if not system_settings or system_settings.show_customer_name_field %}<label>الاسم</label><input class="hub-input" type="text" name="customer_name" value="{{ form_values.customer_name|default:'' }}">{% endif %}
-      {% if not system_settings or system_settings.show_customer_phone_field %}<label>الهاتف</label><input class="hub-input" type="tel" name="customer_phone" value="{{ form_values.customer_phone|default:'' }}">{% endif %}
-      {% if not system_settings or system_settings.show_general_note_field %}<label>ملاحظة عامة</label><textarea class="hub-input" name="general_note" rows="3">{{ form_values.general_note|default:'' }}</textarea>{% endif %}
+      <h4>بيانات الطلب</h4><div class="public-menu-checkout-fields">
+      {% if not system_settings or system_settings.show_customer_name_field %}<label for="customer-name">الاسم</label><input class="hub-input" id="customer-name" type="text" name="customer_name" value="{{ form_values.customer_name|default:'' }}">{% endif %}
+      {% if not system_settings or system_settings.show_customer_phone_field %}<label for="customer-phone">الهاتف</label><input class="hub-input" id="customer-phone" type="tel" name="customer_phone" value="{{ form_values.customer_phone|default:'' }}">{% endif %}
+      {% if not system_settings or system_settings.show_general_note_field %}<label for="general-note">ملاحظة عامة</label><textarea class="hub-input" id="general-note" name="general_note" rows="3">{{ form_values.general_note|default:'' }}</textarea>{% endif %}
+      </div>
 
       <div class="hub-sticky-actions menu-submit-wrap">
-        <button class="hub-button hub-button-primary" type="submit" data-submit-btn>إرسال الطلب</button>
+        <button class="hub-button hub-button-primary public-menu-submit" type="submit" data-submit-btn>إرسال الطلب</button>
+      </div>
       </div>
     </section>
 
-    {% if not system_settings or system_settings.show_sticky_cart %}<aside class="menu-sticky-cart" data-sticky-cart hidden>
+    {% if not system_settings or system_settings.show_sticky_cart %}<button class="menu-sticky-cart public-menu-cart-bar" type="button" data-sticky-cart data-cart-sheet-open aria-controls="cart-review" aria-expanded="false" hidden>
       <p><strong data-item-count class="hub-number latin-numbers">0</strong> عناصر</p>
       <p data-sticky-total class="hub-money latin-numbers">0 ل.س</p>
-      <a href="#cart-review" class="hub-button hub-button-primary">مراجعة الطلب</a>
-    </aside>{% endif %}
+      <span class="hub-button hub-button-primary">مراجعة الطلب</span>
+    </button>{% endif %}
 
     <div class="menu-item-modal" id="menu-item-modal" data-menu-modal hidden role="dialog" aria-modal="true" aria-label="تفاصيل المنتج">
       <div class="menu-item-modal-backdrop" data-menu-modal-close></div>
