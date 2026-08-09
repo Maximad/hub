@@ -6,6 +6,7 @@ from django.utils import translation
 
 from catalog.models import MediaAsset
 from core.models import CashMovement, Expense, ExpenseCategory, FinancialAccount, PostingCommand
+from core.services.finance_reconciliation import FinanceReconciler
 from vendors.models import Vendor
 
 
@@ -167,13 +168,25 @@ class StaffExpensePostTests(TestCase):
             second, reverse('staff_finance_expenses'), fetch_redirect_response=False
         )
         self.assertEqual(Expense.objects.count(), 1)
-        self.assertEqual(Expense.objects.get().status, Expense.Status.PAID)
+        expense = Expense.objects.get()
+        self.assertEqual(expense.status, Expense.Status.PAID)
+        self.assertEqual(expense.financial_account, self.cash_account)
         self.assertEqual(
             set(PostingCommand.objects.values_list('key', flat=True)),
             {'expense-paid:draft', 'expense-paid:payment'},
         )
         self.assertEqual(PostingCommand.objects.count(), 2)
         self.assertEqual(CashMovement.objects.filter(is_generated=True).count(), 1)
+        movement = CashMovement.objects.get(is_generated=True)
+        self.assertEqual(movement.financial_account_id, expense.financial_account_id)
+        self.assertEqual(movement.financial_account, self.cash_account)
+
+        findings = FinanceReconciler(
+            start=expense.business_date, end=expense.business_date, scope='expenses'
+        ).run()
+        self.assertFalse(
+            [finding for finding in findings if finding['code'] == 'expense_movement_mismatch']
+        )
 
     def test_approved_post_uses_distinct_draft_and_approval_keys(self):
         response = self.client.post(

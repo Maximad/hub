@@ -28,7 +28,8 @@ def _sync_cash(expense, context, reason='لم يعد المصروف مدفوعا
         return
     movement, _ = CashMovement.objects.update_or_create(
         related_expense=expense, is_generated=True, is_cancelled=False,
-        defaults={'business_date': expense.business_date, 'movement_type': CashMovement.MovementType.CASH_EXPENSE,
+        defaults={'business_date': expense.business_date, 'financial_account': expense.financial_account,
+                  'movement_type': CashMovement.MovementType.CASH_EXPENSE,
                   'direction': CashMovement.Direction.OUT, 'amount_syp': expense.amount_syp, 'vendor': expense.vendor,
                   'title': expense.title, 'notes': expense.description, 'created_by': context.actor,
                   'approved_by': context.approver},
