@@ -191,3 +191,15 @@ class CartScriptRegressionTests(SimpleTestCase):
         self.assertIn('input.value = ensureQuantity(input.value);', cart_script)
         self.assertNotIn('current > 0 ? stepQuantity(current, 1) : 1', cart_script)
         self.assertIn('if (isSubmitting)', cart_script)
+
+    def test_public_cart_sheet_reuses_authoritative_quantity_state(self):
+        project_root = Path(__file__).resolve().parents[2]
+        cart_script = (project_root / 'static/js/menu_cart.js').read_text()
+        menu_template = (project_root / 'templates/menu/menu.html').read_text()
+
+        self.assertIn('data-cart-sheet-open', menu_template)
+        self.assertIn('aria-controls="cart-review"', menu_template)
+        self.assertIn('data-cart-sheet-close', menu_template)
+        self.assertIn("document.body.classList.add('public-menu-cart-open')", cart_script)
+        self.assertIn("button.dataset.action === 'remove' ? 0", cart_script)
+        self.assertEqual(cart_script.count('let isSubmitting = false;'), 1)
