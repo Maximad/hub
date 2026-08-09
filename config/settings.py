@@ -145,6 +145,31 @@ LOGIN_URL = '/admin/login/'
 LOGIN_REDIRECT_URL = '/staff/'
 LOGOUT_REDIRECT_URL = '/admin/login/'
 
+# Keep handled request failures visible to the container runtime without
+# enabling DEBUG or including request bodies, cookies, or session data.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'stream': 'ext://sys.stderr',
+        },
+    },
+    'loggers': {
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        'django.server': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+    },
+}
+
 # Persistent membership recognition (raw credentials are never stored server-side).
 MEMBER_DEVICE_COOKIE_NAME = os.getenv('MEMBER_DEVICE_COOKIE_NAME', 'hub_member_device')
 MEMBER_DEVICE_COOKIE_AGE = int(os.getenv('MEMBER_DEVICE_COOKIE_AGE', 60 * 60 * 24 * 365))
