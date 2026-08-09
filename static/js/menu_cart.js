@@ -249,6 +249,15 @@
 
   form.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') { closeItemModal(); closeCartSheet(); }
+    if (event.key === 'Tab' && modal && !modal.hidden) {
+      const focusable = Array.from(modal.querySelectorAll('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'));
+      if (focusable.length) {
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
+    }
     if (event.key === 'Tab' && cartSheet?.classList.contains('is-open')) {
       const focusable = Array.from(cartSheet.querySelectorAll('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'));
       if (focusable.length) {

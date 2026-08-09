@@ -1,3 +1,5 @@
+from html.parser import HTMLParser
+
 from django.contrib.auth import get_user_model
 from django.contrib.staticfiles import finders
 from django.test import TestCase, override_settings
@@ -6,6 +8,43 @@ from catalog.models import MenuSection, ProductOption, ProductOptionGroup, Produ
 from core.models import Category, Order, OrderItem, Product, SystemSetting
 from core.settings_helpers import get_system_settings
 from core.templatetags.hub_numbers import format_syp, latin_digits
+
+
+class _Element:
+    def __init__(self, tag, attrs, parent=None):
+        self.tag = tag
+        self.attrs = dict(attrs)
+        self.parent = parent
+        self.children = []
+        self.text = ''
+
+    def descendants(self):
+        for child in self.children:
+            yield child
+            yield from child.descendants()
+
+
+class _RenderedMenuParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.root = _Element('document', [])
+        self.current = self.root
+
+    def handle_starttag(self, tag, attrs):
+        element = _Element(tag, attrs, self.current)
+        self.current.children.append(element)
+        if tag not in {'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr'}:
+            self.current = element
+
+    def handle_endtag(self, tag):
+        node = self.current
+        while node is not self.root and node.tag != tag:
+            node = node.parent
+        if node is not self.root:
+            self.current = node.parent
+
+    def handle_data(self, data):
+        self.current.text += data
 
 
 class LatinNumberFormattingTests(TestCase):
@@ -52,6 +91,25 @@ class CompactMenuRenderingTests(TestCase):
         get_system_settings.cache_clear()
         return setting
 
+    def _assert_product_dialog_contract(self, response):
+        parser = _RenderedMenuParser()
+        parser.feed(response.content.decode())
+        elements = list(parser.root.descendants())
+        cards = [element for element in elements if 'data-product-card' in element.attrs]
+        self.assertEqual(len(cards), 1)
+        card_elements = list(cards[0].descendants())
+        sources = [element for element in card_elements if 'data-modal-source' in element.attrs]
+        self.assertEqual(len(sources), 1)
+        self.assertEqual(sources[0].attrs['data-modal-product-id'], str(self.product.id))
+        self.assertEqual(len([element for element in elements if 'data-menu-modal' in element.attrs]), 1)
+        quantity_inputs = [element for element in elements if element.attrs.get('name') == f'qty_{self.product.id}']
+        self.assertEqual(len(quantity_inputs), 1)
+        self.assertEqual(quantity_inputs[0].attrs.get('id'), f'qty_{self.product.id}')
+        self.assertEqual(quantity_inputs[0].attrs.get('value'), '0')
+        rendered_text = response.content.decode()
+        self.assertIn(self.product.name_ar, rendered_text)
+        self.assertIn('25,000 ل.س', rendered_text)
+
 
     def test_global_numeric_assets_are_loaded_from_base_template(self):
         response = self.client.get('/menu/')
@@ -94,6 +152,17 @@ class CompactMenuRenderingTests(TestCase):
         self.assertContains(response, 'خيارات متاحة')
         self.assertContains(response, 'menu-product-media--placeholder')
         self.assertNotContains(response, 'menu-list-actions')
+        self._assert_product_dialog_contract(response)
+
+    @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
+    def test_public_menu_comfortable_cards_contain_their_modal_source_and_unique_controls(self):
+        self._settings(public_menu_layout=SystemSetting.PublicMenuLayout.COMFORTABLE, show_item_notes=True)
+        response = self.client.get('/menu/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'public-menu-layout-comfortable')
+        self._assert_product_dialog_contract(response)
+        self.assertEqual(response.content.decode().count(f'name="note_{self.product.id}"'), 1)
+        self.assertEqual(response.content.decode().count(f'name="option_{self.product.id}_{self.group.id}"'), 1)
 
     @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
     def test_invalid_public_menu_layout_falls_back(self):
