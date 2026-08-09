@@ -6,6 +6,7 @@
   const cartList = form.querySelector('[data-cart-list]');
   const cartTotal = form.querySelector('[data-cart-total]');
   const cartHelper = form.querySelector('[data-cart-helper]');
+  const cartStatus = form.querySelector('[data-cart-status]');
   const stickyCart = form.querySelector('[data-sticky-cart]');
   const itemCountNodes = Array.from(form.querySelectorAll('[data-item-count]'));
   const stickyTotalNodes = Array.from(form.querySelectorAll('[data-sticky-total]'));
@@ -35,6 +36,7 @@
   let activeModalSource = null;
   let activeReturnFocus = null;
   let isSubmitting = false;
+  let previousTotalQty = 0;
 
   function openCartSheet() {
     if (!cartSheet || !mobileCartQuery.matches) return;
@@ -166,6 +168,18 @@
     stickyTotalNodes.forEach((node) => { node.textContent = totalText; });
     itemCountNodes.forEach((node) => { node.textContent = totalQty.toLocaleString('en-US'); });
 
+    if (cartStatus && totalQty !== previousTotalQty) {
+      cartStatus.textContent = totalQty
+        ? `أصبح في طلبك ${totalQty.toLocaleString('en-US')} من العناصر، والمجموع ${totalText}.`
+        : 'طلبك ما زال فارغاً.';
+    }
+    if (totalQty !== previousTotalQty && previousTotalQty !== 0) {
+      stickyCart?.classList.remove('is-updated');
+      // Restart the restrained confirmation animation without maintaining another cart state.
+      window.requestAnimationFrame(() => stickyCart?.classList.add('is-updated'));
+    }
+    previousTotalQty = totalQty;
+
     const hasItems = totalQty > 0;
     cartSheet?.classList.toggle('has-items', hasItems);
     cartHelper.hidden = hasItems;
@@ -264,16 +278,42 @@
   mobileCartQuery.addEventListener?.('change', (event) => { if (!event.matches) closeCartSheet(false); });
   const sectionLinks = Array.from(form.querySelectorAll('.menu-section-chip'));
   const sections = sectionLinks.map((link) => document.querySelector(link.getAttribute('href'))).filter(Boolean);
-  if (sectionLinks.length) sectionLinks[0].classList.add('is-active');
+  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  let manualNavigationUntil = 0;
+  const sectionVisibility = new Map();
+
+  function setActiveSection(section, reveal = true, smooth = true) {
+    sectionLinks.forEach((link) => {
+      const active = link.hash === `#${section.id}`;
+      link.classList.toggle('is-active', active);
+      if (active) {
+        link.setAttribute('aria-current', 'true');
+        if (reveal) link.scrollIntoView({ behavior: reduceMotion || !smooth ? 'auto' : 'smooth', block: 'nearest', inline: 'center' });
+      } else {
+        link.removeAttribute('aria-current');
+      }
+    });
+  }
+
+  if (sections.length) setActiveSection(sections[0], false);
+  sectionLinks.forEach((link) => link.addEventListener('click', (event) => {
+    const section = document.querySelector(link.hash);
+    if (!section) return;
+    event.preventDefault();
+    manualNavigationUntil = Date.now() + 900;
+    setActiveSection(section, true);
+    section.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+    window.history.replaceState(null, '', link.hash);
+  }));
   if ('IntersectionObserver' in window && sections.length) {
     const sectionObserver = new IntersectionObserver((entries) => {
-      const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-      if (!visible) return;
-      sectionLinks.forEach((link) => {
-        const active = link.getAttribute('href') === `#${visible.target.id}`;
-        link.classList.toggle('is-active', active);
-        if (active) link.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-      });
+      entries.forEach((entry) => sectionVisibility.set(entry.target, entry.isIntersecting ? entry.intersectionRatio : 0));
+      if (Date.now() < manualNavigationUntil) return;
+      const visible = sections
+        .map((section) => ({ section, ratio: sectionVisibility.get(section) || 0 }))
+        .filter((item) => item.ratio > 0)
+        .sort((a, b) => b.ratio - a.ratio)[0];
+      if (visible) setActiveSection(visible.section, true, false);
     }, { rootMargin: '-20% 0px -65% 0px', threshold: [0, 0.2] });
     sections.forEach((section) => sectionObserver.observe(section));
   }
@@ -284,7 +324,7 @@
       return;
     }
     isSubmitting = true;
-    if (originalSubmit) common.setLoading?.(originalSubmit, true, 'جارٍ الإرسال...');
+    if (originalSubmit) common.setLoading?.(originalSubmit, true, 'جارٍ إرسال الطلب...');
   });
   update();
   if (document.querySelector('.public-menu-redesign [data-order-error]')) openCartSheet();
