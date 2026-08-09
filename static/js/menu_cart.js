@@ -197,6 +197,16 @@
 
   form.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') closeItemModal();
+    if (event.key === 'Tab' && modal && !modal.hidden) {
+      const focusable = Array.from(modal.querySelectorAll('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'))
+        .filter((element) => !element.hidden && element.getClientRects().length);
+      if (focusable.length) {
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
+    }
     if ((event.key === 'Enter' || event.key === ' ') && event.target.matches('[data-product-card]')) {
       event.preventDefault();
       openItemModal(event.target);

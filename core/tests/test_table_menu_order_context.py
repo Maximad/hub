@@ -191,3 +191,21 @@ class CartScriptRegressionTests(SimpleTestCase):
         self.assertIn('input.value = ensureQuantity(input.value);', cart_script)
         self.assertNotIn('current > 0 ? stepQuantity(current, 1) : 1', cart_script)
         self.assertIn('if (isSubmitting)', cart_script)
+
+    def test_product_dialog_keeps_keyboard_focus_contained(self):
+        cart_script = (Path(__file__).resolve().parents[2] / 'static/js/menu_cart.js').read_text()
+
+        self.assertIn("event.key === 'Tab' && modal && !modal.hidden", cart_script)
+        self.assertIn('activeReturnFocus.focus()', cart_script)
+
+    def test_product_dialog_uses_content_driven_public_menu_structure(self):
+        root = Path(__file__).resolve().parents[2]
+        template = (root / 'templates/menu/menu.html').read_text()
+        stylesheet = (root / 'static/css/hub.css').read_text()
+
+        self.assertIn('menu-item-modal-handle', template)
+        self.assertIn('menu-item-quantity-label', template)
+        self.assertIn('إضافة إلى الطلب', template)
+        self.assertIn('.public-menu-redesign .menu-item-modal-content', stylesheet)
+        self.assertIn('max-height:94dvh', stylesheet)
+        self.assertNotIn('min-height:700px', stylesheet)
