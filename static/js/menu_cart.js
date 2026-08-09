@@ -28,9 +28,36 @@
 
   const modal = form.querySelector('[data-menu-modal]');
   const modalBody = form.querySelector('[data-menu-modal-body]');
+  const cartSheet = form.querySelector('[data-cart-sheet]');
+  const cartSheetTrigger = form.querySelector('[data-cart-sheet-open]');
+  const cartSheetBackdrop = form.querySelector('.public-menu-cart-backdrop');
+  const mobileCartQuery = window.matchMedia('(max-width: 1023px)');
   let activeModalSource = null;
   let activeReturnFocus = null;
   let isSubmitting = false;
+
+  function openCartSheet() {
+    if (!cartSheet || !mobileCartQuery.matches) return;
+    closeItemModal(false);
+    cartSheet.classList.add('is-open');
+    cartSheet.setAttribute('role', 'dialog');
+    cartSheet.setAttribute('aria-modal', 'true');
+    cartSheetTrigger?.setAttribute('aria-expanded', 'true');
+    if (cartSheetBackdrop) cartSheetBackdrop.hidden = false;
+    document.body.classList.add('public-menu-cart-open');
+    cartSheet.querySelector('[data-cart-sheet-close]')?.focus();
+  }
+
+  function closeCartSheet(restoreFocus = true) {
+    if (!cartSheet?.classList.contains('is-open')) return;
+    cartSheet.classList.remove('is-open');
+    cartSheet.removeAttribute('role');
+    cartSheet.removeAttribute('aria-modal');
+    cartSheetTrigger?.setAttribute('aria-expanded', 'false');
+    if (cartSheetBackdrop) cartSheetBackdrop.hidden = true;
+    document.body.classList.remove('public-menu-cart-open');
+    if (restoreFocus) cartSheetTrigger?.focus();
+  }
 
   function openItemModal(card) {
     if (!modal || !modalBody) return;
@@ -122,7 +149,7 @@
           ? `<ul class="menu-cart-options">${line.options.map((option) => `<li>${escapeHtml(option.name)}</li>`).join('')}</ul>`
           : '';
         const noteHtml = line.note ? `<small>ملاحظة: ${escapeHtml(line.note)}</small>` : '';
-        return `<li><strong>${escapeHtml(line.name)}</strong> × <span class="hub-number latin-numbers">${line.qty}</span> — <span class="hub-money latin-numbers">${formatMoney(line.lineTotal)}</span> ${optionHtml}${noteHtml}<div class="menu-cart-actions"><button class="hub-button hub-button-secondary" type="button" data-cart-action="decrement" data-action="minus" data-target="qty_${line.id}">-</button><button class="hub-button hub-button-secondary" type="button" data-cart-action="increment" data-action="plus" data-target="qty_${line.id}">+</button><button class="hub-button hub-button-secondary" type="button" data-cart-action="edit" data-action="edit" data-target="qty_${line.id}">تعديل</button><button class="hub-button hub-button-danger" type="button" data-cart-action="remove" data-action="remove" data-target="qty_${line.id}">حذف</button></div></li>`;
+        return `<li class="public-menu-cart-item"><div class="public-menu-cart-item__summary"><strong>${escapeHtml(line.name)}</strong><span class="hub-money latin-numbers">${formatMoney(line.lineTotal)}</span></div><div class="public-menu-cart-item__options">${optionHtml}${noteHtml}</div><div class="menu-cart-actions"><div class="public-menu-cart-stepper"><button class="hub-button hub-button-secondary" type="button" data-cart-action="decrement" data-action="minus" data-target="qty_${line.id}" aria-label="تقليل ${escapeHtml(line.name)}">−</button><span class="hub-number latin-numbers" aria-label="الكمية">${line.qty}</span><button class="hub-button hub-button-secondary" type="button" data-cart-action="increment" data-action="plus" data-target="qty_${line.id}" aria-label="زيادة ${escapeHtml(line.name)}">+</button></div><button class="public-menu-cart-edit" type="button" data-cart-action="edit" data-action="edit" data-target="qty_${line.id}">تعديل</button><button class="public-menu-cart-remove" type="button" data-cart-action="remove" data-action="remove" data-target="qty_${line.id}">حذف</button></div></li>`;
       })
       .join('');
 
@@ -140,6 +167,7 @@
     itemCountNodes.forEach((node) => { node.textContent = totalQty.toLocaleString('en-US'); });
 
     const hasItems = totalQty > 0;
+    cartSheet?.classList.toggle('has-items', hasItems);
     cartHelper.hidden = hasItems;
     if (stickyCart) stickyCart.hidden = !hasItems;
     if (submitBtn) { submitBtn.disabled = !hasItems; if (submitBtn.textContent.trim() === 'إرسال الطلب') submitBtn.textContent = form.classList.contains('staff-pos__form') ? 'إتمام الطلب' : 'إرسال الطلب'; }
@@ -147,6 +175,16 @@
   }
 
   form.addEventListener('click', (event) => {
+    if (event.target.closest('[data-cart-sheet-open]')) {
+      event.preventDefault();
+      openCartSheet();
+      return;
+    }
+    if (event.target.closest('[data-cart-sheet-close]')) {
+      event.preventDefault();
+      closeCartSheet();
+      return;
+    }
     const addButton = event.target.closest('[data-add-to-cart]');
     if (addButton) {
       event.preventDefault();
@@ -196,15 +234,14 @@
   }
 
   form.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') closeItemModal();
-    if (event.key === 'Tab' && modal && !modal.hidden) {
-      const focusable = Array.from(modal.querySelectorAll('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'))
-        .filter((element) => !element.hidden && element.getClientRects().length);
+    if (event.key === 'Escape') { closeItemModal(); closeCartSheet(); }
+    if (event.key === 'Tab' && cartSheet?.classList.contains('is-open')) {
+      const focusable = Array.from(cartSheet.querySelectorAll('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'));
       if (focusable.length) {
         const first = focusable[0];
         const last = focusable[focusable.length - 1];
         if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-        if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
       }
     }
     if ((event.key === 'Enter' || event.key === ' ') && event.target.matches('[data-product-card]')) {
@@ -224,6 +261,7 @@
   });
 
   filterProducts();
+  mobileCartQuery.addEventListener?.('change', (event) => { if (!event.matches) closeCartSheet(false); });
   const sectionLinks = Array.from(form.querySelectorAll('.menu-section-chip'));
   const sections = sectionLinks.map((link) => document.querySelector(link.getAttribute('href'))).filter(Boolean);
   if (sectionLinks.length) sectionLinks[0].classList.add('is-active');
@@ -249,4 +287,5 @@
     if (originalSubmit) common.setLoading?.(originalSubmit, true, 'جارٍ الإرسال...');
   });
   update();
+  if (document.querySelector('.public-menu-redesign [data-order-error]')) openCartSheet();
 })();
