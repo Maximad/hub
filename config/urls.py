@@ -20,9 +20,11 @@ from accounts.views_staff import (
     staff_users_list, staff_user_new, staff_user_detail, staff_user_edit, staff_user_password, staff_user_toggle_active,
 )
 from members import views as member_device_views
+from core.views.internet_partner import internet_partner_dashboard
 
 
 urlpatterns = [
+    path('partner/internet/', internet_partner_dashboard, name='internet_partner_dashboard'),
     path('admin/', admin.site.urls),
     path('', menu.dashboard, name='dashboard'),
     path('menu/', menu.menu_public, name='menu_public'),

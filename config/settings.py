@@ -180,6 +180,14 @@ PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', '')
 # A second, manager-level user must approve transfers at or above this amount.
 TRANSFER_APPROVAL_LIMIT_SYP = int(os.getenv('TRANSFER_APPROVAL_LIMIT_SYP', '1000000'))
 
+# Manual networking remains the safe default. These placeholders contain no secrets.
+MIKROTIK_ENABLED = os.getenv('MIKROTIK_ENABLED', 'false').lower() == 'true'
+MIKROTIK_HOST = os.getenv('MIKROTIK_HOST', '')
+MIKROTIK_USERNAME = os.getenv('MIKROTIK_USERNAME', '')
+MIKROTIK_PASSWORD = os.getenv('MIKROTIK_PASSWORD', '')
+MIKROTIK_VERIFY_TLS = os.getenv('MIKROTIK_VERIFY_TLS', 'true').lower() == 'true'
+MIKROTIK_TIMEOUT = int(os.getenv('MIKROTIK_TIMEOUT', '10'))
+
 # Currency safety values are reporting values in the new Syrian pound.  They are
 # review levels, not transaction limits, and may be overridden per operation.
 CURRENCY_RATE_MAX_AGE_DAYS = int(os.getenv('CURRENCY_RATE_MAX_AGE_DAYS', '3'))
