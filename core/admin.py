@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.utils.html import format_html
 from django.template.response import TemplateResponse
+import uuid
 from catalog.admin_media import safe_media_preview
 from catalog.models import ProductMedia, ProductOptionGroupAssignment
 from .settings_helpers import get_system_settings
@@ -18,6 +19,8 @@ from .models import (
     Category,
     InternetPackage,
     InternetSession,
+    InternetBandwidthProfile, InternetPartner, InternetPartnerUser,
+    InternetEntitlement, InternetAccessDevice, InternetRevenueShare,
     DailyClose, PostingCommand, PostingReconciliationFailure,
     ExpenseCategory, Expense, CashMovement,
     InventoryItem, Purchase, PurchaseItem, StockMovement, ProductRecipeItem, ProductionBatch, ProductionBatchIngredient,
@@ -35,6 +38,66 @@ from .models import (
     TableArea,
     ExchangeRate, CurrencyEntrySnapshot,
 )
+
+
+@admin.register(InternetBandwidthProfile)
+class InternetBandwidthProfileAdmin(admin.ModelAdmin):
+    list_display = ('code', 'name', 'download_limit_kbps', 'upload_limit_kbps', 'is_active')
+    list_filter = ('is_active',)
+
+
+@admin.register(InternetPartner)
+class InternetPartnerAdmin(admin.ModelAdmin):
+    list_display = ('name', 'active', 'revenue_share_percent')
+    list_filter = ('active',)
+
+
+@admin.register(InternetPartnerUser)
+class InternetPartnerUserAdmin(admin.ModelAdmin):
+    list_display = ('partner', 'user', 'can_view_customer_phone')
+
+
+@admin.register(InternetPackage)
+class InternetPackageAdmin(admin.ModelAdmin):
+    list_display = ('name_ar', 'code', 'access_mode', 'price_syp', 'activation_policy', 'is_active', 'sort_order')
+    list_filter = ('access_mode', 'activation_policy', 'is_active', 'member_only', 'guest_allowed')
+    search_fields = ('name_ar', 'name_en', 'code')
+    fieldsets = (
+        ('تجاري', {'fields': ('name_ar', 'name_en', 'code', 'description_ar', 'description_en', 'price_syp', 'partner', 'partner_share_percent')}),
+        ('الوصول', {'fields': ('access_mode', 'activation_policy', 'validity_value', 'validity_unit', 'duration_minutes')}),
+        ('الاستخدام', {'fields': ('session_minutes_limit', 'total_minutes_limit', 'daily_minutes_limit')}),
+        ('الشبكة', {'fields': ('bandwidth_profile', 'max_concurrent_devices', 'max_registered_devices', 'backend_config')}),
+        ('التوفر', {'fields': ('is_active', 'member_only', 'guest_allowed', 'visible_to_staff', 'visible_to_customer', 'sort_order', 'notes')}),
+    )
+    actions = ('duplicate_packages', 'deactivate_packages')
+    @admin.action(description='نسخ الباقات المحددة')
+    def duplicate_packages(self, request, queryset):
+        for package in queryset:
+            package.pk = None; package.public_code = uuid.uuid4(); package.code = None
+            package.name_ar = f'نسخة من {package.name_ar}'; package.is_active = False; package.save()
+    @admin.action(description='تعطيل الباقات المحددة')
+    def deactivate_packages(self, request, queryset): queryset.update(is_active=False)
+
+
+@admin.register(InternetEntitlement)
+class InternetEntitlementAdmin(admin.ModelAdmin):
+    list_display = ('access_code', 'package', 'member', 'guest_name', 'status', 'network_status', 'valid_until', 'minutes_remaining')
+    list_filter = ('status', 'network_status', 'access_mode', 'partner')
+    search_fields = ('access_code', 'guest_name', 'guest_phone', 'member__name_ar', 'member__phone')
+    readonly_fields = ('public_code', 'access_code', 'minutes_used', 'created_at', 'updated_at')
+
+
+@admin.register(InternetAccessDevice)
+class InternetAccessDeviceAdmin(admin.ModelAdmin):
+    list_display = ('entitlement', 'device_mac', 'nickname', 'is_active', 'last_seen_at')
+
+
+@admin.register(InternetRevenueShare)
+class InternetRevenueShareAdmin(admin.ModelAdmin):
+    list_display = ('business_date', 'partner', 'package', 'gross_amount_syp', 'share_percent', 'partner_amount_syp', 'hub_amount_syp')
+    readonly_fields = tuple(f.name for f in InternetRevenueShare._meta.fields)
+    def has_add_permission(self, request): return False
+    def has_delete_permission(self, request, obj=None): return False
 
 
 @admin.register(ExchangeRate)
@@ -644,12 +707,6 @@ class MemberAdmin(admin.ModelAdmin):
     list_filter = ('default_plan',)
     search_fields = ('name_ar', 'name_en', 'phone')
     autocomplete_fields = ('default_plan',)
-
-
-@admin.register(InternetPackage)
-class InternetPackageAdmin(admin.ModelAdmin):
-    list_display = ('name_ar', 'duration_minutes', 'price_syp', 'updated_at')
-    search_fields = ('name_ar', 'name_en', 'description_ar')
 
 
 @admin.register(InternetSession)

@@ -1,4 +1,5 @@
 import re
+import secrets
 import uuid
 from pathlib import Path
 
@@ -1351,15 +1352,195 @@ class Member(TimeStampedModel, PublicCodeModel):
 
 
 class InternetPackage(TimeStampedModel, PublicCodeModel):
+    class AccessMode(models.TextChoices):
+        TIMED_SESSION = 'timed_session', 'جلسة محددة الوقت'
+        VALIDITY_PASS = 'validity_pass', 'بطاقة صلاحية'
+        ALLOWANCE = 'allowance', 'رصيد دقائق'
+        UNLIMITED = 'unlimited', 'غير محدود'
+        MEMBERSHIP_CREDIT = 'membership_credit', 'رصيد العضوية'
+
+    class ActivationPolicy(models.TextChoices):
+        ON_PURCHASE = 'on_purchase', 'عند الشراء'
+        ON_FIRST_USE = 'on_first_use', 'عند أول استخدام'
+        MANUAL = 'manual', 'يدوي'
+
+    class ValidityUnit(models.TextChoices):
+        MINUTES = 'minutes', 'دقيقة'
+        DAYS = 'days', 'يوم'
+        WEEKS = 'weeks', 'أسبوع'
+        MONTHS = 'months', 'شهر'
+
     name_ar = models.CharField(max_length=120)
     name_en = models.CharField(max_length=120, blank=True)
     description_ar = models.TextField(blank=True)
     description_en = models.TextField(blank=True)
-    duration_minutes = models.PositiveIntegerField()
+    duration_minutes = models.PositiveIntegerField(default=0)
     price_syp = models.PositiveIntegerField()
+    code = models.SlugField(max_length=50, unique=True, null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.IntegerField(default=0)
+    access_mode = models.CharField(max_length=24, choices=AccessMode.choices, default=AccessMode.TIMED_SESSION)
+    activation_policy = models.CharField(max_length=24, choices=ActivationPolicy.choices, default=ActivationPolicy.ON_PURCHASE)
+    validity_value = models.PositiveIntegerField(null=True, blank=True)
+    validity_unit = models.CharField(max_length=12, choices=ValidityUnit.choices, blank=True)
+    session_minutes_limit = models.PositiveIntegerField(null=True, blank=True)
+    total_minutes_limit = models.PositiveIntegerField(null=True, blank=True)
+    daily_minutes_limit = models.PositiveIntegerField(null=True, blank=True)
+    bandwidth_profile = models.ForeignKey('InternetBandwidthProfile', on_delete=models.PROTECT, null=True, blank=True, related_name='packages')
+    max_concurrent_devices = models.PositiveSmallIntegerField(default=1)
+    max_registered_devices = models.PositiveSmallIntegerField(default=1)
+    member_only = models.BooleanField(default=False)
+    guest_allowed = models.BooleanField(default=True)
+    visible_to_staff = models.BooleanField(default=True)
+    visible_to_customer = models.BooleanField(default=False)
+    partner = models.ForeignKey('InternetPartner', on_delete=models.PROTECT, null=True, blank=True, related_name='packages')
+    partner_share_percent = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0), MaxValueValidator(100)])
+    notes = models.TextField(blank=True)
+    backend_config = models.JSONField(default=dict, blank=True)
+
+    def clean(self):
+        errors = {}
+        validity = bool(self.validity_value and self.validity_unit)
+        if bool(self.validity_value) != bool(self.validity_unit): errors['validity_value'] = 'يجب تحديد قيمة ووحدة الصلاحية معاً.'
+        if self.max_concurrent_devices < 1 or self.max_registered_devices < 1: errors['max_registered_devices'] = 'حد الأجهزة يجب أن يكون واحداً على الأقل.'
+        if self.max_concurrent_devices > self.max_registered_devices: errors['max_concurrent_devices'] = 'حد الأجهزة المتزامنة لا يتجاوز حد الأجهزة المسجلة.'
+        if self.member_only and self.guest_allowed: errors['guest_allowed'] = 'باقة الأعضاء فقط لا يمكن أن تسمح للزوار.'
+        if self.access_mode == self.AccessMode.TIMED_SESSION and not (self.session_minutes_limit or self.duration_minutes): errors['session_minutes_limit'] = 'حد دقائق الجلسة مطلوب.'
+        if self.access_mode in {self.AccessMode.VALIDITY_PASS, self.AccessMode.UNLIMITED} and not validity: errors['validity_value'] = 'الصلاحية مطلوبة.'
+        if self.access_mode == self.AccessMode.ALLOWANCE and not self.total_minutes_limit: errors['total_minutes_limit'] = 'إجمالي الدقائق مطلوب.'
+        if self.access_mode == self.AccessMode.UNLIMITED and self.total_minutes_limit: errors['total_minutes_limit'] = 'الباقة غير المحدودة لا تستخدم رصيد دقائق.'
+        if self.access_mode == self.AccessMode.MEMBERSHIP_CREDIT:
+            if not self.member_only or self.guest_allowed: errors['member_only'] = 'رصيد العضوية مخصص للأعضاء فقط.'
+            if self.total_minutes_limit: errors['total_minutes_limit'] = 'رصيد العضوية يأتي من الاشتراك، لا من الباقة.'
+        if errors: raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        if self.access_mode == self.AccessMode.TIMED_SESSION and not self.session_minutes_limit and self.duration_minutes:
+            self.session_minutes_limit = self.duration_minutes
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
     def __str__(self):
         return _arabic_first(self, 'name_ar', 'name_en', fallback=str(self.public_code)[:8])
+
+
+class InternetBandwidthProfile(TimeStampedModel):
+    code = models.SlugField(max_length=50, unique=True)
+    name = models.CharField(max_length=120)
+    download_limit_kbps = models.PositiveIntegerField(null=True, blank=True)
+    upload_limit_kbps = models.PositiveIntegerField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    def __str__(self): return self.name
+
+
+class InternetPartner(TimeStampedModel):
+    name = models.CharField(max_length=120)
+    active = models.BooleanField(default=True)
+    revenue_share_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0, validators=[MinValueValidator(0), MaxValueValidator(100)])
+    users = models.ManyToManyField(settings.AUTH_USER_MODEL, through='InternetPartnerUser', related_name='internet_partners')
+    def __str__(self): return self.name
+
+
+class InternetPartnerUser(TimeStampedModel):
+    partner = models.ForeignKey(InternetPartner, on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    can_view_customer_phone = models.BooleanField(default=False)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['partner', 'user'], name='unique_internet_partner_user')]
+
+
+class InternetEntitlement(TimeStampedModel, PublicCodeModel):
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'بانتظار التفعيل'
+        ACTIVE = 'active', 'فعال'
+        EXPIRED = 'expired', 'منتهي'
+        CANCELLED = 'cancelled', 'ملغى'
+    class NetworkStatus(models.TextChoices):
+        NOT_PROVISIONED = 'not_provisioned', 'غير مجهز'
+        PROVISIONED = 'provisioned', 'مجهز'
+        DISCONNECTED = 'disconnected', 'مفصول'
+        PROVISION_ERROR = 'provision_error', 'خطأ تجهيز'
+
+    member = models.ForeignKey(Member, on_delete=models.PROTECT, null=True, blank=True, related_name='internet_entitlements')
+    guest_name = models.CharField(max_length=120, blank=True)
+    guest_phone = models.CharField(max_length=30, blank=True)
+    package = models.ForeignKey(InternetPackage, on_delete=models.PROTECT, related_name='entitlements')
+    order = models.ForeignKey(Order, on_delete=models.SET_NULL, null=True, blank=True, related_name='internet_entitlements')
+    payment = models.ForeignKey(Payment, on_delete=models.SET_NULL, null=True, blank=True, related_name='internet_entitlements')
+    subscription = models.ForeignKey('members.MembershipSubscription', on_delete=models.PROTECT, null=True, blank=True, related_name='internet_entitlements')
+    idempotency_key = models.CharField(max_length=100, null=True, blank=True, unique=True)
+    access_code = models.CharField(max_length=12, unique=True, editable=False)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    access_mode = models.CharField(max_length=24, choices=InternetPackage.AccessMode.choices)
+    activation_policy = models.CharField(max_length=24, choices=InternetPackage.ActivationPolicy.choices)
+    activated_at = models.DateTimeField(null=True, blank=True)
+    valid_from = models.DateTimeField(null=True, blank=True)
+    valid_until = models.DateTimeField(null=True, blank=True)
+    validity_value = models.PositiveIntegerField(null=True, blank=True)
+    validity_unit = models.CharField(max_length=12, choices=InternetPackage.ValidityUnit.choices, blank=True)
+    session_minutes_limit = models.PositiveIntegerField(null=True, blank=True)
+    total_minutes_allowed = models.PositiveIntegerField(null=True, blank=True)
+    minutes_used = models.PositiveIntegerField(default=0)
+    daily_minutes_limit = models.PositiveIntegerField(null=True, blank=True)
+    bandwidth_profile_code = models.CharField(max_length=50, blank=True)
+    max_concurrent_devices = models.PositiveSmallIntegerField(default=1)
+    max_registered_devices = models.PositiveSmallIntegerField(default=1)
+    network_backend = models.CharField(max_length=30, default='manual')
+    network_status = models.CharField(max_length=30, choices=NetworkStatus.choices, default=NetworkStatus.NOT_PROVISIONED)
+    external_network_identifier = models.CharField(max_length=120, blank=True)
+    last_network_sync_at = models.DateTimeField(null=True, blank=True)
+    last_network_error = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_internet_entitlements')
+    cancelled_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='cancelled_internet_entitlements')
+    cancellation_reason = models.TextField(blank=True)
+    partner = models.ForeignKey(InternetPartner, on_delete=models.PROTECT, null=True, blank=True, related_name='entitlements')
+    gross_amount_syp = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+
+    @property
+    def minutes_remaining(self):
+        return None if self.total_minutes_allowed is None else max(self.total_minutes_allowed - self.minutes_used, 0)
+
+    def effective_status(self, at=None):
+        from django.utils import timezone
+        at = at or timezone.now()
+        return self.Status.EXPIRED if self.status == self.Status.ACTIVE and self.valid_until and self.valid_until <= at else self.status
+
+    @staticmethod
+    def new_access_code():
+        alphabet = '23456789ABCDEFGHJKMNPQRSTUVWXYZ'
+        raw = ''.join(secrets.choice(alphabet) for _ in range(8))
+        return raw[:4] + '-' + raw[4:]
+
+    def save(self, *args, **kwargs):
+        if not self.access_code:
+            for _ in range(20):
+                candidate = self.new_access_code()
+                if not type(self).objects.filter(access_code=candidate).exists(): self.access_code = candidate; break
+        return super().save(*args, **kwargs)
+
+
+class InternetAccessDevice(TimeStampedModel):
+    entitlement = models.ForeignKey(InternetEntitlement, on_delete=models.CASCADE, related_name='devices')
+    device_mac = models.CharField(max_length=64)
+    nickname = models.CharField(max_length=120, blank=True)
+    first_seen_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['entitlement', 'device_mac'], name='unique_entitlement_device')]
+
+
+class InternetRevenueShare(TimeStampedModel):
+    entitlement = models.OneToOneField(InternetEntitlement, on_delete=models.PROTECT, related_name='revenue_share')
+    partner = models.ForeignKey(InternetPartner, on_delete=models.PROTECT, related_name='revenue_shares')
+    package = models.ForeignKey(InternetPackage, on_delete=models.PROTECT, related_name='revenue_shares')
+    order = models.ForeignKey(Order, on_delete=models.SET_NULL, null=True, blank=True)
+    payment = models.ForeignKey(Payment, on_delete=models.SET_NULL, null=True, blank=True)
+    gross_amount_syp = models.DecimalField(max_digits=14, decimal_places=2)
+    share_percent = models.DecimalField(max_digits=5, decimal_places=2)
+    partner_amount_syp = models.DecimalField(max_digits=14, decimal_places=2)
+    hub_amount_syp = models.DecimalField(max_digits=14, decimal_places=2)
+    business_date = models.DateField()
 
 
 class InternetSession(TimeStampedModel, PublicCodeModel):
@@ -1391,6 +1572,7 @@ class InternetSession(TimeStampedModel, PublicCodeModel):
     session_type = models.CharField(max_length=20, choices=SessionType.choices, default=SessionType.INTERNET, verbose_name='نوع الجلسة')
     member = models.ForeignKey(Member, on_delete=models.PROTECT, related_name='internet_sessions', null=True, blank=True)
     package = models.ForeignKey(InternetPackage, on_delete=models.PROTECT, related_name='sessions', null=True, blank=True)
+    entitlement = models.ForeignKey(InternetEntitlement, on_delete=models.PROTECT, related_name='sessions', null=True, blank=True)
     customer_name = models.CharField(max_length=120, blank=True)
     customer_phone = models.CharField(max_length=30, blank=True)
     guest_name = models.CharField(max_length=120, blank=True)

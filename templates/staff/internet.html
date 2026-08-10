@@ -8,6 +8,18 @@
   {% for message in messages %}<p class="hub-badge hub-badge-info">{{ message }}</p>{% endfor %}
 </section>
 
+<section class="hub-section hub-summary-cards">
+  <div class="hub-summary-card"><span>الجلسات الفعالة</span><strong class="metric">{{ internet_metrics.active_sessions }}</strong></div>
+  <div class="hub-summary-card"><span>البطاقات الفعالة</span><strong class="metric">{{ internet_metrics.active_passes }}</strong></div>
+  <div class="hub-summary-card"><span>تنتهي اليوم</span><strong class="metric">{{ internet_metrics.expiring_today }}</strong></div>
+  <div class="hub-summary-card"><span>غير مدفوع</span><strong class="metric">{{ internet_metrics.unpaid }}</strong></div>
+  <div class="hub-summary-card"><span>أخطاء التجهيز</span><strong class="metric">{{ internet_metrics.provision_errors }}</strong></div>
+</section>
+
+<section class="hub-section hub-card"><h3 class="hub-section-title">صلاحيات الوصول التجارية</h3>
+<div class="hub-table-wrap"><table class="hub-table"><tr><th>العميل</th><th>الباقة</th><th>القسيمة</th><th>الوصول</th><th>الشبكة</th><th>الانتهاء</th><th>الدقائق المتبقية</th><th>السرعة</th><th>الأجهزة</th></tr>
+{% for e in active_entitlements %}<tr><td>{% if e.member %}{{ e.member.name_ar }}{% else %}{{ e.guest_name|default:'زائر' }}{% endif %}</td><td>{{ e.package.name_ar }}</td><td><code>{{ e.access_code }}</code></td><td><span class="hub-status-chip">{{ e.get_status_display }}</span></td><td><span class="hub-status-chip">{{ e.get_network_status_display }}</span></td><td>{{ e.valid_until|default:'—' }}</td><td>{{ e.minutes_remaining|default_if_none:'غير محدود' }}</td><td>{{ e.bandwidth_profile_code|default:'—' }}</td><td>{{ e.devices.count }} / {{ e.max_registered_devices }}</td></tr>{% empty %}<tr><td colspan="9">لا توجد صلاحيات فعالة.</td></tr>{% endfor %}</table></div></section>
+
 <section class="hub-section hub-card">
   <h3 class="hub-section-title">جلسة جديدة — بدء الجلسة</h3>
   <form class="hub-form hub-form-section" method="post" action="{% url 'staff_internet_start' %}" id="internet-start-form">{% csrf_token %}

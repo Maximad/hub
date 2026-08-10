@@ -26,7 +26,7 @@ from accounts.permissions import (
     require_staff_capability, user_has_capability,
 )
 from core.stock_recipes import deduct_order_item_stock
-from core.models import ActivityLog, CancellationReason, CashMovement, Category, DailyClose, Expense, InternetPackage, InternetSession, Member, Order, OrderDiscount, OrderItem, Payment, Product, Room, SystemSetting, TableArea
+from core.models import ActivityLog, CancellationReason, CashMovement, Category, DailyClose, Expense, InternetEntitlement, InternetPackage, InternetSession, Member, Order, OrderDiscount, OrderItem, Payment, Product, Room, SystemSetting, TableArea
 from core.services.posting.context import PostingContext
 from core.services.posting.order_payments import collect as collect_order_payment
 from events.models import Event
@@ -1718,6 +1718,9 @@ def staff_internet(request):
     packages = InternetPackage.objects.order_by('name_ar')
     members = Member.objects.order_by('-created_at')[:200]
     active_rows = []
+    active_entitlements = InternetEntitlement.objects.select_related('member', 'package', 'payment').filter(status=InternetEntitlement.Status.ACTIVE).order_by('valid_until')
+    today = timezone.localdate()
+    expiring_today = active_entitlements.filter(valid_until__date=today).count()
     for session in active_sessions:
         duration = calculate_session_duration_minutes(session.effective_started_at, now)
         estimated_total = 0 if session.billing_mode in {InternetSession.BillingMode.FREE, InternetSession.BillingMode.PREPAID} else calculate_metered_session_total(
@@ -1726,6 +1729,13 @@ def staff_internet(request):
         active_rows.append({'session': session, 'elapsed_minutes': duration, 'estimated_total': estimated_total})
     return render(request, 'staff/internet.html', {
         'active_sessions': active_sessions,
+        'active_entitlements': active_entitlements,
+        'internet_metrics': {
+            'active_sessions': active_sessions.count(), 'active_passes': active_entitlements.count(),
+            'expiring_today': expiring_today,
+            'unpaid': active_entitlements.filter(payment__isnull=True, gross_amount_syp__gt=0).count(),
+            'provision_errors': active_entitlements.filter(network_status=InternetEntitlement.NetworkStatus.PROVISION_ERROR).count(),
+        },
         'active_rows': active_rows,
         'recent_sessions': recent_sessions,
         'packages': packages,
