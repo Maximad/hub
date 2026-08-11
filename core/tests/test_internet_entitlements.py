@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
@@ -319,3 +319,73 @@ class InternetHttpWorkflowTests(TestCase):
         response = self.client.get(reverse('internet_partner_dashboard'))
         self.assertEqual(response.context['totals']['gross'], Decimal('0'))
         self.assertEqual(response.context['totals']['partner'], Decimal('0'))
+
+
+class PartnerDashboardDateRangeTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        self.partner = InternetPartner.objects.create(
+            name='Date range ISP', revenue_share_percent=Decimal('30'))
+        self.package = InternetPackage.objects.create(
+            name_ar='نطاق زمني', code='date-range', duration_minutes=60,
+            price_syp=2000, access_mode='timed_session',
+            session_minutes_limit=60, partner=self.partner)
+        self.user = get_user_model().objects.create_user(
+            username='date-partner', phone='0903', password='x')
+        InternetPartnerUser.objects.create(partner=self.partner, user=self.user)
+        self.client.force_login(self.user)
+        self.url = reverse('internet_partner_dashboard')
+
+    def test_malformed_date_returns_controlled_validation_response(self):
+        response = self.client.get(self.url, {'start': 'not-a-date', 'end': '2026-08-11'})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, 'role="alert"', status_code=400)
+
+    def test_impossible_calendar_date_returns_controlled_validation_response(self):
+        response = self.client.get(self.url, {'start': '2026-02-30', 'end': '2026-03-01'})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, 'role="alert"', status_code=400)
+
+    def test_inverted_range_returns_controlled_validation_response(self):
+        response = self.client.get(self.url, {'start': '2026-08-12', 'end': '2026-08-11'})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, 'تاريخ البداية', status_code=400)
+
+    def test_reporting_interval_is_bounded(self):
+        response = self.client.get(self.url, {'start': '2025-01-01', 'end': '2026-08-11'})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, '366', status_code=400)
+
+    def test_boundary_dates_are_included_and_outside_records_are_excluded(self):
+        shares = []
+        for key in ('range-start', 'range-end', 'range-outside'):
+            entitlement = create_commercial_sale(
+                self.package, payment_method=Payment.Method.CASH,
+                actor=self.user, idempotency_key=key)
+            shares.append(entitlement.revenue_share)
+        InternetRevenueShare.objects.filter(pk=shares[0].pk).update(
+            business_date=date(2026, 8, 1))
+        InternetRevenueShare.objects.filter(pk=shares[1].pk).update(
+            business_date=date(2026, 8, 11))
+        InternetRevenueShare.objects.filter(pk=shares[2].pk).update(
+            business_date=date(2026, 8, 12))
+        InternetRevenueShareAdjustment.objects.create(
+            revenue_share=shares[0], kind='correction', idempotency_key='boundary-adjustment',
+            gross_delta_syp=Decimal('-100'), partner_delta_syp=Decimal('-30'),
+            hub_delta_syp=Decimal('-70'), business_date=date(2026, 8, 11))
+        InternetRevenueShareAdjustment.objects.create(
+            revenue_share=shares[0], kind='correction', idempotency_key='outside-adjustment',
+            gross_delta_syp=Decimal('-500'), partner_delta_syp=Decimal('-150'),
+            hub_delta_syp=Decimal('-350'), business_date=date(2026, 7, 31))
+
+        response = self.client.get(self.url, {'start': '2026-08-01', 'end': '2026-08-11'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            set(response.context['shares'].values_list('pk', flat=True)),
+            {shares[0].pk, shares[1].pk})
+        self.assertEqual(response.context['totals']['gross'], Decimal('3900'))
