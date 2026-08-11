@@ -1,11 +1,14 @@
 """Network adapters. Manual is the safe default and makes no external calls."""
 from django.conf import settings
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 
 
 class ManualNetworkBackend:
     code = 'manual'
     def provision_access(self, entitlement):
+        if entitlement.effective_status() in {entitlement.Status.EXPIRED, entitlement.Status.CANCELLED}:
+            raise ValidationError('لا يمكن تجهيز استحقاق منتهٍ أو ملغى.')
         entitlement.network_status = entitlement.NetworkStatus.PROVISIONED
         entitlement.last_network_error = ''
         entitlement.last_network_sync_at = timezone.now()
@@ -25,7 +28,12 @@ class ManualNetworkBackend:
 
 
 class MikroTikNetworkBackend:
-    """Explicit extension point; physical RouterOS integration is deferred."""
+    """Deferred extension point.
+
+    A future implementation must use the locked remaining allowance as a
+    network-side session timeout. Hub accounting still preserves actual
+    duration if the network permits an overrun.
+    """
     code = 'mikrotik'
     def __init__(self, *args, **kwargs):
         raise NotImplementedError('MikroTik integration is not enabled in this release.')

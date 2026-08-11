@@ -2,13 +2,15 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import Client, TestCase
+from django.urls import reverse
 from django.utils import timezone
 
-from core.models import (InternetBandwidthProfile, InternetEntitlement,
-                         InternetPackage, InternetPartner, InternetRevenueShare,
-                         Member)
+from core.models import (InternetAccessDevice, InternetBandwidthProfile, InternetEntitlement,
+                         InternetPackage, InternetPartner, InternetPartnerUser, InternetRevenueShare,
+                         InternetRevenueShareAdjustment, InternetSession, Member, Order, Payment)
 from core.services.internet_access import (create_entitlement, end_usage_session,
+    effectively_active_entitlements, record_payment_reversal_adjustment,
     register_device, start_usage_session, validity_end)
 from core.services.network_backends import ManualNetworkBackend, get_network_backend
 from members.models import MembershipPlan, MembershipSubscription
@@ -120,3 +122,134 @@ class PartnerSnapshotTests(TestCase):
         create_entitlement(package, idempotency_key='another')
         share.refresh_from_db(); self.assertEqual(share.share_percent, Decimal('25'))
         self.assertEqual(InternetRevenueShare.objects.filter(entitlement=ent).count(), 1)
+
+
+class HardeningRegressionTests(TestCase):
+    def setUp(self):
+        self.package = InternetPackage.objects.create(name_ar='ساعتان', code='hardening-2h', duration_minutes=120,
+            price_syp=1000, access_mode='timed_session', session_minutes_limit=120)
+
+    def test_runtime_expiry_blocks_operations_and_metrics_without_cleanup(self):
+        ent = create_entitlement(self.package)
+        InternetEntitlement.objects.filter(pk=ent.pk).update(valid_until=timezone.now() - timedelta(seconds=1))
+        ent.refresh_from_db()
+        self.assertEqual(ent.status, 'active')
+        self.assertEqual(ent.effective_status(), 'expired')
+        self.assertFalse(effectively_active_entitlements().filter(pk=ent.pk).exists())
+        with self.assertRaises(ValidationError): start_usage_session(ent)
+        with self.assertRaises(ValidationError): register_device(ent, 'AA:BB')
+        with self.assertRaises(ValidationError): ManualNetworkBackend().provision_access(ent)
+        self.assertEqual(InternetAccessDevice.objects.count(), 0)
+
+    def test_allowance_overrun_preserves_actual_and_caps_consumption(self):
+        package = InternetPackage.objects.create(name_ar='17 دقيقة', code='17m', duration_minutes=0,
+            price_syp=1, access_mode='allowance', total_minutes_limit=17)
+        ent = create_entitlement(package)
+        session = start_usage_session(ent)
+        end_usage_session(session, at=session.started_at + timedelta(minutes=40))
+        session.refresh_from_db(); ent.refresh_from_db()
+        self.assertEqual(session.actual_duration_minutes, 40)
+        self.assertEqual(session.allowance_minutes_consumed, 17)
+        self.assertEqual(ent.minutes_remaining, 0)
+        end_usage_session(session, at=session.started_at + timedelta(minutes=50))
+        ent.refresh_from_db(); self.assertEqual(ent.minutes_used, 17)
+
+    def test_on_first_use_is_only_usage_session_start(self):
+        package = InternetPackage.objects.create(name_ar='أسبوع', code='first-use-only', duration_minutes=0,
+            price_syp=1, access_mode='unlimited', activation_policy='on_first_use', validity_value=1, validity_unit='weeks')
+        ent = create_entitlement(package)
+        ManualNetworkBackend().provision_access(ent); ManualNetworkBackend().refresh_access(ent)
+        ent.refresh_from_db()
+        self.assertIsNone(ent.activated_at); self.assertEqual(ent.status, 'pending')
+        start_usage_session(ent); ent.refresh_from_db()
+        self.assertIsNotNone(ent.activated_at); self.assertEqual(ent.status, 'active')
+
+    def test_package_edits_do_not_change_sold_terms(self):
+        partner = InternetPartner.objects.create(name='A', revenue_share_percent=Decimal('20'))
+        profile = InternetBandwidthProfile.objects.create(code='old-speed', name='Old')
+        self.package.partner = partner; self.package.partner_share_percent = Decimal('25')
+        self.package.bandwidth_profile = profile; self.package.validity_value = 30; self.package.validity_unit = 'days'
+        self.package.max_concurrent_devices = 2; self.package.max_registered_devices = 3
+        self.package.total_minutes_limit = 200; self.package.save()
+        ent = create_entitlement(self.package); share = ent.revenue_share
+        other = InternetPartner.objects.create(name='B', revenue_share_percent=Decimal('90'))
+        self.package.price_syp = 9999; self.package.validity_value = 1; self.package.bandwidth_profile = None
+        self.package.max_concurrent_devices = self.package.max_registered_devices = 1
+        self.package.total_minutes_limit = 2; self.package.partner = other; self.package.partner_share_percent = 90; self.package.save()
+        ent.refresh_from_db(); share.refresh_from_db()
+        self.assertEqual((ent.gross_amount_syp, ent.validity_value, ent.bandwidth_profile_code,
+            ent.max_concurrent_devices, ent.max_registered_devices, ent.total_minutes_allowed, ent.partner_id,
+            share.share_percent), (Decimal('1000'), 30, 'old-speed', 2, 3, 200, partner.pk, Decimal('25')))
+
+    def test_revenue_adjustment_is_immutable_and_idempotent(self):
+        partner = InternetPartner.objects.create(name='ISP', revenue_share_percent=Decimal('25'))
+        self.package.partner = partner; self.package.save()
+        order = Order.objects.create(); payment = Payment.objects.create(order=order, amount_syp=1000, method='cash')
+        ent = create_entitlement(self.package, order=order, payment=payment)
+        first = record_payment_reversal_adjustment(ent.revenue_share, payment=payment)
+        second = record_payment_reversal_adjustment(ent.revenue_share, payment=payment)
+        self.assertEqual(first.pk, second.pk); self.assertEqual(InternetRevenueShareAdjustment.objects.count(), 1)
+        self.assertEqual(first.partner_delta_syp, Decimal('-250'))
+        ent.revenue_share.refresh_from_db(); self.assertEqual(ent.revenue_share.share_percent, Decimal('25'))
+
+
+class InternetHttpWorkflowTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        self.staff = get_user_model().objects.create_user(username='cash', phone='0900', password='x', role='cashier')
+        self.client = Client(); self.client.force_login(self.staff)
+        self.partner = InternetPartner.objects.create(name='ISP', revenue_share_percent=Decimal('30'))
+        self.package = InternetPackage.objects.create(name_ar='أسبوعي', code='http-week', duration_minutes=0,
+            price_syp=2000, access_mode='unlimited', validity_value=1, validity_unit='weeks', partner=self.partner)
+
+    def test_duplicate_sale_post_creates_one_commercial_identity(self):
+        data = {'customer_kind': 'guest', 'guest_name': 'Guest', 'package': self.package.pk,
+                'payment_method': 'cash', 'idempotency_key': 'browser-post-1'}
+        self.client.post(reverse('staff_internet_sale'), data)
+        self.client.post(reverse('staff_internet_sale'), data)
+        ent = InternetEntitlement.objects.get()
+        self.assertEqual(Order.objects.count(), 1); self.assertEqual(Payment.objects.count(), 1)
+        self.assertEqual(InternetRevenueShare.objects.count(), 1)
+        self.assertEqual(ent.network_status, 'provisioned'); self.assertTrue(ent.external_network_identifier == '')
+
+    def test_expired_is_rendered_and_not_in_staff_metric(self):
+        ent = create_entitlement(self.package)
+        InternetEntitlement.objects.filter(pk=ent.pk).update(valid_until=timezone.now() - timedelta(minutes=1))
+        response = self.client.get(reverse('staff_internet'))
+        self.assertContains(response, 'expired'); self.assertEqual(response.context['internet_metrics']['active_passes'], 0)
+
+    def test_partner_cross_scope_and_expired_rendering(self):
+        from django.contrib.auth import get_user_model
+        user = get_user_model().objects.create_user(username='partner', phone='0901', password='x')
+        InternetPartnerUser.objects.create(partner=self.partner, user=user)
+        own = create_entitlement(self.package)
+        InternetEntitlement.objects.filter(pk=own.pk).update(valid_until=timezone.now() - timedelta(minutes=1))
+        other_partner = InternetPartner.objects.create(name='Other')
+        other_package = InternetPackage.objects.create(name_ar='سري', code='secret', duration_minutes=2,
+            price_syp=99, access_mode='timed_session', partner=other_partner)
+        other = create_entitlement(other_package, guest_name='Hidden customer')
+        self.client.force_login(user); response = self.client.get(reverse('internet_partner_dashboard'))
+        self.assertContains(response, own.access_code); self.assertContains(response, 'expired')
+        self.assertNotContains(response, other.access_code); self.assertNotContains(response, 'Hidden customer')
+
+    def test_partner_net_revenue_ignores_unpaid_and_nets_reversal(self):
+        unpaid_data = {'customer_kind': 'guest', 'package': self.package.pk,
+            'payment_method': 'unpaid', 'idempotency_key': 'unpaid'}
+        self.client.post(reverse('staff_internet_sale'), unpaid_data)
+        paid_data = {**unpaid_data, 'payment_method': 'cash', 'idempotency_key': 'paid'}
+        self.client.post(reverse('staff_internet_sale'), paid_data)
+        from django.contrib.auth import get_user_model
+        user = get_user_model().objects.create_user(username='revenue-partner', phone='0902', password='x')
+        InternetPartnerUser.objects.create(partner=self.partner, user=user)
+        self.client.force_login(user)
+        response = self.client.get(reverse('internet_partner_dashboard'))
+        self.assertEqual(response.context['totals']['gross'], Decimal('2000'))
+        paid_share = InternetRevenueShare.objects.get(entitlement__idempotency_key='paid')
+        Payment.objects.filter(pk=paid_share.payment_id).update(is_reversed=True, is_active=False,
+            reversed_at=timezone.now(), reversal_reason='other')
+        response = self.client.get(reverse('internet_partner_dashboard'))
+        self.assertEqual(response.context['totals']['gross'], Decimal('0'))
+        record_payment_reversal_adjustment(paid_share)
+        response = self.client.get(reverse('internet_partner_dashboard'))
+        self.assertEqual(response.context['totals']['gross'], Decimal('0'))
+        self.assertEqual(response.context['totals']['partner'], Decimal('0'))

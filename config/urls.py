@@ -4,7 +4,7 @@ from django.urls import path, re_path
 from core.views import menu
 from core.media_views import serve_media
 from core.views.staff_reports import staff_reports_home, staff_reports_day, staff_reports_day_csv, staff_product_margin_report, staff_product_margin_csv, staff_close_day, staff_close_day_print
-from core.views.staff_internet import staff_internet, staff_internet_start, staff_internet_session, staff_internet_end, staff_internet_cancel, staff_wifi
+from core.views.staff_internet import staff_internet, staff_internet_sale, staff_internet_start, staff_internet_session, staff_internet_end, staff_internet_cancel, staff_wifi
 from core.views.staff_members import staff_members, staff_member_new, staff_member_detail, staff_member_subscribe
 from core.views.staff_events import staff_events, staff_event_new, staff_event_detail
 from core.views.staff_reservations import staff_reservations, staff_reservation_new, staff_reservation_detail, staff_reservation_status, staff_reservation_tables
@@ -137,6 +137,7 @@ urlpatterns = [
     path('staff/members/<str:member_id>/devices/revoke/', member_device_views.revoke_device, name='staff_member_devices_revoke'),
     path('staff/members/<str:member_id>/devices/<uuid:device_id>/revoke/', member_device_views.revoke_device, name='staff_member_device_revoke'),
     path('staff/internet/', staff_internet, name='staff_internet'),
+    path('staff/internet/sale/', staff_internet_sale, name='staff_internet_sale'),
     path('staff/internet/start/', staff_internet_start, name='staff_internet_start'),
     path('staff/internet/session/<int:session_id>/', staff_internet_session, name='staff_internet_session'),
     path('staff/internet/<int:session_id>/', staff_internet_session, name='staff_internet_session_legacy'),
