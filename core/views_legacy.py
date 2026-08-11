@@ -1714,6 +1714,8 @@ def staff_member_subscribe(request, member_id):
         return render(request, 'staff/member_subscribe.html', {'member': member, 'plans': plans, 'now': timezone.now(), 'errors': errors, 'form_values': request.POST})
     with transaction.atomic():
         sub = MembershipSubscription.objects.create(member=member, plan=plan, starts_at=starts_at, ends_at=ends_at, remaining_internet_minutes=minutes_val, remaining_credit_syp=credit_val, notes=request.POST.get('notes', '').strip(), status='active')
+        from members.internet_benefits import provision_subscription_internet
+        provision_subscription_internet(sub)
         if minutes_val > 0:
             MemberCreditLedger.objects.create(member=member, subscription=sub, change_type='add_minutes', minutes_delta=minutes_val, notes='إضافة دقائق تلقائية من الاشتراك', created_by=request.user)
         if credit_val > 0:

@@ -106,6 +106,8 @@ class MembershipSubscription(models.Model):
         self.frozen_at = None
         self.freeze_until = None
         self.save(update_fields=['status', 'activated_at', 'frozen_at', 'freeze_until', 'updated_at'])
+        from members.internet_benefits import provision_subscription_internet
+        provision_subscription_internet(self)
 
     def freeze(self, until=None, at=None):
         at = at or timezone.now()
@@ -127,6 +129,8 @@ class MembershipSubscription(models.Model):
         self.cancelled_at = at or timezone.now()
         self.cancellation_reason = reason
         self.save(update_fields=['status', 'cancelled_at', 'cancellation_reason', 'updated_at'])
+        from members.internet_benefits import invalidate_subscription_internet
+        invalidate_subscription_internet(self, reason=reason)
 
 
 class MemberAttribute(models.Model):
@@ -210,6 +214,12 @@ class MembershipBenefitRule(models.Model):
     is_active = models.BooleanField(default=True)
     notes = models.TextField(blank=True)
     metadata = models.JSONField(default=dict, blank=True)
+    internet_bandwidth_profile = models.ForeignKey(
+        'core.InternetBandwidthProfile', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='membership_benefit_rules')
+    max_concurrent_devices = models.PositiveSmallIntegerField(null=True, blank=True)
+    max_registered_devices = models.PositiveSmallIntegerField(null=True, blank=True)
+    commercial_allocation_syp = models.PositiveBigIntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -226,13 +236,60 @@ class MembershipBenefitRule(models.Model):
             'scope_type': self.scope_type, 'scope_code': self.scope_code,
             'usage_limit': self.usage_limit, 'usage_period': self.usage_period,
             'priority': self.priority, 'metadata': self.metadata,
+            'internet_bandwidth_profile_id': self.internet_bandwidth_profile_id,
+            'internet_bandwidth_profile_code': (
+                self.internet_bandwidth_profile.code if self.internet_bandwidth_profile_id else ''),
+            'max_concurrent_devices': self.max_concurrent_devices,
+            'max_registered_devices': self.max_registered_devices,
+            'commercial_allocation_syp': self.commercial_allocation_syp,
             # Stable compatibility targets for benefit rules created before the generic layer.
             'product_id': self.product_id, 'category_id': self.category_id,
             'menu_section_id': self.menu_section_id, 'tag_id': self.tag_id,
             'item_type': self.item_type, 'beverage_type': self.beverage_type,
             'food_type': self.food_type, 'service_type': self.service_type,
             'applies_to_alcohol': self.applies_to_alcohol,
+            'included_minutes': self.included_minutes,
         }
+
+
+class CommercialAllocation(models.Model):
+    """Immutable commercial component snapshot for one membership sale."""
+    class ComponentType(models.TextChoices):
+        MEMBERSHIP = 'membership', 'Membership'
+        INTERNET = 'internet', 'Internet'
+        WORKSPACE = 'workspace', 'Workspace'
+        OTHER = 'other', 'Other'
+
+    subscription = models.ForeignKey(MembershipSubscription, on_delete=models.PROTECT, related_name='commercial_allocations')
+    component_type = models.CharField(max_length=20, choices=ComponentType.choices)
+    source_benefit_rule_id = models.PositiveBigIntegerField(null=True, blank=True)
+    allocated_amount_syp = models.PositiveBigIntegerField()
+    internet_entitlement = models.OneToOneField('core.InternetEntitlement', on_delete=models.PROTECT, null=True, blank=True, related_name='commercial_allocation')
+    partner = models.ForeignKey('core.InternetPartner', on_delete=models.PROTECT, null=True, blank=True, related_name='commercial_allocations')
+    partner_name_snapshot = models.CharField(max_length=120, blank=True)
+    partner_share_percent = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    partner_share_amount_syp = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=('subscription', 'component_type', 'source_benefit_rule_id'), name='unique_subscription_commercial_component')]
+
+    def clean(self):
+        super().clean()
+        gross = self.subscription.gross_amount_syp
+        existing = type(self).objects.filter(subscription=self.subscription).exclude(pk=self.pk).aggregate(total=models.Sum('allocated_amount_syp'))['total'] or 0
+        if gross is not None and existing + self.allocated_amount_syp > gross:
+            raise ValidationError({'allocated_amount_syp': 'Component allocations cannot exceed subscription gross amount.'})
+        if self.component_type != self.ComponentType.INTERNET and (self.partner_id or self.partner_share_percent is not None):
+            raise ValidationError('Partner share applies only to the Internet component.')
+
+    def save(self, *args, **kwargs):
+        if self.pk and type(self).objects.filter(pk=self.pk).exists():
+            raise ValidationError('Commercial allocation snapshots are immutable.')
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
 
 class Program(models.Model):

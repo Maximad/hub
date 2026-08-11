@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}إعدادات الإنترنت{% endblock %}
+{% block content %}
+<h1>إعدادات الإنترنت</h1>
+<p class="hub-alert hub-alert-warning">تغيير النسبة يؤثر على المبيعات والاستحقاقات الجديدة فقط، ولا يغيّر السجلات السابقة.</p>
+<section><h2>شركاء الإنترنت</h2><p>الشريك الافتراضي: {{ default_partner|default:'لا يوجد' }} — النسبة: {{ default_partner.revenue_share_percent|default:'-' }}%</p>
+<table><tr><th>الاسم</th><th>فعال</th><th>افتراضي</th><th>النسبة</th><th>آخر تحديث</th><th>تعديل</th></tr>
+{% for p in partners %}<tr><form method="post" action="{% url 'staff_internet_partner_edit' p.pk %}">{% csrf_token %}<td><input name="name" value="{{ p.name }}"></td><td><input type="checkbox" name="active" {% if p.active %}checked{% endif %}></td><td><input type="checkbox" name="is_default" {% if p.is_default %}checked{% endif %}></td><td><input type="number" step=".01" min="0" max="100" name="revenue_share_percent" value="{{ p.revenue_share_percent }}"></td><td>{{ p.updated_at }}</td><td><button type="submit">حفظ</button></td></form></tr>{% endfor %}</table>
+<h3>شريك جديد</h3><form method="post" action="{% url 'staff_internet_partner_new' %}">{% csrf_token %}{{ partner_form.as_p }}<button type="submit">إنشاء</button></form></section>
+<section><h2>الإعدادات التجارية الحالية</h2><ul><li>باقات ترث الافتراضي: {{ inherited_packages }}</li><li>تجاوز شريك صريح: {{ partner_overrides }}</li><li>تجاوز نسبة صريح: {{ percent_overrides }}</li></ul></section>
+<section><h2>ملفات السرعة</h2><p>اسم ملف الراوتر ربط شبكي اختياري ويمكن تركه فارغاً في الوضع اليدوي.</p>
+{% for p in profiles %}<form method="post" action="{% url 'staff_internet_profile_edit' p.pk %}">{% csrf_token %}<input name="code" value="{{ p.code }}"><input name="name" value="{{ p.name }}"><input name="download_limit_kbps" value="{{ p.download_limit_kbps|default:'' }}" placeholder="تنزيل"><input name="upload_limit_kbps" value="{{ p.upload_limit_kbps|default:'' }}" placeholder="رفع"><input name="router_profile_name" value="{{ p.router_profile_name }}" placeholder="Router profile"><label>فعال <input type="checkbox" name="is_active" {% if p.is_active %}checked{% endif %}></label><button>حفظ</button></form>{% endfor %}
+<form method="post" action="{% url 'staff_internet_profile_new' %}">{% csrf_token %}{{ profile_form.as_p }}<button>إنشاء ملف</button></form></section>
+<section><h2>شبكات Wi-Fi</h2><table><tr><th>الاسم</th><th>SSID</th><th>النوع</th><th>فعال</th><th>الخلفية</th><th>السرعة</th><th>QR</th></tr>{% for n in networks %}<tr><td>{{ n.name_ar }}</td><td>{{ n.ssid }}</td><td>{{ n.get_network_type_display }}</td><td>{{ n.is_active|yesno:'نعم,لا' }}</td><td>{{ n.get_network_backend_display }}</td><td>{{ n.bandwidth_profile|default:'-' }}</td><td>{{ n.visible_on_qr|yesno:'نعم,لا' }}</td></tr>{% endfor %}</table><p>كلمات مرور Wi-Fi لا تعرض هنا.</p></section>
+<section><h2>حالة MikroTik</h2><p>التكامل: {{ mikrotik_enabled|yesno:'مفعّل,معطّل' }} — الإعداد: {{ mikrotik_configured|yesno:'مكتمل,غير مكتمل' }}</p><p>الخلفيات الحالية: {{ network_backends|join:', ' }}</p><p>بيانات الدخول محفوظة في البيئة ولا تعرض في هذه الصفحة.</p></section>
+{% endblock %}

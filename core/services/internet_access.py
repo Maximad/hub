@@ -63,7 +63,7 @@ def validity_end(start, value, unit):
 @transaction.atomic
 def create_entitlement(package, *, member=None, guest_name='', guest_phone='', order=None,
                        payment=None, subscription=None, created_by=None, idempotency_key=None,
-                       purchased_at=None):
+                       purchased_at=None, charged_amount_syp=None, pricing_benefit=None):
     package = InternetPackage.objects.select_for_update().get(pk=package.pk)
     if idempotency_key:
         existing = InternetEntitlement.objects.filter(idempotency_key=idempotency_key).first()
@@ -95,7 +95,10 @@ def create_entitlement(package, *, member=None, guest_name='', guest_phone='', o
         bandwidth_profile_code=package.bandwidth_profile.code if package.bandwidth_profile_id else '',
         max_concurrent_devices=package.max_concurrent_devices,
         max_registered_devices=package.max_registered_devices,
-        partner=partner, gross_amount_syp=package.price_syp,
+        partner=partner, partner_name_snapshot=partner.name if partner else '',
+        partner_share_percent_snapshot=partner_share_percent,
+        gross_amount_syp=package.price_syp if charged_amount_syp is None else charged_amount_syp,
+        source_benefit_rule_id=(pricing_benefit.definition.get('rule_id') if pricing_benefit else None),
         status=InternetEntitlement.Status.ACTIVE if activate else InternetEntitlement.Status.PENDING,
     )
     ActivityLog.objects.create(actor=created_by, action='internet.entitlement_created', details={'entitlement': str(entitlement.public_code), 'voucher': entitlement.access_code})
@@ -207,7 +210,10 @@ def create_commercial_sale(package, *, payment_method, member=None, guest_name='
     existing = InternetEntitlement.objects.filter(idempotency_key=idempotency_key).first()
     if existing:
         return existing
-    complimentary = package.access_mode == package.AccessMode.MEMBERSHIP_CREDIT or package.price_syp == 0
+    from members.benefits import resolve_internet_price
+    charged_price, pricing_benefit = resolve_internet_price(member, package)
+    charged_price = int(charged_price)
+    complimentary = package.access_mode == package.AccessMode.MEMBERSHIP_CREDIT or charged_price == 0
     order = payment = None
     if not complimentary:
         order = Order.objects.create(member=member, notes=f'Internet package: {package.name_ar}')
@@ -218,14 +224,15 @@ def create_commercial_sale(package, *, payment_method, member=None, guest_name='
                       'service_type': Product.ServiceType.INTERNET, 'visible_on_pos': False,
                       'orderable_on_pos': False, 'visible_on_qr': False, 'requires_preparation': False})
         OrderItem.objects.create(order=order, product=product, quantity=1,
-            product_name_ar_snapshot=package.name_ar, unit_price_syp_snapshot=package.price_syp,
-            line_total_syp_snapshot=package.price_syp)
+            product_name_ar_snapshot=package.name_ar, unit_price_syp_snapshot=charged_price,
+            line_total_syp_snapshot=charged_price)
         method = payment_method if payment_method in Payment.Method.values else Payment.Method.UNPAID
-        payment = Payment.objects.create(order=order, amount_syp=package.price_syp,
+        payment = Payment.objects.create(order=order, amount_syp=charged_price,
                                          method=method, created_by=actor)
     entitlement = create_entitlement(package, member=member, guest_name=guest_name,
         guest_phone=guest_phone, order=order, payment=payment, subscription=subscription,
-        created_by=actor, idempotency_key=idempotency_key)
+        created_by=actor, idempotency_key=idempotency_key, charged_amount_syp=charged_price,
+        pricing_benefit=pricing_benefit)
     from core.services.network_backends import get_network_backend
     get_network_backend(entitlement.network_backend).provision_access(entitlement)
     return entitlement
