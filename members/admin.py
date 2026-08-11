@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import (MemberAttribute, MembershipPlan, MembershipSubscription,
+from .models import (CommercialAllocation, MemberAttribute, MembershipPlan, MembershipSubscription,
                      MembershipBenefitRule, MemberCreditLedger, Program,
                      ProgramEnrollment)
 
@@ -53,6 +53,14 @@ class MembershipBenefitRuleAdmin(admin.ModelAdmin):
     search_fields = ('plan__name_ar', 'plan__name_en', 'plan__code', 'scope_code', 'value_text', 'notes')
     autocomplete_fields = ('plan', 'product')
     readonly_fields = ('uuid', 'created_at', 'updated_at')
+
+
+@admin.register(CommercialAllocation)
+class CommercialAllocationAdmin(admin.ModelAdmin):
+    list_display = ('subscription', 'component_type', 'allocated_amount_syp', 'partner', 'partner_share_amount_syp', 'created_at')
+    readonly_fields = tuple(field.name for field in CommercialAllocation._meta.fields)
+    def has_add_permission(self, request): return False
+    def has_delete_permission(self, request, obj=None): return False
 
 
 @admin.register(Program)

@@ -1502,10 +1502,12 @@ class InternetEntitlement(TimeStampedModel, PublicCodeModel):
     member = models.ForeignKey(Member, on_delete=models.PROTECT, null=True, blank=True, related_name='internet_entitlements')
     guest_name = models.CharField(max_length=120, blank=True)
     guest_phone = models.CharField(max_length=30, blank=True)
-    package = models.ForeignKey(InternetPackage, on_delete=models.PROTECT, related_name='entitlements')
+    package = models.ForeignKey(InternetPackage, on_delete=models.PROTECT, null=True, blank=True, related_name='entitlements')
     order = models.ForeignKey(Order, on_delete=models.SET_NULL, null=True, blank=True, related_name='internet_entitlements')
     payment = models.ForeignKey(Payment, on_delete=models.SET_NULL, null=True, blank=True, related_name='internet_entitlements')
     subscription = models.ForeignKey('members.MembershipSubscription', on_delete=models.PROTECT, null=True, blank=True, related_name='internet_entitlements')
+    source_benefit_rule_id = models.PositiveBigIntegerField(null=True, blank=True)
+    origin_type = models.CharField(max_length=30, default='direct_package')
     idempotency_key = models.CharField(max_length=100, null=True, blank=True, unique=True)
     access_code = models.CharField(max_length=12, unique=True, editable=False)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
@@ -1533,6 +1535,8 @@ class InternetEntitlement(TimeStampedModel, PublicCodeModel):
     cancelled_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='cancelled_internet_entitlements')
     cancellation_reason = models.TextField(blank=True)
     partner = models.ForeignKey(InternetPartner, on_delete=models.PROTECT, null=True, blank=True, related_name='entitlements')
+    partner_name_snapshot = models.CharField(max_length=120, blank=True)
+    partner_share_percent_snapshot = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     gross_amount_syp = models.DecimalField(max_digits=14, decimal_places=2, default=0)
 
     @property
@@ -1576,7 +1580,8 @@ class InternetAccessDevice(TimeStampedModel):
 class InternetRevenueShare(TimeStampedModel):
     entitlement = models.OneToOneField(InternetEntitlement, on_delete=models.PROTECT, related_name='revenue_share')
     partner = models.ForeignKey(InternetPartner, on_delete=models.PROTECT, related_name='revenue_shares')
-    package = models.ForeignKey(InternetPackage, on_delete=models.PROTECT, related_name='revenue_shares')
+    package = models.ForeignKey(InternetPackage, on_delete=models.PROTECT, null=True, blank=True, related_name='revenue_shares')
+    subscription = models.ForeignKey('members.MembershipSubscription', on_delete=models.PROTECT, null=True, blank=True, related_name='internet_revenue_shares')
     order = models.ForeignKey(Order, on_delete=models.SET_NULL, null=True, blank=True)
     payment = models.ForeignKey(Payment, on_delete=models.SET_NULL, null=True, blank=True)
     gross_amount_syp = models.DecimalField(max_digits=14, decimal_places=2)

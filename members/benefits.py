@@ -181,3 +181,21 @@ def get_internet_benefits(member, at=None):
     types = {MembershipBenefitRule.BenefitType.INTERNET_MINUTES,
              MembershipBenefitRule.BenefitType.INTERNET_MEMBER_PRICE}
     return [benefit for benefit in get_effective_benefits(member, at) if benefit.benefit_type in types]
+
+
+def resolve_internet_price(member, package, at=None):
+    """Resolve one lowest eligible member price; benefits never stack."""
+    candidates = []
+    for benefit in get_internet_benefits(member, at):
+        if benefit.benefit_type != MembershipBenefitRule.BenefitType.INTERNET_MEMBER_PRICE:
+            continue
+        definition = benefit.definition
+        scope = str(definition.get('scope_code') or '')
+        if scope and scope not in {str(package.pk), str(package.public_code), package.code or ''}:
+            continue
+        price = _decimal(definition)
+        if price >= 0:
+            candidates.append((price, benefit))
+    if not candidates:
+        return Decimal(package.price_syp), None
+    return sorted(candidates, key=lambda row: (row[0], -int(row[1].definition.get('priority') or 0), row[1].subscription.pk))[0]

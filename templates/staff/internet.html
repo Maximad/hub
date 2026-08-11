@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}الإنترنت والعمل{% endblock %}
 {% block content %}
+{% if staff_caps.settings %}<p><a class="hub-button" href="{% url 'staff_internet_settings' %}">إعدادات الإنترنت</a></p>{% endif %}
 <section class="hub-section">
   <h2 class="hub-section-title hub-page-header__title">الإنترنت والعمل</h2>
   <p class="hub-badge hub-badge-info">فوترة يدوية فقط — لا يوجد تحكم راوتر أو Captive Portal في هذه المرحلة.</p>
@@ -33,7 +34,7 @@
 <section class="hub-section hub-card"><h3 class="hub-section-title">ج. صلاحيات الوصول التجارية الفعالة والحديثة</h3>
 <p class="hub-text-muted">تعرض الأعمدة بشكل منفصل الحالة التجارية، وحالة الصلاحية، ونوع backend الشبكة، وحالة التجهيز الفعلية.</p>
 <div class="hub-table-wrap"><table class="hub-table"><tr><th>العميل</th><th>الباقة</th><th>القسيمة</th><th>الحالة التجارية</th><th>حالة الصلاحية</th><th>backend الشبكة</th><th>حالة الشبكة / التجهيز</th><th>الانتهاء</th><th>الدقائق المتبقية</th><th>السرعة</th><th>الأجهزة</th></tr>
-{% for row in entitlement_rows %}{% with e=row.entitlement %}<tr><td>{% if e.member %}{{ e.member.name_ar }}{% else %}{{ e.guest_name|default:'زائر' }}{% endif %}</td><td>{{ e.package.name_ar }}</td><td><code>{{ e.access_code }}</code></td><td><span class="hub-status-chip">{{ row.commercial_label }}</span></td><td><span class="hub-status-chip">{{ row.entitlement_label }}</span></td><td>{{ row.backend_label }}</td><td><span class="hub-status-chip">{{ row.network_label }}</span></td><td>{{ e.valid_until|default:'—' }}</td><td>{{ e.minutes_remaining|default_if_none:'غير محدود' }}</td><td>{{ e.bandwidth_profile_code|default:'—' }}</td><td>{{ e.devices.count }} / {{ e.max_registered_devices }}</td></tr>{% endwith %}{% empty %}<tr><td colspan="11">لا توجد صلاحيات.</td></tr>{% endfor %}</table></div></section>
+{% for row in entitlement_rows %}{% with e=row.entitlement %}<tr><td>{% if e.member %}{{ e.member.name_ar }}{% else %}{{ e.guest_name|default:'زائر' }}{% endif %}</td><td>{% if e.package %}{{ e.package.name_ar }}{% else %}ميزة عضوية{% endif %}</td><td><code>{{ e.access_code }}</code></td><td><span class="hub-status-chip">{{ row.commercial_label }}</span></td><td><span class="hub-status-chip">{{ row.entitlement_label }}</span></td><td>{{ row.backend_label }}</td><td><span class="hub-status-chip">{{ row.network_label }}</span></td><td>{{ e.valid_until|default:'—' }}</td><td>{{ e.minutes_remaining|default_if_none:'غير محدود' }}</td><td>{{ e.bandwidth_profile_code|default:'—' }}</td><td>{{ e.devices.count }} / {{ e.max_registered_devices }}</td></tr>{% endwith %}{% empty %}<tr><td colspan="11">لا توجد صلاحيات.</td></tr>{% endfor %}</table></div></section>
 
 
 
