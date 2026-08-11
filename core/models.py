@@ -1436,6 +1436,7 @@ class InternetBandwidthProfile(TimeStampedModel):
     download_limit_kbps = models.PositiveIntegerField(null=True, blank=True)
     upload_limit_kbps = models.PositiveIntegerField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
+    router_profile_name = models.CharField(max_length=120, blank=True)
     def __str__(self): return self.name
 
 
@@ -1494,6 +1495,7 @@ class InternetEntitlement(TimeStampedModel, PublicCodeModel):
     network_backend = models.CharField(max_length=30, default='manual')
     network_status = models.CharField(max_length=30, choices=NetworkStatus.choices, default=NetworkStatus.NOT_PROVISIONED)
     external_network_identifier = models.CharField(max_length=120, blank=True)
+    network_credential_encrypted = models.TextField(blank=True, editable=False)
     last_network_sync_at = models.DateTimeField(null=True, blank=True)
     last_network_error = models.TextField(blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_internet_entitlements')

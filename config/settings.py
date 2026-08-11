@@ -234,11 +234,17 @@ TRANSFER_APPROVAL_LIMIT_SYP = int(os.getenv('TRANSFER_APPROVAL_LIMIT_SYP', '5000
 
 # Manual networking remains the safe default. These placeholders contain no secrets.
 MIKROTIK_ENABLED = os.getenv('MIKROTIK_ENABLED', 'false').lower() == 'true'
-MIKROTIK_HOST = os.getenv('MIKROTIK_HOST', '')
+MIKROTIK_BASE_URL = os.getenv('MIKROTIK_BASE_URL', os.getenv('MIKROTIK_HOST', ''))
 MIKROTIK_USERNAME = os.getenv('MIKROTIK_USERNAME', '')
 MIKROTIK_PASSWORD = os.getenv('MIKROTIK_PASSWORD', '')
 MIKROTIK_VERIFY_TLS = os.getenv('MIKROTIK_VERIFY_TLS', 'true').lower() == 'true'
-MIKROTIK_TIMEOUT = int(os.getenv('MIKROTIK_TIMEOUT', '10'))
+MIKROTIK_CA_FILE = os.getenv('MIKROTIK_CA_FILE', '')
+MIKROTIK_CONNECT_TIMEOUT = float(os.getenv('MIKROTIK_CONNECT_TIMEOUT', '5'))
+MIKROTIK_READ_TIMEOUT = float(os.getenv('MIKROTIK_READ_TIMEOUT', os.getenv('MIKROTIK_TIMEOUT', '10')))
+MIKROTIK_HOTSPOT_SERVER = os.getenv('MIKROTIK_HOTSPOT_SERVER', '')
+MIKROTIK_USER_PREFIX = os.getenv('MIKROTIK_USER_PREFIX', 'hub-')
+MIKROTIK_DEFAULT_PROFILE = os.getenv('MIKROTIK_DEFAULT_PROFILE', '')
+MIKROTIK_CREDENTIAL_KEY = os.getenv('MIKROTIK_CREDENTIAL_KEY', '')
 
 # Currency safety values are reporting values in the new Syrian pound.  They are
 # review levels, not transaction limits, and may be overridden per operation.
