@@ -137,3 +137,12 @@ def evaluate_membership_benefit(context, product, quantity=1, unit_price=None):
     if rule.included_quantity:
         discount += min(quantity, rule.included_quantity) * max(int(unit_price if unit_price is not None else product.price_syp), 0)
     return BenefitResult(rule, total, min(discount, total))
+
+
+# Generic benefit API.  The legacy evaluator above remains unchanged for the
+# existing Internet/commercial and member-recognition workflows.
+from members.benefits import (  # noqa: E402,F401
+    get_active_subscriptions, get_effective_benefits, get_internet_benefits,
+    get_internet_member_pricing_eligibility, get_workspace_allowance,
+    has_booking_priority, resolve_event_discount, resolve_product_discount,
+)

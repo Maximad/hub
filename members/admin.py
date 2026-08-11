@@ -1,5 +1,7 @@
 from django.contrib import admin
-from .models import MemberAttribute, MembershipPlan, MembershipSubscription, MembershipBenefitRule, MemberCreditLedger
+from .models import (MemberAttribute, MembershipPlan, MembershipSubscription,
+                     MembershipBenefitRule, MemberCreditLedger, Program,
+                     ProgramEnrollment)
 
 
 @admin.register(MembershipPlan)
@@ -44,4 +46,39 @@ class MemberCreditLedgerAdmin(admin.ModelAdmin):
     search_fields = ('member__name_ar', 'member__phone', 'notes')
 
 
-admin.site.register(MembershipBenefitRule)
+@admin.register(MembershipBenefitRule)
+class MembershipBenefitRuleAdmin(admin.ModelAdmin):
+    list_display = ('plan', 'benefit_type', 'scope_type', 'scope_code', 'priority', 'is_active', 'updated_at')
+    list_filter = ('benefit_type', 'scope_type', 'is_active', 'plan')
+    search_fields = ('plan__name_ar', 'plan__name_en', 'plan__code', 'scope_code', 'value_text', 'notes')
+    autocomplete_fields = ('plan', 'product')
+    readonly_fields = ('uuid', 'created_at', 'updated_at')
+
+
+@admin.register(Program)
+class ProgramAdmin(admin.ModelAdmin):
+    list_display = ('name_ar', 'code', 'status', 'starts_at', 'ends_at', 'capacity', 'is_active')
+    list_filter = ('status', 'is_active', 'starts_at')
+    search_fields = ('code', 'name_ar', 'name_en', 'description_ar', 'description_en')
+    readonly_fields = ('created_at', 'updated_at')
+    date_hierarchy = 'starts_at'
+
+
+@admin.register(ProgramEnrollment)
+class ProgramEnrollmentAdmin(admin.ModelAdmin):
+    list_display = ('program', 'participant', 'status', 'enrolled_at', 'effective_status')
+    list_filter = ('status', 'program', 'enrolled_at')
+    search_fields = ('program__code', 'program__name_ar', 'member__name_ar', 'member__phone', 'participant_name', 'notes')
+    autocomplete_fields = ('program', 'member', 'subscription', 'order', 'payment')
+    readonly_fields = ('created_at', 'updated_at', 'completed_at', 'cancelled_at')
+    date_hierarchy = 'enrolled_at'
+
+    @admin.display(description='المشارك')
+    def participant(self, obj):
+        return obj.member or obj.participant_name
+
+    @admin.display(description='الحالة الفعلية')
+    def effective_status(self, obj):
+        if not obj.program.is_active and obj.status in {obj.Status.PENDING, obj.Status.ACTIVE}:
+            return 'البرنامج غير نشط'
+        return obj.get_status_display()
