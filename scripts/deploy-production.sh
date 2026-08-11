@@ -9,9 +9,8 @@ BRANCH="main"
 COMPOSE_FILE="docker-compose.prod.yml"
 ENV_FILE=".env"
 BASE_URL="https://hubsweida.jwtalenthouse.com"
-LOCK_FILE="/tmp/hub-production-deploy.lock"
+LOCK_FILE="/tmp/hub-production-operation.lock"
 
-TIMESTAMP="$(date +%F_%H-%M-%S)"
 BACKUP_FILE=""
 
 log() {
@@ -132,27 +131,9 @@ git merge-base --is-ancestor "$CURRENT_COMMIT" "$TARGET_COMMIT" ||
 printf 'Current commit: %s\n' "$CURRENT_COMMIT"
 printf 'Target commit:  %s\n' "$TARGET_COMMIT"
 
-log "Creating database backup"
-
-mkdir -p backups
-
-BACKUP_FILE="backups/hub_${TIMESTAMP}_before_deploy.sql"
-
-dc exec -T db pg_dump -U hub -d hub > "$BACKUP_FILE"
-
-[[ -s "$BACKUP_FILE" ]] ||
-    die "Database backup is empty."
-
-BACKUP_SIZE="$(wc -c < "$BACKUP_FILE")"
-
-(( BACKUP_SIZE >= 1000 )) ||
-    die "Database backup is unexpectedly small."
-
-grep -q "PostgreSQL database dump complete" "$BACKUP_FILE" ||
-    die "Database backup did not complete successfully."
-
-printf 'Backup: %s\n' "$BACKUP_FILE"
-printf 'Size:   %s bytes\n' "$BACKUP_SIZE"
+log "Creating full production backup"
+./scripts/backup-production.sh --lock-held
+BACKUP_FILE="backups/production (latest successful backup)"
 
 log "Updating source code"
 

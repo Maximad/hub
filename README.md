@@ -288,6 +288,13 @@ Bootstrap updates structural/reference data with `update_or_create` and does not
 - `/staff/vendors/<vendor_id>/participation/new/`
 - `/staff/food-lab/`
 
+## Production operations
+
+See [the production backup and restore runbook](docs/production-backups.md) for
+the daily PostgreSQL/media backup, retention, isolated restore drill, and
+emergency recovery commands. Backups currently remain on the VPS; the runbook
+documents requirements for a future safe off-site upload hook.
+
 ## Phase 8 – Hub / Masharib UI redesign
 - Added shared design system stylesheet at `static/css/hub.css` with reusable tokens and components.
 - Updated base template and key staff/public templates to use responsive card-based RTL layout.
