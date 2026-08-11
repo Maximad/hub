@@ -1,11 +1,11 @@
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.test import RequestFactory, TestCase, override_settings
+from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from core.models import Category, Member, OrderDiscount, Product
+from core.models import ActivityLog, Category, Member, OrderDiscount, Product
 from members.models import MemberActivationToken, MemberDeviceToken, MembershipBenefitRule, MembershipPlan, MembershipSubscription
 from members.services import consume_activation_token, create_activation_token, evaluate_membership_benefit, get_active_member_context, resolve_member_from_request
 
@@ -25,8 +25,63 @@ class MemberRecognitionTests(TestCase):
     def activate(self):
         token, raw = create_activation_token(self.member)
         self.assertNotEqual(token.token_hash, raw)
-        response = self.client.get(reverse('member_activate', kwargs={'token': raw}))
+        url = reverse('member_activate', kwargs={'token': raw})
+        self.client.get(url)
+        response = self.client.post(url, {'confirm': 'yes'})
         return token, raw, response
+
+    def assert_token_unused(self, token):
+        token.refresh_from_db()
+        self.assertIsNone(token.consumed_at)
+        self.assertFalse(MemberDeviceToken.objects.exists())
+
+    def test_activation_previews_never_consume_token(self):
+        token, raw = create_activation_token(self.member)
+        url = reverse('member_activate', kwargs={'token': raw})
+
+        for method in (self.client.get, self.client.head, self.client.get, self.client.get):
+            with self.subTest(method=method.__name__):
+                response = method(url)
+                self.assertEqual(response.status_code, 200)
+                self.assert_token_unused(token)
+
+        self.assertNotContains(response, raw)
+        self.assertEqual(response.headers['Referrer-Policy'], 'no-referrer')
+        self.assertNotContains(response, '<script', html=False)
+        self.assertNotContains(response, '<link', html=False)
+
+    def test_failed_confirmation_does_not_consume_token(self):
+        token, raw = create_activation_token(self.member)
+        url = reverse('member_activate', kwargs={'token': raw})
+        csrf_client = Client(enforce_csrf_checks=True)
+
+        self.assertEqual(csrf_client.post(url, {'confirm': 'yes'}).status_code, 403)
+        self.assert_token_unused(token)
+        self.assertEqual(self.client.post(url, {'confirm': 'no'}).status_code, 302)
+        self.assert_token_unused(token)
+
+    def test_valid_confirmation_consumes_once_sets_cookie_and_logs(self):
+        token, raw = create_activation_token(self.member)
+        url = reverse('member_activate', kwargs={'token': raw}) + '?next=/menu/'
+        preview = self.client.get(url)
+
+        response = self.client.post(
+            reverse('member_activate', kwargs={'token': raw}),
+            {'confirm': 'yes', 'next': '/menu/'},
+            HTTP_X_CSRFTOKEN=preview.cookies['csrftoken'].value,
+        )
+        self.assertRedirects(response, '/menu/', fetch_redirect_response=False)
+        token.refresh_from_db()
+        self.assertIsNotNone(token.consumed_at)
+        self.assertEqual(MemberDeviceToken.objects.count(), 1)
+        self.assertIn('hub_member_device', response.cookies)
+        self.assertEqual(ActivityLog.objects.filter(action='member_device_activated').count(), 1)
+
+        repeated = self.client.post(
+            reverse('member_activate', kwargs={'token': raw}), {'confirm': 'yes'})
+        self.assertEqual(repeated.status_code, 302)
+        self.assertEqual(MemberDeviceToken.objects.count(), 1)
+        self.assertEqual(ActivityLog.objects.filter(action='member_device_activated').count(), 1)
 
     def test_activation_is_one_time_hashed_and_cookie_is_secure(self):
         token, raw, response = self.activate()
@@ -39,7 +94,8 @@ class MemberRecognitionTests(TestCase):
         self.assertTrue(cookie['secure'])
         self.assertEqual(cookie['samesite'], 'Lax')
         self.assertNotIn(cookie.value.split('.', 1)[1], device.token_hash)
-        self.assertEqual(self.client.get(reverse('member_activate', kwargs={'token': raw})).status_code, 302)
+        self.assertEqual(self.client.post(
+            reverse('member_activate', kwargs={'token': raw}), {'confirm': 'yes'}).status_code, 302)
         self.assertEqual(MemberDeviceToken.objects.count(), 1)
 
     def test_valid_cookie_resolves_and_revocation_stops_recognition(self):

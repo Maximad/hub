@@ -4,28 +4,53 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import Http404, HttpResponse
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_http_methods, require_POST
 
 from accounts.permissions import user_has_capability
 from core.models import ActivityLog, Member
 from members.models import MemberDeviceToken
-from members.services import consume_activation_token, create_activation_token, resolve_member_from_request
+from members.services import consume_activation_token, create_activation_token, resolve_member_from_request, validate_activation_token
 
 
+def _activation_destination(request):
+    destination = request.POST.get('next', '') if request.method == 'POST' else request.GET.get('next', '')
+    if not url_has_allowed_host_and_scheme(
+        destination, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        return reverse('menu_public')
+    return destination
+
+
+@require_http_methods(['GET', 'HEAD', 'POST'])
 def activate_member_device(request, token):
+    destination = _activation_destination(request)
+    if request.method in ('GET', 'HEAD'):
+        activation = validate_activation_token(token)
+        if not activation:
+            messages.error(request, 'رابط التفعيل غير صالح أو منتهي الصلاحية.')
+            return redirect('menu_public')
+        response = render(request, 'members/activation_confirm.html', {
+            'member': activation.member,
+            'destination': destination,
+        })
+        response.headers['Cache-Control'] = 'no-store'
+        response.headers['Referrer-Policy'] = 'no-referrer'
+        return response
+
+    if request.POST.get('confirm') != 'yes':
+        messages.error(request, 'يرجى تأكيد تفعيل العضوية.')
+        return redirect('menu_public')
+
     label = request.META.get('HTTP_USER_AGENT', '').split(')')[0][:120]
     device, cookie_value = consume_activation_token(token, label)
     if not device:
         messages.error(request, 'رابط التفعيل غير صالح أو منتهي الصلاحية.')
         return redirect('menu_public')
     messages.success(request, 'تم تفعيل عضويتك على هذا الجهاز.')
-    destination = request.GET.get('next', '')
-    if not url_has_allowed_host_and_scheme(destination, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
-        destination = reverse('menu_public')
     response = redirect(destination)
     response.set_cookie(settings.MEMBER_DEVICE_COOKIE_NAME, cookie_value,
         max_age=settings.MEMBER_DEVICE_COOKIE_AGE, httponly=True,
