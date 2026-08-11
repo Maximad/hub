@@ -1722,6 +1722,46 @@ def staff_internet(request):
     entitlement_base = InternetEntitlement.objects.select_related('member', 'package', 'payment', 'order').prefetch_related('devices')
     active_entitlements = effectively_active_entitlements(entitlement_base, at=now).order_by('valid_until')
     recent_entitlements = entitlement_base.order_by('-created_at')[:50]
+    entitlement_rows = []
+    for entitlement in recent_entitlements:
+        if entitlement.access_mode == InternetPackage.AccessMode.MEMBERSHIP_CREDIT:
+            commercial_label = 'رصيد عضوية'
+        elif entitlement.gross_amount_syp == 0 or (
+                entitlement.payment_id and entitlement.payment.method == Payment.Method.FREE):
+            commercial_label = 'مجاني'
+        elif (entitlement.payment_id
+              and entitlement.payment.method == Payment.Method.MEMBER_DISCOUNT):
+            commercial_label = 'رصيد عضوية'
+        elif (entitlement.payment_id
+              and entitlement.payment.method in {Payment.Method.CASH, Payment.Method.MANUAL_TRANSFER}
+              and entitlement.payment.is_active and not entitlement.payment.is_reversed):
+            commercial_label = 'مدفوع'
+        else:
+            commercial_label = 'غير مدفوع'
+
+        effective_status = entitlement.effective_status(now)
+        entitlement_label = dict(InternetEntitlement.Status.choices)[effective_status]
+        if entitlement.network_backend == 'manual':
+            backend_label = 'يدوي (بدون راوتر)'
+            if entitlement.network_status == InternetEntitlement.NetworkStatus.DISCONNECTED:
+                network_label = 'مفصول'
+            elif entitlement.network_status == InternetEntitlement.NetworkStatus.PROVISION_ERROR:
+                network_label = 'خطأ'
+            else:
+                network_label = 'تجهيز يدوي — أو بانتظار الربط بالشبكة'
+        else:
+            backend_label = entitlement.network_backend
+            network_label = {
+                InternetEntitlement.NetworkStatus.NOT_PROVISIONED: 'بانتظار التجهيز',
+                InternetEntitlement.NetworkStatus.PROVISIONED: 'مجهز على الشبكة',
+                InternetEntitlement.NetworkStatus.DISCONNECTED: 'مفصول',
+                InternetEntitlement.NetworkStatus.PROVISION_ERROR: 'خطأ',
+            }[entitlement.network_status]
+        entitlement_rows.append({
+            'entitlement': entitlement, 'commercial_label': commercial_label,
+            'entitlement_label': entitlement_label, 'backend_label': backend_label,
+            'network_label': network_label,
+        })
     today = timezone.localdate()
     expiring_today = active_entitlements.filter(valid_until__date=today).count()
     for session in active_sessions:
@@ -1734,10 +1774,16 @@ def staff_internet(request):
         'active_sessions': active_sessions,
         'active_entitlements': active_entitlements,
         'recent_entitlements': recent_entitlements,
+        'entitlement_rows': entitlement_rows,
         'internet_metrics': {
             'active_sessions': active_sessions.count(), 'active_passes': active_entitlements.count(),
             'expiring_today': expiring_today,
-            'unpaid': active_entitlements.filter(payment__isnull=True, gross_amount_syp__gt=0).count(),
+            # Count the commercial access once, at its entitlement identity.  New sales
+            # deliberately retain an ``unpaid`` Payment row, so NULL is not unpaid.
+            'unpaid': active_entitlements.filter(
+                order__isnull=False, gross_amount_syp__gt=0,
+                payment__method=Payment.Method.UNPAID,
+            ).count(),
             'provision_errors': active_entitlements.filter(network_status=InternetEntitlement.NetworkStatus.PROVISION_ERROR).count(),
         },
         'active_rows': active_rows,
