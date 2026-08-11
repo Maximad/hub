@@ -24,6 +24,7 @@ run_phase() (
     set -Eeuo pipefail
     events="$1"
     fail_migration="${2:-false}"
+    fail_readiness="${3:-false}"
 
     log() { printf 'LOG %s\n' "$*" >>"$events"; }
     check_route() { printf 'ROUTE %s %s\n' "$1" "$2" >>"$events"; }
@@ -35,10 +36,11 @@ run_phase() (
               "${6:-}" == manage.py && "${7:-}" == migrate ]]; then
             exit 42
         fi
+        if [[ "$fail_readiness" == true && "${1:-}" == run &&
+              "${6:-}" == manage.py && "${7:-}" == launch_readiness ]]; then
+            exit 43
+        fi
     }
-
-    # launch_readiness deliberately tolerates failure in production, but this
-    # stub succeeds so only the migration failure path controls these fixtures.
     source "$deployment_phase"
 )
 
@@ -57,6 +59,7 @@ line_of() {
 build_line="$(line_of 'DC <build> <web>' "$events")"
 check_line="$(line_of 'DC <run> <--rm> <-T> <web> <python> <manage.py> <check>' "$events")"
 migration_line="$(line_of 'DC <run> <--rm> <-T> <web> <python> <manage.py> <migrate> <--noinput>' "$events")"
+readiness_line="$(line_of 'DC <run> <--rm> <-T> <web> <python> <manage.py> <launch_readiness> <--json>' "$events")"
 replacement_line="$(line_of 'DC <up> <-d> <--no-deps> <--force-recreate> <web>' "$events")"
 static_line="$(line_of 'DC <exec> <-T> <web> <python> <manage.py> <collectstatic> <--noinput> <--clear>' "$events")"
 restart_line="$(line_of 'DC <restart> <web>' "$events")"
@@ -64,7 +67,8 @@ route_line="$(line_of 'ROUTE /menu/ 200' "$events")"
 
 (( build_line < check_line ))
 (( check_line < migration_line ))
-(( migration_line < replacement_line ))
+(( migration_line < readiness_line ))
+(( readiness_line < replacement_line ))
 (( replacement_line < static_line ))
 (( static_line < restart_line ))
 (( restart_line < route_line ))
@@ -81,6 +85,31 @@ fi
 grep -Fq 'DC <run> <--rm> <-T> <web> <python> <manage.py> <migrate> <--noinput>' "$failed_events"
 if grep -Fq 'DC <up> <-d> <--no-deps> <--force-recreate> <web>' "$failed_events"; then
     echo "web replacement ran after a failed migration" >&2
+    exit 1
+fi
+
+readiness_failed_events="$tmp/readiness-failure.events"
+set +e
+run_phase "$readiness_failed_events" false true
+readiness_failure_status=$?
+set -e
+if (( readiness_failure_status == 0 )); then
+    echo "launch readiness FAIL unexpectedly allowed deployment to continue" >&2
+    exit 1
+fi
+grep -Fq 'DC <run> <--rm> <-T> <web> <python> <manage.py> <launch_readiness> <--json>' "$readiness_failed_events"
+if grep -Fq 'DC <up> <-d> <--no-deps> <--force-recreate> <web>' "$readiness_failed_events"; then
+    echo "web replacement ran after a failed launch readiness gate" >&2
+    exit 1
+fi
+
+# The revision marker is after the gated phase, so errexit cannot write it when
+# launch readiness returns FAIL.
+readiness_source_line="$(grep -n -m1 'manage.py launch_readiness --json' "$repo/scripts/deploy-production.sh" | cut -d: -f1)"
+marker_source_line="$(grep -n -m1 'last_deployed_revision.txt.tmp' "$repo/scripts/deploy-production.sh" | cut -d: -f1)"
+(( readiness_source_line < marker_source_line ))
+if grep -F 'manage.py launch_readiness' "$repo/scripts/deploy-production.sh" | grep -Fq '||'; then
+    echo "launch readiness exit status is still suppressed" >&2
     exit 1
 fi
 

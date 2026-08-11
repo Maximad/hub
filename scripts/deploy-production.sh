@@ -181,6 +181,14 @@ log "Applying migrations"
 # expand/migrate/contract rollout across releases.
 dc run --rm -T web python manage.py migrate --noinput
 
+log "Evaluating launch readiness gate"
+
+# Run the read-only audit from the target image before traffic is cut over.
+# Machine-readable mode still exits nonzero for FAIL, while WARN remains an
+# approved, visible, non-blocking result.  Do not suppress this exit status:
+# errexit prevents both cutover and the deployed-revision write on failure.
+dc run --rm -T web python manage.py launch_readiness --json
+
 log "Replacing web container"
 
 dc up -d --no-deps --force-recreate web
@@ -203,11 +211,6 @@ log "Running production checks"
 dc exec -T web python manage.py check
 dc exec -T web python manage.py smoke_check
 dc exec -T web python manage.py system_audit
-
-# Display only: launch_readiness is a strictly read-only post-deployment audit.
-# It is intentionally not part of migration, collection, bootstrap, or cleanup.
-dc exec -T web python manage.py launch_readiness ||
-    printf 'WARNING: launch readiness audit reported findings; deployment remains complete.\n'
 
 log "Checking routes"
 
