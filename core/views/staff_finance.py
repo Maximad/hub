@@ -111,7 +111,7 @@ def staff_cashbox(request):
 def staff_cashbox_new(request):
     errors=[]
     if request.method=='POST':
-        mv=CashMovement(business_date=_parse_report_date(request.POST.get('business_date')), movement_type=request.POST.get('movement_type'), direction=request.POST.get('direction'), amount_syp=_positive_int(request.POST.get('amount_syp')), vendor_id=request.POST.get('vendor') or None, related_expense_id=request.POST.get('related_expense') or None, title=request.POST.get('title','').strip(), notes=request.POST.get('notes','').strip(), created_by=request.user)
+        mv=CashMovement(business_date=_parse_report_date(request.POST.get('business_date')), financial_account_id=request.POST.get('financial_account') or None, movement_type=request.POST.get('movement_type'), direction=request.POST.get('direction'), amount_syp=_positive_int(request.POST.get('amount_syp')), vendor_id=request.POST.get('vendor') or None, related_expense_id=request.POST.get('related_expense') or None, title=request.POST.get('title','').strip(), notes=request.POST.get('notes','').strip(), created_by=request.user)
         if mv.movement_type in {CashMovement.MovementType.CASH_CORRECTION, CashMovement.MovementType.OWNER_CASH_OUT} and not can_approve_partial_payment(request.user): errors.append('هذه الحركة تحتاج صلاحية المدير.')
         try: mv.full_clean()
         except ValidationError as e: errors += sum(e.message_dict.values(), []) if hasattr(e,'message_dict') else e.messages
@@ -122,7 +122,7 @@ def staff_cashbox_new(request):
                 errors.extend(_validation_messages(error))
             else:
                 messages.success(request,'تم حفظ حركة الصندوق.'); return redirect('staff_finance_cashbox')
-    return render(request,'staff/finance_cashbox_form.html',{'types':CashMovement.MovementType.choices,'directions':CashMovement.Direction.choices,'vendors':Vendor.objects.all(),'expenses':Expense.objects.exclude(status=Expense.Status.CANCELLED)[:100],'today':timezone.now().date(),'errors':errors,'form_values':request.POST})
+    return render(request,'staff/finance_cashbox_form.html',{'types':CashMovement.MovementType.choices,'directions':CashMovement.Direction.choices,'accounts':FinancialAccount.objects.filter(is_active=True),'vendors':Vendor.objects.all(),'expenses':Expense.objects.exclude(status=Expense.Status.CANCELLED)[:100],'today':timezone.now().date(),'errors':errors,'form_values':request.POST})
 
 @require_staff_capability('finance')
 def staff_transfers(request):
@@ -214,9 +214,12 @@ def staff_daily_close_close(request, close_id):
     if not _can_manage_finance(request.user): messages.error(request,'الإغلاق يحتاج صلاحية الإدارة المالية.'); return redirect('staff_daily_close_detail', close_id=close.pk)
     errors=[]
     if request.method=='POST':
+        if 'actual_cash_counted_syp' not in request.POST or request.POST.get('actual_cash_counted_syp', '').strip() == '':
+            errors.append('العد الفعلي للنقد مطلوب.')
         try:
-            close=closing_posting.close(close, _posting_context(request, close.business_date), _positive_int(request.POST.get('actual_cash_counted_syp')), request.POST.get('notes',''), _positive_int(request.POST.get('opening_cash_syp')))
-            messages.success(request,'تم إغلاق تاريخ العمل.'); return redirect('staff_daily_close_detail', close_id=close.pk)
+            if not errors:
+                close=closing_posting.close(close, _posting_context(request, close.business_date), _positive_int(request.POST.get('actual_cash_counted_syp')), request.POST.get('notes',''), _positive_int(request.POST.get('opening_cash_syp')))
+                messages.success(request,'تم إغلاق تاريخ العمل.'); return redirect('staff_daily_close_detail', close_id=close.pk)
         except Exception as e: errors.extend(_validation_messages(e))
     return render(request,'staff/finance_close_form.html',{'close':close,'errors':errors,'business_date':current_business_date()})
 

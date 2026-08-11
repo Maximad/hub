@@ -4,11 +4,11 @@ from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from django.utils import timezone
 
-from accounts.permissions import can_approve_partial_payment
 from core.models import CashMovement, PostingBatch, PostingEntry, Transfer
 from .engine import dispatch
 from .exceptions import InvalidTransition
 from .ledger import post_balanced_batch
+from .policy import is_finance_user, require_finance_actor
 
 
 def approval_limit():
@@ -20,8 +20,7 @@ def _requires_approval(amount):
 
 
 def _validate(source, context):
-    if not context.actor:
-        raise InvalidTransition('منفذ التحويل مطلوب.')
+    require_finance_actor(context, 'التحويل')
     if source.actor_id and source.actor_id != context.actor.pk:
         raise InvalidTransition('منفذ التحويل لا يطابق المستخدم الحالي.')
     if source.source_account_id == source.destination_account_id:
@@ -41,8 +40,8 @@ def _validate(source, context):
             raise InvalidTransition(f'التحويلات بقيمة {approval_limit():,.0f} ل.س أو أكثر تحتاج موافقة.')
         if context.approver.pk == context.actor.pk:
             raise InvalidTransition('يجب أن يكون المعتمد شخصاً مختلفاً عن منفذ التحويل.')
-        if not can_approve_partial_payment(context.approver):
-            raise InvalidTransition('معتمد التحويل يجب أن يملك صلاحية المدير أو صاحب المحل.')
+        if not is_finance_user(context.approver) or not (context.approver.is_superuser or getattr(context.approver, 'role', '') == 'admin'):
+            raise InvalidTransition('معتمد التحويل المرتفع يجب أن يكون مديراً.')
 
 
 def _movement(source, context, *, account, direction, leg):
@@ -89,8 +88,7 @@ def reverse(transfer, context, reason):
     def handle(source):
         if source.state != Transfer.State.POSTED or not reason.strip():
             raise InvalidTransition('يمكن عكس تحويل مرحل فقط مع ذكر السبب.')
-        if not context.actor:
-            raise InvalidTransition('منفذ العكس مطلوب.')
+        require_finance_actor(context, 'عكس التحويل')
         original = PostingBatch.objects.select_for_update().get(pk=source.posting_batch_id)
         batch = PostingBatch.objects.create(
             operation_type='transfer.reverse', source_content_type=ContentType.objects.get_for_model(source),

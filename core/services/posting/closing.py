@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from core.models import AuditEvent, DailyClose, DailyCloseRevision, FinancialAccount, PostingEntry
 from .exceptions import InvalidTransition
+from .policy import require_finance_actor
 
 
 def _amount(value):
@@ -52,6 +53,9 @@ def snapshot_for(close, totals=None):
 
 @transaction.atomic
 def close(daily_close, context, actual_cash_counted_syp, notes='', opening_cash_syp=None):
+    require_finance_actor(context, 'الإغلاق اليومي')
+    if actual_cash_counted_syp is None:
+        raise InvalidTransition('العد الفعلي للنقد مطلوب.')
     source = DailyClose.objects.select_for_update().select_related('account').get(pk=daily_close.pk)
     if not source.account_id:
         raise InvalidTransition('يجب تحديد الحساب المالي للإغلاق.')
@@ -90,7 +94,7 @@ def reopen(daily_close, context, reason):
     if not reason:
         raise InvalidTransition('سبب إعادة الفتح مطلوب.')
     actor = context.actor
-    if not actor or not (actor.is_superuser or actor.has_perm('core.reopen_business_day')):
+    if not actor or not (actor.is_superuser or getattr(actor, 'role', '') == 'admin'):
         raise InvalidTransition('إعادة فتح فترة تحتاج صلاحية الإدارة المالية.')
     source = DailyClose.objects.select_for_update().get(pk=daily_close.pk)
     FinancialAccount.objects.select_for_update().filter(pk=source.account_id).first()

@@ -331,3 +331,25 @@ flag transitions, batch manifests, reconciliation JSON, monitoring graphs,
 approvals, and rollback decision. The finance owner and IC close the change only
 after the first complete close reconciles. Keep legacy fields and compatibility
 reads until the separately approved retention-period release described above.
+
+## 9. Bootstrap approved launch finance policy
+
+This bootstrap covers **only D01-D04 and D12-D14**. It uses global scope for
+Hub Sweida and does not activate supplier, inventory, payable, or owner accounts
+covered by D05-D11. Run the preview first and retain its output:
+
+```bash
+cd /opt/hub
+export DC='docker compose -f docker-compose.prod.yml --env-file .env'
+$DC exec -T web python manage.py bootstrap_launch_finance --dry-run
+$DC exec -T web python manage.py bootstrap_launch_finance --apply
+$DC exec -T web python manage.py bootstrap_launch_finance --apply
+$DC exec -T web python manage.py reconcile_finance --check --format=json
+$DC exec -T web python manage.py shell -c \
+  "from core.services.posting.rollout import current_rollout; print(current_rollout())"
+```
+
+The second apply must report only unchanged accounts. Reconciliation is a
+read-only gate. Expected rollout values remain `ledger_writes=False`,
+`dual_reads=False`, and `report_reads=False`; do not change `.env` or database
+flags as part of bootstrap.

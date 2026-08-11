@@ -178,7 +178,7 @@ MEMBER_DEVICE_COOKIE_SECURE = os.getenv('MEMBER_DEVICE_COOKIE_SECURE', str(not D
 PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', '')
 
 # A second, manager-level user must approve transfers at or above this amount.
-TRANSFER_APPROVAL_LIMIT_SYP = int(os.getenv('TRANSFER_APPROVAL_LIMIT_SYP', '1000000'))
+TRANSFER_APPROVAL_LIMIT_SYP = int(os.getenv('TRANSFER_APPROVAL_LIMIT_SYP', '50000'))
 
 # Manual networking remains the safe default. These placeholders contain no secrets.
 MIKROTIK_ENABLED = os.getenv('MIKROTIK_ENABLED', 'false').lower() == 'true'

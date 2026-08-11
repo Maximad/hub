@@ -14,7 +14,7 @@ from core.services.posting.transfers import post, reverse
 class TransferPostingTests(TestCase):
     def setUp(self):
         User=get_user_model()
-        self.actor=User.objects.create_user(username='cashier-transfer', password='x', phone='+99101')
+        self.actor=User.objects.create_user(username='finance-transfer', password='x', phone='+99101', role='admin')
         self.approver=User.objects.create_user(username='manager-transfer', password='x', phone='+99102', role='admin')
         self.source=FinancialAccount.objects.create(code='CASH-A', name_ar='الصندوق أ', account_type='asset', is_active=True)
         self.destination=FinancialAccount.objects.create(code='CASH-B', name_ar='الصندوق ب', account_type='asset', is_active=True)
