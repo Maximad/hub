@@ -39,10 +39,11 @@ def get_active_member_context(member, at=None, device=None):
     at = at or timezone.now()
     if not getattr(member, 'is_active', True):
         return None
-    subscription = (MembershipSubscription.objects.select_related('plan')
-        .filter(member=member, status='active', starts_at__lte=at, plan__is_active=True)
-        .filter(models.Q(ends_at__isnull=True) | models.Q(ends_at__gte=at))
-        .order_by('-starts_at').first())
+    candidates = (MembershipSubscription.objects.select_related('plan')
+        .filter(member=member, status__in=['active', 'frozen'], starts_at__lte=at, plan__is_active=True)
+        .filter(models.Q(ends_at__isnull=True) | models.Q(ends_at__gt=at))
+        .order_by('-starts_at'))
+    subscription = next((candidate for candidate in candidates if candidate.is_active_at(at)), None)
     return MemberContext(member, subscription, subscription.plan, device) if subscription else None
 
 
