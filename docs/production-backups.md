@@ -76,6 +76,22 @@ successful bootstrap, leave the checkout on `main`. All later deployments use
 the ordinary `./scripts/deploy-production.sh` path, which creates a fresh full
 backup and runs the corrected strict UTC timestamp parser before updating source.
 
+## Deployment migration policy
+
+`deploy-production.sh` builds the target web image and runs its Django checks,
+then applies migrations in a one-off container from that image. The currently
+serving web container is not replaced until migration succeeds. A failed
+migration stops deployment and leaves the old web container serving; operators
+must investigate the migration rather than forcing cutover or reversing it.
+
+Because the old release remains live while migrations execute, every production
+migration must be backward-compatible with that release. Add new tables or
+nullable columns and preserve existing tables, columns, and meanings during the
+**expand** release; migrate or backfill data while both application versions can
+operate during the **migrate** release; only remove obsolete schema in a later
+**contract** release after no deployed code uses it. A destructive migration
+must never combine these stages into one deployment.
+
 ## Schedule
 
 As `deploy`, edit `crontab -e` and install (02:17 UTC daily):
