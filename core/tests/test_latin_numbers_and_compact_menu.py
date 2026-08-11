@@ -113,6 +113,15 @@ class CompactMenuRenderingTests(TestCase):
         cart_sheets = [element for element in elements if 'data-cart-sheet' in element.attrs]
         self.assertEqual(len(cart_sheets), 1)
         self.assertIn(cart_sheets[0], form_elements)
+        cart_elements = list(cart_sheets[0].descendants())
+        cart_lists = [element for element in cart_elements if 'data-cart-list' in element.attrs]
+        self.assertEqual(len(cart_lists), 1)
+        submit_buttons = [element for element in cart_elements if 'data-submit-btn' in element.attrs]
+        self.assertEqual(len(submit_buttons), 1)
+        self.assertEqual(submit_buttons[0].tag, 'button')
+        self.assertEqual(submit_buttons[0].attrs.get('type'), 'submit')
+        for hook in ('data-cart-helper', 'data-cart-status', 'data-cart-total', 'data-fulfillment-selector'):
+            self.assertEqual(len([element for element in cart_elements if hook in element.attrs]), 1)
         sticky_carts = [element for element in elements if 'data-sticky-cart' in element.attrs]
         self.assertEqual(len(sticky_carts), 1)
         self.assertIn(sticky_carts[0], form_elements)
