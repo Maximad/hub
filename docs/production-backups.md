@@ -9,6 +9,73 @@ The manifest contains only timestamps, the Git commit, sizes, and basic counts;
 it contains no database password or application secret. Deployment and backup
 share a non-blocking lock, and deployment runs the full backup before updating.
 
+## One-time timestamp-parser deployment bootstrap
+
+Production commit `51249a4` cannot deploy the parser correction in `6d14032` by
+running `deploy-production.sh`. The normal ordering is: check the old checkout,
+fetch `origin/main`, create a backup **with scripts from the old checkout**, run
+the old retention parser, and only then fast-forward the checkout. The legacy
+parser passes `YYYYMMDDTHHMMSS` to GNU `date` in an invalid form, retention exits,
+the deploy error trap stops the deployment, and the source-update step is never
+reached. Re-running follows exactly the same ordering and fails again.
+
+The one-time bridge verifies (rather than deletes, renames, or skips) the newest
+existing full backup before changing the checkout. It then validates that
+`origin/main` is a commit and a fast-forward, records the old HEAD in
+`backups/rollback_revision.txt`, and fast-forwards the working tree. No Docker
+command is run before that fast-forward, so the running containers remain on the
+old image. The corrected `deploy-production.sh` re-verifies the same backup at
+handoff, builds the image, runs checks, replaces the web container, migrates,
+collects static files, restarts, and performs the normal smoke, audit, route, and
+log checks. It writes `backups/last_deployed_revision.txt` only after all checks
+succeed; therefore that file continues to describe the last successful deploy.
+
+Run these exact commands as the `deploy` user (not root):
+
+```bash
+cd /opt/hub
+test "$(git rev-parse HEAD)" = 51249a4917ccbfc935f793332510813636694d9d
+test -z "$(git status --porcelain)"
+git fetch origin main
+git show origin/main:scripts/bootstrap-production-deploy.sh > /tmp/bootstrap-production-deploy.sh
+chmod 700 /tmp/bootstrap-production-deploy.sh
+/tmp/bootstrap-production-deploy.sh
+rm -f /tmp/bootstrap-production-deploy.sh
+cat backups/rollback_revision.txt
+cat backups/last_deployed_revision.txt
+test "$(cat backups/last_deployed_revision.txt)" = "$(git rev-parse HEAD)"
+```
+
+If independently confirming the full production commit, compare it with
+`git rev-parse 51249a4`; do not continue on a mismatch. Do not create, remove,
+rename, or edit anything under `backups/production` during this procedure. The verifier restores into an
+isolated temporary PostgreSQL container and never changes production data.
+
+If the bootstrap deployment fails, preserve its output and the verified backup.
+Do not reset volumes or run reverse migrations. The following source/image
+rollback returns the application code to the accurately recorded revision while
+leaving production data and every backup intact:
+
+```bash
+cd /opt/hub
+rollback="$(cat backups/rollback_revision.txt)"
+git cat-file -e "$rollback^{commit}"
+git checkout --detach "$rollback"
+docker compose -f docker-compose.prod.yml --env-file .env build web
+docker compose -f docker-compose.prod.yml --env-file .env up -d --no-deps --force-recreate web
+docker compose -f docker-compose.prod.yml --env-file .env exec -T web python manage.py collectstatic --noinput --clear
+docker compose -f docker-compose.prod.yml --env-file .env restart web
+curl -kfsS https://hubsweida.jwtalenthouse.com/menu/ >/dev/null
+docker compose -f docker-compose.prod.yml --env-file .env exec -T web python manage.py check
+docker compose -f docker-compose.prod.yml --env-file .env exec -T web python manage.py smoke_check
+```
+
+Escalate for a migration-aware recovery if old application code is not compatible
+with already-applied forward migrations; never reset production data. After a
+successful bootstrap, leave the checkout on `main`. All later deployments use
+the ordinary `./scripts/deploy-production.sh` path, which creates a fresh full
+backup and runs the corrected strict UTC timestamp parser before updating source.
+
 ## Schedule
 
 As `deploy`, edit `crontab -e` and install (02:17 UTC daily):

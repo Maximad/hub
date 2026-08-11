@@ -9,7 +9,27 @@ trap 'rm -rf "$tmp"' EXIT
 
 bash -n "$repo/scripts/backup-production.sh" \
     "$repo/scripts/production-backup-retention.sh" \
-    "$repo/scripts/verify-production-backup.sh"
+    "$repo/scripts/verify-production-backup.sh" \
+    "$repo/scripts/bootstrap-production-deploy.sh" \
+    "$repo/scripts/deploy-production.sh"
+
+# The bootstrap handoff is explicitly supported by the normal deploy script.
+# This guards the legacy-parser deadlock: source moves before that script runs,
+# while both the bootstrap and the handoff verify the existing full backup.
+grep -q 'git merge --ff-only "origin/\$BRANCH"' "$repo/scripts/bootstrap-production-deploy.sh"
+grep -q 'exec ./scripts/deploy-production.sh --bootstrap-resume' "$repo/scripts/bootstrap-production-deploy.sh"
+grep -q 'verify-production-backup.sh.*BOOTSTRAP_BACKUP' "$repo/scripts/deploy-production.sh"
+
+# Regression fixture: 51249a4 is the deployed revision containing the legacy
+# GNU-date parser.  Its normal deploy updates source only after backup returns.
+legacy_backup="$(git -C "$repo" show 51249a4:scripts/backup-production.sh)"
+grep -q 'date -u -d "${BASH_REMATCH\[1\]:0:8} ${BASH_REMATCH\[1\]:9:6}"' <<<"$legacy_backup"
+legacy_deploy="$(git -C "$repo" show 51249a4:scripts/deploy-production.sh)"
+[[ "$(grep -n 'backup-production.sh --lock-held' <<<"$legacy_deploy" | cut -d: -f1)" -lt \
+   "$(grep -n 'git merge --ff-only' <<<"$legacy_deploy" | cut -d: -f1)" ]]
+bootstrap_verify_line="$(grep -n 'verify-production-backup.sh.*latest' "$repo/scripts/bootstrap-production-deploy.sh" | cut -d: -f1)"
+bootstrap_checkout_line="$(grep -n 'git merge --ff-only' "$repo/scripts/bootstrap-production-deploy.sh" | cut -d: -f1)"
+[[ "$bootstrap_verify_line" -lt "$bootstrap_checkout_line" ]]
 
 source "$repo/scripts/production-backup-retention.sh"
 
