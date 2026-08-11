@@ -10,6 +10,9 @@ LOCK_FILE="${LOCK_FILE:-/tmp/hub-production-operation.lock}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 ENV_FILE="${ENV_FILE:-.env}"
 LOCK_HELD=false
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+
+source "$SCRIPT_DIR/production-backup-retention.sh"
 
 die() { printf 'BACKUP FAILED: %s\n' "$*" >&2; exit 1; }
 log() { printf '[%s] %s\n' "$(date -u '+%FT%TZ')" "$*"; }
@@ -103,17 +106,5 @@ mv -- "$staging" "$final"
 staging=""
 log "Backup completed: $final"
 
-# Only inspect direct, validated backup directories, and always preserve newest success.
-mapfile -t successful < <(find "$root_real" -mindepth 1 -maxdepth 1 -type d -name 'hub-[0-9]*T[0-9]*Z' \
-    -exec test -f '{}/SUCCESS' \; -print | sort)
-if ((${#successful[@]} > 1)); then
-    newest="${successful[-1]}"
-    cutoff="$(date -u -d "$RETENTION_DAYS days ago" +%s)"
-    for candidate in "${successful[@]}"; do
-        [[ "$candidate" != "$newest" && "$(dirname "$candidate")" == "$root_real" ]] || continue
-        base="$(basename "$candidate")"
-        [[ "$base" =~ ^hub-([0-9]{8}T[0-9]{6}Z)$ ]] || continue
-        candidate_epoch="$(date -u -d "${BASH_REMATCH[1]:0:8} ${BASH_REMATCH[1]:9:6}" +%s)" || continue
-        (( candidate_epoch < cutoff )) && rm -rf -- "$candidate"
-    done
-fi
+# Only inspect direct, validated backup directories, and always preserve the newest success.
+cleanup_production_backups "$root_real" "$RETENTION_DAYS"
