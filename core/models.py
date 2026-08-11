@@ -1007,6 +1007,14 @@ class DailyCloseRevision(TimeStampedModel):
     def __str__(self):
         return f'{self.daily_close.business_date} — {self.revision_type}'
 
+    def save(self, *args, **kwargs):
+        if self.pk and type(self).objects.filter(pk=self.pk).exists():
+            raise ValidationError('Daily-close snapshots are immutable; append a revision instead.')
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError('Daily-close snapshots are immutable and cannot be deleted.')
+
 
 class PostingCommand(TimeStampedModel):
     """Durable idempotency receipt for a financially meaningful command."""

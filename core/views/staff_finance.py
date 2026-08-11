@@ -29,6 +29,10 @@ def _dec(raw):
 def _can_manage_finance(user):
     return user.is_superuser or user.has_perm('core.close_business_day') or user.has_perm('core.reopen_business_day') or getattr(user,'role','') == 'admin'
 
+def _can_reopen_finance(user):
+    """D14 reserves reopening to administrators, regardless of finance grants."""
+    return bool(user.is_active and (user.is_superuser or getattr(user, 'role', '') == 'admin'))
+
 def _positive_int(raw):
     try:
         return int(raw or 0)
@@ -203,12 +207,12 @@ def staff_daily_close_detail(request, close_id):
     purchases=Purchase.objects.filter(business_date=close.business_date).select_related('vendor')
     expenses=Expense.objects.filter(business_date=close.business_date).select_related('category','vendor')
     movements=CashMovement.objects.filter(business_date=close.business_date).select_related('vendor','created_by')
-    return render(request,'staff/finance_daily_close_detail.html',{'close':close,'rows':rows,'sums':sums,'finance':finance,'purchases':purchases,'expenses':expenses,'movements':movements,'business_date':current_business_date(),'can_reopen':_can_manage_finance(request.user)})
+    return render(request,'staff/finance_daily_close_detail.html',{'close':close,'rows':rows,'sums':sums,'finance':finance,'purchases':purchases,'expenses':expenses,'movements':movements,'business_date':current_business_date(),'can_reopen':_can_reopen_finance(request.user)})
 
 @require_staff_capability('finance')
 def staff_daily_close_reopen(request, close_id):
     close=get_object_or_404(DailyClose, pk=close_id)
-    if not _can_manage_finance(request.user): messages.error(request,'إعادة الفتح تحتاج صلاحية الإدارة المالية.'); return redirect('staff_daily_close_detail', close_id=close.pk)
+    if not _can_reopen_finance(request.user): messages.error(request,'إعادة الفتح تحتاج صلاحية الإدارة المالية.'); return redirect('staff_daily_close_detail', close_id=close.pk)
     errors=[]
     if request.method=='POST':
         try:

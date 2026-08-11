@@ -29,11 +29,14 @@ def close_totals(account, business_date):
         values = queryset.aggregate(debits=Sum('debit'), credits=Sum('credit'))
         return _amount(values['debits']) - _amount(values['credits'])
 
-    transfers_in = signed(entries.filter(batch__operation_type__icontains='transfer', debit__isnull=False))
-    transfers_out = -signed(entries.filter(batch__operation_type__icontains='transfer', credit__isnull=False))
-    reversals = -signed(entries.filter(Q(batch__reversal_of__isnull=False) | Q(batch__operation_type__icontains='reverse')))
-    ordinary = entries.exclude(batch__operation_type__icontains='transfer').exclude(
-        Q(batch__reversal_of__isnull=False) | Q(batch__operation_type__icontains='reverse'))
+    reversal_filter = Q(batch__reversal_of__isnull=False) | Q(batch__operation_type__icontains='reverse')
+    # A transfer reversal is a reversal, not a second transfer. Keeping these
+    # sets disjoint prevents it from changing expected cash twice.
+    transfer_entries = entries.filter(batch__operation_type__icontains='transfer').exclude(reversal_filter)
+    transfers_in = signed(transfer_entries.filter(debit__isnull=False))
+    transfers_out = -signed(transfer_entries.filter(credit__isnull=False))
+    reversals = -signed(entries.filter(reversal_filter))
+    ordinary = entries.exclude(batch__operation_type__icontains='transfer').exclude(reversal_filter)
     receipts = signed(ordinary.filter(debit__isnull=False))
     payments = -signed(ordinary.filter(credit__isnull=False))
     return {'cash_receipts': receipts, 'transfers_in': transfers_in, 'cash_payments': payments,
@@ -97,6 +100,8 @@ def reopen(daily_close, context, reason):
     if not actor or not (actor.is_superuser or getattr(actor, 'role', '') == 'admin'):
         raise InvalidTransition('إعادة فتح فترة تحتاج صلاحية الإدارة المالية.')
     source = DailyClose.objects.select_for_update().get(pk=daily_close.pk)
+    if source.status != DailyClose.Status.CLOSED or not source.is_finalized:
+        raise InvalidTransition('يمكن إعادة فتح إغلاق نهائي مغلق فقط.')
     FinancialAccount.objects.select_for_update().filter(pk=source.account_id).first()
     before = source.close_snapshot
     DailyCloseRevision.objects.create(daily_close=source, revision_type='before_reopen', snapshot=before, reason=reason, created_by=actor)

@@ -3,10 +3,12 @@ from decimal import Decimal
 from io import StringIO
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.test import TestCase
 
-from core.models import DailyClose, FinancialAccount, Transfer
+from core.finance import finance_summary_for_date
+from core.models import AuditEvent, DailyClose, DailyCloseRevision, FinancialAccount, Transfer
 from core.services.posting import closing, transfers
 from core.services.posting.context import PostingContext
 from core.services.posting.exceptions import ClosedPeriodError, InvalidTransition
@@ -82,3 +84,43 @@ class LaunchPolicyAcceptanceTests(TestCase):
             closing.reopen(closed, self.context(self.admin, 'reopen:reason'), '')
         reopened = closing.reopen(closed, self.context(self.admin, 'reopen:ok'), 'تصحيح موثق')
         self.assertEqual(reopened.status, DailyClose.Status.REOPENED)
+
+    def test_close_snapshot_report_refresh_reopen_and_posting(self):
+        posted = transfers.post(self.transfer('125.50'), self.context(self.admin, 'close-flow:transfer'))
+        transfers.reverse(posted, self.context(self.admin, 'close-flow:reverse'), 'تصحيح التحويل')
+        close = DailyClose.objects.create(
+            account=self.source, business_date=self.day,
+            status=DailyClose.Status.OPEN, is_finalized=False,
+        )
+        closed = closing.close(
+            close, self.context(self.admin, 'close-flow:close'),
+            actual_cash_counted_syp=1000, opening_cash_syp=1000,
+        )
+        original_snapshot = dict(closed.close_snapshot)
+        self.assertEqual(original_snapshot['opening_amount'], '1000')
+        self.assertEqual(original_snapshot['expected_amount'], '1000')
+        self.assertEqual(original_snapshot['counted_amount'], '1000')
+        self.assertEqual(original_snapshot['difference'], '0')
+        first_expected = finance_summary_for_date(self.day)['expected_cash_syp']
+        closed.refresh_from_db()
+        refreshed_expected = finance_summary_for_date(self.day)['expected_cash_syp']
+        self.assertEqual(first_expected, refreshed_expected)
+        self.assertEqual(first_expected, Decimal('1000.00'))
+
+        with self.assertRaises(ClosedPeriodError):
+            transfers.post(self.transfer('1'), self.context(self.admin, 'close-flow:blocked'))
+        reopened = closing.reopen(
+            closed, self.context(self.admin, 'close-flow:reopen'), 'إضافة عملية منسية',
+        )
+        revision = DailyCloseRevision.objects.get(daily_close=closed, revision_type='before_reopen')
+        self.assertEqual(revision.snapshot, original_snapshot)
+        revision.reason = 'محاولة تعديل'
+        with self.assertRaises(ValidationError):
+            revision.save()
+        self.assertTrue(AuditEvent.objects.filter(
+            action='account_period_reopened', source_object_id=str(closed.pk),
+        ).exists())
+        after_reopen = transfers.post(self.transfer('1'), self.context(self.admin, 'close-flow:after-reopen'))
+        self.assertEqual(after_reopen.state, Transfer.State.POSTED)
+        with self.assertRaisesRegex(InvalidTransition, 'إغلاق نهائي'):
+            closing.reopen(reopened, self.context(self.admin, 'close-flow:reopen-twice'), 'مرة ثانية')
