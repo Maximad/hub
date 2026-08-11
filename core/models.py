@@ -1399,8 +1399,17 @@ class InternetPackage(TimeStampedModel, PublicCodeModel):
     guest_allowed = models.BooleanField(default=True)
     visible_to_staff = models.BooleanField(default=True)
     visible_to_customer = models.BooleanField(default=False)
-    partner = models.ForeignKey('InternetPartner', on_delete=models.PROTECT, null=True, blank=True, related_name='packages')
-    partner_share_percent = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0), MaxValueValidator(100)])
+    partner = models.ForeignKey(
+        'InternetPartner', on_delete=models.PROTECT, null=True, blank=True, related_name='packages',
+        verbose_name='شريك إنترنت خاص بهذه الباقة (اختياري)',
+        help_text='ترك الحقل فارغاً يعني استخدام شريك الإنترنت الافتراضي.',
+    )
+    partner_share_percent = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        verbose_name='نسبة مشاركة خاصة بهذه الباقة (اختياري)',
+        help_text='ترك الحقل فارغاً يعني استخدام النسبة الافتراضية للشريك الفعلي.',
+    )
     notes = models.TextField(blank=True)
     backend_config = models.JSONField(default=dict, blank=True)
 
@@ -1443,8 +1452,30 @@ class InternetBandwidthProfile(TimeStampedModel):
 class InternetPartner(TimeStampedModel):
     name = models.CharField(max_length=120)
     active = models.BooleanField(default=True)
+    is_default = models.BooleanField(default=False)
     revenue_share_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0, validators=[MinValueValidator(0), MaxValueValidator(100)])
     users = models.ManyToManyField(settings.AUTH_USER_MODEL, through='InternetPartnerUser', related_name='internet_partners')
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(is_default=False) | models.Q(active=True),
+                name='internet_partner_default_must_be_active',
+            ),
+            models.UniqueConstraint(
+                fields=('is_default',), condition=models.Q(is_default=True),
+                name='unique_default_internet_partner',
+            ),
+        ]
+
+    def clean(self):
+        if self.is_default and not self.active:
+            raise ValidationError({'is_default': 'يجب أن يكون شريك الإنترنت الافتراضي فعالاً.'})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
     def __str__(self): return self.name
 
 

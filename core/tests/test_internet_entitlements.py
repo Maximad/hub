@@ -10,7 +10,8 @@ from core.models import (InternetAccessDevice, InternetBandwidthProfile, Interne
                          InternetPackage, InternetPartner, InternetPartnerUser, InternetRevenueShare,
                          InternetRevenueShareAdjustment, InternetSession, Member, Order, Payment)
 from core.services.internet_access import (create_entitlement, end_usage_session,
-    create_commercial_sale, effectively_active_entitlements, record_payment_reversal_adjustment,
+    create_commercial_sale, effectively_active_entitlements, get_default_internet_partner,
+    record_payment_reversal_adjustment,
     register_device, start_usage_session, validity_end)
 from core.services.network_backends import ManualNetworkBackend, get_network_backend
 from members.models import MembershipPlan, MembershipSubscription
@@ -110,6 +111,97 @@ class EntitlementWorkflowTests(TestCase):
 
 
 class PartnerSnapshotTests(TestCase):
+    def package(self, **overrides):
+        values = dict(name_ar='باقة شريك', duration_minutes=60, price_syp=1000,
+            access_mode=InternetPackage.AccessMode.TIMED_SESSION, session_minutes_limit=60)
+        values.update(overrides)
+        return InternetPackage.objects.create(**values)
+
+    def test_default_partner_and_percentage_are_inherited(self):
+        partner = InternetPartner.objects.create(
+            name='Default ISP', is_default=True, revenue_share_percent=Decimal('30'))
+
+        entitlement = create_entitlement(self.package())
+
+        self.assertEqual(entitlement.partner, partner)
+        self.assertEqual(entitlement.revenue_share.share_percent, Decimal('30'))
+        self.assertEqual(entitlement.revenue_share.partner_amount_syp, Decimal('300'))
+
+    def test_explicit_active_package_partner_overrides_default(self):
+        InternetPartner.objects.create(
+            name='Default ISP', is_default=True, revenue_share_percent=Decimal('30'))
+        override = InternetPartner.objects.create(
+            name='Special ISP', revenue_share_percent=Decimal('25'))
+
+        entitlement = create_entitlement(self.package(partner=override))
+
+        self.assertEqual(entitlement.partner, override)
+        self.assertEqual(entitlement.revenue_share.share_percent, Decimal('25'))
+
+    def test_package_percentage_overrides_effective_partner_percentage(self):
+        partner = InternetPartner.objects.create(
+            name='Default ISP', is_default=True, revenue_share_percent=Decimal('30'))
+
+        entitlement = create_entitlement(
+            self.package(partner_share_percent=Decimal('20')))
+
+        self.assertEqual(entitlement.partner, partner)
+        self.assertEqual(entitlement.revenue_share.share_percent, Decimal('20'))
+
+    def test_sale_without_default_or_package_partner_has_no_share(self):
+        entitlement = create_entitlement(self.package())
+
+        self.assertIsNone(entitlement.partner)
+        self.assertFalse(InternetRevenueShare.objects.filter(entitlement=entitlement).exists())
+
+    def test_inactive_partner_cannot_be_default_and_is_never_implicitly_selected(self):
+        inactive = InternetPartner(name='Inactive ISP', active=False, is_default=True)
+        with self.assertRaises(ValidationError):
+            inactive.save()
+        inactive.is_default = False
+        inactive.save()
+        fallback = InternetPartner.objects.create(name='Default ISP', is_default=True)
+
+        entitlement = create_entitlement(self.package(partner=inactive))
+
+        self.assertEqual(get_default_internet_partner(), fallback)
+        self.assertEqual(entitlement.partner, fallback)
+
+    def test_only_one_default_partner_is_allowed(self):
+        InternetPartner.objects.create(name='First', is_default=True)
+
+        with self.assertRaises(ValidationError):
+            InternetPartner.objects.create(name='Second', is_default=True)
+
+    def test_default_changes_do_not_rewrite_snapshots_or_dashboard_history(self):
+        old_partner = InternetPartner.objects.create(
+            name='Old default', is_default=True, revenue_share_percent=Decimal('30'))
+        package = self.package()
+        old_entitlement = create_entitlement(package, idempotency_key='historical-sale')
+        old_share = old_entitlement.revenue_share
+        old_partner.is_default = False
+        old_partner.revenue_share_percent = Decimal('90')
+        old_partner.save()
+        new_partner = InternetPartner.objects.create(
+            name='New default', is_default=True, revenue_share_percent=Decimal('20'))
+
+        new_entitlement = create_entitlement(package, idempotency_key='new-sale')
+        retry = create_entitlement(package, idempotency_key='historical-sale')
+        old_entitlement.refresh_from_db()
+        old_share.refresh_from_db()
+
+        self.assertEqual(retry.pk, old_entitlement.pk)
+        self.assertEqual(old_entitlement.partner, old_partner)
+        self.assertEqual((old_share.partner, old_share.share_percent),
+                         (old_partner, Decimal('30')))
+        self.assertEqual((new_entitlement.partner, new_entitlement.revenue_share.share_percent),
+                         (new_partner, Decimal('20')))
+        self.assertEqual(
+            InternetRevenueShare.objects.filter(partner=old_partner).values_list(
+                'entitlement_id', 'share_percent').get(),
+            (old_entitlement.pk, Decimal('30')),
+        )
+
     def test_default_override_and_history_are_immutable(self):
         partner = InternetPartner.objects.create(name='ISP', revenue_share_percent=Decimal('30'))
         package = InternetPackage.objects.create(name_ar='أسبوعي', code='partner-week', duration_minutes=0,

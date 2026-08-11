@@ -9,8 +9,28 @@ from django.db.models import F
 from django.utils import timezone
 
 from core.models import (ActivityLog, Category, InternetAccessDevice, InternetEntitlement,
-                         InternetPackage, InternetRevenueShare, InternetRevenueShareAdjustment,
+                         InternetPackage, InternetPartner, InternetRevenueShare, InternetRevenueShareAdjustment,
                          InternetSession, Order, OrderItem, Payment, Product)
+
+
+def get_default_internet_partner():
+    """Return the active default provider, without ever inferring one from existing data."""
+    return InternetPartner.objects.filter(active=True, is_default=True).first()
+
+
+def resolve_internet_partner(package):
+    """Resolve a sale's provider; an inactive package override is never selected."""
+    if package.partner_id and package.partner.active:
+        return package.partner
+    return get_default_internet_partner()
+
+
+def resolve_partner_share_percent(package, partner=None):
+    """Resolve the commercial percentage to snapshot for a new sale."""
+    if package.partner_share_percent is not None:
+        return package.partner_share_percent
+    partner = partner if partner is not None else resolve_internet_partner(package)
+    return partner.revenue_share_percent if partner is not None else None
 
 
 def effectively_active_entitlements(queryset=None, *, at=None):
@@ -59,6 +79,8 @@ def create_entitlement(package, *, member=None, guest_name='', guest_phone='', o
         raise ValidationError('باقة رصيد العضوية تتطلب عضواً واشتراكاً فعالاً.')
     now = purchased_at or timezone.now()
     activate = package.activation_policy == package.ActivationPolicy.ON_PURCHASE
+    partner = resolve_internet_partner(package)
+    partner_share_percent = resolve_partner_share_percent(package, partner)
     entitlement = InternetEntitlement.objects.create(
         package=package, member=member, guest_name=guest_name, guest_phone=guest_phone,
         order=order, payment=payment, subscription=subscription, created_by=created_by,
@@ -73,11 +95,11 @@ def create_entitlement(package, *, member=None, guest_name='', guest_phone='', o
         bandwidth_profile_code=package.bandwidth_profile.code if package.bandwidth_profile_id else '',
         max_concurrent_devices=package.max_concurrent_devices,
         max_registered_devices=package.max_registered_devices,
-        partner=package.partner, gross_amount_syp=package.price_syp,
+        partner=partner, gross_amount_syp=package.price_syp,
         status=InternetEntitlement.Status.ACTIVE if activate else InternetEntitlement.Status.PENDING,
     )
     ActivityLog.objects.create(actor=created_by, action='internet.entitlement_created', details={'entitlement': str(entitlement.public_code), 'voucher': entitlement.access_code})
-    snapshot_revenue_share(entitlement)
+    snapshot_revenue_share(entitlement, share_percent=partner_share_percent)
     return entitlement
 
 
@@ -159,11 +181,14 @@ def end_usage_session(session, *, actor=None, at=None):
     return session
 
 
-def snapshot_revenue_share(entitlement, business_date=None):
+def snapshot_revenue_share(entitlement, business_date=None, share_percent=None):
     if not entitlement.partner_id:
         return None
-    percent = entitlement.package.partner_share_percent
-    if percent is None: percent = entitlement.partner.revenue_share_percent
+    percent = share_percent
+    if percent is None:
+        percent = resolve_partner_share_percent(entitlement.package, entitlement.partner)
+    if percent is None:
+        return None
     gross = Decimal(entitlement.gross_amount_syp)
     partner_amount = (gross * Decimal(percent) / Decimal('100')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     return InternetRevenueShare.objects.get_or_create(entitlement=entitlement, defaults={
