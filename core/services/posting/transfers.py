@@ -12,7 +12,9 @@ from .policy import is_finance_user, require_finance_actor
 
 
 def approval_limit():
-    return Decimal(str(getattr(settings, 'TRANSFER_APPROVAL_LIMIT_SYP', 1000000)))
+    # Keep the policy-safe value here as well as in settings so an incomplete
+    # deployment cannot silently restore the superseded 1,000,000 SYP limit.
+    return Decimal(str(getattr(settings, 'TRANSFER_APPROVAL_LIMIT_SYP', 50000)))
 
 
 def _requires_approval(amount):
@@ -29,6 +31,8 @@ def _validate(source, context):
         raise InvalidTransition('يجب أن يكون حسابا المصدر والوجهة فعالين.')
     if source.source_account.currency != source.destination_account.currency:
         raise InvalidTransition('لا يمكن تحويل الرقم نفسه بين حسابين بعملتين مختلفتين. استخدم سير عمل تحويل عملة مصرحاً يحفظ المبلغين وسعر الصرف.')
+    if (source.source_account.business_unit or '') != (source.destination_account.business_unit or ''):
+        raise InvalidTransition('يجب أن يكون حسابا التحويل ضمن وحدة العمل نفسها.')
     if source.amount <= 0:
         raise InvalidTransition('مبلغ التحويل يجب أن يكون موجباً.')
     if not source.business_date:
