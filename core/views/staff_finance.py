@@ -12,7 +12,7 @@ from catalog.models import MediaAsset
 from core.finance import finance_summary_for_date, current_business_date
 from core.services.posting.context import PostingContext
 from core.services.posting import expenses as expense_posting, purchases as purchase_posting, closing as closing_posting, transfers as transfer_posting
-from core.models import ActivityLog, CashMovement, DailyClose, Expense, ExpenseCategory, FinancialAccount, InventoryItem, Purchase, PurchaseItem, StockMovement, Transfer
+from core.models import ActivityLog, CashMovement, DailyClose, Expense, ExpenseCategory, FinancialAccount, InventoryItem, PostingCommand, Purchase, PurchaseItem, StockMovement, Transfer
 from core.views_legacy import DAMASCUS_TZ, _build_day_report, _parse_report_date
 from vendors.models import Vendor
 
@@ -83,22 +83,26 @@ def staff_expense_new(request):
         if not errors:
             try:
                 base_context = _posting_context(request, exp.business_date)
-                exp = expense_posting.create_draft(
-                    exp, base_context.with_key_suffix('draft')
-                )
-                if requested_status == Expense.Status.APPROVED:
-                    expense_posting.approve_liability(
-                        exp, base_context.with_key_suffix('approval'), exp.liability_account
+                duplicate = PostingCommand.objects.filter(key=f'{base_context.idempotency_key}:draft').exists()
+                with transaction.atomic():
+                    exp = expense_posting.create_draft(
+                        exp, base_context.with_key_suffix('draft')
                     )
-                elif requested_status == Expense.Status.PAID:
-                    expense_posting.pay_immediately(
-                        exp, base_context.with_key_suffix('payment'), exp.financial_account,
-                        exp.payment_method,
-                    )
+                    if requested_status == Expense.Status.APPROVED:
+                        expense_posting.approve_liability(
+                            exp, base_context.with_key_suffix('approval'), exp.liability_account
+                        )
+                    elif requested_status == Expense.Status.PAID:
+                        expense_posting.pay_immediately(
+                            exp, base_context.with_key_suffix('payment'), exp.financial_account,
+                            exp.payment_method,
+                        )
             except ValidationError as error:
                 errors.extend(_validation_messages(error))
             else:
-                messages.success(request,'تم حفظ المصروف.'); return redirect('staff_finance_expenses')
+                if duplicate: messages.warning(request,'طلب مكرر: تم استخدام النتيجة المحفوظة دون إنشاء قيد جديد.')
+                else: messages.success(request,'تم حفظ المصروف.')
+                return redirect('staff_finance_expenses')
     return render(request,'staff/finance_expense_form.html',{'categories':ExpenseCategory.objects.filter(is_active=True),'vendors':Vendor.objects.all(),'financial_accounts':FinancialAccount.objects.filter(is_active=True),'liability_accounts':FinancialAccount.objects.filter(is_active=True, account_type=FinancialAccount.AccountType.LIABILITY),'payee_types':Expense.PayeeType.choices,'media_assets':MediaAsset.objects.order_by('-created_at')[:50],'methods':Expense.PaymentMethod.choices,'paid_froms':Expense.PaidFrom.choices,'statuses':Expense.Status.choices,'today':timezone.now().date(),'errors':errors,'form_values':request.POST})
 
 @require_staff_capability('finance')
@@ -117,11 +121,16 @@ def staff_cashbox_new(request):
         except ValidationError as e: errors += sum(e.message_dict.values(), []) if hasattr(e,'message_dict') else e.messages
         if not errors:
             try:
-                expense_posting.post_cash_movement(mv, _posting_context(request, mv.business_date))
+                context = _posting_context(request, mv.business_date)
+                duplicate = PostingCommand.objects.filter(key=context.idempotency_key).exists()
+                with transaction.atomic():
+                    expense_posting.post_cash_movement(mv, context)
             except ValidationError as error:
                 errors.extend(_validation_messages(error))
             else:
-                messages.success(request,'تم حفظ حركة الصندوق.'); return redirect('staff_finance_cashbox')
+                if duplicate: messages.warning(request,'طلب مكرر: لم يتم إنشاء حركة صندوق إضافية.')
+                else: messages.success(request,'تم حفظ حركة الصندوق.')
+                return redirect('staff_finance_cashbox')
     return render(request,'staff/finance_cashbox_form.html',{'types':CashMovement.MovementType.choices,'directions':CashMovement.Direction.choices,'accounts':FinancialAccount.objects.filter(is_active=True),'vendors':Vendor.objects.all(),'expenses':Expense.objects.exclude(status=Expense.Status.CANCELLED)[:100],'today':timezone.now().date(),'errors':errors,'form_values':request.POST})
 
 @require_staff_capability('finance')

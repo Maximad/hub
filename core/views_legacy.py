@@ -26,7 +26,7 @@ from accounts.permissions import (
     require_staff_capability, user_has_capability,
 )
 from core.stock_recipes import deduct_order_item_stock
-from core.models import ActivityLog, CancellationReason, CashMovement, Category, DailyClose, Expense, InternetEntitlement, InternetPackage, InternetSession, Member, Order, OrderDiscount, OrderItem, Payment, Product, Room, SystemSetting, TableArea
+from core.models import ActivityLog, CancellationReason, CashMovement, Category, DailyClose, Expense, InternetEntitlement, InternetPackage, InternetSession, Member, Order, OrderDiscount, OrderItem, Payment, PostingCommand, Product, Room, SystemSetting, TableArea
 from core.services.posting.context import PostingContext
 from core.services.posting.order_payments import collect as collect_order_payment
 from events.models import Event
@@ -1358,7 +1358,14 @@ def staff_cashier_pay(request, public_code):
     import hashlib
     digest=hashlib.sha256(repr(sorted((key, request.POST.getlist(key)) for key in request.POST)).encode()).hexdigest()[:24]
     posting_key=request.headers.get('Idempotency-Key') or request.POST.get('idempotency_key') or f'cashier:{order.pk}:{request.user.pk}:{digest}'
-    payment = collect_order_payment(order, PostingContext(actor=request.user,approver=locals().get('approving_manager'),business_date=timezone.localdate(),idempotency_key=posting_key,channel='cashier',request_metadata={'path':request.path}), amount_val, method, request.POST.get('notes', '').strip())
+    duplicate = PostingCommand.objects.filter(key=posting_key).exists()
+    try:
+        payment = collect_order_payment(order, PostingContext(actor=request.user,approver=locals().get('approving_manager'),business_date=timezone.localdate(),idempotency_key=posting_key,channel='cashier',request_metadata={'path':request.path}), amount_val, method, request.POST.get('notes', '').strip())
+    except ValidationError as error:
+        messages.error(request, ' '.join(error.messages))
+        return redirect('staff_cashier_order', public_code=order.public_code)
+    if duplicate:
+        messages.warning(request, 'طلب دفع مكرر: لم يتم إنشاء دفعة أو حركة صندوق إضافية.')
     if order.remaining_syp > 0:
         create_notification('payment_pending', f'الدفع بانتظار الكاشير {order.display_number}', f'المتبقي {order.remaining_syp} ل.س', order=order, target_role='cashier', created_by=request.user)
     try:

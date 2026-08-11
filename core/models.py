@@ -679,8 +679,6 @@ class CashMovement(TimeStampedModel):
     class Direction(models.TextChoices):
         IN='in','دخول'; OUT='out','خروج'
     business_date = models.DateField('تاريخ العمل')
-    financial_account = models.ForeignKey('FinancialAccount', on_delete=models.PROTECT, null=True, blank=True,
-                                          related_name='cash_movements')
     movement_type = models.CharField(max_length=30, choices=MovementType.choices)
     direction = models.CharField(max_length=5, choices=Direction.choices)
     amount_syp = models.DecimalField('المبلغ', max_digits=20, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
