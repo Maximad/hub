@@ -16,9 +16,10 @@ from members.models import MemberDeviceToken
 from members.services import consume_activation_token, create_activation_token, resolve_member_from_request, validate_activation_token
 
 
-def _activation_destination(request):
+def _redirect_destination(request):
     destination = request.POST.get('next', '') if request.method == 'POST' else request.GET.get('next', '')
-    if not url_has_allowed_host_and_scheme(
+    destination = destination.strip()
+    if destination.startswith('//') or not url_has_allowed_host_and_scheme(
         destination, allowed_hosts={request.get_host()}, require_https=request.is_secure()
     ):
         return reverse('menu_public')
@@ -27,7 +28,7 @@ def _activation_destination(request):
 
 @require_http_methods(['GET', 'HEAD', 'POST'])
 def activate_member_device(request, token):
-    destination = _activation_destination(request)
+    destination = _redirect_destination(request)
     if request.method in ('GET', 'HEAD'):
         activation = validate_activation_token(token)
         if not activation:
@@ -61,11 +62,12 @@ def activate_member_device(request, token):
 
 @require_POST
 def deactivate_member_device(request):
+    destination = _redirect_destination(request)
     context = resolve_member_from_request(request, touch=False)
     if context:
         MemberDeviceToken.objects.filter(pk=context.device.pk).update(revoked_at=timezone.now())
         ActivityLog.objects.create(action='member_device_revoked', details={'member_public_code': str(context.member.public_code), 'device_uuid': str(context.device.uuid)})
-    response = redirect(request.POST.get('next') or 'menu_public')
+    response = redirect(destination)
     response.delete_cookie(settings.MEMBER_DEVICE_COOKIE_NAME, path='/', samesite='Lax')
     return response
 
