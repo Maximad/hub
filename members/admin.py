@@ -1,20 +1,31 @@
 from django.contrib import admin
-from .models import MembershipPlan, MembershipSubscription, MembershipBenefitRule, MemberCreditLedger
+from .models import MemberAttribute, MembershipPlan, MembershipSubscription, MembershipBenefitRule, MemberCreditLedger
 
 
 @admin.register(MembershipPlan)
 class MembershipPlanAdmin(admin.ModelAdmin):
-    list_display = ('name_ar', 'code', 'billing_period', 'price_syp', 'is_active')
-    list_filter = ('billing_period', 'is_active')
+    list_display = ('name_ar', 'code', 'billing_period', 'price_syp', 'is_active', 'visible_to_staff', 'visible_to_customer', 'sort_order')
+    list_filter = ('billing_period', 'is_active', 'visible_to_staff', 'visible_to_customer')
     search_fields = ('name_ar', 'name_en', 'code')
 
 
 @admin.register(MembershipSubscription)
 class MembershipSubscriptionAdmin(admin.ModelAdmin):
-    list_display = ('member', 'plan', 'status', 'starts_at', 'ends_at', 'remaining_internet_minutes', 'remaining_credit_syp')
+    list_display = ('member', 'plan', 'status', 'starts_at', 'ends_at', 'gross_amount_syp', 'created_by')
     list_filter = ('status', 'plan')
     search_fields = ('member__name_ar', 'member__phone', 'plan__name_ar', 'plan__code')
-    autocomplete_fields = ('member', 'plan')
+    autocomplete_fields = ('member', 'plan', 'order', 'payment', 'created_by')
+    readonly_fields = ('created_at', 'updated_at')
+    date_hierarchy = 'starts_at'
+
+
+@admin.register(MemberAttribute)
+class MemberAttributeAdmin(admin.ModelAdmin):
+    list_display = ('member', 'code', 'label_ar', 'granted_at', 'expires_at', 'granted_by')
+    list_filter = ('code', 'granted_at', 'expires_at')
+    search_fields = ('member__name_ar', 'member__phone', 'code', 'label_ar', 'notes')
+    autocomplete_fields = ('member', 'granted_by')
+    date_hierarchy = 'granted_at'
 
 
 @admin.register(MemberCreditLedger)
