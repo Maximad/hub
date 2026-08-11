@@ -139,6 +139,42 @@ class MemberRecognitionTests(TestCase):
         self.assertEqual(response.cookies['hub_member_device']['max-age'], 0)
         self.assertIsNotNone(MemberDeviceToken.objects.get().revoked_at)
 
+    def test_deactivation_accepts_valid_relative_and_same_host_destinations(self):
+        destinations = ('/orders/complete/', 'https://testserver/orders/complete/')
+
+        for destination in destinations:
+            with self.subTest(destination=destination):
+                _, _, activated = self.activate()
+                self.client.cookies['hub_member_device'] = activated.cookies['hub_member_device'].value
+
+                response = self.client.post(
+                    reverse('member_device_deactivate'), {'next': destination}, secure=True)
+
+                self.assertRedirects(response, destination, fetch_redirect_response=False)
+                self.assertEqual(response.cookies['hub_member_device']['max-age'], 0)
+                self.assertIsNotNone(MemberDeviceToken.objects.latest('pk').revoked_at)
+
+    def test_deactivation_rejects_unsafe_destinations_and_still_revokes(self):
+        destinations = (
+            None,
+            'https://example.com/orders/complete/',
+            '//testserver/orders/complete/',
+            'https://[invalid/',
+        )
+
+        for destination in destinations:
+            with self.subTest(destination=destination):
+                _, _, activated = self.activate()
+                self.client.cookies['hub_member_device'] = activated.cookies['hub_member_device'].value
+                data = {} if destination is None else {'next': destination}
+
+                response = self.client.post(
+                    reverse('member_device_deactivate'), data, secure=True)
+
+                self.assertRedirects(response, reverse('menu_public'), fetch_redirect_response=False)
+                self.assertEqual(response.cookies['hub_member_device']['max-age'], 0)
+                self.assertIsNotNone(MemberDeviceToken.objects.latest('pk').revoked_at)
+
 
 @override_settings(STORAGES={'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
 class MemberDeviceStaffPermissionTests(TestCase):
