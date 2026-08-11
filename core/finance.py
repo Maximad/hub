@@ -7,11 +7,16 @@ def finance_summary_for_date(day, base_sums=None):
     base_sums = base_sums or {}
     expenses = Expense.objects.filter(business_date=day)
     movements = CashMovement.objects.filter(business_date=day, is_cancelled=False)
-    paid_cash_expenses = expenses.filter(status=Expense.Status.PAID, paid_from=Expense.PaidFrom.CASHBOX, payment_method=Expense.PaymentMethod.CASH)
     opening_cash = movements.filter(movement_type=CashMovement.MovementType.OPENING_CASH, direction=CashMovement.Direction.IN).aggregate(v=Sum('amount_syp'))['v'] or 0
     cash_in = movements.filter(direction=CashMovement.Direction.IN).exclude(movement_type=CashMovement.MovementType.OPENING_CASH).aggregate(v=Sum('amount_syp'))['v'] or 0
     cash_out_movements = movements.filter(direction=CashMovement.Direction.OUT).exclude(related_expense__isnull=False).aggregate(v=Sum('amount_syp'))['v'] or 0
-    cash_expenses = paid_cash_expenses.aggregate(v=Sum('amount_syp'))['v'] or 0
+    # The generated projection is the single source used by cash screens and
+    # closing, including expenses whose legacy ``paid_from`` value is stale.
+    cash_expenses = movements.filter(
+        related_expense__isnull=False, is_generated=True,
+        movement_type=CashMovement.MovementType.CASH_EXPENSE,
+        direction=CashMovement.Direction.OUT,
+    ).aggregate(v=Sum('amount_syp'))['v'] or 0
     latest_close = None
     try:
         from core.models import DailyClose
