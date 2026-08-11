@@ -173,13 +173,17 @@ log "Running pre-deployment checks"
 dc run --rm -T web python manage.py check
 dc run --rm -T web python manage.py makemigrations --check --dry-run
 
+log "Applying migrations"
+
+# Migrations run from the target image while the previous release continues to
+# serve traffic.  Every production migration must therefore be compatible with
+# the currently running release; destructive changes require an
+# expand/migrate/contract rollout across releases.
+dc run --rm -T web python manage.py migrate --noinput
+
 log "Replacing web container"
 
 dc up -d --no-deps --force-recreate web
-
-log "Applying migrations"
-
-dc exec -T web python manage.py migrate --noinput
 
 log "Collecting static files"
 
