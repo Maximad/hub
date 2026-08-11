@@ -12,6 +12,17 @@ BASE_URL="https://hubsweida.jwtalenthouse.com"
 LOCK_FILE="/tmp/hub-production-operation.lock"
 
 BACKUP_FILE=""
+BOOTSTRAP_RESUME=false
+if [[ "${1:-}" == "--bootstrap-resume" ]]; then
+    [[ $# -eq 4 ]] || { echo "Invalid bootstrap handoff" >&2; exit 2; }
+    BOOTSTRAP_RESUME=true
+    BOOTSTRAP_ROLLBACK="$2"
+    BOOTSTRAP_TARGET="$3"
+    BOOTSTRAP_BACKUP="$4"
+elif [[ $# -ne 0 ]]; then
+    echo "Usage: $0 [--bootstrap-resume ROLLBACK TARGET VERIFIED_BACKUP]" >&2
+    exit 2
+fi
 
 log() {
     printf '\n[%s] %s\n' "$(date '+%H:%M:%S')" "$*"
@@ -119,25 +130,39 @@ fi
 
 CURRENT_COMMIT="$(git rev-parse HEAD)"
 
-log "Fetching origin/main"
+if [[ "$BOOTSTRAP_RESUME" == true ]]; then
+    log "Validating bootstrap handoff"
+    [[ "$CURRENT_COMMIT" == "$BOOTSTRAP_TARGET" ]] || die "Bootstrap target does not match HEAD."
+    [[ "$(git rev-parse --verify origin/$BRANCH^{commit})" == "$BOOTSTRAP_TARGET" ]] || die "origin/main changed after bootstrap."
+    [[ "$(cat backups/rollback_revision.txt)" == "$BOOTSTRAP_ROLLBACK" ]] || die "Rollback revision record is inaccurate."
+    git merge-base --is-ancestor "$BOOTSTRAP_ROLLBACK" "$BOOTSTRAP_TARGET" || die "Invalid bootstrap revision range."
+    [[ "$BOOTSTRAP_BACKUP" == "$PROJECT_DIR"/backups/production/* && -f "$BOOTSTRAP_BACKUP/SUCCESS" ]] || die "Invalid bootstrap backup."
+    ./scripts/verify-production-backup.sh "$BOOTSTRAP_BACKUP"
+    TARGET_COMMIT="$CURRENT_COMMIT"
+    BACKUP_FILE="${BOOTSTRAP_BACKUP#$PROJECT_DIR/}"
+else
+    log "Fetching origin/main"
 
-git fetch origin "$BRANCH"
+    git fetch origin "$BRANCH"
 
-TARGET_COMMIT="$(git rev-parse origin/$BRANCH)"
+    TARGET_COMMIT="$(git rev-parse origin/$BRANCH)"
 
-git merge-base --is-ancestor "$CURRENT_COMMIT" "$TARGET_COMMIT" ||
-    die "Local main cannot be safely fast-forwarded."
+    git merge-base --is-ancestor "$CURRENT_COMMIT" "$TARGET_COMMIT" ||
+        die "Local main cannot be safely fast-forwarded."
 
-printf 'Current commit: %s\n' "$CURRENT_COMMIT"
-printf 'Target commit:  %s\n' "$TARGET_COMMIT"
+    printf 'Current commit: %s\n' "$CURRENT_COMMIT"
+    printf 'Target commit:  %s\n' "$TARGET_COMMIT"
 
-log "Creating full production backup"
-./scripts/backup-production.sh --lock-held
-BACKUP_FILE="backups/production (latest successful backup)"
+    log "Creating full production backup"
+    ./scripts/backup-production.sh --lock-held
+    BACKUP_FILE="backups/production (latest successful backup)"
 
-log "Updating source code"
+    log "Updating source code"
 
-git merge --ff-only "origin/$BRANCH"
+    printf '%s\n' "$CURRENT_COMMIT" >backups/rollback_revision.txt.tmp
+    mv backups/rollback_revision.txt.tmp backups/rollback_revision.txt
+    git merge --ff-only "origin/$BRANCH"
+fi
 
 log "Building web image"
 
@@ -201,7 +226,8 @@ fi
 
 DEPLOY_COMMIT="$(git rev-parse HEAD)"
 
-printf '%s\n' "$DEPLOY_COMMIT" > backups/last_deployed_revision.txt
+printf '%s\n' "$DEPLOY_COMMIT" >backups/last_deployed_revision.txt.tmp
+mv backups/last_deployed_revision.txt.tmp backups/last_deployed_revision.txt
 
 log "Deployment completed successfully"
 
