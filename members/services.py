@@ -6,6 +6,7 @@ from datetime import timedelta
 from decimal import Decimal, ROUND_DOWN
 
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 
 from members.models import MemberActivationToken, MemberDeviceToken, MembershipBenefitRule, MembershipSubscription
@@ -58,9 +59,26 @@ def create_activation_token(member, created_by=None):
     return token, raw
 
 
+def validate_activation_token(raw, at=None):
+    """Return non-secret activation metadata without changing token state."""
+    now = at or timezone.now()
+    digest = _digest(raw)
+    candidate = MemberActivationToken.objects.select_related('member').filter(token_hash=digest).first()
+    if (
+        not candidate
+        or not hmac.compare_digest(candidate.token_hash, digest)
+        or candidate.consumed_at
+        or candidate.revoked_at
+        or candidate.expires_at <= now
+    ):
+        return None
+    return candidate
+
+
+@transaction.atomic
 def consume_activation_token(raw, device_label=''):
     now = timezone.now()
-    candidate = MemberActivationToken.objects.select_related('member').filter(token_hash=_digest(raw)).first()
+    candidate = MemberActivationToken.objects.select_for_update().select_related('member').filter(token_hash=_digest(raw)).first()
     if not candidate or not hmac.compare_digest(candidate.token_hash, _digest(raw)) or candidate.consumed_at or candidate.revoked_at or candidate.expires_at <= now:
         return None, None
     candidate.consumed_at = now

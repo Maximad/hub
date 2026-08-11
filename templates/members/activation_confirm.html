@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>تأكيد تفعيل العضوية</title>
+  <style>
+    body { margin: 0; background: #f5f1e8; color: #29251f; font-family: system-ui, sans-serif; }
+    main { box-sizing: border-box; max-width: 34rem; margin: 12vh auto; padding: 2rem; background: #fff; border-radius: 1rem; box-shadow: 0 0.5rem 2rem #0002; }
+    button { border: 0; border-radius: .6rem; padding: .8rem 1.4rem; background: #725438; color: #fff; font: inherit; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>تأكيد تفعيل العضوية</h1>
+    <p>هل تريد تفعيل عضوية {{ member.name_ar }} على هذا الجهاز؟</p>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="confirm" value="yes">
+      <input type="hidden" name="next" value="{{ destination }}">
+      <button type="submit">تفعيل على هذا الجهاز</button>
+    </form>
+  </main>
+</body>
+</html>
