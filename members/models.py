@@ -68,6 +68,7 @@ class MembershipSubscription(models.Model):
     remaining_internet_minutes = models.IntegerField(null=True, blank=True)
     remaining_credit_syp = models.IntegerField(null=True, blank=True)
     notes = models.TextField(blank=True)
+    benefit_snapshot = models.JSONField(default=list, blank=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -77,6 +78,8 @@ class MembershipSubscription(models.Model):
     def save(self, *args, **kwargs):
         if self._state.adding and self.gross_amount_syp is None and self.plan_id:
             self.gross_amount_syp = self.plan.price_syp
+        if self._state.adding and not self.benefit_snapshot and self.plan_id:
+            self.benefit_snapshot = [rule.as_snapshot() for rule in self.plan.benefit_rules.filter(is_active=True)]
         super().save(*args, **kwargs)
 
     def effective_status(self, at=None):
@@ -168,8 +171,27 @@ class MemberAttribute(models.Model):
 
 
 class MembershipBenefitRule(models.Model):
+    class BenefitType(models.TextChoices):
+        PRODUCT_DISCOUNT_FIXED = 'product_discount_fixed', 'خصم ثابت على منتج'
+        PRODUCT_DISCOUNT_PERCENT = 'product_discount_percent', 'نسبة خصم على منتج'
+        EVENT_DISCOUNT_PERCENT = 'event_discount_percent', 'نسبة خصم على فعالية'
+        BOOKING_PRIORITY = 'booking_priority', 'أولوية الحجز'
+        WORKSPACE_MINUTES = 'workspace_minutes', 'دقائق مساحة العمل'
+        INTERNET_MINUTES = 'internet_minutes', 'دقائق الإنترنت'
+        INTERNET_MEMBER_PRICE = 'internet_member_price', 'سعر إنترنت للأعضاء'
+        FREE_PRODUCT_QUANTITY = 'free_product_quantity', 'كمية منتج مجانية'
+        EARLY_ACCESS = 'early_access', 'وصول مبكر'
+
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     plan = models.ForeignKey(MembershipPlan, on_delete=models.CASCADE, related_name='benefit_rules')
+    benefit_type = models.CharField(max_length=50, choices=BenefitType.choices, blank=True)
+    value_decimal = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    value_integer = models.IntegerField(null=True, blank=True)
+    value_text = models.CharField(max_length=255, blank=True)
+    scope_type = models.CharField(max_length=40, blank=True)
+    scope_code = models.CharField(max_length=120, blank=True)
+    usage_limit = models.PositiveIntegerField(null=True, blank=True)
+    usage_period = models.CharField(max_length=30, blank=True)
     item_type = models.CharField(max_length=30, blank=True)
     beverage_type = models.CharField(max_length=30, blank=True)
     food_type = models.CharField(max_length=30, blank=True)
@@ -187,12 +209,107 @@ class MembershipBenefitRule(models.Model):
     priority = models.IntegerField(default=0)
     is_active = models.BooleanField(default=True)
     notes = models.TextField(blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         target = self.product or self.category or self.menu_section or self.tag or self.item_type or 'قاعدة عامة'
         return f'{self.plan} — {target}'
+
+    def as_snapshot(self):
+        """Return the immutable, JSON-safe benefit definition stored on a subscription."""
+        return {
+            'rule_id': self.pk, 'benefit_type': self.benefit_type,
+            'value_decimal': str(self.value_decimal) if self.value_decimal is not None else None,
+            'value_integer': self.value_integer, 'value_text': self.value_text,
+            'scope_type': self.scope_type, 'scope_code': self.scope_code,
+            'usage_limit': self.usage_limit, 'usage_period': self.usage_period,
+            'priority': self.priority, 'metadata': self.metadata,
+            # Stable compatibility targets for benefit rules created before the generic layer.
+            'product_id': self.product_id, 'category_id': self.category_id,
+            'menu_section_id': self.menu_section_id, 'tag_id': self.tag_id,
+            'item_type': self.item_type, 'beverage_type': self.beverage_type,
+            'food_type': self.food_type, 'service_type': self.service_type,
+            'applies_to_alcohol': self.applies_to_alcohol,
+        }
+
+
+class Program(models.Model):
+    class Status(models.TextChoices):
+        DRAFT = 'draft', 'مسودة'
+        OPEN = 'open', 'مفتوح'
+        COMPLETED = 'completed', 'مكتمل'
+        CANCELLED = 'cancelled', 'ملغى'
+
+    code = models.SlugField(max_length=80, unique=True)
+    name_ar = models.CharField(max_length=160)
+    name_en = models.CharField(max_length=160, blank=True)
+    description_ar = models.TextField(blank=True)
+    description_en = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
+    starts_at = models.DateTimeField(null=True, blank=True)
+    ends_at = models.DateTimeField(null=True, blank=True)
+    capacity = models.PositiveIntegerField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name_ar or self.name_en or self.code
+
+    def clean(self):
+        super().clean()
+        if self.ends_at and self.starts_at and self.ends_at <= self.starts_at:
+            raise ValidationError({'ends_at': 'يجب أن يكون وقت النهاية بعد وقت البداية.'})
+
+
+class ProgramEnrollment(models.Model):
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'قيد الانتظار'
+        ACTIVE = 'active', 'نشط'
+        COMPLETED = 'completed', 'مكتمل'
+        CANCELLED = 'cancelled', 'ملغى'
+
+    program = models.ForeignKey(Program, on_delete=models.PROTECT, related_name='enrollments')
+    member = models.ForeignKey('core.Member', on_delete=models.PROTECT, null=True, blank=True, related_name='program_enrollments')
+    participant_name = models.CharField(max_length=160, blank=True)
+    participant_metadata = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    subscription = models.ForeignKey(MembershipSubscription, on_delete=models.SET_NULL, null=True, blank=True, related_name='program_enrollments')
+    order = models.ForeignKey('core.Order', on_delete=models.SET_NULL, null=True, blank=True, related_name='program_enrollments')
+    payment = models.ForeignKey('core.Payment', on_delete=models.SET_NULL, null=True, blank=True, related_name='program_enrollments')
+    enrolled_at = models.DateTimeField(default=timezone.now)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.program} — {self.member or self.participant_name}'
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if not self.member_id and not self.participant_name.strip():
+            errors['participant_name'] = 'الاسم مطلوب عند عدم ربط المشارك بعضو.'
+        if self.subscription_id and self.member_id and self.subscription.member_id != self.member_id:
+            errors['subscription'] = 'يجب أن يعود الاشتراك للعضو المحدد.'
+        if errors:
+            raise ValidationError(errors)
+
+    def complete(self, at=None):
+        self.status = self.Status.COMPLETED
+        self.completed_at = at or timezone.now()
+        self.save(update_fields=['status', 'completed_at', 'updated_at'])
+
+    def cancel(self, at=None):
+        self.status = self.Status.CANCELLED
+        self.cancelled_at = at or timezone.now()
+        self.save(update_fields=['status', 'cancelled_at', 'updated_at'])
 
 
 class MemberCreditLedger(models.Model):
