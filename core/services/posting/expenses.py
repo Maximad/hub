@@ -1,9 +1,12 @@
+from dataclasses import replace
+
 from django.contrib.contenttypes.models import ContentType
 from django.utils import timezone
 
 from core.models import ActivityLog, CashMovement, Expense, FinancialAccount, PostingBatch
 from .engine import dispatch
 from .exceptions import InvalidTransition
+from .policy import require_active, require_finance_actor, require_permitted_approval
 
 
 def _audit(context, action, expense):
@@ -71,7 +74,11 @@ def approve_liability(expense, context, liability_account=None):
 
 
 def pay_immediately(expense, context, financial_account, payment_method):
+    approver = require_permitted_approval(context, 'دفع المصروف الفوري')
+    if context.approver is None:
+        context = replace(context, approver=approver)
     def handle(source):
+        require_active(financial_account)
         if source.status != Expense.Status.DRAFT or not financial_account:
             raise InvalidTransition('يمكن الدفع الفوري لمسودة ومن حساب مالي محدد فقط.')
         source.status = Expense.Status.PAID; source.payment_method = payment_method
@@ -108,6 +115,7 @@ def cancel_unposted_draft(expense, context, reason):
 
 def reverse_posted_expense(expense, context, reason):
     def handle(source):
+        require_permitted_approval(context, 'عكس المصروف')
         if source.posting_state != Expense.PostingState.POSTED or not reason.strip():
             raise InvalidTransition('يمكن عكس مصروف مرحل فقط مع ذكر السبب.')
         original = source.payment_batch or source.approval_batch
@@ -134,7 +142,15 @@ def pay(expense, context, payment_method, paid_from=None, financial_account=None
 
 
 def post_cash_movement(movement, context):
+    require_finance_actor(context, 'حركة الصندوق')
+    approver = require_permitted_approval(context, 'حركة الصندوق')
+    if context.approver is None:
+        context = replace(context, approver=approver)
     def handle(source):
+        if not (source.notes or source.title or '').strip():
+            raise InvalidTransition('سبب حركة الصندوق مطلوب.')
+        require_active(source.financial_account)
+        source.approved_by = approver
         source.created_by=source.created_by or context.actor; source.approved_by=context.approver
         source.full_clean(); source.save()
         ActivityLog.objects.create(actor=context.actor,action='cash_movement_posted',details={'cash_movement_id':source.pk,'posting_key':context.idempotency_key})
