@@ -63,6 +63,17 @@ class ProxySecurityTests(SimpleTestCase):
         with mock.patch.object(admin.site, 'each_context', return_value={}):
             self.assertEqual(self.https_client.get('/admin/login/').status_code, 200)
 
+    @override_settings(STORAGES={'staticfiles': {
+        'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
+    }})
+    def test_rendered_menu_uses_pinned_local_htmx_asset(self):
+        with mock.patch('core.views_legacy._menu_context', return_value={}):
+            response = self.https_client.get('/menu/')
+
+        self.assertContains(response, '<script src="/static/js/htmx.min.js"></script>', html=True)
+        rendered = response.content.decode()
+        self.assertNotRegex(rendered, r'https?://[^\"\s]*htmx')
+
     def test_staff_redirect_works_behind_https_proxy(self):
         response = self.https_client.get('/staff/')
         self.assertEqual(response.status_code, 302)
