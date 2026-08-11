@@ -8,6 +8,19 @@
   {% for message in messages %}<p class="hub-badge hub-badge-info">{{ message }}</p>{% endfor %}
 </section>
 
+<section class="hub-section hub-card">
+  <h3 class="hub-section-title">بيع باقة إنترنت</h3>
+  <form class="hub-form hub-grid hub-grid-2" method="post" action="{% url 'staff_internet_sale' %}">{% csrf_token %}
+    <input type="hidden" name="idempotency_key" value="{{ sale_idempotency_key }}">
+    <label>العميل<select name="customer_kind"><option value="guest">زائر</option><option value="member">عضو</option></select></label>
+    <label>العضو<select name="member"><option value="">—</option>{% for m in members %}<option value="{{ m.id }}">{{ m.name_ar }} — {{ m.phone }}</option>{% endfor %}</select></label>
+    <label>اسم الزائر<input name="guest_name"></label><label>هاتف الزائر<input name="guest_phone"></label>
+    <label>الباقة<select name="package" required>{% for p in packages %}{% if p.is_active and p.visible_to_staff %}<option value="{{ p.id }}">{{ p.name_ar }} — {{ p.price_syp }} ل.س</option>{% endif %}{% endfor %}</select></label>
+    <label>الحالة التجارية<select name="payment_method"><option value="unpaid">غير مدفوع</option><option value="cash">مدفوع نقداً</option><option value="manual_transfer">مدفوع بتحويل</option><option value="free">ضيافة / رصيد عضو</option></select></label>
+    <button class="hub-button hub-button-primary" type="submit">إنشاء الطلب والقسيمة وتجهيزها يدوياً</button>
+  </form>
+</section>
+
 <section class="hub-section hub-summary-cards">
   <div class="hub-summary-card"><span>الجلسات الفعالة</span><strong class="metric">{{ internet_metrics.active_sessions }}</strong></div>
   <div class="hub-summary-card"><span>البطاقات الفعالة</span><strong class="metric">{{ internet_metrics.active_passes }}</strong></div>
@@ -17,8 +30,8 @@
 </section>
 
 <section class="hub-section hub-card"><h3 class="hub-section-title">صلاحيات الوصول التجارية</h3>
-<div class="hub-table-wrap"><table class="hub-table"><tr><th>العميل</th><th>الباقة</th><th>القسيمة</th><th>الوصول</th><th>الشبكة</th><th>الانتهاء</th><th>الدقائق المتبقية</th><th>السرعة</th><th>الأجهزة</th></tr>
-{% for e in active_entitlements %}<tr><td>{% if e.member %}{{ e.member.name_ar }}{% else %}{{ e.guest_name|default:'زائر' }}{% endif %}</td><td>{{ e.package.name_ar }}</td><td><code>{{ e.access_code }}</code></td><td><span class="hub-status-chip">{{ e.get_status_display }}</span></td><td><span class="hub-status-chip">{{ e.get_network_status_display }}</span></td><td>{{ e.valid_until|default:'—' }}</td><td>{{ e.minutes_remaining|default_if_none:'غير محدود' }}</td><td>{{ e.bandwidth_profile_code|default:'—' }}</td><td>{{ e.devices.count }} / {{ e.max_registered_devices }}</td></tr>{% empty %}<tr><td colspan="9">لا توجد صلاحيات فعالة.</td></tr>{% endfor %}</table></div></section>
+<div class="hub-table-wrap"><table class="hub-table"><tr><th>العميل</th><th>الباقة</th><th>القسيمة</th><th>الحالة التجارية</th><th>الوصول</th><th>الشبكة</th><th>الانتهاء</th><th>الدقائق المتبقية</th><th>السرعة</th><th>الأجهزة</th></tr>
+{% for e in recent_entitlements %}<tr><td>{% if e.member %}{{ e.member.name_ar }}{% else %}{{ e.guest_name|default:'زائر' }}{% endif %}</td><td>{{ e.package.name_ar }}</td><td><code>{{ e.access_code }}</code></td><td>{% if e.access_mode == 'membership_credit' or not e.order or e.payment.method == 'free' or e.payment.method == 'member_discount' %}ضيافة / رصيد عضو{% elif e.order.payment_status == 'paid' %}مدفوع{% else %}غير مدفوع{% endif %}</td><td><span class="hub-status-chip">{{ e.effective_status }}</span></td><td><span class="hub-status-chip">{{ e.get_network_status_display }}</span></td><td>{{ e.valid_until|default:'—' }}</td><td>{{ e.minutes_remaining|default_if_none:'غير محدود' }}</td><td>{{ e.bandwidth_profile_code|default:'—' }}</td><td>{{ e.devices.count }} / {{ e.max_registered_devices }}</td></tr>{% empty %}<tr><td colspan="10">لا توجد صلاحيات.</td></tr>{% endfor %}</table></div></section>
 
 <section class="hub-section hub-card">
   <h3 class="hub-section-title">جلسة جديدة — بدء الجلسة</h3>

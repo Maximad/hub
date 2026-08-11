@@ -8,8 +8,18 @@ from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 
-from core.models import (ActivityLog, InternetAccessDevice, InternetEntitlement,
-                         InternetPackage, InternetRevenueShare, InternetSession)
+from core.models import (ActivityLog, Category, InternetAccessDevice, InternetEntitlement,
+                         InternetPackage, InternetRevenueShare, InternetRevenueShareAdjustment,
+                         InternetSession, Order, OrderItem, Payment, Product)
+
+
+def effectively_active_entitlements(queryset=None, *, at=None):
+    """Single database definition of runtime-active access; cleanup/cron is not required."""
+    from django.db.models import Q
+    queryset = queryset if queryset is not None else InternetEntitlement.objects.all()
+    at = at or timezone.now()
+    return queryset.filter(status=InternetEntitlement.Status.ACTIVE).filter(
+        Q(valid_until__isnull=True) | Q(valid_until__gt=at))
 
 
 def validity_end(start, value, unit):
@@ -90,6 +100,8 @@ def activate_entitlement(entitlement, *, actor=None, at=None):
 @transaction.atomic
 def register_device(entitlement, device_mac, nickname=''):
     entitlement = InternetEntitlement.objects.select_for_update().get(pk=entitlement.pk)
+    if entitlement.effective_status() != entitlement.Status.ACTIVE:
+        raise ValidationError('الاستحقاق غير فعال.')
     device = InternetAccessDevice.objects.filter(entitlement=entitlement, device_mac__iexact=device_mac).first()
     if device:
         device.is_active = True; device.nickname = nickname or device.nickname; device.save()
@@ -102,6 +114,7 @@ def register_device(entitlement, device_mac, nickname=''):
 @transaction.atomic
 def start_usage_session(entitlement, *, actor=None, device_mac='', ip_address='', at=None):
     entitlement = InternetEntitlement.objects.select_for_update().select_related('member').get(pk=entitlement.pk)
+    # Business first use is precisely creation of the first real Hub usage session.
     if entitlement.activation_policy == InternetPackage.ActivationPolicy.ON_FIRST_USE and not entitlement.activated_at:
         entitlement = activate_entitlement(entitlement, actor=actor, at=at)
     if entitlement.effective_status(at) != entitlement.Status.ACTIVE:
@@ -134,11 +147,14 @@ def end_usage_session(session, *, actor=None, at=None):
     session.actual_duration_minutes = session.duration_minutes = minutes
     session.status = session.Status.ENDED
     session.ended_by = actor
-    session.save(update_fields=['ended_at', 'end_time', 'actual_duration_minutes', 'duration_minutes', 'status', 'ended_by', 'updated_at'])
+    consume = 0
     if session.entitlement_id and session.entitlement.access_mode == InternetPackage.AccessMode.ALLOWANCE:
         ent = InternetEntitlement.objects.select_for_update().get(pk=session.entitlement_id)
         consume = min(minutes, ent.minutes_remaining or 0)
         InternetEntitlement.objects.filter(pk=ent.pk).update(minutes_used=F('minutes_used') + consume)
+    session.allowance_minutes_consumed = consume
+    session.save(update_fields=['ended_at', 'end_time', 'actual_duration_minutes', 'duration_minutes',
+                                'allowance_minutes_consumed', 'status', 'ended_by', 'updated_at'])
     ActivityLog.objects.create(actor=actor, action='internet.session_ended', details={'session': session.pk, 'minutes': minutes})
     return session
 
@@ -157,3 +173,48 @@ def snapshot_revenue_share(entitlement, business_date=None):
         'business_date': business_date or timezone.localdate(),
     })[0]
 
+
+@transaction.atomic
+def create_commercial_sale(package, *, payment_method, member=None, guest_name='', guest_phone='',
+                           subscription=None, actor=None, idempotency_key):
+    """Atomic staff checkout. The unique entitlement key is the server-side POST identity."""
+    package = InternetPackage.objects.select_for_update().get(pk=package.pk)
+    existing = InternetEntitlement.objects.filter(idempotency_key=idempotency_key).first()
+    if existing:
+        return existing
+    complimentary = package.access_mode == package.AccessMode.MEMBERSHIP_CREDIT or package.price_syp == 0
+    order = payment = None
+    if not complimentary:
+        order = Order.objects.create(member=member, notes=f'Internet package: {package.name_ar}')
+        category, _ = Category.objects.get_or_create(name_ar='خدمات الإنترنت', defaults={'name_en': 'Internet services'})
+        product, _ = Product.objects.get_or_create(
+            category=category, name_ar=package.name_ar, product_type=Product.ProductType.INTERNET,
+            defaults={'price_syp': package.price_syp, 'item_type': Product.ItemType.SERVICE,
+                      'service_type': Product.ServiceType.INTERNET, 'visible_on_pos': False,
+                      'orderable_on_pos': False, 'visible_on_qr': False, 'requires_preparation': False})
+        OrderItem.objects.create(order=order, product=product, quantity=1,
+            product_name_ar_snapshot=package.name_ar, unit_price_syp_snapshot=package.price_syp,
+            line_total_syp_snapshot=package.price_syp)
+        method = payment_method if payment_method in Payment.Method.values else Payment.Method.UNPAID
+        payment = Payment.objects.create(order=order, amount_syp=package.price_syp,
+                                         method=method, created_by=actor)
+    entitlement = create_entitlement(package, member=member, guest_name=guest_name,
+        guest_phone=guest_phone, order=order, payment=payment, subscription=subscription,
+        created_by=actor, idempotency_key=idempotency_key)
+    from core.services.network_backends import get_network_backend
+    get_network_backend(entitlement.network_backend).provision_access(entitlement)
+    return entitlement
+
+
+@transaction.atomic
+def record_payment_reversal_adjustment(revenue_share, *, payment=None, kind='reversal', business_date=None):
+    """Record one immutable negation of a realized sale; safe to retry."""
+    payment = payment or revenue_share.payment
+    key = f'internet-share:{revenue_share.pk}:{kind}:payment:{payment.pk if payment else "none"}'
+    return InternetRevenueShareAdjustment.objects.get_or_create(idempotency_key=key, defaults={
+        'revenue_share': revenue_share, 'payment': payment, 'kind': kind,
+        'gross_delta_syp': -revenue_share.gross_amount_syp,
+        'partner_delta_syp': -revenue_share.partner_amount_syp,
+        'hub_delta_syp': -revenue_share.hub_amount_syp,
+        'business_date': business_date or timezone.localdate(),
+    })[0]

@@ -1505,6 +1505,10 @@ class InternetEntitlement(TimeStampedModel, PublicCodeModel):
         at = at or timezone.now()
         return self.Status.EXPIRED if self.status == self.Status.ACTIVE and self.valid_until and self.valid_until <= at else self.status
 
+    @property
+    def is_effectively_active(self):
+        return self.effective_status() == self.Status.ACTIVE
+
     @staticmethod
     def new_access_code():
         alphabet = '23456789ABCDEFGHJKMNPQRSTUVWXYZ'
@@ -1541,6 +1545,23 @@ class InternetRevenueShare(TimeStampedModel):
     partner_amount_syp = models.DecimalField(max_digits=14, decimal_places=2)
     hub_amount_syp = models.DecimalField(max_digits=14, decimal_places=2)
     business_date = models.DateField()
+
+
+class InternetRevenueShareAdjustment(TimeStampedModel):
+    """Immutable commercial correction; this is not a second finance ledger."""
+    revenue_share = models.ForeignKey(InternetRevenueShare, on_delete=models.PROTECT, related_name='adjustments')
+    payment = models.ForeignKey(Payment, on_delete=models.PROTECT, null=True, blank=True)
+    kind = models.CharField(max_length=24, choices=[('reversal', 'عكس'), ('refund', 'استرداد'), ('correction', 'تصحيح')])
+    idempotency_key = models.CharField(max_length=120, unique=True)
+    gross_delta_syp = models.DecimalField(max_digits=14, decimal_places=2)
+    partner_delta_syp = models.DecimalField(max_digits=14, decimal_places=2)
+    hub_delta_syp = models.DecimalField(max_digits=14, decimal_places=2)
+    business_date = models.DateField()
+
+    def save(self, *args, **kwargs):
+        if self.pk and type(self).objects.filter(pk=self.pk).exists():
+            raise ValidationError('تعديل حصة الإنترنت غير قابل للتعديل.')
+        return super().save(*args, **kwargs)
 
 
 class InternetSession(TimeStampedModel, PublicCodeModel):
@@ -1583,6 +1604,7 @@ class InternetSession(TimeStampedModel, PublicCodeModel):
     started_at = models.DateTimeField(null=True, blank=True)
     ended_at = models.DateTimeField(null=True, blank=True)
     actual_duration_minutes = models.PositiveIntegerField(null=True, blank=True)
+    allowance_minutes_consumed = models.PositiveIntegerField(default=0)
     duration_minutes = models.PositiveIntegerField(null=True, blank=True)
     rate_per_hour_syp = models.PositiveIntegerField(default=0)
     minimum_minutes = models.PositiveIntegerField(default=0)

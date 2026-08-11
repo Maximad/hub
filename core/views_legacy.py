@@ -34,6 +34,7 @@ from reservations.models import Reservation
 from vendors.models import Vendor, VendorParticipation
 from core.notifications import create_notification, notify_order_created
 from core.services.margins import item_margin, product_margin_from_values
+from core.services.internet_access import create_commercial_sale, effectively_active_entitlements
 
 
 DAMASCUS_TZ = ZoneInfo('Asia/Damascus')
@@ -1718,7 +1719,9 @@ def staff_internet(request):
     packages = InternetPackage.objects.order_by('name_ar')
     members = Member.objects.order_by('-created_at')[:200]
     active_rows = []
-    active_entitlements = InternetEntitlement.objects.select_related('member', 'package', 'payment').filter(status=InternetEntitlement.Status.ACTIVE).order_by('valid_until')
+    entitlement_base = InternetEntitlement.objects.select_related('member', 'package', 'payment', 'order').prefetch_related('devices')
+    active_entitlements = effectively_active_entitlements(entitlement_base, at=now).order_by('valid_until')
+    recent_entitlements = entitlement_base.order_by('-created_at')[:50]
     today = timezone.localdate()
     expiring_today = active_entitlements.filter(valid_until__date=today).count()
     for session in active_sessions:
@@ -1730,6 +1733,7 @@ def staff_internet(request):
     return render(request, 'staff/internet.html', {
         'active_sessions': active_sessions,
         'active_entitlements': active_entitlements,
+        'recent_entitlements': recent_entitlements,
         'internet_metrics': {
             'active_sessions': active_sessions.count(), 'active_passes': active_entitlements.count(),
             'expiring_today': expiring_today,
@@ -1746,7 +1750,31 @@ def staff_internet(request):
         'can_cancel_sessions': can_override_session_total(request.user),
         'can_override_total': can_override_session_total(request.user),
         'form_values': {},
+        'sale_idempotency_key': str(uuid.uuid4()),
     })
+
+
+@login_required
+def staff_internet_sale(request):
+    _assert_staff_capability(request.user, 'members/internet')
+    if request.method != 'POST':
+        return redirect('staff_internet')
+    package = get_object_or_404(InternetPackage, pk=request.POST.get('package'), is_active=True, visible_to_staff=True)
+    member = get_object_or_404(Member, pk=request.POST.get('member')) if request.POST.get('customer_kind') == 'member' else None
+    key = request.POST.get('idempotency_key', '').strip()
+    if not key:
+        raise ValidationError('معرّف العملية مطلوب.')
+    try:
+        entitlement = create_commercial_sale(package, payment_method=request.POST.get('payment_method', Payment.Method.UNPAID),
+            member=member, guest_name=request.POST.get('guest_name', '').strip(),
+            guest_phone=request.POST.get('guest_phone', '').strip(),
+            subscription=_active_subscription_for_member(member) if member else None,
+            actor=request.user, idempotency_key=key)
+    except ValidationError as exc:
+        messages.error(request, '; '.join(exc.messages))
+        return redirect('staff_internet')
+    messages.success(request, f'تم إنشاء الوصول. القسيمة الثابتة: {entitlement.access_code}')
+    return redirect('staff_internet')
 
 
 @login_required
