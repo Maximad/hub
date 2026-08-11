@@ -49,8 +49,9 @@ class InternetBandwidthProfileAdmin(admin.ModelAdmin):
 
 @admin.register(InternetPartner)
 class InternetPartnerAdmin(admin.ModelAdmin):
-    list_display = ('name', 'active', 'revenue_share_percent')
-    list_filter = ('active',)
+    list_display = ('name', 'active', 'is_default', 'revenue_share_percent')
+    list_filter = ('active', 'is_default')
+    fields = ('name', 'active', 'is_default', 'revenue_share_percent')
 
 
 @admin.register(InternetPartnerUser)
@@ -64,7 +65,8 @@ class InternetPackageAdmin(admin.ModelAdmin):
     list_filter = ('access_mode', 'activation_policy', 'is_active', 'member_only', 'guest_allowed')
     search_fields = ('name_ar', 'name_en', 'code')
     fieldsets = (
-        ('تجاري', {'fields': ('name_ar', 'name_en', 'code', 'description_ar', 'description_en', 'price_syp', 'partner', 'partner_share_percent')}),
+        ('تجاري', {'fields': ('name_ar', 'name_en', 'code', 'description_ar', 'description_en', 'price_syp')}),
+        ('إعدادات الشريك المتقدمة (اختياري)', {'fields': ('partner', 'partner_share_percent'), 'classes': ('collapse',)}),
         ('الوصول', {'fields': ('access_mode', 'activation_policy', 'validity_value', 'validity_unit', 'duration_minutes')}),
         ('الاستخدام', {'fields': ('session_minutes_limit', 'total_minutes_limit', 'daily_minutes_limit')}),
         ('الشبكة', {'fields': ('bandwidth_profile', 'max_concurrent_devices', 'max_registered_devices', 'backend_config')}),
