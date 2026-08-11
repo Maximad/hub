@@ -16,7 +16,7 @@
 <p><strong>المجموع قبل الخصم:</strong> {{ order.subtotal_syp }} ل.س</p>{% if order.delivery_fee_syp %}<p><strong>رسوم التوصيل:</strong> {{ order.delivery_fee_syp }} ل.س</p>{% endif %}<p><strong>الخصم:</strong> {{ order.discount_syp }} ل.س</p><p><strong>المجموع بعد الخصم:</strong> {{ total }} ل.س</p><p><strong>المدفوع:</strong> {{ paid }} ل.س</p><p><strong>المتبقي:</strong> {{ remaining }} ل.س</p><p><strong>حالة الدفع:</strong> {{ payment_label }}</p>
 <h3>إضافة دفعة</h3>
 <form method="post" action="{% url 'staff_cashier_pay' order.public_code %}" class="hub-form hub-form-section" id="cashier-payment-form">{% csrf_token %}
-<label>المبلغ (ل.س): <input class="hub-input" type="number" min="1" max="{{ remaining }}" name="amount_syp" id="payment-amount" value="{{ payment_amount_default }}" required data-remaining="{{ remaining }}"></label>
+{% include "components/currency_entry.html" %}
 <p class="hub-help-text">الحقل مملوء تلقائياً بالمبلغ المتبقي. لتسجيل دفعة جزئية، أدخل مبلغاً أقل مع موافقة المدير.</p>
 <div class="hub-manager-approval" id="manager-approval" hidden>
   <label>اسم المدير<input class="hub-input" type="text" name="manager_username" autocomplete="username"></label>

@@ -1,0 +1,17 @@
+{% load static %}{% with p=currency_component.prefix %}
+<fieldset class="hub-card currency-entry" data-currency-entry>
+  <legend>المبلغ والعملة</legend>
+  <label>العملة <select name="{{ p }}_currency" data-currency-select>
+    {% for value,label in currency_component.currencies %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+  </select></label>
+  <label>المبلغ الأصلي <input name="{{ p }}_amount" type="number" min="0" step="0.01" required data-currency-amount></label>
+  <p><strong>القيمة المحوّلة:</strong> <output data-currency-preview>—</output> ل.س جديدة</p>
+  <div class="hub-message hub-message-warning" data-currency-warning>
+    تنبيه: النظام يستخدم «ل.س جديدة». راجع المبلغ بعناية؛ إدخال العملة القديمة قد يجعل القيمة أكبر 100 مرة.
+  </div>
+  <label><input type="checkbox" name="{{ p }}_acknowledged"> أؤكد أنني راجعت المبلغ والعملة (إلزامي من 10,000 ل.س جديدة).</label>
+  <label><input type="checkbox" name="{{ p }}_allow_stale_rate"> استخدام سعر قديم بصلاحية التجاوز (عند الضرورة فقط).</label>
+  <small>تحتاج القيم من 50,000 ل.س جديدة إلى اعتماد مدير.</small>
+</fieldset>
+<script src="{% static 'js/currency-entry.js' %}" defer></script>
+{% endwith %}

@@ -4,7 +4,7 @@
 <label>تاريخ العمل <input type="date" name="business_date" value="{{ form_values.business_date|default:today|date:'Y-m-d' }}" required></label>
 <label>حساب المصدر <select name="source_account" required><option value="">— اختر —</option>{% for a in accounts %}<option value="{{ a.id }}" {% if form_values.source_account == a.id|stringformat:'s' %}selected{% endif %}>{{ a }}</option>{% endfor %}</select></label>
 <label>حساب الوجهة <select name="destination_account" required><option value="">— اختر —</option>{% for a in accounts %}<option value="{{ a.id }}" {% if form_values.destination_account == a.id|stringformat:'s' %}selected{% endif %}>{{ a }}</option>{% endfor %}</select></label>
-<label>المبلغ <input type="number" name="amount" min="0.01" step="0.01" value="{{ form_values.amount }}" required></label>
+{% include "components/currency_entry.html" %}
 <label>السبب <textarea name="reason" required>{{ form_values.reason }}</textarea></label>
 <label>المعتمد (إلزامي عند بلوغ الحد) <select name="approver"><option value="">— لا يلزم دون الحد —</option>{% for u in approvers %}<option value="{{ u.id }}">{{ u }}</option>{% endfor %}</select></label>
 <button class="hub-btn" type="submit">ترحيل التحويل</button></form>{% endblock %}

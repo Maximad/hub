@@ -9,6 +9,7 @@ import uuid
 from catalog.admin_media import safe_media_preview
 from catalog.models import ProductMedia, ProductOptionGroupAssignment
 from .settings_helpers import get_system_settings
+from .currency_forms import CurrencyEntryFormService
 from .stock_recipes import calculate_recipe_cost, update_product_cost_from_recipe
 from .services.margins import product_unit_margin
 from .services.posting.context import PostingContext
@@ -100,12 +101,21 @@ class InternetRevenueShareAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None): return False
 
 
+class ExchangeRateAdminForm(forms.ModelForm):
+    correction_of = forms.ModelChoiceField(label='تصحيح لسعر سابق', required=False,
+        queryset=ExchangeRate.objects.filter(superseded_by__isnull=True))
+    class Meta:
+        model = ExchangeRate
+        fields = '__all__'
+
+
 @admin.register(ExchangeRate)
 class ExchangeRateAdmin(admin.ModelAdmin):
+    form = ExchangeRateAdminForm
     list_display = ('direction', 'effective_date', 'source', 'created_by', 'created_at', 'superseded_by')
     list_filter = ('effective_date', 'foreign_currency')
     readonly_fields = ('base_currency', 'created_by', 'created_at', 'updated_at', 'direction')
-    fields = ('direction', 'base_currency', 'foreign_currency', 'rate_to_base', 'effective_date', 'source', 'note',
+    fields = ('direction', 'base_currency', 'foreign_currency', 'rate_to_base', 'effective_date', 'source', 'note', 'correction_of',
               'superseded_by', 'created_by', 'created_at', 'updated_at')
 
     @admin.display(description='اتجاه سعر الصرف')
@@ -118,6 +128,14 @@ class ExchangeRateAdmin(admin.ModelAdmin):
         obj.created_by = request.user
         obj.full_clean()
         super().save_model(request, obj, form, change)
+        corrected = form.cleaned_data.get('correction_of')
+        if corrected:
+            ExchangeRate.objects.filter(pk=corrected.pk, superseded_by__isnull=True).update(superseded_by=obj)
+        ActivityLog.objects.create(actor=request.user, action='exchange_rate_created', details={
+            'exchange_rate_id': obj.pk, 'rate_to_base': str(obj.rate_to_base),
+            'effective_date': str(obj.effective_date),
+            'supersedes_id': getattr(corrected, 'pk', None),
+        })
 
 
 @admin.register(CurrencyEntrySnapshot)
@@ -447,8 +465,31 @@ class PageSettingAdmin(admin.ModelAdmin):
     search_fields = ('key', 'title_ar', 'title_en', 'subtitle_ar', 'subtitle_en')
 
 
+class ProductCurrencyAdminForm(forms.ModelForm):
+    currency_currency = forms.ChoiceField(label='العملة', choices=(('SYP_NEW', 'ل.س جديدة'), ('USD', 'USD')))
+    currency_amount = forms.DecimalField(label='المبلغ الأصلي', min_value=0)
+    currency_acknowledged = forms.BooleanField(label='راجعت المبلغ والعملة (10,000+)', required=False)
+    currency_allow_stale_rate = forms.BooleanField(label='تجاوز سعر قديم بصلاحية خاصة', required=False)
+
+    class Meta:
+        model = Product
+        fields = '__all__'
+
+    def clean(self):
+        cleaned = super().clean()
+        if self.instance.pk and not self.data.get('currency_amount'):
+            return cleaned
+        service = CurrencyEntryFormService(self.request, operation='product')
+        entry = service.clean(cleaned.get('price_syp'))
+        cleaned['price_syp'] = entry.base_amount
+        self.instance._currency_service = service
+        self.instance._currency_entry = entry
+        return cleaned
+
+
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
+    form = ProductCurrencyAdminForm
     actions = ('update_estimated_cost_from_recipe',)
     list_display = ('image_thumbnail', 'name_ar', 'price_syp', 'section_list', 'product_type', 'estimated_unit_cost_syp', 'estimated_margin_display', 'estimated_margin_percent_display', 'cost_warning', 'track_margin', 'requires_preparation', 'prep_station_ref', 'visible_on_pos', 'visible_on_qr', 'orderable_on_qr', 'orderable_on_pos', 'requires_staff_confirmation', 'vendor', 'is_available')
     list_display_links = ('name_ar',)
@@ -458,6 +499,16 @@ class ProductAdmin(admin.ModelAdmin):
     autocomplete_fields = ('category', 'vendor', 'prep_station_ref', 'cost_updated_by')
     readonly_fields = ('cost_updated_at', 'recipe_cost_preview', 'recipe_cost_difference')
     inlines = (ProductMediaInline, ProductOptionGroupAssignmentInline, ProductRecipeItemInline)
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        form.request = request
+        return form
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if hasattr(obj, '_currency_entry'):
+            obj._currency_service.snapshot(obj, obj._currency_entry, 'price_syp')
 
 
     @admin.display(description='الصورة')
