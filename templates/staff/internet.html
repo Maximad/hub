@@ -9,18 +9,19 @@
 </section>
 
 <section class="hub-section hub-card">
-  <h3 class="hub-section-title">بيع باقة إنترنت</h3>
+  <h3 class="hub-section-title">أ. بيع صلاحية إنترنت</h3>
   <form class="hub-form hub-grid hub-grid-2" method="post" action="{% url 'staff_internet_sale' %}">{% csrf_token %}
     <input type="hidden" name="idempotency_key" value="{{ sale_idempotency_key }}">
     <label>العميل<select name="customer_kind"><option value="guest">زائر</option><option value="member">عضو</option></select></label>
     <label>العضو<select name="member"><option value="">—</option>{% for m in members %}<option value="{{ m.id }}">{{ m.name_ar }} — {{ m.phone }}</option>{% endfor %}</select></label>
     <label>اسم الزائر<input name="guest_name"></label><label>هاتف الزائر<input name="guest_phone"></label>
     <label>الباقة<select name="package" required>{% for p in packages %}{% if p.is_active and p.visible_to_staff %}<option value="{{ p.id }}">{{ p.name_ar }} — {{ p.price_syp }} ل.س</option>{% endif %}{% endfor %}</select></label>
-    <label>الحالة التجارية<select name="payment_method"><option value="unpaid">غير مدفوع</option><option value="cash">مدفوع نقداً</option><option value="manual_transfer">مدفوع بتحويل</option><option value="free">ضيافة / رصيد عضو</option></select></label>
-    <button class="hub-button hub-button-primary" type="submit">إنشاء الطلب والقسيمة وتجهيزها يدوياً</button>
+    <label>الحالة التجارية<select name="payment_method"><option value="unpaid">غير مدفوع</option><option value="cash">مدفوع نقداً</option><option value="manual_transfer">مدفوع بتحويل</option><option value="free">مجاني</option></select></label>
+    <button class="hub-button hub-button-primary" type="submit">إنشاء الطلب وصلاحية الوصول</button>
   </form>
 </section>
 
+<h3 class="hub-section-title">ب. ملخص الإنترنت</h3>
 <section class="hub-section hub-summary-cards">
   <div class="hub-summary-card"><span>الجلسات الفعالة</span><strong class="metric">{{ internet_metrics.active_sessions }}</strong></div>
   <div class="hub-summary-card"><span>البطاقات الفعالة</span><strong class="metric">{{ internet_metrics.active_passes }}</strong></div>
@@ -29,12 +30,42 @@
   <div class="hub-summary-card"><span>أخطاء التجهيز</span><strong class="metric">{{ internet_metrics.provision_errors }}</strong></div>
 </section>
 
-<section class="hub-section hub-card"><h3 class="hub-section-title">صلاحيات الوصول التجارية</h3>
-<div class="hub-table-wrap"><table class="hub-table"><tr><th>العميل</th><th>الباقة</th><th>القسيمة</th><th>الحالة التجارية</th><th>الوصول</th><th>الشبكة</th><th>الانتهاء</th><th>الدقائق المتبقية</th><th>السرعة</th><th>الأجهزة</th></tr>
-{% for e in recent_entitlements %}<tr><td>{% if e.member %}{{ e.member.name_ar }}{% else %}{{ e.guest_name|default:'زائر' }}{% endif %}</td><td>{{ e.package.name_ar }}</td><td><code>{{ e.access_code }}</code></td><td>{% if e.access_mode == 'membership_credit' or not e.order or e.payment.method == 'free' or e.payment.method == 'member_discount' %}ضيافة / رصيد عضو{% elif e.order.payment_status == 'paid' %}مدفوع{% else %}غير مدفوع{% endif %}</td><td><span class="hub-status-chip">{{ e.effective_status }}</span></td><td><span class="hub-status-chip">{{ e.get_network_status_display }}</span></td><td>{{ e.valid_until|default:'—' }}</td><td>{{ e.minutes_remaining|default_if_none:'غير محدود' }}</td><td>{{ e.bandwidth_profile_code|default:'—' }}</td><td>{{ e.devices.count }} / {{ e.max_registered_devices }}</td></tr>{% empty %}<tr><td colspan="10">لا توجد صلاحيات.</td></tr>{% endfor %}</table></div></section>
+<section class="hub-section hub-card"><h3 class="hub-section-title">ج. صلاحيات الوصول التجارية الفعالة والحديثة</h3>
+<p class="hub-text-muted">تعرض الأعمدة بشكل منفصل الحالة التجارية، وحالة الصلاحية، ونوع backend الشبكة، وحالة التجهيز الفعلية.</p>
+<div class="hub-table-wrap"><table class="hub-table"><tr><th>العميل</th><th>الباقة</th><th>القسيمة</th><th>الحالة التجارية</th><th>حالة الصلاحية</th><th>backend الشبكة</th><th>حالة الشبكة / التجهيز</th><th>الانتهاء</th><th>الدقائق المتبقية</th><th>السرعة</th><th>الأجهزة</th></tr>
+{% for row in entitlement_rows %}{% with e=row.entitlement %}<tr><td>{% if e.member %}{{ e.member.name_ar }}{% else %}{{ e.guest_name|default:'زائر' }}{% endif %}</td><td>{{ e.package.name_ar }}</td><td><code>{{ e.access_code }}</code></td><td><span class="hub-status-chip">{{ row.commercial_label }}</span></td><td><span class="hub-status-chip">{{ row.entitlement_label }}</span></td><td>{{ row.backend_label }}</td><td><span class="hub-status-chip">{{ row.network_label }}</span></td><td>{{ e.valid_until|default:'—' }}</td><td>{{ e.minutes_remaining|default_if_none:'غير محدود' }}</td><td>{{ e.bandwidth_profile_code|default:'—' }}</td><td>{{ e.devices.count }} / {{ e.max_registered_devices }}</td></tr>{% endwith %}{% empty %}<tr><td colspan="11">لا توجد صلاحيات.</td></tr>{% endfor %}</table></div></section>
 
-<section class="hub-section hub-card">
-  <h3 class="hub-section-title">جلسة جديدة — بدء الجلسة</h3>
+
+
+<section class="hub-section">
+  <h3 class="hub-section-title">د. جلسات الاستخدام الفعالة / الحالية</h3>
+  <div class="hub-table-wrap"><table class="hub-table">
+    <tr><th>#</th><th>العضو/الزائر</th><th>الهاتف</th><th>البدء</th><th>الوقت الفعلي</th><th>النوع</th><th>الفوترة</th><th>المبلغ التقديري</th><th>الحالة</th><th>إجراءات</th></tr>
+    {% for row in active_rows %}{% with s=row.session %}<tr>
+      <td><a href="{% url 'staff_internet_session' s.id %}">{{ s.id }}</a></td>
+      <td>{% if s.member %}{{ s.member.name_ar }}{% else %}{{ s.display_guest_name|default:'زائر' }}{% endif %}</td>
+      <td>{% if s.member %}{{ s.member.phone }}{% else %}{{ s.display_guest_phone }}{% endif %}</td>
+      <td>{{ s.effective_started_at }}</td>
+      <td><span class="js-elapsed" data-start="{{ s.effective_started_at|date:'c' }}">{{ row.elapsed_minutes }} دقيقة</span></td>
+      <td>{{ s.get_session_type_display }}</td>
+      <td>{{ s.get_billing_mode_display }}</td>
+      <td><span class="js-estimate" data-start="{{ s.effective_started_at|date:'c' }}" data-rate="{{ s.rate_per_hour_syp }}" data-minimum="{{ s.minimum_minutes }}" data-rounding="{{ s.rounding_increment_minutes }}" data-min-charge="{{ s.minimum_charge_syp }}" data-grace="{{ s.free_grace_minutes }}" data-cap="{{ s.daily_cap_syp|default:'' }}" data-free="{% if s.billing_mode == 'free' or s.billing_mode == 'prepaid' %}1{% else %}0{% endif %}">{{ row.estimated_total }}</span> ل.س</td>
+      <td>{{ s.get_status_display }}</td>
+      <td class="hub-toolbar"><a class="hub-button hub-button-primary" href="{% url 'staff_internet_end' s.id %}">إنهاء</a>{% if can_cancel_sessions %}<form class="hub-form-section" method="post" action="{% url 'staff_internet_cancel' s.id %}" onsubmit="var reason=prompt('سبب الإلغاء؟'); if(!reason) return false; this.querySelector('[name=cancellation_reason]').value=reason; return true;">{% csrf_token %}<input type="hidden" name="cancellation_reason"><button class="hub-button" type="submit">إلغاء</button></form>{% endif %}</td>
+    </tr>{% endwith %}{% empty %}<tr><td colspan="10">لا توجد جلسات فعالة.</td></tr>{% endfor %}
+  </table></div>
+</section>
+
+<section class="hub-section">
+  <h3 class="hub-section-title">هـ. الجلسات الحديثة / المنتهية</h3>
+  <div class="hub-table-wrap"><table class="hub-table">
+    <tr><th>#</th><th>العميل</th><th>النوع</th><th>الانتهاء</th><th>الوقت الفعلي</th><th>الوقت المحسوب</th><th>المبلغ</th><th>الطلب</th><th>الحالة</th></tr>
+    {% for s in recent_sessions %}<tr><td><a href="{% url 'staff_internet_session' s.id %}">جلسة {{ s.id }}</a></td><td>{% if s.member %}{{ s.member.name_ar }}{% else %}{{ s.display_guest_name|default:'زائر' }}{% endif %}</td><td>{{ s.get_session_type_display }}</td><td>{{ s.effective_ended_at }}</td><td>{{ s.effective_duration_minutes|default:'-' }}</td><td>{{ s.billable_minutes|default:'-' }}</td><td>{{ s.payable_total_syp }}</td><td>{% if s.linked_order %}<a href="{% url 'staff_cashier_order' s.linked_order.public_code %}">{{ s.linked_order.display_number }}</a>{% else %}-{% endif %}</td><td>{{ s.get_status_display }}</td></tr>{% empty %}<tr><td colspan="9">لا يوجد.</td></tr>{% endfor %}
+  </table></div>
+</section>
+<details class="hub-section hub-card">
+  <summary class="hub-section-title">جلسة يدوية بدون باقة (خيار متقدم)</summary>
+  <p class="hub-text-muted">مسار قديم ثانوي لفتح جلسة مقاسة يدوياً، ولا يبيع صلاحية باقة.</p>
   <form class="hub-form hub-form-section" method="post" action="{% url 'staff_internet_start' %}" id="internet-start-form">{% csrf_token %}
     <div class="hub-grid hub-grid-2">
       <label>الزبون
@@ -70,34 +101,7 @@
     </div>
     <button class="hub-button hub-button-primary" type="submit">بدء الجلسة</button>
   </form>
-</section>
-
-<section class="hub-section">
-  <h3 class="hub-section-title">الجلسات المفتوحة</h3>
-  <div class="hub-table-wrap"><table class="hub-table">
-    <tr><th>#</th><th>العضو/الزائر</th><th>الهاتف</th><th>البدء</th><th>الوقت الفعلي</th><th>النوع</th><th>الفوترة</th><th>المبلغ التقديري</th><th>الحالة</th><th>إجراءات</th></tr>
-    {% for row in active_rows %}{% with s=row.session %}<tr>
-      <td><a href="{% url 'staff_internet_session' s.id %}">{{ s.id }}</a></td>
-      <td>{% if s.member %}{{ s.member.name_ar }}{% else %}{{ s.display_guest_name|default:'زائر' }}{% endif %}</td>
-      <td>{% if s.member %}{{ s.member.phone }}{% else %}{{ s.display_guest_phone }}{% endif %}</td>
-      <td>{{ s.effective_started_at }}</td>
-      <td><span class="js-elapsed" data-start="{{ s.effective_started_at|date:'c' }}">{{ row.elapsed_minutes }} دقيقة</span></td>
-      <td>{{ s.get_session_type_display }}</td>
-      <td>{{ s.get_billing_mode_display }}</td>
-      <td><span class="js-estimate" data-start="{{ s.effective_started_at|date:'c' }}" data-rate="{{ s.rate_per_hour_syp }}" data-minimum="{{ s.minimum_minutes }}" data-rounding="{{ s.rounding_increment_minutes }}" data-min-charge="{{ s.minimum_charge_syp }}" data-grace="{{ s.free_grace_minutes }}" data-cap="{{ s.daily_cap_syp|default:'' }}" data-free="{% if s.billing_mode == 'free' or s.billing_mode == 'prepaid' %}1{% else %}0{% endif %}">{{ row.estimated_total }}</span> ل.س</td>
-      <td>{{ s.get_status_display }}</td>
-      <td class="hub-toolbar"><a class="hub-button hub-button-primary" href="{% url 'staff_internet_end' s.id %}">إنهاء</a>{% if can_cancel_sessions %}<form class="hub-form-section" method="post" action="{% url 'staff_internet_cancel' s.id %}" onsubmit="var reason=prompt('سبب الإلغاء؟'); if(!reason) return false; this.querySelector('[name=cancellation_reason]').value=reason; return true;">{% csrf_token %}<input type="hidden" name="cancellation_reason"><button class="hub-button" type="submit">إلغاء</button></form>{% endif %}</td>
-    </tr>{% endwith %}{% empty %}<tr><td colspan="10">لا توجد جلسات فعالة.</td></tr>{% endfor %}
-  </table></div>
-</section>
-
-<section class="hub-section">
-  <h3 class="hub-section-title">الجلسات المنتهية</h3>
-  <div class="hub-table-wrap"><table class="hub-table">
-    <tr><th>#</th><th>العميل</th><th>النوع</th><th>الانتهاء</th><th>الوقت الفعلي</th><th>الوقت المحسوب</th><th>المبلغ</th><th>الطلب</th><th>الحالة</th></tr>
-    {% for s in recent_sessions %}<tr><td><a href="{% url 'staff_internet_session' s.id %}">جلسة {{ s.id }}</a></td><td>{% if s.member %}{{ s.member.name_ar }}{% else %}{{ s.display_guest_name|default:'زائر' }}{% endif %}</td><td>{{ s.get_session_type_display }}</td><td>{{ s.effective_ended_at }}</td><td>{{ s.effective_duration_minutes|default:'-' }}</td><td>{{ s.billable_minutes|default:'-' }}</td><td>{{ s.payable_total_syp }}</td><td>{% if s.linked_order %}<a href="{% url 'staff_cashier_order' s.linked_order.public_code %}">{{ s.linked_order.display_number }}</a>{% else %}-{% endif %}</td><td>{{ s.get_status_display }}</td></tr>{% empty %}<tr><td colspan="9">لا يوجد.</td></tr>{% endfor %}
-  </table></div>
-</section>
+</details>
 <script>
 (function(){
 function ceilPrice(minutes, rate, minimum, grace, cap, freeMode, rounding, minCharge){ if(freeMode) return 0; minutes=Math.max(minutes||0,0); rate=Math.max(rate||0,0); grace=Math.max(grace||0,0); minimum=Math.max(minimum||0,0); rounding=[15,30,60].indexOf(rounding)>=0?rounding:15; if(minutes<=grace||rate<=0) return 0; var billable=Math.max(minutes, minimum); if(billable>0) billable=Math.ceil(billable/rounding)*rounding; var total=Math.ceil((billable*rate)/60); total=Math.max(total, minCharge||0); if(cap!==null && cap!=='' && !isNaN(cap)) total=Math.min(total, Math.max(parseInt(cap,10),0)); return Math.max(total,0); }

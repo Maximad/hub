@@ -10,7 +10,7 @@ from core.models import (InternetAccessDevice, InternetBandwidthProfile, Interne
                          InternetPackage, InternetPartner, InternetPartnerUser, InternetRevenueShare,
                          InternetRevenueShareAdjustment, InternetSession, Member, Order, Payment)
 from core.services.internet_access import (create_entitlement, end_usage_session,
-    effectively_active_entitlements, record_payment_reversal_adjustment,
+    create_commercial_sale, effectively_active_entitlements, record_payment_reversal_adjustment,
     register_device, start_usage_session, validity_end)
 from core.services.network_backends import ManualNetworkBackend, get_network_backend
 from members.models import MembershipPlan, MembershipSubscription
@@ -216,7 +216,73 @@ class InternetHttpWorkflowTests(TestCase):
         ent = create_entitlement(self.package)
         InternetEntitlement.objects.filter(pk=ent.pk).update(valid_until=timezone.now() - timedelta(minutes=1))
         response = self.client.get(reverse('staff_internet'))
-        self.assertContains(response, 'expired'); self.assertEqual(response.context['internet_metrics']['active_passes'], 0)
+        self.assertContains(response, 'منتهي'); self.assertEqual(response.context['internet_metrics']['active_passes'], 0)
+
+    def unpaid_metric(self):
+        return self.client.get(reverse('staff_internet')).context['internet_metrics']['unpaid']
+
+    def test_active_unpaid_commercial_entitlement_counts_once(self):
+        unpaid = create_commercial_sale(
+            self.package, payment_method=Payment.Method.UNPAID,
+            actor=self.staff, idempotency_key='metric-unpaid')
+
+        self.assertTrue(unpaid.is_effectively_active)
+        self.assertEqual(self.unpaid_metric(), 1)
+
+    def test_paid_entitlement_does_not_count_as_unpaid(self):
+        create_commercial_sale(
+            self.package, payment_method=Payment.Method.CASH,
+            actor=self.staff, idempotency_key='metric-paid')
+
+        self.assertEqual(self.unpaid_metric(), 0)
+
+    def test_complimentary_entitlement_does_not_count_as_unpaid(self):
+        complimentary = InternetPackage.objects.create(
+            name_ar='مجاني', code='metric-free', duration_minutes=30,
+            price_syp=0, access_mode=InternetPackage.AccessMode.TIMED_SESSION,
+            session_minutes_limit=30)
+        create_commercial_sale(
+            complimentary, payment_method=Payment.Method.FREE,
+            actor=self.staff, idempotency_key='metric-free')
+
+        self.assertEqual(self.unpaid_metric(), 0)
+
+    def test_membership_credit_entitlement_does_not_count_as_unpaid(self):
+        member = Member.objects.create(name_ar='عضو', phone='0999000000')
+        plan = MembershipPlan.objects.create(code='metric-plan', name_ar='عضوية')
+        subscription = MembershipSubscription.objects.create(
+            member=member, plan=plan, starts_at=timezone.now(),
+            remaining_internet_minutes=60)
+        credit = InternetPackage.objects.create(
+            name_ar='رصيد عضوية', code='metric-credit', duration_minutes=0,
+            price_syp=0, access_mode=InternetPackage.AccessMode.MEMBERSHIP_CREDIT,
+            member_only=True, guest_allowed=False)
+        create_commercial_sale(
+            credit, payment_method=Payment.Method.FREE, member=member,
+            subscription=subscription, actor=self.staff, idempotency_key='metric-credit')
+
+        self.assertEqual(self.unpaid_metric(), 0)
+
+    def test_staff_page_labels_manual_backend_without_claiming_router_provisioning(self):
+        create_commercial_sale(
+            self.package, payment_method=Payment.Method.CASH,
+            actor=self.staff, idempotency_key='manual-label')
+
+        response = self.client.get(reverse('staff_internet'))
+
+        self.assertContains(response, 'يدوي (بدون راوتر)')
+        self.assertContains(response, 'تجهيز يدوي — أو بانتظار الربط بالشبكة')
+        self.assertNotContains(response, 'مجهز على الشبكة')
+
+    def test_commercial_sale_is_primary_and_legacy_session_form_remains(self):
+        response = self.client.get(reverse('staff_internet'))
+        content = response.content.decode()
+
+        self.assertContains(response, 'action="{}"'.format(reverse('staff_internet_sale')))
+        self.assertContains(response, 'action="{}"'.format(reverse('staff_internet_start')))
+        self.assertContains(response, 'جلسة يدوية بدون باقة (خيار متقدم)')
+        self.assertLess(content.index(reverse('staff_internet_sale')),
+                        content.index(reverse('staff_internet_start')))
 
     def test_partner_cross_scope_and_expired_rendering(self):
         from django.contrib.auth import get_user_model
