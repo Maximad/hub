@@ -118,6 +118,12 @@ def record_snapshot(source, *, operation, field_name, amount, currency, settleme
     from django.contrib.contenttypes.models import ContentType
     from core.models import CurrencyEntrySnapshot
     business_date = business_date or timezone.localdate()
+    content_type = ContentType.objects.get_for_model(source)
+    existing = CurrencyEntrySnapshot.objects.filter(
+        source_content_type=content_type, source_object_id=str(source.pk),
+        operation=operation, field_name=field_name).first()
+    if existing:
+        return existing
     if currency == USD and rate_record is None:
         rate_record = applicable_rate(business_date)
     rate = rate_record.rate_to_base if rate_record else Decimal('1')
@@ -126,7 +132,7 @@ def record_snapshot(source, *, operation, field_name, amount, currency, settleme
                                     exchange_rate=rate, converted_base_amount=base)
     enforce_risk(result, acknowledged=acknowledged, user=approved_by or user)
     return CurrencyEntrySnapshot.objects.create(
-        source_content_type=ContentType.objects.get_for_model(source), source_object_id=str(source.pk),
+        source_content_type=content_type, source_object_id=str(source.pk),
         operation=operation, field_name=field_name, transaction_currency=currency,
         settlement_currency=settlement_currency or currency, original_amount=decimal_amount(amount),
         exchange_rate_to_base=rate, base_amount_syp=base, exchange_rate_record=rate_record,

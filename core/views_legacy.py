@@ -18,6 +18,7 @@ from members.services import evaluate_membership_benefit, get_active_member_cont
 from internet.models import WifiNetwork
 from catalog.models import MenuSection, PrepStation, ProductMedia, ProductOption, ProductOptionGroup, ProductOptionGroupAssignment, Tag
 from core.settings_helpers import get_page_setting, get_system_settings
+from core.currency_forms import CurrencyEntryFormService
 from core.internet_billing import calculate_billable_minutes, calculate_metered_session_total, calculate_session_duration_minutes, can_override_session_total, finalize_internet_session
 from core.services.bulk_edit import BulkEditValidationError
 from core.services.menu_tools import ALLOWED_ACTIONS, apply_product_bulk_action, preview_product_bulk_action
@@ -1302,7 +1303,7 @@ def staff_cashier_order(request, public_code):
     order = get_object_or_404(Order.objects.select_related('table', 'table__room').prefetch_related('items', 'payments', 'discounts'), public_code=public_code)
     total, paid, remaining, payment_label = _order_financials(order)
     methods = Payment.Method.choices
-    return render(request, 'staff/cashier_order.html', {'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods, 'discount_types': OrderDiscount.DiscountType.choices, 'can_manage_discounts': _can_approve_partial_payment(request.user), 'payment_amount_default': remaining, 'qr_url': reverse('order_qr', kwargs={'public_code': order.public_code})})
+    return render(request, 'staff/cashier_order.html', {'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods, 'discount_types': OrderDiscount.DiscountType.choices, 'can_manage_discounts': _can_approve_partial_payment(request.user), 'payment_amount_default': remaining, 'qr_url': reverse('order_qr', kwargs={'public_code': order.public_code}), 'currency_component': CurrencyEntryFormService(request, operation='payment').context})
 
 
 @require_staff_capability('cashier')
@@ -1317,10 +1318,13 @@ def staff_cashier_pay(request, public_code):
     _total, _paid, remaining, _payment_label = _order_financials(
         Order.objects.prefetch_related('items', 'payments').get(pk=order.pk)
     )
+    currency_service = CurrencyEntryFormService(request, operation='payment')
     try:
-        amount_val = int((request.POST.get('amount_syp') or '').strip())
-    except (TypeError, ValueError):
-        amount_val = 0
+        currency_entry = currency_service.clean(request.POST.get('amount_syp'))
+        amount_val = currency_entry.base_amount
+    except (ValidationError, PermissionDenied) as error:
+        messages.error(request, ' '.join(getattr(error, 'messages', [str(error)])))
+        return redirect('staff_cashier_order', public_code=order.public_code)
     if amount_val <= 0:
         messages.error(request, 'المبلغ يجب أن يكون أكبر من صفر.')
         return redirect('staff_cashier_order', public_code=order.public_code)
@@ -1361,6 +1365,7 @@ def staff_cashier_pay(request, public_code):
     duplicate = PostingCommand.objects.filter(key=posting_key).exists()
     try:
         payment = collect_order_payment(order, PostingContext(actor=request.user,approver=locals().get('approving_manager'),business_date=timezone.localdate(),idempotency_key=posting_key,channel='cashier',request_metadata={'path':request.path}), amount_val, method, request.POST.get('notes', '').strip())
+        currency_service.snapshot(payment, currency_entry, 'amount_syp')
     except ValidationError as error:
         messages.error(request, ' '.join(error.messages))
         return redirect('staff_cashier_order', public_code=order.public_code)

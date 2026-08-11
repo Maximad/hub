@@ -1,7 +1,7 @@
 import csv
 from django.contrib import messages
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Q, Sum
 from django.http import HttpResponse
@@ -10,6 +10,7 @@ from django.utils import timezone
 from accounts.permissions import require_staff_capability, can_approve_partial_payment
 from catalog.models import MediaAsset
 from core.finance import finance_summary_for_date, current_business_date
+from core.currency_forms import CurrencyEntryFormService
 from core.services.posting.context import PostingContext
 from core.services.posting import expenses as expense_posting, purchases as purchase_posting, closing as closing_posting, transfers as transfer_posting
 from core.models import ActivityLog, CashMovement, DailyClose, Expense, ExpenseCategory, FinancialAccount, InventoryItem, PostingCommand, Purchase, PurchaseItem, StockMovement, Transfer
@@ -80,7 +81,11 @@ def staff_expense_new(request):
     errors=[]
     if request.method=='POST':
         requested_status=request.POST.get('status') or Expense.Status.DRAFT
-        exp=Expense(business_date=_parse_report_date(request.POST.get('business_date')), category_id=request.POST.get('category'), vendor_id=request.POST.get('vendor') or None, payee_type=request.POST.get('payee_type') or (Expense.PayeeType.VENDOR if request.POST.get('vendor') else Expense.PayeeType.MANUAL), supplier_name=request.POST.get('supplier_name','').strip(), title=request.POST.get('title','').strip(), description=request.POST.get('description','').strip(), amount_syp=_positive_int(request.POST.get('amount_syp')), payment_method=request.POST.get('payment_method',''), paid_from=request.POST.get('paid_from') or Expense.PaidFrom.UNPAID, status=Expense.Status.DRAFT, financial_account_id=request.POST.get('financial_account') or None, liability_account_id=request.POST.get('liability_account') or None, receipt_media_id=request.POST.get('receipt_media') or None, receipt_number=request.POST.get('receipt_number','').strip(), created_by=request.user)
+        business_date=_parse_report_date(request.POST.get('business_date'))
+        currency_service=CurrencyEntryFormService(request, operation='expense', business_date=business_date)
+        try: currency_entry=currency_service.clean(request.POST.get('amount_syp'))
+        except (ValidationError, PermissionDenied) as e: errors.extend(_validation_messages(e)); currency_entry=None
+        exp=Expense(business_date=business_date, category_id=request.POST.get('category'), vendor_id=request.POST.get('vendor') or None, payee_type=request.POST.get('payee_type') or (Expense.PayeeType.VENDOR if request.POST.get('vendor') else Expense.PayeeType.MANUAL), supplier_name=request.POST.get('supplier_name','').strip(), title=request.POST.get('title','').strip(), description=request.POST.get('description','').strip(), amount_syp=currency_entry.base_amount if currency_entry else 0, payment_method=request.POST.get('payment_method',''), paid_from=request.POST.get('paid_from') or Expense.PaidFrom.UNPAID, status=Expense.Status.DRAFT, financial_account_id=request.POST.get('financial_account') or None, liability_account_id=request.POST.get('liability_account') or None, receipt_media_id=request.POST.get('receipt_media') or None, receipt_number=request.POST.get('receipt_number','').strip(), created_by=request.user)
         if requested_status in {Expense.Status.APPROVED, Expense.Status.CANCELLED} and not can_approve_partial_payment(request.user): errors.append('الاعتماد أو الإلغاء يحتاج صلاحية المدير.')
         try: exp.full_clean()
         except ValidationError as e: errors += sum(e.message_dict.values(), []) if hasattr(e,'message_dict') else e.messages
@@ -92,6 +97,7 @@ def staff_expense_new(request):
                     exp = expense_posting.create_draft(
                         exp, base_context.with_key_suffix('draft')
                     )
+                    currency_service.snapshot(exp, currency_entry, 'amount_syp')
                     if requested_status == Expense.Status.APPROVED:
                         expense_posting.approve_liability(
                             exp, base_context.with_key_suffix('approval'), exp.liability_account
@@ -107,7 +113,7 @@ def staff_expense_new(request):
                 if duplicate: messages.warning(request,'طلب مكرر: تم استخدام النتيجة المحفوظة دون إنشاء قيد جديد.')
                 else: messages.success(request,'تم حفظ المصروف.')
                 return redirect('staff_finance_expenses')
-    return render(request,'staff/finance_expense_form.html',{'categories':ExpenseCategory.objects.filter(is_active=True),'vendors':Vendor.objects.all(),'financial_accounts':FinancialAccount.objects.filter(is_active=True),'liability_accounts':FinancialAccount.objects.filter(is_active=True, account_type=FinancialAccount.AccountType.LIABILITY),'payee_types':Expense.PayeeType.choices,'media_assets':MediaAsset.objects.order_by('-created_at')[:50],'methods':Expense.PaymentMethod.choices,'paid_froms':Expense.PaidFrom.choices,'statuses':Expense.Status.choices,'today':timezone.now().date(),'errors':errors,'form_values':request.POST})
+    return render(request,'staff/finance_expense_form.html',{'categories':ExpenseCategory.objects.filter(is_active=True),'vendors':Vendor.objects.all(),'financial_accounts':FinancialAccount.objects.filter(is_active=True),'liability_accounts':FinancialAccount.objects.filter(is_active=True, account_type=FinancialAccount.AccountType.LIABILITY),'payee_types':Expense.PayeeType.choices,'media_assets':MediaAsset.objects.order_by('-created_at')[:50],'methods':Expense.PaymentMethod.choices,'paid_froms':Expense.PaidFrom.choices,'statuses':Expense.Status.choices,'today':timezone.now().date(),'errors':errors,'form_values':request.POST, 'currency_component': CurrencyEntryFormService(request, operation='expense').context})
 
 @require_staff_capability('finance')
 def staff_cashbox(request):
@@ -119,7 +125,10 @@ def staff_cashbox(request):
 def staff_cashbox_new(request):
     errors=[]
     if request.method=='POST':
-        mv=CashMovement(business_date=_parse_report_date(request.POST.get('business_date')), financial_account_id=request.POST.get('financial_account') or None, movement_type=request.POST.get('movement_type'), direction=request.POST.get('direction'), amount_syp=_positive_int(request.POST.get('amount_syp')), vendor_id=request.POST.get('vendor') or None, related_expense_id=request.POST.get('related_expense') or None, title=request.POST.get('title','').strip(), notes=request.POST.get('notes','').strip(), created_by=request.user)
+        mv=CashMovement(business_date=_parse_report_date(request.POST.get('business_date')), financial_account_id=request.POST.get('financial_account') or None, movement_type=request.POST.get('movement_type'), direction=request.POST.get('direction'), amount_syp=0, vendor_id=request.POST.get('vendor') or None, related_expense_id=request.POST.get('related_expense') or None, title=request.POST.get('title','').strip(), notes=request.POST.get('notes','').strip(), created_by=request.user)
+        currency_service=CurrencyEntryFormService(request, operation='cash_movement', business_date=mv.business_date)
+        try: currency_entry=currency_service.clean(request.POST.get('amount_syp')); mv.amount_syp=currency_entry.base_amount
+        except (ValidationError, PermissionDenied) as e: errors.extend(_validation_messages(e)); currency_entry=None
         if mv.movement_type in {CashMovement.MovementType.CASH_CORRECTION, CashMovement.MovementType.OWNER_CASH_OUT} and not can_approve_partial_payment(request.user): errors.append('هذه الحركة تحتاج صلاحية المدير.')
         try: mv.full_clean()
         except ValidationError as e: errors += sum(e.message_dict.values(), []) if hasattr(e,'message_dict') else e.messages
@@ -129,13 +138,14 @@ def staff_cashbox_new(request):
                 duplicate = PostingCommand.objects.filter(key=context.idempotency_key).exists()
                 with transaction.atomic():
                     expense_posting.post_cash_movement(mv, context)
+                    currency_service.snapshot(mv, currency_entry, 'amount_syp')
             except ValidationError as error:
                 errors.extend(_validation_messages(error))
             else:
                 if duplicate: messages.warning(request,'طلب مكرر: لم يتم إنشاء حركة صندوق إضافية.')
                 else: messages.success(request,'تم حفظ حركة الصندوق.')
                 return redirect('staff_finance_cashbox')
-    return render(request,'staff/finance_cashbox_form.html',{'types':CashMovement.MovementType.choices,'directions':CashMovement.Direction.choices,'accounts':FinancialAccount.objects.filter(is_active=True),'vendors':Vendor.objects.all(),'expenses':Expense.objects.exclude(status=Expense.Status.CANCELLED)[:100],'today':timezone.now().date(),'errors':errors,'form_values':request.POST})
+    return render(request,'staff/finance_cashbox_form.html',{'types':CashMovement.MovementType.choices,'directions':CashMovement.Direction.choices,'accounts':FinancialAccount.objects.filter(is_active=True),'vendors':Vendor.objects.all(),'expenses':Expense.objects.exclude(status=Expense.Status.CANCELLED)[:100],'today':timezone.now().date(),'errors':errors,'form_values':request.POST,'currency_component':CurrencyEntryFormService(request, operation='cash_movement').context})
 
 @require_staff_capability('finance')
 def staff_transfers(request):
@@ -146,10 +156,15 @@ def staff_transfers(request):
 def staff_transfer_new(request):
     errors=[]
     if request.method == 'POST':
-        transfer=Transfer(source_account_id=request.POST.get('source_account'), destination_account_id=request.POST.get('destination_account'), amount=_dec(request.POST.get('amount')), business_date=_parse_report_date(request.POST.get('business_date')), reason=request.POST.get('reason','').strip(), actor=request.user)
+        business_date=_parse_report_date(request.POST.get('business_date'))
         approver=get_user_model().objects.filter(pk=request.POST.get('approver') or None).first()
+        currency_service=CurrencyEntryFormService(request, operation='transfer', business_date=business_date, approver=approver)
         try:
-            transfer_posting.post(transfer, _posting_context(request, transfer.business_date, approver))
+            currency_entry=currency_service.clean(request.POST.get('amount'))
+            transfer=Transfer(source_account_id=request.POST.get('source_account'), destination_account_id=request.POST.get('destination_account'), amount=currency_entry.base_amount, business_date=business_date, reason=request.POST.get('reason','').strip(), actor=request.user)
+            with transaction.atomic():
+                transfer_posting.post(transfer, _posting_context(request, transfer.business_date, approver))
+                currency_service.snapshot(transfer, currency_entry, 'amount')
         except Exception as error:
             errors.extend(_validation_messages(error))
         else:
@@ -157,7 +172,7 @@ def staff_transfer_new(request):
             return redirect('staff_finance_transfer_detail', transfer_id=transfer.pk)
     accounts=FinancialAccount.objects.filter(is_active=True).order_by('code')
     approvers=get_user_model().objects.filter(Q(is_superuser=True)|Q(role='admin'), is_active=True).exclude(pk=request.user.pk).order_by('username')
-    return render(request,'staff/finance_transfer_form.html',{'accounts':accounts,'approvers':approvers,'approval_limit':transfer_posting.approval_limit(),'today':current_business_date(),'errors':errors,'form_values':request.POST,'business_date':current_business_date()})
+    return render(request,'staff/finance_transfer_form.html',{'accounts':accounts,'approvers':approvers,'approval_limit':transfer_posting.approval_limit(),'today':current_business_date(),'errors':errors,'form_values':request.POST,'business_date':current_business_date(),'currency_component':CurrencyEntryFormService(request, operation='transfer').context})
 
 @require_staff_capability('finance')
 def staff_transfer_detail(request, transfer_id):
@@ -231,10 +246,14 @@ def staff_daily_close_close(request, close_id):
             errors.append('العد الفعلي للنقد مطلوب.')
         try:
             if not errors:
-                close=closing_posting.close(close, _posting_context(request, close.business_date), _positive_int(request.POST.get('actual_cash_counted_syp')), request.POST.get('notes',''), _positive_int(request.POST.get('opening_cash_syp')))
+                currency_service=CurrencyEntryFormService(request, operation='daily_close', business_date=close.business_date)
+                currency_entry=currency_service.clean(request.POST.get('actual_cash_counted_syp'))
+                with transaction.atomic():
+                    close=closing_posting.close(close, _posting_context(request, close.business_date), currency_entry.base_amount, request.POST.get('notes',''), _positive_int(request.POST.get('opening_cash_syp')))
+                    currency_service.snapshot(close, currency_entry, 'actual_cash_counted_syp')
                 messages.success(request,'تم إغلاق تاريخ العمل.'); return redirect('staff_daily_close_detail', close_id=close.pk)
         except Exception as e: errors.extend(_validation_messages(e))
-    return render(request,'staff/finance_close_form.html',{'close':close,'errors':errors,'business_date':current_business_date()})
+    return render(request,'staff/finance_close_form.html',{'close':close,'errors':errors,'business_date':current_business_date(),'currency_component':CurrencyEntryFormService(request, operation='daily_close').context})
 
 @require_staff_capability('finance')
 def staff_purchases(request):
@@ -246,14 +265,19 @@ def _save_purchase_from_post(request, purchase=None):
     purchase = purchase or Purchase(created_by=request.user)
     purchase.business_date=_parse_report_date(request.POST.get('business_date')); purchase.invoice_date=_parse_report_date(request.POST.get('invoice_date')) if request.POST.get('invoice_date') else None
     purchase.vendor_id=request.POST.get('vendor') or None; purchase.supplier_name=request.POST.get('supplier_name','').strip(); purchase.invoice_number=request.POST.get('invoice_number','').strip(); purchase.status=request.POST.get('status') or Purchase.Status.DRAFT; purchase.payment_method=request.POST.get('payment_method') or Purchase.PaymentMethod.CREDIT; purchase.paid_from=request.POST.get('paid_from') or Purchase.PaidFrom.UNPAID; purchase.discount_syp=_dec(request.POST.get('discount_syp')); purchase.notes=request.POST.get('notes','')
+    currency_service=CurrencyEntryFormService(request, operation='purchase', business_date=purchase.business_date)
+    entered_total=sum((_dec(qty) * _dec(cost) for qty, cost in zip(request.POST.getlist('quantity'), request.POST.getlist('unit_cost_syp'))), _dec(0))
+    currency_entry=currency_service.clean(entered_total)
+    conversion_factor=currency_entry.base_amount / _dec(currency_entry.original_amount) if _dec(currency_entry.original_amount) else _dec(1)
     with transaction.atomic():
         purchase.full_clean(); purchase.save()
         if purchase.status == Purchase.Status.DRAFT or not purchase.stock_movements.exists():
             purchase.items.all().delete()
             for item_id, qty, unit, cost in zip(request.POST.getlist('inventory_item'), request.POST.getlist('quantity'), request.POST.getlist('unit'), request.POST.getlist('unit_cost_syp')):
                 if item_id and _dec(qty)>0:
-                    pi=PurchaseItem(purchase=purchase, inventory_item_id=item_id, quantity=_dec(qty), unit=unit, unit_cost_syp=_dec(cost)); pi.full_clean(); pi.save()
+                    pi=PurchaseItem(purchase=purchase, inventory_item_id=item_id, quantity=_dec(qty), unit=unit, unit_cost_syp=_dec(cost) * conversion_factor); pi.full_clean(); pi.save()
         purchase.recalculate_totals(); purchase.full_clean(); purchase.save()
+        currency_service.snapshot(purchase, currency_entry, 'total_syp')
         _log(request.user,'purchase_saved',{'purchase_id':purchase.id,'status':purchase.status})
     return purchase
 
@@ -263,7 +287,7 @@ def staff_purchase_new(request):
     if request.method=='POST':
         try: p=_save_purchase_from_post(request); messages.success(request,'تم حفظ الشراء.'); return redirect('staff_purchase_detail', purchase_id=p.pk)
         except Exception as e: errors.extend(_validation_messages(e))
-    return render(request,'staff/finance_purchase_form.html',{'purchase':None,'items':InventoryItem.objects.filter(is_active=True),'vendors':Vendor.objects.all(),'statuses':Purchase.Status.choices,'methods':Purchase.PaymentMethod.choices,'paid_froms':Purchase.PaidFrom.choices,'units':InventoryItem.Unit.choices,'today':current_business_date(),'errors':errors,'business_date':current_business_date()})
+    return render(request,'staff/finance_purchase_form.html',{'purchase':None,'items':InventoryItem.objects.filter(is_active=True),'vendors':Vendor.objects.all(),'statuses':Purchase.Status.choices,'methods':Purchase.PaymentMethod.choices,'paid_froms':Purchase.PaidFrom.choices,'units':InventoryItem.Unit.choices,'today':current_business_date(),'errors':errors,'business_date':current_business_date(),'currency_component':CurrencyEntryFormService(request, operation='purchase').context})
 
 @require_staff_capability('finance')
 def staff_purchase_detail(request,purchase_id):
@@ -280,7 +304,7 @@ def staff_purchase_edit(request,purchase_id):
     if request.method=='POST':
         try: p=_save_purchase_from_post(request,p); messages.success(request,'تم تعديل الشراء بدون تكرار المخزون.'); return redirect('staff_purchase_detail', purchase_id=p.pk)
         except Exception as e: errors.extend(_validation_messages(e))
-    return render(request,'staff/finance_purchase_form.html',{'purchase':p,'items':InventoryItem.objects.filter(is_active=True),'vendors':Vendor.objects.all(),'statuses':Purchase.Status.choices,'methods':Purchase.PaymentMethod.choices,'paid_froms':Purchase.PaidFrom.choices,'units':InventoryItem.Unit.choices,'today':current_business_date(),'errors':errors,'business_date':current_business_date()})
+    return render(request,'staff/finance_purchase_form.html',{'purchase':p,'items':InventoryItem.objects.filter(is_active=True),'vendors':Vendor.objects.all(),'statuses':Purchase.Status.choices,'methods':Purchase.PaymentMethod.choices,'paid_froms':Purchase.PaidFrom.choices,'units':InventoryItem.Unit.choices,'today':current_business_date(),'errors':errors,'business_date':current_business_date(),'currency_component':CurrencyEntryFormService(request, operation='purchase').context})
 
 def _receive_purchase(request,p):
     try:
