@@ -52,6 +52,18 @@ DJANGO_ALLOWED_HOSTS=hubsweida.jwtalenthouse.com,72.62.52.167,localhost,127.0.0.
 DJANGO_CSRF_TRUSTED_ORIGINS=https://hubsweida.jwtalenthouse.com,http://hubsweida.jwtalenthouse.com
 ```
 
+### Production security rollout
+
+The complete production settings are listed in `.env.example`. Start HSTS at
+`3600` seconds and monitor HTTPS traffic and redirect behavior. After a stable
+rollout, increase it first to `86400` (one day), then to `31536000` (one year).
+Keep `includeSubDomains` and preload disabled until every current and future
+subdomain has been inventoried and confirmed to support HTTPS permanently.
+
+`SECURE_PROXY_SSL_HEADER` trusts only Traefik's existing `X-Forwarded-Proto`
+contract. Do not add forwarded-header conventions from a different proxy stack,
+and do not expose the application port directly to untrusted clients.
+
 ### Infrastructure access plan
 
 Current target topology is **public Traefik plus optional VPN/private operations access**:

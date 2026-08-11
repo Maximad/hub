@@ -13,7 +13,7 @@
     {% if system_settings.safe_button_padding_scale == 'compact' %}--hub-button-padding-y:.4rem;--hub-button-padding-x:.7rem;{% elif system_settings.safe_button_padding_scale == 'large' %}--hub-button-padding-y:.75rem;--hub-button-padding-x:1.15rem;{% else %}--hub-button-padding-y:.55rem;--hub-button-padding-x:.9rem;{% endif %}
     {% if system_settings.safe_input_size == 'compact' %}--hub-input-padding-y:.42rem;--hub-input-padding-x:.55rem;{% elif system_settings.safe_input_size == 'large' %}--hub-input-padding-y:.75rem;--hub-input-padding-x:.85rem;{% else %}--hub-input-padding-y:.55rem;--hub-input-padding-x:.65rem;{% endif %}
   }</style>{% endif %}
-  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <script src="{% static 'vendor/htmx/htmx-1.9.12.min.js' %}"></script>
 </head>
 <body class="hub-page {% block body_class %}{% endblock %}{% if system_settings %} density-{{ system_settings.safe_ui_density }} button-scale-{{ system_settings.safe_button_padding_scale }} input-size-{{ system_settings.safe_input_size }} shadow-{{ system_settings.safe_card_shadow_level }}{% if system_settings.sticky_header_enabled %} hub-sticky-header{% endif %}{% endif %}">
   <header class="hub-header">

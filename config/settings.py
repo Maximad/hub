@@ -1,6 +1,8 @@
 from pathlib import Path
 import os
 
+from django.core.exceptions import ImproperlyConfigured
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
@@ -19,6 +21,24 @@ def optional_bool_env(name):
     )
 
 
+def bool_env(name, default):
+    """Return a strictly parsed boolean environment setting."""
+    value = optional_bool_env(name)
+    return default if value is None else value
+
+
+def non_negative_int_env(name, default):
+    """Return a non-negative integer environment setting."""
+    raw_value = os.getenv(name, str(default))
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise ImproperlyConfigured(f'{name} must be an integer') from exc
+    if value < 0:
+        raise ImproperlyConfigured(f'{name} must be zero or greater')
+    return value
+
+
 for _setting_name in (
     'POSTING_LEDGER_WRITES_ENABLED',
     'POSTING_DUAL_READ_ENABLED',
@@ -28,8 +48,24 @@ for _setting_name in (
     if _setting_value is not None:
         globals()[_setting_name] = _setting_value
 
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'change-me-in-production')
-DEBUG = os.getenv('DJANGO_DEBUG', 'False').lower() == 'true'
+DEBUG = bool_env('DJANGO_DEBUG', False)
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', '').strip()
+_SECRET_KEY_PLACEHOLDERS = {
+    '',
+    'change-me-in-production',
+    'change-this-in-production',
+    'replace-me',
+}
+if not DEBUG and (
+    SECRET_KEY.lower() in _SECRET_KEY_PLACEHOLDERS
+    or SECRET_KEY.lower().startswith('django-insecure-')
+):
+    raise ImproperlyConfigured(
+        'DJANGO_SECRET_KEY must be set to a non-placeholder value when DJANGO_DEBUG=False'
+    )
+# A deterministic key is acceptable only for local debug mode. Production exits above.
+if not SECRET_KEY:
+    SECRET_KEY = 'debug-only-not-for-production'
 ALLOWED_HOSTS = [host.strip() for host in os.getenv('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost').split(',') if host.strip()]
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
@@ -38,6 +74,22 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 USE_X_FORWARDED_HOST = True
+SECURE_SSL_REDIRECT = bool_env('DJANGO_SECURE_SSL_REDIRECT', not DEBUG)
+SESSION_COOKIE_SECURE = bool_env('DJANGO_SESSION_COOKIE_SECURE', not DEBUG)
+CSRF_COOKIE_SECURE = bool_env('DJANGO_CSRF_COOKIE_SECURE', not DEBUG)
+SECURE_HSTS_SECONDS = non_negative_int_env(
+    'DJANGO_SECURE_HSTS_SECONDS', 0 if DEBUG else 3600
+)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+SECURE_HSTS_PRELOAD = False
+# These deploy checks recommend a broader HSTS scope than this staged rollout.
+# They are deliberately silenced until the documented subdomain audit is complete.
+SILENCED_SYSTEM_CHECKS = ['security.W005', 'security.W021']
+SECURE_CONTENT_TYPE_NOSNIFF = bool_env('DJANGO_SECURE_CONTENT_TYPE_NOSNIFF', True)
+SECURE_REFERRER_POLICY = os.getenv(
+    'DJANGO_SECURE_REFERRER_POLICY', 'strict-origin-when-cross-origin'
+).strip()
+X_FRAME_OPTIONS = os.getenv('DJANGO_X_FRAME_OPTIONS', 'DENY').strip().upper()
 
 INSTALLED_APPS = [
     'django.contrib.admin',
