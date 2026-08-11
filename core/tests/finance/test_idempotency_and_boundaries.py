@@ -8,14 +8,14 @@ from django.urls import reverse
 
 from core.admin import CashMovementAdmin, ExpenseAdmin, PurchaseAdmin
 from core.models import (
-    CashMovement, Expense, ExpenseCategory, FinancialAccount, InventoryItem,
+    CashMovement, DailyClose, Expense, ExpenseCategory, FinanceReviewItem, FinancialAccount, InventoryItem,
     PostingBatch, PostingCommand, PostingReconciliationFailure,
     Purchase, PurchaseItem, PurchasePayment, PurchaseReceipt, PurchaseReturn,
     StockMovement, Transfer,
 )
 from core.services.posting import expenses, purchases, transfers
 from core.services.posting.context import PostingContext
-from core.services.posting.exceptions import IdempotencyConflict
+from core.services.posting.exceptions import ClosedPeriodError, IdempotencyConflict, InvalidTransition
 from core.services.posting.reconciliation import record_unsupported_bypasses
 
 
@@ -51,6 +51,10 @@ class FinanceBoundaryTestCase(TestCase):
         )
         return purchase, item
 
+    def transfer_to(self, destination):
+        return Transfer(source_account=self.cash, destination_account=destination,
+                        amount=Decimal('1'), business_date=self.day, reason='اختبار')
+
     def assert_balanced(self, batch):
         self.assertEqual(batch.entries.count(), 2)
         self.assertTrue(batch.is_balanced())
@@ -79,18 +83,12 @@ class FinanceBoundaryTestCase(TestCase):
         self.assertEqual((batch.actor, batch.approver, batch.channel), (self.actor, self.approver, 'service-test'))
         self.assertEqual(batch.metadata, {'request_id': 'transfer:retry'})
 
-    def test_duplicate_purchase_payment_key_preserves_rows_and_totals(self):
+    def test_supplier_payment_is_blocked_while_purchase_decisions_are_unconfirmed(self):
         purchase, _ = self.purchase()
-        first = purchases.pay(purchase, self.context('purchase-pay:retry'), 100, self.cash, 'cash')
-        again = purchases.pay(purchase, self.context('purchase-pay:retry'), 100, self.cash, 'cash')
-        self.assertEqual(first.pk, again.pk)
-        purchase.refresh_from_db()
-        self.assertEqual(PurchasePayment.objects.filter(purchase=purchase).count(), 1)
-        self.assertEqual(PostingBatch.objects.filter(operation_type='purchase.payment').count(), 1)
-        self.assertEqual(purchase.amount_paid_syp, Decimal('100'))
-        self.assertEqual(purchase.remaining_syp, Decimal('100'))
-        self.assert_balanced(first.posting_batch)
-        self.assertEqual((first.actor, first.approver, first.idempotency_key), (self.actor, self.approver, 'purchase-pay:retry'))
+        with self.assertRaisesMessage(InvalidTransition, 'D07–D11 غير معتمدة'):
+            purchases.pay(purchase, self.context('purchase-pay:blocked'), 100, self.cash, 'cash')
+        self.assertFalse(PurchasePayment.objects.filter(purchase=purchase).exists())
+        self.assertFalse(PostingBatch.objects.filter(operation_type__startswith='purchase.').exists())
 
     def test_repeated_receipt_cancellation_return_and_reversal_requests_do_not_drift(self):
         purchase, item = self.purchase()
@@ -107,20 +105,23 @@ class FinanceBoundaryTestCase(TestCase):
         self.assertEqual(PurchaseReturn.objects.filter(purchase=purchase).count(), 1)
         self.assertEqual(StockMovement.objects.filter(related_purchase=purchase, direction='out').count(), 1)
         item.refresh_from_db(); self.assertEqual(item.current_quantity, Decimal('0'))
-        self.assertEqual(PostingBatch.objects.filter(reversal_of__isnull=False).count(), 1)
+        self.assertFalse(PostingBatch.objects.filter(operation_type__startswith='purchase.').exists())
         for batch in PostingBatch.objects.all():
             self.assert_balanced(batch)
 
     def test_one_key_cannot_be_reused_for_a_different_direct_service_command(self):
-        purchase, _ = self.purchase()
-        purchases.pay(purchase, self.context('shared-key'), 50, self.cash)
         expense_category = ExpenseCategory.objects.create(name_ar='تشغيل', code='boundary-ops')
         expense = Expense.objects.create(
             business_date=self.day, category=expense_category, supplier_name='مورد',
             title='مصروف', amount_syp=10,
         )
+        expenses.create_draft(expense, self.context('shared-key'))
+        destination = FinancialAccount.objects.create(
+            code='cash:key-destination', name_ar='وجهة', account_type='asset', is_active=True,
+            negative_balance_policy='allow',
+        )
         with self.assertRaises(IdempotencyConflict):
-            expenses.create_draft(expense, self.context('shared-key'))
+            transfers.post(self.transfer_to(destination), self.context('shared-key'))
 
     def test_admin_financial_models_are_read_only_and_actions_use_service_metadata(self):
         request = RequestFactory().get('/admin/core/expense/')
@@ -164,6 +165,51 @@ class FinanceBoundaryTestCase(TestCase):
         self.assertEqual(item.current_quantity, Decimal('2'))
         command = PostingCommand.objects.get(key='staff-receipt-retry')
         self.assertEqual((command.actor, command.channel), (self.actor, 'staff'))
+
+    def test_draft_partial_receipt_review_and_closed_date_controls(self):
+        purchase, item = self.purchase(quantity=Decimal('5'))
+        self.assertEqual(item.current_quantity, Decimal('0'))
+        self.assertFalse(StockMovement.objects.filter(related_purchase=purchase).exists())
+
+        receipt = purchases.receive(purchase, self.context('receipt:partial'),
+                                    {purchase.items.get().pk: Decimal('2.5')})
+        item.refresh_from_db()
+        self.assertEqual(item.current_quantity, Decimal('2.5'))
+        self.assertEqual(receipt.lines.get().received_quantity, Decimal('2.5'))
+        movement = receipt.lines.get().stock_movement
+        self.assertEqual((movement.related_purchase, movement.related_purchase_item),
+                         (purchase, purchase.items.get()))
+        review = FinanceReviewItem.objects.get(
+            issue_code='purchase_finance_policy_unconfirmed', record_id=str(purchase.pk))
+        self.assertIn('تشغيلي فقط', review.reason)
+        self.assertFalse(PostingBatch.objects.filter(operation_type__startswith='purchase.').exists())
+
+        DailyClose.objects.create(account=self.cash, business_date=self.day,
+                                  status=DailyClose.Status.CLOSED, is_finalized=True)
+        other, _ = self.purchase()
+        with self.assertRaises(ClosedPeriodError):
+            purchases.receive(other, self.context('receipt:closed'))
+        self.assertFalse(other.receipts.exists())
+
+    def test_draft_cancellation_has_no_return_or_stock_movement(self):
+        purchase, item = self.purchase()
+        purchases.cancel(purchase, self.context('cancel:draft'), 'لم يعد مطلوباً')
+        purchase.refresh_from_db(); item.refresh_from_db()
+        self.assertEqual(purchase.status, Purchase.Status.CANCELLED)
+        self.assertEqual(item.current_quantity, Decimal('0'))
+        self.assertFalse(PurchaseReturn.objects.filter(purchase=purchase).exists())
+        self.assertFalse(StockMovement.objects.filter(related_purchase=purchase).exists())
+
+    def test_received_cancellation_blocks_when_stock_was_consumed_atomically(self):
+        purchase, item = self.purchase()
+        purchases.receive(purchase, self.context('receipt:consume'))
+        item.current_quantity = Decimal('1'); item.save(update_fields=['current_quantity'])
+        with self.assertRaisesMessage(InvalidTransition, 'تم استهلاك مخزون مستلم'):
+            purchases.cancel(purchase, self.context('cancel:insufficient'), 'إلغاء')
+        purchase.refresh_from_db(); item.refresh_from_db()
+        self.assertNotEqual(purchase.status, Purchase.Status.CANCELLED)
+        self.assertEqual(item.current_quantity, Decimal('1'))
+        self.assertFalse(PurchaseReturn.objects.filter(purchase=purchase).exists())
 
     def test_unsupported_direct_mutation_is_detected_once_by_reconciliation(self):
         movement = CashMovement.objects.create(
