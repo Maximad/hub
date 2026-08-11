@@ -33,4 +33,5 @@ docker exec "$container" psql -X -U postgres -d hub_restore -A -t -v ON_ERROR_ST
     >"$actual"
 
 cmp "$backup/counts.tsv" "$actual" || { echo "Restored essential table counts differ from backup" >&2; exit 1; }
+date -u +%Y-%m-%dT%H:%M:%SZ >"$backup/RESTORE_VERIFIED"
 echo "Restore verification succeeded: $backup"
