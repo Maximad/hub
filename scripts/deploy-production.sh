@@ -200,6 +200,11 @@ dc exec -T web python manage.py check
 dc exec -T web python manage.py smoke_check
 dc exec -T web python manage.py system_audit
 
+# Display only: launch_readiness is a strictly read-only post-deployment audit.
+# It is intentionally not part of migration, collection, bootstrap, or cleanup.
+dc exec -T web python manage.py launch_readiness ||
+    printf 'WARNING: launch readiness audit reported findings; deployment remains complete.\n'
+
 log "Checking routes"
 
 check_route "/menu/" "200"
