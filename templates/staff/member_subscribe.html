@@ -1,14 +1,36 @@
 {% extends "base.html" %}
-{% block title %}إضافة اشتراك{% endblock %}
+{% block title %}شراء عضوية{% endblock %}
 {% block content %}
-<h2 class="hub-page-header__title">إضافة اشتراك للعضو {{ member.name_ar }}</h2>
+<h2 class="hub-page-header__title">شراء عضوية للعضو {{ member.name_ar }}</h2>
+<p><strong>العضو:</strong> {{ member.name_ar }} — {{ member.phone }}</p>
+{% if errors %}<div class="alert alert-error" role="alert"><ul>{% for field, error in errors.items %}<li>{{ error }}</li>{% endfor %}</ul></div>{% endif %}
 <form class="hub-form-section" method="post">{% csrf_token %}
-<label>الخطة</label><select data-hub-searchable-select="true" name="plan" required style="display:block; width:100%; margin-bottom:.5rem;">{% for p in plans %}<option value="{{ p.id }}">{{ p.name_ar }} ({{ p.code }})</option>{% endfor %}</select>
-<label>يبدأ في</label><input type="datetime-local" name="starts_at" style="display:block; width:100%; margin-bottom:.5rem;">
-<label>ينتهي في</label><input type="datetime-local" name="ends_at" style="display:block; width:100%; margin-bottom:.5rem;">
-<label>الدقائق المتبقية</label><input type="number" name="remaining_internet_minutes" style="display:block; width:100%; margin-bottom:.5rem;">
-<label>الرصيد المتبقي</label><input type="number" name="remaining_credit_syp" style="display:block; width:100%; margin-bottom:.5rem;">
-<label>ملاحظات</label><textarea name="notes" style="display:block; width:100%; margin-bottom:.5rem;"></textarea>
-<button type="submit">إنشاء الاشتراك</button>
+<input type="hidden" name="idempotency_key" value="{{ idempotency_key }}">
+<label for="membership-plan">الخطة</label>
+<select id="membership-plan" data-hub-searchable-select="true" name="plan" required style="display:block; width:100%; margin-bottom:.5rem;">
+{% for p in plans %}<option value="{{ p.id }}" data-price="{{ p.price_syp }}" data-term-value="{{ p.term_value|default_if_none:'' }}" data-term-unit="{{ p.term_unit|default_if_none:'' }}" {% if form_values.plan == p.id|stringformat:'s' %}selected{% endif %}>{{ p.name_ar }} ({{ p.code }}) — {% if p.price_syp == 0 %}مجاني{% else %}{{ p.price_syp }} ل.س{% endif %}</option>{% endfor %}
+</select>
+<p><strong>السعر / المبلغ المستحق:</strong> <span id="membership-price"></span></p>
+<label for="membership-payment-method">طريقة الدفع</label>
+<select id="membership-payment-method" name="payment_method" required style="display:block; width:100%; margin-bottom:.5rem;">
+{% for value, label in payment_methods %}<option value="{{ value }}" {% if form_values.payment_method == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+</select>
+<label for="membership-start">تاريخ البداية</label><input id="membership-start" type="datetime-local" name="starts_at" value="{{ form_values.starts_at }}" style="display:block; width:100%; margin-bottom:.5rem;">
+<label for="membership-end">تاريخ الانتهاء</label><input id="membership-end" type="datetime-local" name="ends_at" value="{{ form_values.ends_at }}" style="display:block; width:100%; margin-bottom:.5rem;">
+<small>إذا تُرك تاريخ الانتهاء فارغاً فسيُحسب من مدة الخطة. الاشتراكات المستقبلية تبقى معلّقة حتى تفعيلها لاحقاً.</small>
+<button type="submit">تحصيل السعر وإنشاء العضوية</button>
 </form>
+<script>
+(() => {
+  const plan = document.getElementById('membership-plan');
+  const price = document.getElementById('membership-price');
+  const payment = document.getElementById('membership-payment-method');
+  function refreshPrice() {
+    const amount = Number(plan.selectedOptions[0]?.dataset.price || 0);
+    price.textContent = amount === 0 ? 'مجاني' : `${amount.toLocaleString('ar-SY')} ل.س`;
+    payment.disabled = amount === 0;
+  }
+  plan.addEventListener('change', refreshPrice); refreshPrice();
+})();
+</script>
 {% endblock %}

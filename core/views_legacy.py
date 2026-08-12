@@ -15,6 +15,7 @@ import re
 
 from members.models import MembershipBenefitRule, MembershipPlan, MembershipSubscription, MemberCreditLedger
 from members.services import evaluate_membership_benefit, get_active_member_context, resolve_member_from_request
+from members.membership_sales import create_membership_sale
 from internet.models import WifiNetwork
 from catalog.models import MenuSection, PrepStation, ProductMedia, ProductOption, ProductOptionGroup, ProductOptionGroupAssignment, Tag
 from core.settings_helpers import get_page_setting, get_system_settings
@@ -1683,28 +1684,41 @@ def staff_member_subscribe(request, member_id):
     _assert_staff_capability(request.user, 'members/internet')
     member = _get_member_or_404(member_id)
     if request.method != 'POST':
-        plans = MembershipPlan.objects.filter(is_active=True).order_by('name_ar')
-        return render(request, 'staff/member_subscribe.html', {'member': member, 'plans': plans, 'now': timezone.now()})
-    plans = MembershipPlan.objects.filter(is_active=True).order_by('name_ar')
-    plan = get_object_or_404(MembershipPlan, pk=request.POST.get('plan'), is_active=True)
+        plans = MembershipPlan.objects.filter(is_active=True, visible_to_staff=True).order_by('name_ar')
+        return render(request, 'staff/member_subscribe.html', {
+            'member': member, 'plans': plans, 'now': timezone.now(),
+            'idempotency_key': str(uuid.uuid4()), 'payment_methods': (
+                (Payment.Method.CASH, Payment.Method.CASH.label),
+                (Payment.Method.MANUAL_TRANSFER, Payment.Method.MANUAL_TRANSFER.label),
+            )})
+    plans = MembershipPlan.objects.filter(is_active=True, visible_to_staff=True).order_by('name_ar')
+    plan = MembershipPlan.objects.filter(pk=request.POST.get('plan')).first()
     errors = {}
+    if not plan:
+        errors['plan'] = 'الخطة المحددة غير موجودة.'
     starts_at = _parse_local_dt_or_error(request.POST.get('starts_at', ''), 'وقت البداية', errors, default=timezone.now())
     ends_at = _parse_local_dt_or_error(request.POST.get('ends_at', ''), 'وقت النهاية', errors, default=None)
-    default_minutes, default_credit = _best_plan_benefits(plan)
-    minutes_val = _parse_int_or_error(request.POST.get('remaining_internet_minutes', ''), 'الدقائق المتبقية', errors, default=default_minutes, min_value=0)
-    credit_val = _parse_int_or_error(request.POST.get('remaining_credit_syp', ''), 'الرصيد المتبقي', errors, default=default_credit, min_value=0)
-    if starts_at and ends_at and ends_at < starts_at:
-        errors['ends_at'] = 'وقت النهاية يجب أن يكون بعد أو يساوي وقت البداية.'
+    if starts_at and ends_at and ends_at <= starts_at:
+        errors['ends_at'] = 'تاريخ الانتهاء يجب أن يكون بعد تاريخ البداية.'
     if errors:
-        return render(request, 'staff/member_subscribe.html', {'member': member, 'plans': plans, 'now': timezone.now(), 'errors': errors, 'form_values': request.POST})
-    with transaction.atomic():
-        sub = MembershipSubscription.objects.create(member=member, plan=plan, starts_at=starts_at, ends_at=ends_at, remaining_internet_minutes=minutes_val, remaining_credit_syp=credit_val, notes=request.POST.get('notes', '').strip(), status='active')
-        from members.internet_benefits import provision_subscription_internet
-        provision_subscription_internet(sub)
-        if minutes_val > 0:
-            MemberCreditLedger.objects.create(member=member, subscription=sub, change_type='add_minutes', minutes_delta=minutes_val, notes='إضافة دقائق تلقائية من الاشتراك', created_by=request.user)
-        if credit_val > 0:
-            MemberCreditLedger.objects.create(member=member, subscription=sub, change_type='add_credit', credit_delta_syp=credit_val, notes='إضافة رصيد تلقائي من الاشتراك', created_by=request.user)
+        return render(request, 'staff/member_subscribe.html', {
+            'member': member, 'plans': plans, 'now': timezone.now(), 'errors': errors,
+            'form_values': request.POST, 'idempotency_key': request.POST.get('idempotency_key'),
+            'payment_methods': ((Payment.Method.CASH, Payment.Method.CASH.label),
+                                (Payment.Method.MANUAL_TRANSFER, Payment.Method.MANUAL_TRANSFER.label))})
+    try:
+        create_membership_sale(
+            member=member, plan=plan, payment_method=request.POST.get('payment_method'),
+            actor=request.user, idempotency_key=request.POST.get('idempotency_key'),
+            starts_at=starts_at, ends_at=ends_at,
+            payment_amount_syp=request.POST.get('payment_amount_syp') or None)
+    except ValidationError as exc:
+        errors.update(exc.message_dict if hasattr(exc, 'message_dict') else {'sale': '; '.join(exc.messages)})
+        return render(request, 'staff/member_subscribe.html', {
+            'member': member, 'plans': plans, 'now': timezone.now(), 'errors': errors,
+            'form_values': request.POST, 'idempotency_key': request.POST.get('idempotency_key'),
+            'payment_methods': ((Payment.Method.CASH, Payment.Method.CASH.label),
+                                (Payment.Method.MANUAL_TRANSFER, Payment.Method.MANUAL_TRANSFER.label))})
     return redirect('staff_member_detail', member_id=member.public_code)
 
 
