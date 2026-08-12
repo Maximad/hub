@@ -1,8 +1,10 @@
 from datetime import date, timedelta
 from decimal import Decimal
+from threading import Barrier, Thread
 
 from django.core.exceptions import ValidationError
-from django.test import Client, TestCase
+from django.db import close_old_connections
+from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -108,6 +110,93 @@ class EntitlementWorkflowTests(TestCase):
         ent = create_entitlement(package, member=member, subscription=subscription)
         self.assertIsNone(ent.total_minutes_allowed)
         self.assertEqual(subscription.remaining_internet_minutes, 90)
+
+    def membership_credit(self, *, minutes=90, status='active', ends_at=None):
+        member = Member.objects.create(name_ar='عضو الرصيد', phone=f'08{Member.objects.count():08d}')
+        plan = MembershipPlan.objects.create(code=f'credit-{member.pk}', name_ar='عضوية')
+        subscription = MembershipSubscription.objects.create(
+            member=member, plan=plan, starts_at=timezone.now() - timedelta(days=1),
+            ends_at=ends_at, status=status, remaining_internet_minutes=minutes)
+        package = InternetPackage.objects.create(
+            name_ar='رصيد عضو', code=f'credit-{member.pk}', duration_minutes=0,
+            price_syp=0, access_mode='membership_credit', member_only=True,
+            guest_allowed=False, max_concurrent_devices=2)
+        return subscription, create_entitlement(package, member=member, subscription=subscription)
+
+    def test_membership_session_longer_than_balance_caps_consumption(self):
+        subscription, entitlement = self.membership_credit(minutes=17)
+        session = start_usage_session(entitlement)
+
+        end_usage_session(session, at=session.started_at + timedelta(minutes=40))
+
+        session.refresh_from_db(); subscription.refresh_from_db()
+        self.assertEqual(session.actual_duration_minutes, 40)
+        self.assertEqual(session.allowance_minutes_consumed, 17)
+        self.assertEqual(session.member_minutes_used, 17)
+        self.assertEqual(subscription.remaining_internet_minutes, 0)
+
+    def test_exhausted_and_expired_memberships_cannot_start(self):
+        _, exhausted = self.membership_credit(minutes=0)
+        _, expired = self.membership_credit(
+            minutes=10, ends_at=timezone.now() - timedelta(seconds=1))
+
+        with self.assertRaises(ValidationError):
+            start_usage_session(exhausted)
+        with self.assertRaises(ValidationError):
+            start_usage_session(expired)
+
+    def test_membership_end_retry_is_idempotent(self):
+        subscription, entitlement = self.membership_credit(minutes=30)
+        session = start_usage_session(entitlement)
+        ended_at = session.started_at + timedelta(minutes=12)
+
+        end_usage_session(session, at=ended_at)
+        end_usage_session(session, at=ended_at + timedelta(minutes=10))
+
+        session.refresh_from_db(); subscription.refresh_from_db()
+        self.assertEqual(session.allowance_minutes_consumed, 12)
+        self.assertEqual(subscription.remaining_internet_minutes, 18)
+
+
+class MembershipCreditConcurrencyTests(TransactionTestCase):
+    reset_sequences = True
+
+    def test_simultaneous_sessions_compete_without_negative_balance(self):
+        member = Member.objects.create(name_ar='عضو متزامن', phone='0777777777')
+        plan = MembershipPlan.objects.create(code='concurrent-credit', name_ar='عضوية')
+        subscription = MembershipSubscription.objects.create(
+            member=member, plan=plan, starts_at=timezone.now() - timedelta(days=1),
+            status='active', remaining_internet_minutes=60)
+        package = InternetPackage.objects.create(
+            name_ar='رصيد متزامن', code='concurrent-credit', duration_minutes=0,
+            price_syp=0, access_mode='membership_credit', member_only=True,
+            guest_allowed=False, max_concurrent_devices=2)
+        entitlement = create_entitlement(package, member=member, subscription=subscription)
+        sessions = [start_usage_session(entitlement), start_usage_session(entitlement)]
+        barrier = Barrier(2)
+        errors = []
+
+        def finish(session_id):
+            close_old_connections()
+            try:
+                current = InternetSession.objects.get(pk=session_id)
+                barrier.wait()
+                end_usage_session(
+                    current, at=current.started_at + timedelta(minutes=40))
+            except Exception as exc:  # Captured so failures are asserted in the main test thread.
+                errors.append(exc)
+            finally:
+                close_old_connections()
+
+        threads = [Thread(target=finish, args=(session.pk,)) for session in sessions]
+        for thread in threads: thread.start()
+        for thread in threads: thread.join()
+
+        self.assertEqual(errors, [])
+        subscription.refresh_from_db()
+        consumed = sum(InternetSession.objects.values_list('allowance_minutes_consumed', flat=True))
+        self.assertEqual(consumed, 60)
+        self.assertEqual(subscription.remaining_internet_minutes, 0)
 
 
 class PartnerSnapshotTests(TestCase):
