@@ -56,6 +56,11 @@ class MikroTikBackendTests(TestCase):
         self.backend.refresh_access(self.entitlement)
         self.assertEqual(self.client.users[self.backend.username(self.entitlement)]['limit-uptime'], '1:00:00')
 
+    def test_plan_uses_tighter_authoritative_daily_allowance(self):
+        self.entitlement.daily_minutes_limit = 20
+        self.entitlement.save(update_fields=['daily_minutes_limit'])
+        self.assertEqual(self.backend.plan(self.entitlement)['limit-uptime'], '0:20:00')
+
     def test_collision_refused_and_commercial_state_preserved(self):
         name = self.backend.username(self.entitlement)
         self.client.users[name] = {'.id': '*9', 'name': name, 'comment': 'provider-owned'}

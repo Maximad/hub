@@ -94,15 +94,13 @@ class MikroTikNetworkBackend:
             profile = mapping.router_profile_name if mapping and mapping.router_profile_name else profile
         if not profile:
             raise MikroTikConfigurationError('لا يوجد ملف RouterOS مطابق لملف السرعة.')
-        limits = []
-        if entitlement.minutes_remaining is not None: limits.append(entitlement.minutes_remaining)
-        elif entitlement.session_minutes_limit: limits.append(entitlement.session_minutes_limit)
-        if entitlement.valid_until:
-            limits.append(max(0, int((entitlement.valid_until - timezone.now()).total_seconds() // 60)))
+        from core.services.internet_access import get_effective_network_allowance
+        safe_minutes = get_effective_network_allowance(
+            entitlement, include_session_limit=False, include_reservations=True)
         values = {'name': self.username(entitlement), 'server': settings.MIKROTIK_HOTSPOT_SERVER,
                   'profile': profile, 'shared-users': str(entitlement.max_concurrent_devices),
                   'comment': self.ownership(entitlement), 'disabled': 'false'}
-        if limits: values['limit-uptime'] = str(timedelta(minutes=min(limits)))
+        if safe_minutes is not None: values['limit-uptime'] = str(timedelta(minutes=safe_minutes))
         devices = list(entitlement.devices.filter(is_active=True).values_list('device_mac', flat=True)[:2])
         if len(devices) == 1: values['mac-address'] = devices[0]
         if include_password: values['password'] = self._credential(entitlement)[0]
