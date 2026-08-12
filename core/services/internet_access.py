@@ -77,6 +77,11 @@ def create_entitlement(package, *, member=None, guest_name='', guest_phone='', o
         raise ValidationError('هذه الباقة لا تسمح للزوار.')
     if package.access_mode == package.AccessMode.MEMBERSHIP_CREDIT and (member is None or subscription is None):
         raise ValidationError('باقة رصيد العضوية تتطلب عضواً واشتراكاً فعالاً.')
+    if package.access_mode == package.AccessMode.MEMBERSHIP_CREDIT:
+        from members.models import MembershipSubscription
+        subscription = MembershipSubscription.objects.select_for_update().get(pk=subscription.pk)
+        if subscription.member_id != member.pk:
+            raise ValidationError('اشتراك رصيد الإنترنت لا يعود لهذا العضو.')
     now = purchased_at or timezone.now()
     activate = package.activation_policy == package.ActivationPolicy.ON_PURCHASE
     partner = resolve_internet_partner(package)
@@ -139,18 +144,30 @@ def register_device(entitlement, device_mac, nickname=''):
 @transaction.atomic
 def start_usage_session(entitlement, *, actor=None, device_mac='', ip_address='', at=None):
     entitlement = InternetEntitlement.objects.select_for_update().select_related('member').get(pk=entitlement.pk)
+    at = at or timezone.now()
     # Business first use is precisely creation of the first real Hub usage session.
     if entitlement.activation_policy == InternetPackage.ActivationPolicy.ON_FIRST_USE and not entitlement.activated_at:
         entitlement = activate_entitlement(entitlement, actor=actor, at=at)
     if entitlement.effective_status(at) != entitlement.Status.ACTIVE:
         raise ValidationError('الاستحقاق غير فعال.')
+    if entitlement.access_mode == InternetPackage.AccessMode.MEMBERSHIP_CREDIT:
+        from members.models import MembershipSubscription
+        if not entitlement.subscription_id:
+            raise ValidationError('لا يوجد اشتراك مرتبط برصيد العضوية.')
+        subscription = MembershipSubscription.objects.select_for_update().get(
+            pk=entitlement.subscription_id)
+        if subscription.member_id != entitlement.member_id:
+            raise ValidationError('الاشتراك لا يعود لصاحب الاستحقاق.')
+        if not subscription.is_active_at(at):
+            raise ValidationError('اشتراك العضوية غير فعال أو منتهي.')
+        if not subscription.remaining_internet_minutes or subscription.remaining_internet_minutes < 0:
+            raise ValidationError('نفد رصيد دقائق العضوية.')
     if entitlement.minutes_remaining is not None and entitlement.minutes_remaining <= 0:
         raise ValidationError('نفد رصيد الدقائق.')
     active = InternetSession.objects.filter(entitlement=entitlement, status=InternetSession.Status.ACTIVE).count()
     if active >= entitlement.max_concurrent_devices:
         raise ValidationError('تم بلوغ حد الأجهزة المتزامنة.')
     if device_mac: register_device(entitlement, device_mac)
-    at = at or timezone.now()
     return InternetSession.objects.create(entitlement=entitlement, package=entitlement.package,
         member=entitlement.member, guest_name=entitlement.guest_name, guest_phone=entitlement.guest_phone,
         customer_name=entitlement.guest_name, customer_phone=entitlement.guest_phone,
@@ -173,13 +190,36 @@ def end_usage_session(session, *, actor=None, at=None):
     session.status = session.Status.ENDED
     session.ended_by = actor
     consume = 0
-    if session.entitlement_id and session.entitlement.access_mode == InternetPackage.AccessMode.ALLOWANCE:
+    membership_consume = 0
+    if session.entitlement_id:
         ent = InternetEntitlement.objects.select_for_update().get(pk=session.entitlement_id)
-        consume = min(minutes, ent.minutes_remaining or 0)
-        InternetEntitlement.objects.filter(pk=ent.pk).update(minutes_used=F('minutes_used') + consume)
+        if ent.access_mode == InternetPackage.AccessMode.ALLOWANCE:
+            # Overrun rule: retain actual duration, but stop prepaid consumption at the balance.
+            consume = min(minutes, ent.minutes_remaining or 0)
+            InternetEntitlement.objects.filter(pk=ent.pk).update(minutes_used=F('minutes_used') + consume)
+        elif ent.access_mode == InternetPackage.AccessMode.MEMBERSHIP_CREDIT:
+            from members.models import MembershipSubscription
+            if not ent.subscription_id:
+                raise ValidationError('لا يوجد اشتراك مرتبط برصيد العضوية.')
+            subscription = MembershipSubscription.objects.select_for_update().get(
+                pk=ent.subscription_id)
+            if subscription.member_id != ent.member_id:
+                raise ValidationError('الاشتراك لا يعود لصاحب الاستحقاق.')
+            # The same cap-at-balance rule applies when concurrent sessions finish.
+            balance = max(subscription.remaining_internet_minutes or 0, 0)
+            membership_consume = consume = min(minutes, balance)
+            if consume:
+                updated = MembershipSubscription.objects.filter(
+                    pk=subscription.pk,
+                    remaining_internet_minutes__gte=consume,
+                ).update(remaining_internet_minutes=F('remaining_internet_minutes') - consume)
+                if updated != 1:
+                    raise ValidationError('تغيّر رصيد العضوية؛ يرجى إعادة المحاولة.')
     session.allowance_minutes_consumed = consume
+    session.member_minutes_used = membership_consume
     session.save(update_fields=['ended_at', 'end_time', 'actual_duration_minutes', 'duration_minutes',
-                                'allowance_minutes_consumed', 'status', 'ended_by', 'updated_at'])
+                                'allowance_minutes_consumed', 'member_minutes_used', 'status',
+                                'ended_by', 'updated_at'])
     ActivityLog.objects.create(actor=actor, action='internet.session_ended', details={'session': session.pk, 'minutes': minutes})
     return session
 
