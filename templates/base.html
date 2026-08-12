@@ -26,10 +26,11 @@
 
     {% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %}
       <div id="staff-notifications" class="staff-notifications" data-poll-url="{% url 'staff_notifications_poll' %}" data-mark-read-url="{% url 'staff_notifications_mark_read' %}" data-pref-url="{% url 'staff_notifications_preferences' %}">
-        <button type="button" id="staff-notification-toggle" class="hub-btn hub-button-secondary" aria-controls="staff-notification-dropdown">التنبيهات <span id="staff-notification-badge">0</span></button>
+        <button type="button" id="staff-notification-toggle" class="hub-btn hub-button-secondary" aria-controls="staff-notification-dropdown" aria-expanded="false">التنبيهات <span id="staff-notification-badge" aria-label="0 تنبيهات غير مقروءة">0</span></button>
         <button type="button" id="staff-sound-toggle" class="hub-btn hub-btn-secondary">تشغيل الصوت</button>
         <button type="button" id="staff-browser-toggle" class="hub-btn hub-btn-secondary">تفعيل تنبيهات المتصفح</button>
         <div id="staff-notification-dropdown" class="staff-notification-dropdown" hidden><div class="staff-notification-empty">لا توجد تنبيهات جديدة</div></div>
+        <p id="staff-notification-status" class="hub-visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>
       </div>
     {% endif %}
     {% if messages %}
