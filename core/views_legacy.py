@@ -32,6 +32,7 @@ from core.services.posting.context import PostingContext
 from core.services.posting.order_payments import collect as collect_order_payment
 from events.models import Event
 from reservations.models import Reservation
+from reservations.services import change_reservation_status, create_reservation
 from vendors.models import Vendor, VendorParticipation
 from core.notifications import create_notification, notify_order_created
 from core.services.margins import item_margin, product_margin_from_values
@@ -2144,10 +2145,9 @@ def staff_reservation_new(request):
         if event_id:
             reservation.event = Event.objects.filter(pk=event_id).first()
         try:
-            reservation.full_clean()
+            create_reservation(reservation)
         except ValidationError as exc:
             return render(request, 'staff/reservation_form.html', {**context, 'errors': exc.message_dict, 'form_values': request.POST})
-        reservation.save()
         return redirect('staff_reservation_detail', reservation_id=reservation.id)
     initial_type = Reservation.ReservationType.EVENT if request.GET.get('event') else Reservation.ReservationType.REGULAR
     return render(request, 'staff/reservation_form.html', {**context, 'form_values': {'reservation_type': initial_type, 'event': request.GET.get('event', '')}})
