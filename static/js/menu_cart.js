@@ -19,6 +19,7 @@
   const totalWithDeliveryRow = form.querySelector('[data-total-with-delivery-row]');
   const totalWithDeliveryNode = form.querySelector('[data-total-with-delivery]');
   const deliveryMinimum = form.querySelector('[data-delivery-minimum]');
+  const deliveryAddress = form.querySelector('#delivery-address');
   const common = window.HubCartCommon || {};
   const parseQuantity = common.parseQuantity || ((value) => Math.max(0, parseInt(value || '0', 10) || 0));
   const stepQuantity = common.stepQuantity || ((value, delta) => Math.max(0, (parseInt(value || '0', 10) || 0) + delta));
@@ -159,6 +160,12 @@
     const isDelivery = deliverySettings.enabled !== false && currentFulfillmentMode() === 'delivery';
     const deliveryFee = isDelivery && deliverySettings.feeMode === 'fixed' ? Math.max(Number(deliverySettings.fixedFee || 0), 0) : 0;
     if (deliveryFields) deliveryFields.hidden = !isDelivery;
+    const deliveryAddressRequired = isDelivery && deliverySettings.requireAddress === true;
+    if (deliveryAddress) {
+      deliveryAddress.toggleAttribute('required', deliveryAddressRequired);
+      if (deliveryAddressRequired) deliveryAddress.setAttribute('aria-required', 'true');
+      else deliveryAddress.removeAttribute('aria-required');
+    }
     if (deliveryFeeRow) deliveryFeeRow.hidden = !isDelivery || deliveryFee <= 0;
     if (deliveryFeeNode) deliveryFeeNode.textContent = formatMoney(deliveryFee);
     if (totalWithDeliveryRow) totalWithDeliveryRow.hidden = !isDelivery || deliveryFee <= 0;
