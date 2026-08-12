@@ -32,6 +32,7 @@
   const cartSheet = form.querySelector('[data-cart-sheet]');
   const cartSheetTrigger = form.querySelector('[data-cart-sheet-open]');
   const cartSheetBackdrop = form.querySelector('.public-menu-cart-backdrop');
+  const orderError = form.querySelector('[data-order-error]');
   const mobileCartQuery = window.matchMedia('(max-width: 1023px)');
   let activeModalSource = null;
   let activeReturnFocus = null;
@@ -336,5 +337,9 @@
     if (originalSubmit) common.setLoading?.(originalSubmit, true, 'جارٍ إرسال الطلب...');
   });
   update();
-  if (document.querySelector('.public-menu-redesign [data-order-error]')) openCartSheet();
+  if (orderError) {
+    if (mobileCartQuery.matches) openCartSheet();
+    else orderError.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
+    orderError.focus({ preventScroll: true });
+  }
 })();

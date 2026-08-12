@@ -7,6 +7,7 @@ from django.urls import reverse
 
 from catalog.models import MenuSection, ProductOption, ProductOptionGroup, ProductOptionGroupAssignment
 from core.models import Category, Order, OrderItem, Product, Room, TableArea
+from core.settings_helpers import get_system_settings
 
 
 @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=False, ALLOWED_HOSTS=['testserver'], STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage', STORAGES={'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
@@ -83,6 +84,37 @@ class TableMenuOrderContextTests(TestCase):
         ]:
             with self.subTest(expected=expected):
                 self.assertContains(response, expected)
+
+    def test_failed_submission_renders_accessible_error_and_preserves_values_with_header(self):
+        self._assert_failed_submission_with_header_setting(True)
+
+    def test_failed_submission_renders_accessible_error_and_preserves_values_without_header(self):
+        self._assert_failed_submission_with_header_setting(False)
+
+    def _assert_failed_submission_with_header_setting(self, show_public_header):
+        settings = get_system_settings()
+        settings.show_public_header = show_public_header
+        settings.save(update_fields=['show_public_header'])
+        response = self.client.post(reverse('menu_public'), {
+            'fulfillment_mode': Order.FulfillmentMode.INSIDE_SPACE,
+            'customer_name': 'اسم محفوظ',
+            'customer_phone': '+963 944 555 666',
+            'general_note': 'ملاحظة محفوظة',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'يرجى اختيار عنصر واحد على الأقل.')
+        self.assertContains(response, 'data-order-error')
+        self.assertContains(response, 'role="alert"')
+        self.assertContains(response, 'aria-live="assertive"')
+        self.assertContains(response, 'value="اسم محفوظ"')
+        self.assertContains(response, 'value="+963 944 555 666"')
+        self.assertContains(response, '>ملاحظة محفوظة</textarea>')
+        self.assertEqual(response.content.count(b'data-order-error'), 1)
+        if show_public_header:
+            self.assertContains(response, 'menu-public__header')
+        else:
+            self.assertNotContains(response, 'menu-public__header')
 
     def test_table_menu_returns_200_uses_same_controls_and_displays_context(self):
         response = self.client.get(reverse('menu_table', kwargs={'qr_token': self.table.qr_token}))
