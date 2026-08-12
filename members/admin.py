@@ -1,4 +1,7 @@
+from django import forms
 from django.contrib import admin
+from django.core.exceptions import ValidationError
+from core.models import ActivityLog
 from .models import (CommercialAllocation, MemberAttribute, MembershipPlan, MembershipSubscription,
                      MembershipBenefitRule, MemberCreditLedger, Program,
                      ProgramEnrollment)
@@ -13,12 +16,39 @@ class MembershipPlanAdmin(admin.ModelAdmin):
 
 @admin.register(MembershipSubscription)
 class MembershipSubscriptionAdmin(admin.ModelAdmin):
+    class ManualGrantForm(forms.ModelForm):
+        class Meta:
+            model = MembershipSubscription
+            fields = '__all__'
+
+        def clean(self):
+            cleaned = super().clean()
+            if not self.instance.pk and not (cleaned.get('notes') or '').strip():
+                raise ValidationError('سبب المنحة اليدوية مطلوب. الشراء العادي يتم من شاشة بيع العضوية.')
+            return cleaned
+
+    form = ManualGrantForm
     list_display = ('member', 'plan', 'status', 'starts_at', 'ends_at', 'gross_amount_syp', 'created_by')
     list_filter = ('status', 'plan')
     search_fields = ('member__name_ar', 'member__phone', 'plan__name_ar', 'plan__code')
     autocomplete_fields = ('member', 'plan', 'order', 'payment', 'created_by')
-    readonly_fields = ('created_at', 'updated_at')
+    readonly_fields = ('sale_idempotency_key', 'sale_request_fingerprint', 'is_complimentary',
+                       'activation_error', 'created_at', 'updated_at')
     date_hierarchy = 'starts_at'
+
+    def has_add_permission(self, request):
+        return request.user.is_active and request.user.is_superuser
+
+    def save_model(self, request, obj, form, change):
+        is_manual_grant = not change
+        if is_manual_grant:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+        if is_manual_grant:
+            ActivityLog.objects.create(
+                actor=request.user, action='membership.manual_grant_created',
+                details={'subscription_id': str(obj.uuid), 'member_id': obj.member_id,
+                         'plan_id': obj.plan_id, 'reason': obj.notes[:500]})
 
 
 @admin.register(MemberAttribute)

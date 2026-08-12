@@ -35,6 +35,11 @@ class MembershipPlan(models.Model):
     sort_order = models.IntegerField(default=0)
     metadata = models.JSONField(default=dict, blank=True)
     notes = models.TextField(blank=True)
+    catalog_product = models.OneToOneField(
+        'core.Product', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='membership_plan',
+        help_text='Stable hidden catalog identity used for commercial membership sales.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -69,8 +74,24 @@ class MembershipSubscription(models.Model):
     remaining_credit_syp = models.IntegerField(null=True, blank=True)
     notes = models.TextField(blank=True)
     benefit_snapshot = models.JSONField(default=list, blank=True, editable=False)
+    sale_idempotency_key = models.CharField(max_length=120, null=True, blank=True, unique=True)
+    sale_request_fingerprint = models.CharField(max_length=64, blank=True, editable=False)
+    is_complimentary = models.BooleanField(default=False, editable=False)
+    activation_error = models.TextField(blank=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(gross_amount_syp__isnull=True) | Q(gross_amount_syp__gte=0),
+                name='membership_subscription_gross_nonnegative',
+            ),
+            models.CheckConstraint(
+                condition=Q(ends_at__isnull=True) | Q(ends_at__gt=models.F('starts_at')),
+                name='membership_subscription_dates_valid',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.member} — {self.plan} — {self.get_status_display()}'
