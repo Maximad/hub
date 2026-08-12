@@ -222,3 +222,19 @@ class CartScriptRegressionTests(SimpleTestCase):
         self.assertIn("'(prefers-reduced-motion: reduce)'", cart_script)
         self.assertIn('manualNavigationUntil', cart_script)
         self.assertIn('جارٍ إرسال الطلب...', cart_script)
+
+    def test_delivery_address_browser_validation_tracks_fulfillment_mode(self):
+        root = Path(__file__).resolve().parents[2]
+        template = (root / 'templates/menu/menu.html').read_text()
+        cart_script = (root / 'static/js/menu_cart.js').read_text()
+
+        for field in ('area', 'address', 'notes'):
+            self.assertIn(f'<label for="delivery-{field}">', template)
+            self.assertIn(f'id="delivery-{field}"', template)
+        self.assertIn('<span aria-hidden="true">*</span>', template)
+        self.assertIn('<span class="hub-visually-hidden"> (حقل مطلوب)</span>', template)
+        self.assertIn('requireAddress:', template)
+        self.assertIn("const deliveryAddressRequired = isDelivery && deliverySettings.requireAddress === true;", cart_script)
+        self.assertIn("deliveryAddress.toggleAttribute('required', deliveryAddressRequired);", cart_script)
+        self.assertIn("deliveryAddress.setAttribute('aria-required', 'true');", cart_script)
+        self.assertIn("deliveryAddress.removeAttribute('aria-required');", cart_script)

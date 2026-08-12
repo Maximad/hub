@@ -127,9 +127,9 @@
         <h4>بيانات التوصيل</h4>
         {% if settings.delivery_working_hours_text %}<p class="hub-help-text">ساعات التوصيل: {{ settings.delivery_working_hours_text }}</p>{% endif %}
         {% if settings.delivery_notes %}<p class="hub-help-text">{{ settings.delivery_notes }}</p>{% endif %}
-        <label>منطقة التوصيل</label><input class="hub-input" type="text" name="delivery_area" value="{{ form_values.delivery_area|default:'' }}">
-        <label>عنوان التوصيل{% if settings.require_address_for_delivery %} *{% endif %}</label><textarea class="hub-input" name="delivery_address" rows="3">{{ form_values.delivery_address|default:'' }}</textarea>
-        <label>ملاحظات التوصيل</label><textarea class="hub-input" name="delivery_notes" rows="2">{{ form_values.delivery_notes|default:'' }}</textarea>
+        <label for="delivery-area">منطقة التوصيل</label><input class="hub-input" id="delivery-area" type="text" name="delivery_area" value="{{ form_values.delivery_area|default:'' }}">
+        <label for="delivery-address">عنوان التوصيل{% if settings.require_address_for_delivery %} <span aria-hidden="true">*</span><span class="hub-visually-hidden"> (حقل مطلوب)</span>{% endif %}</label><textarea class="hub-input" id="delivery-address" name="delivery_address" rows="3">{{ form_values.delivery_address|default:'' }}</textarea>
+        <label for="delivery-notes">ملاحظات التوصيل</label><textarea class="hub-input" id="delivery-notes" name="delivery_notes" rows="2">{{ form_values.delivery_notes|default:'' }}</textarea>
       </div>{% endif %}
 
       <h4>بيانات الطلب</h4><div class="public-menu-checkout-fields">
@@ -161,7 +161,7 @@
     </div>
   </form>
 </div>
-<script>window.HUB_DELIVERY_SETTINGS = {enabled: {% if settings.effective_delivery_enabled %}true{% else %}false{% endif %}, feeMode: '{{ settings.delivery_fee_mode|default:'none' }}', fixedFee: {{ settings.fixed_delivery_fee_syp|default:0 }}, minimum: {{ settings.minimum_delivery_order_syp|default:0 }}};</script>
+<script>window.HUB_DELIVERY_SETTINGS = {enabled: {% if settings.effective_delivery_enabled %}true{% else %}false{% endif %}, feeMode: '{{ settings.delivery_fee_mode|default:'none' }}', fixedFee: {{ settings.fixed_delivery_fee_syp|default:0 }}, minimum: {{ settings.minimum_delivery_order_syp|default:0 }}, requireAddress: {% if settings.require_address_for_delivery %}true{% else %}false{% endif %}};</script>
 <script src="{% static 'js/hub_cart_common.js' %}" defer></script>
 <script src="{% static 'js/menu_cart.js' %}" defer></script>
 {% endblock %}
