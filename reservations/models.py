@@ -1,6 +1,8 @@
 import uuid
 from django.db import models
+from django.db import transaction
 from django.core.exceptions import ValidationError
+from django.apps import apps
 
 
 class Reservation(models.Model):
@@ -33,17 +35,54 @@ class Reservation(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    class Meta:
-        constraints = [
-            models.CheckConstraint(
-                condition=models.Q(end_time__isnull=True) | models.Q(start_time__isnull=True) | models.Q(end_time__gt=models.F('start_time')),
-                name='reservation_end_after_start',
-            ),
-        ]
-        indexes = [
-            models.Index(fields=['reservation_date', 'start_time', 'end_time', 'status'], name='reservation_interval_idx'),
-            models.Index(fields=['event', 'status'], name='reservation_event_idx'),
-        ]
+    TRANSITIONS = {
+        Status.PENDING: frozenset({Status.CONFIRMED, Status.CANCELLED}),
+        Status.CONFIRMED: frozenset({Status.COMPLETED, Status.NO_SHOW, Status.CANCELLED}),
+        Status.CANCELLED: frozenset(),
+        Status.COMPLETED: frozenset(),
+        Status.NO_SHOW: frozenset(),
+    }
+    CORRECTIONS = {
+        Status.CANCELLED: frozenset({Status.PENDING, Status.CONFIRMED}),
+        Status.COMPLETED: frozenset({Status.PENDING, Status.CONFIRMED}),
+        Status.NO_SHOW: frozenset({Status.PENDING, Status.CONFIRMED}),
+    }
+
+    @classmethod
+    def transition_status(cls, reservation_id, *, actor, new_status):
+        return cls._change_status(reservation_id, actor=actor, new_status=new_status, reason='', correction=False)
+
+    @classmethod
+    def correct_status(cls, reservation_id, *, actor, new_status, reason):
+        return cls._change_status(reservation_id, actor=actor, new_status=new_status, reason=reason, correction=True)
+
+    @classmethod
+    def _change_status(cls, reservation_id, *, actor, new_status, reason, correction):
+        """Validate and persist a status change while holding the reservation row lock."""
+        with transaction.atomic():
+            reservation = cls.objects.select_for_update().get(pk=reservation_id)
+            old_status = reservation.status
+            allowed = cls.CORRECTIONS.get(old_status, ()) if correction else cls.TRANSITIONS.get(old_status, ())
+            if new_status not in allowed:
+                raise ValidationError({'status': f'Transition from {old_status} to {new_status} is not permitted.'})
+            if correction:
+                if not (getattr(actor, 'is_active', False) and (getattr(actor, 'is_superuser', False) or getattr(actor, 'role', '') == 'admin')):
+                    raise ValidationError({'status': 'Only an administrator may correct a terminal reservation.'})
+                if not (reason or '').strip():
+                    raise ValidationError({'reason': 'A reason is required for a reservation correction.'})
+            reservation.status = new_status
+            reservation.save(update_fields=['status', 'updated_at'])
+            AuditEvent = apps.get_model('core', 'AuditEvent')
+            AuditEvent.objects.create(
+                actor=actor, action='reservation_status_correction' if correction else 'reservation_status_transition',
+                source=reservation, before_snapshot={'status': old_status},
+                after_snapshot={'status': new_status, 'reason': (reason or '').strip()}, channel='staff',
+            )
+            return reservation
+
+    @property
+    def allowed_status_transitions(self):
+        return self.TRANSITIONS.get(self.status, frozenset())
 
     def __str__(self):
         return f'{self.name} — {self.effective_date or "—"} {self.effective_starts_at or "—"} — {self.phone}'

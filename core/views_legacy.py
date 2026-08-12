@@ -1053,31 +1053,20 @@ def staff_order_status(request, public_code):
     if request.method != 'POST':
         raise Http404()
     order = get_object_or_404(Order, public_code=public_code)
+    correction = request.POST.get('action') == 'correct'
+    reason = request.POST.get('reason', '').strip()
     new_delivery_status = request.POST.get('delivery_status')
     if new_delivery_status:
         if not user_has_capability(request.user, 'delivery_management'):
             messages.error(request, ACCESS_DENIED_MESSAGE)
             return redirect('staff_orders')
-        valid_delivery = {choice[0] for choice in Order.DeliveryStatus.choices}
-        if order.is_delivery and new_delivery_status in valid_delivery and new_delivery_status != Order.DeliveryStatus.NOT_APPLICABLE:
-            if new_delivery_status == Order.DeliveryStatus.CANCELLED and not request.POST.get('cancellation_reason', '').strip():
-                messages.error(request, 'سبب إلغاء التوصيل مطلوب.')
-                return redirect(request.POST.get('next') or 'staff_delivery')
+        if order.is_delivery:
             old_delivery_status = order.delivery_status
-            if old_delivery_status != new_delivery_status:
-                order.delivery_status = new_delivery_status
-                now = timezone.now()
-                update_fields = ['delivery_status', 'updated_at']
-                if new_delivery_status == Order.DeliveryStatus.CONFIRMED:
-                    order.delivery_confirmed_at = now; update_fields.append('delivery_confirmed_at')
-                elif new_delivery_status == Order.DeliveryStatus.OUT_FOR_DELIVERY:
-                    order.delivery_out_at = now; update_fields.append('delivery_out_at')
-                elif new_delivery_status == Order.DeliveryStatus.DELIVERED:
-                    order.delivery_delivered_at = now; update_fields.append('delivery_delivered_at')
-                elif new_delivery_status == Order.DeliveryStatus.CANCELLED:
-                    order.delivery_cancelled_at = now; update_fields.append('delivery_cancelled_at')
-                    order.cancellation_reason = request.POST.get('cancellation_reason', '').strip(); update_fields.append('cancellation_reason')
-                order.save(update_fields=update_fields)
+            try:
+                if correction:
+                    order = Order.correct_delivery_status(order.pk, actor=request.user, new_status=new_delivery_status, reason=reason)
+                else:
+                    order = Order.transition_delivery_status(order.pk, actor=request.user, new_status=new_delivery_status, cancellation_reason=request.POST.get('cancellation_reason', ''))
                 event_map = {
                     Order.DeliveryStatus.CONFIRMED: 'delivery_order_confirmed',
                     Order.DeliveryStatus.READY_FOR_DELIVERY: 'delivery_ready_for_delivery',
@@ -1087,38 +1076,29 @@ def staff_order_status(request, public_code):
                 }
                 if new_delivery_status in event_map:
                     create_notification(event_map[new_delivery_status], f'{order.get_delivery_status_display()} {order.display_number}', order.location_label, order=order, created_by=request.user)
-                try:
-                    ActivityLog.objects.create(actor=request.user, action='delivery_status_changed', details={'order_public_code': str(order.public_code), 'old_status': old_delivery_status, 'new_status': new_delivery_status})
-                except Exception:
-                    pass
+            except ValidationError as exc:
+                messages.error(request, '; '.join(exc.messages))
         return redirect(request.POST.get('next') or 'staff_orders')
     new_status = request.POST.get('status')
     valid = {choice[0] for choice in Order.Status.choices}
     if new_status not in valid:
         return redirect('staff_orders')
-    old_status = order.status
-    if old_status != new_status:
-        update_fields = ['status', 'updated_at']
-        if new_status == Order.Status.CANCELLED:
-            reason = request.POST.get('cancellation_reason', '').strip()
-            if reason not in set(CancellationReason.values):
-                messages.error(request, 'سبب الإلغاء مطلوب.')
-                return redirect('staff_orders')
+    if order.status != new_status:
+        if new_status == Order.Status.CANCELLED and not correction:
+            cancellation_reason = request.POST.get('cancellation_reason', '').strip()
             _total, paid, _remaining, _label = _order_financials(Order.objects.prefetch_related('items', 'payments', 'discounts').get(pk=order.pk))
             if paid > 0 and not _can_approve_partial_payment(request.user):
                 messages.error(request, 'إلغاء طلب مدفوع أو مدفوع جزئياً يحتاج موافقة المدير.')
                 return redirect('staff_orders')
-            order.cancellation_reason = reason
-            order.cancellation_notes = request.POST.get('cancellation_notes', '').strip()
-            order.cancelled_by = request.user
-            order.cancelled_at = timezone.now()
-            update_fields += ['cancellation_reason', 'cancellation_notes', 'cancelled_by', 'cancelled_at']
-        order.status = new_status
-        order.save(update_fields=update_fields)
         try:
-            ActivityLog.objects.create(actor=request.user, action='order_cancelled' if new_status == Order.Status.CANCELLED else 'order_status_changed', details={'order_public_code': str(order.public_code), 'old_status': old_status, 'new_status': new_status, 'cancellation_reason': getattr(order, 'cancellation_reason', '')})
-        except Exception:
-            pass
+            if correction:
+                Order.correct_status(order.pk, actor=request.user, new_status=new_status, reason=reason)
+            else:
+                Order.transition_status(order.pk, actor=request.user, new_status=new_status,
+                                        cancellation_reason=request.POST.get('cancellation_reason', ''),
+                                        cancellation_notes=request.POST.get('cancellation_notes', ''))
+        except ValidationError as exc:
+            messages.error(request, '; '.join(exc.messages))
     return redirect('staff_orders')
 
 
@@ -2196,12 +2176,13 @@ def staff_reservation_status(request, reservation_id):
         raise Http404()
     reservation = get_object_or_404(Reservation, pk=reservation_id)
     new_status = request.POST.get('status')
-    allowed = {c[0] for c in Reservation.Status.choices}
-    if new_status in allowed:
-        try:
-            reservation = change_reservation_status(reservation.id, new_status)
-        except ValidationError as exc:
-            messages.error(request, ' '.join(exc.messages))
+    try:
+        if request.POST.get('action') == 'correct':
+            Reservation.correct_status(reservation.pk, actor=request.user, new_status=new_status, reason=request.POST.get('reason', ''))
+        else:
+            Reservation.transition_status(reservation.pk, actor=request.user, new_status=new_status)
+    except ValidationError as exc:
+        messages.error(request, '; '.join(exc.messages))
     return redirect('staff_reservation_detail', reservation_id=reservation.id)
 
 
