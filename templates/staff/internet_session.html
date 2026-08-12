@@ -13,6 +13,13 @@
     <p><strong>البدء:</strong> {{ session.effective_started_at }}</p>
     <p><strong>الانتهاء:</strong> {{ session.effective_ended_at|default:'-' }}</p>
     <p><strong>الوقت الفعلي:</strong> {{ session.effective_duration_minutes|default:'-' }} دقيقة</p>
+    <p><strong>الحد لهذه الجلسة:</strong> {{ session.authorized_minutes|default_if_none:'غير محدود' }} دقيقة</p>
+    <p><strong>الوقت المصرح حتى:</strong> {{ session.authorized_until|default:'-' }}</p>
+    <p><strong>الدقائق المتاحة:</strong> {{ available_minutes|default_if_none:'غير محدود' }}</p>
+    <p><strong>المستخدم اليوم:</strong> {{ used_today|default:'0' }}</p>
+    <p><strong>المتبقي اليوم:</strong> {{ remaining_today|default_if_none:'غير محدود' }}</p>
+    <p><strong>المتبقي الإجمالي:</strong> {% if session.entitlement %}{{ session.entitlement.minutes_remaining|default_if_none:'غير محدود' }}{% else %}-{% endif %}</p>
+    <p><strong>التجاوز التشغيلي:</strong> {{ session.overrun_minutes }} دقيقة</p>
     <p><strong>الوقت المحسوب:</strong> {{ session.billable_minutes|default:"-" }} دقيقة</p>
     <p><strong>المبلغ المستحق:</strong> {{ session.calculated_total_syp }} ل.س</p>
     <p><strong>المبلغ اليدوي:</strong> {{ session.manual_total_syp|default:'-' }}</p>
@@ -22,6 +29,7 @@
     <p><strong>الطلب المرتبط:</strong> {% if session.linked_order %}<a href="{% url 'staff_cashier_order' session.linked_order.public_code %}">{{ session.linked_order.display_number }}</a>{% else %}-{% endif %}</p>
     <p><strong>الدفع المرتبط:</strong> {{ session.linked_payment|default:'-' }}</p>
   </div>
+  {% if session.is_overdue %}<p class="hub-badge hub-badge-danger">تجاوزت الجلسة الوقت المصرّح به وتحتاج إلى إيقاف يدوي.</p>{% endif %}
   <p><strong>سبب الإلغاء:</strong> {{ session.cancellation_reason|default:"-" }}</p>
   <p><strong>ملاحظات:</strong> {{ session.notes|default:'-' }}</p>
   <details><summary>معلومات الشبكة المستقبلية</summary><p>المزوّد: {{ session.get_network_provider_display }} — كود الوصول: {{ session.access_code|default:'-' }} — جلسة الشبكة: {{ session.network_session_id|default:'-' }} — MAC: {{ session.device_mac|default:'-' }} — IP: {{ session.ip_address|default:'-' }} — البروفايل: {{ session.bandwidth_profile|default:'-' }} — الحالة: {{ session.network_status|default:'-' }}</p></details>

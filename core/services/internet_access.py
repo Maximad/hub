@@ -5,12 +5,82 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import F
+from django.db.models import F, Sum
 from django.utils import timezone
 
 from core.models import (ActivityLog, Category, InternetAccessDevice, InternetEntitlement,
                          InternetPackage, InternetPartner, InternetRevenueShare, InternetRevenueShareAdjustment,
-                         InternetSession, Order, OrderItem, Payment, Product)
+                         InternetSession, InternetUsageLedger, Order, OrderItem, Payment, Product)
+
+
+def _business_date(at):
+    """Customer allowance days always follow Django's configured local timezone."""
+    return timezone.localtime(at).date()
+
+
+def _next_business_midnight(at):
+    local = timezone.localtime(at)
+    return timezone.make_aware(
+        timezone.datetime.combine(local.date() + timedelta(days=1), timezone.datetime.min.time()),
+        timezone.get_current_timezone(),
+    )
+
+
+def daily_minutes_used(entitlement, business_date=None):
+    business_date = business_date or timezone.localdate()
+    return (entitlement.usage_ledger.filter(business_date=business_date)
+            .aggregate(total=Sum('minutes'))['total'] or 0)
+
+
+def daily_minutes_remaining(entitlement, at=None, *, include_reservations=True):
+    if entitlement.daily_minutes_limit is None:
+        return None
+    at = at or timezone.now()
+    business_date = _business_date(at)
+    used = daily_minutes_used(entitlement, business_date)
+    reserved = 0
+    if include_reservations:
+        reserved = (entitlement.sessions.filter(
+            status=InternetSession.Status.ACTIVE,
+            reservation_business_date=business_date,
+            reserved_minutes__isnull=False,
+        ).aggregate(total=Sum('reserved_minutes'))['total'] or 0)
+    return max(entitlement.daily_minutes_limit - used - reserved, 0)
+
+
+def get_effective_network_allowance(entitlement, at=None, *, include_session_limit=True,
+                                    include_reservations=True):
+    """Return the single authoritative finite allowance intersection, or ``None``.
+
+    Validity is floored to complete minutes so authorization can never extend beyond
+    expiry. A daily-limited authorization is also bounded by local midnight.
+    """
+    at = at or timezone.now()
+    limits = []
+    if entitlement.total_minutes_allowed is not None:
+        reserved = 0
+        if include_reservations:
+            reserved = (entitlement.sessions.filter(status=InternetSession.Status.ACTIVE,
+                reserved_minutes__isnull=False).aggregate(total=Sum('reserved_minutes'))['total'] or 0)
+        limits.append(max(entitlement.total_minutes_allowed - entitlement.minutes_used - reserved, 0))
+    elif entitlement.access_mode == InternetPackage.AccessMode.MEMBERSHIP_CREDIT:
+        balance = max(getattr(entitlement.subscription, 'remaining_internet_minutes', 0) or 0, 0)
+        reserved = 0
+        if include_reservations:
+            reserved = (entitlement.sessions.filter(status=InternetSession.Status.ACTIVE,
+                reserved_minutes__isnull=False).aggregate(total=Sum('reserved_minutes'))['total'] or 0)
+        limits.append(max(balance - reserved, 0))
+    daily = daily_minutes_remaining(entitlement, at, include_reservations=include_reservations)
+    if daily is not None:
+        limits.append(daily)
+    if include_session_limit and entitlement.session_minutes_limit is not None:
+        limits.append(entitlement.session_minutes_limit)
+    deadlines = [deadline for deadline in (entitlement.valid_until,
+        _next_business_midnight(at) if entitlement.daily_minutes_limit is not None else None) if deadline]
+    if deadlines:
+        seconds = max((min(deadlines) - at).total_seconds(), 0)
+        limits.append(int(seconds // 60))
+    return min(limits) if limits else None
 
 
 def get_default_internet_partner():
@@ -130,6 +200,11 @@ def activate_entitlement(entitlement, *, actor=None, at=None):
 @transaction.atomic
 def register_device(entitlement, device_mac, nickname=''):
     entitlement = InternetEntitlement.objects.select_for_update().get(pk=entitlement.pk)
+    return _register_device_locked(entitlement, device_mac, nickname)
+
+
+def _register_device_locked(entitlement, device_mac, nickname=''):
+    """Register while the caller holds the entitlement lock."""
     if entitlement.effective_status() != entitlement.Status.ACTIVE:
         raise ValidationError('الاستحقاق غير فعال.')
     device = InternetAccessDevice.objects.filter(entitlement=entitlement, device_mac__iexact=device_mac).first()
@@ -143,7 +218,8 @@ def register_device(entitlement, device_mac, nickname=''):
 
 @transaction.atomic
 def start_usage_session(entitlement, *, actor=None, device_mac='', ip_address='', at=None):
-    entitlement = InternetEntitlement.objects.select_for_update().select_related('member').get(pk=entitlement.pk)
+    entitlement = InternetEntitlement.objects.select_for_update().select_related(
+        'member', 'subscription').get(pk=entitlement.pk)
     at = at or timezone.now()
     # Business first use is precisely creation of the first real Hub usage session.
     if entitlement.activation_policy == InternetPackage.ActivationPolicy.ON_FIRST_USE and not entitlement.activated_at:
@@ -162,19 +238,30 @@ def start_usage_session(entitlement, *, actor=None, device_mac='', ip_address=''
             raise ValidationError('اشتراك العضوية غير فعال أو منتهي.')
         if not subscription.remaining_internet_minutes or subscription.remaining_internet_minutes < 0:
             raise ValidationError('نفد رصيد دقائق العضوية.')
-    if entitlement.minutes_remaining is not None and entitlement.minutes_remaining <= 0:
-        raise ValidationError('نفد رصيد الدقائق.')
     active = InternetSession.objects.filter(entitlement=entitlement, status=InternetSession.Status.ACTIVE).count()
     if active >= entitlement.max_concurrent_devices:
         raise ValidationError('تم بلوغ حد الأجهزة المتزامنة.')
-    if device_mac: register_device(entitlement, device_mac)
+    if device_mac: _register_device_locked(entitlement, device_mac)
+    authorized = get_effective_network_allowance(entitlement, at)
+    if authorized is not None and authorized <= 0:
+        raise ValidationError('لا توجد دقائق قابلة للاستخدام حالياً.')
+    deadlines = []
+    if authorized is not None:
+        deadlines.append(at + timedelta(minutes=authorized))
+    if entitlement.valid_until:
+        deadlines.append(entitlement.valid_until)
+    if entitlement.daily_minutes_limit is not None:
+        deadlines.append(_next_business_midnight(at))
+    authorized_until = min(deadlines) if deadlines else None
     return InternetSession.objects.create(entitlement=entitlement, package=entitlement.package,
         member=entitlement.member, guest_name=entitlement.guest_name, guest_phone=entitlement.guest_phone,
         customer_name=entitlement.guest_name, customer_phone=entitlement.guest_phone,
         start_time=at, started_at=at, billing_mode=InternetSession.BillingMode.PREPAID,
         status=InternetSession.Status.ACTIVE, started_by=actor, device_mac=device_mac,
         ip_address=ip_address, access_code=entitlement.access_code,
-        bandwidth_profile=entitlement.bandwidth_profile_code, network_provider=entitlement.network_backend)
+        bandwidth_profile=entitlement.bandwidth_profile_code, network_provider=entitlement.network_backend,
+        reserved_minutes=authorized, authorized_minutes=authorized,
+        authorized_until=authorized_until, reservation_business_date=_business_date(at))
 
 
 @transaction.atomic
@@ -194,9 +281,14 @@ def end_usage_session(session, *, actor=None, at=None):
     if session.entitlement_id:
         ent = InternetEntitlement.objects.select_for_update().get(pk=session.entitlement_id)
         if ent.access_mode == InternetPackage.AccessMode.ALLOWANCE:
-            # Overrun rule: retain actual duration, but stop prepaid consumption at the balance.
-            consume = min(minutes, ent.minutes_remaining or 0)
-            InternetEntitlement.objects.filter(pk=ent.pk).update(minutes_used=F('minutes_used') + consume)
+            # New sessions settle against their immutable reservation. Legacy nullable
+            # sessions conservatively use the balance available while holding this lock.
+            cap = session.reserved_minutes
+            if cap is None:
+                cap = max((ent.total_minutes_allowed or 0) - ent.minutes_used, 0)
+            consume = min(minutes, cap)
+            ent.minutes_used = min(ent.minutes_used + consume, ent.total_minutes_allowed or 0)
+            ent.save(update_fields=['minutes_used', 'updated_at'])
         elif ent.access_mode == InternetPackage.AccessMode.MEMBERSHIP_CREDIT:
             from members.models import MembershipSubscription
             if not ent.subscription_id:
@@ -207,7 +299,8 @@ def end_usage_session(session, *, actor=None, at=None):
                 raise ValidationError('الاشتراك لا يعود لصاحب الاستحقاق.')
             # The same cap-at-balance rule applies when concurrent sessions finish.
             balance = max(subscription.remaining_internet_minutes or 0, 0)
-            membership_consume = consume = min(minutes, balance)
+            cap = session.reserved_minutes if session.reserved_minutes is not None else balance
+            membership_consume = consume = min(minutes, cap, balance)
             if consume:
                 updated = MembershipSubscription.objects.filter(
                     pk=subscription.pk,
@@ -216,10 +309,23 @@ def end_usage_session(session, *, actor=None, at=None):
                 if updated != 1:
                     raise ValidationError('تغيّر رصيد العضوية؛ يرجى إعادة المحاولة.')
     session.allowance_minutes_consumed = consume
+    session.overrun_minutes = (max(minutes - session.authorized_minutes, 0)
+                               if session.authorized_minutes is not None else 0)
     session.member_minutes_used = membership_consume
     session.save(update_fields=['ended_at', 'end_time', 'actual_duration_minutes', 'duration_minutes',
-                                'allowance_minutes_consumed', 'member_minutes_used', 'status',
+                                'allowance_minutes_consumed', 'member_minutes_used', 'overrun_minutes', 'status',
                                 'ended_by', 'updated_at'])
+    if session.entitlement_id and consume:
+        allocations = {}
+        # Each rounded usage minute belongs to the local date on which that minute began.
+        for offset in range(consume):
+            day = _business_date(session.effective_started_at + timedelta(minutes=offset))
+            allocations[day] = allocations.get(day, 0) + 1
+        InternetUsageLedger.objects.bulk_create([
+            InternetUsageLedger(entitlement_id=session.entitlement_id, session=session,
+                                business_date=day, minutes=value)
+            for day, value in allocations.items()
+        ], ignore_conflicts=True)
     ActivityLog.objects.create(actor=actor, action='internet.session_ended', details={'session': session.pk, 'minutes': minutes})
     return session
 

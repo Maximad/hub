@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 from decimal import Decimal
 from unittest.mock import patch
+from threading import Barrier, Thread
 
 from django.core.exceptions import ValidationError
 from django.db import close_old_connections
@@ -10,10 +11,11 @@ from django.utils import timezone
 
 from core.models import (CashMovement, DailyClose, FinancialAccount, InternetAccessDevice, InternetBandwidthProfile, InternetEntitlement,
                          InternetPackage, InternetPartner, InternetPartnerUser, InternetRevenueShare,
-                         InternetRevenueShareAdjustment, InternetSession, Member, Order, Payment,
+                         InternetRevenueShareAdjustment, InternetSession, InternetUsageLedger, Member, Order, Payment,
                          PostingBatch, PostingCommand)
 from core.services.internet_access import (create_entitlement, end_usage_session,
-    create_commercial_sale, effectively_active_entitlements, get_default_internet_partner,
+    create_commercial_sale, daily_minutes_remaining, daily_minutes_used,
+    effectively_active_entitlements, get_default_internet_partner,
     record_payment_reversal_adjustment,
     register_device, start_usage_session, validity_end)
 from core.services.network_backends import ManualNetworkBackend, get_network_backend
@@ -87,6 +89,39 @@ class EntitlementWorkflowTests(TestCase):
         ent.refresh_from_db()
         self.assertEqual(ent.minutes_used, 75)
         self.assertEqual(ent.minutes_remaining, 1125)
+
+    def test_intersected_limits_reservation_settlement_and_overrun(self):
+        package = InternetPackage.objects.create(name_ar='حدود', code='limits', duration_minutes=0,
+            price_syp=1, access_mode='allowance', total_minutes_limit=90,
+            daily_minutes_limit=40, session_minutes_limit=60, max_concurrent_devices=2)
+        ent = create_entitlement(package)
+        now = timezone.now().replace(second=0, microsecond=0)
+        ent.valid_until = now + timedelta(minutes=25, seconds=30)
+        ent.save(update_fields=['valid_until'])
+        session = start_usage_session(ent, at=now)
+        self.assertEqual((session.authorized_minutes, session.reserved_minutes), (25, 25))
+        self.assertLessEqual(session.authorized_until, ent.valid_until)
+        end_usage_session(session, at=now + timedelta(minutes=35))
+        session.refresh_from_db(); ent.refresh_from_db()
+        self.assertEqual((session.actual_duration_minutes, session.allowance_minutes_consumed,
+                          session.overrun_minutes), (35, 25, 10))
+        self.assertEqual(ent.minutes_used, 25)
+
+    def test_daily_usage_resets_and_splits_at_local_midnight(self):
+        package = InternetPackage.objects.create(name_ar='يومي', code='daily-split', duration_minutes=0,
+            price_syp=1, access_mode='allowance', total_minutes_limit=100,
+            daily_minutes_limit=60, session_minutes_limit=60)
+        ent = create_entitlement(package)
+        local_tz = timezone.get_current_timezone()
+        start = timezone.make_aware(timezone.datetime(2026, 1, 2, 23, 58), local_tz)
+        session = InternetSession.objects.create(entitlement=ent, package=package,
+            start_time=start, started_at=start, billing_mode='prepaid', status='active')
+        # A legacy nullable-authorization session remains endable, and its finalized
+        # usage is allocated across the local date boundary rather than to one day.
+        end_usage_session(session, at=start + timedelta(minutes=4))
+        self.assertEqual(daily_minutes_used(ent, start.date()), 2)
+        self.assertEqual(daily_minutes_used(ent, start.date() + timedelta(days=1)), 2)
+        self.assertEqual(daily_minutes_remaining(ent, start + timedelta(days=1)), 58)
 
     def test_manual_activation_expiry_devices_and_backend(self):
         package = InternetPackage.objects.create(name_ar='يومي', code='day', duration_minutes=0,
@@ -164,7 +199,7 @@ class EntitlementWorkflowTests(TestCase):
 class MembershipCreditConcurrencyTests(TransactionTestCase):
     reset_sequences = True
 
-    def test_simultaneous_sessions_compete_without_negative_balance(self):
+    def test_simultaneous_starts_cannot_reserve_membership_balance_twice(self):
         member = Member.objects.create(name_ar='عضو متزامن', phone='0777777777')
         plan = MembershipPlan.objects.create(code='concurrent-credit', name_ar='عضوية')
         subscription = MembershipSubscription.objects.create(
@@ -175,31 +210,29 @@ class MembershipCreditConcurrencyTests(TransactionTestCase):
             price_syp=0, access_mode='membership_credit', member_only=True,
             guest_allowed=False, max_concurrent_devices=2)
         entitlement = create_entitlement(package, member=member, subscription=subscription)
-        sessions = [start_usage_session(entitlement), start_usage_session(entitlement)]
         barrier = Barrier(2)
         errors = []
+        session_ids = []
 
-        def finish(session_id):
+        def start():
             close_old_connections()
             try:
-                current = InternetSession.objects.get(pk=session_id)
                 barrier.wait()
-                end_usage_session(
-                    current, at=current.started_at + timedelta(minutes=40))
+                session_ids.append(start_usage_session(
+                    InternetEntitlement.objects.get(pk=entitlement.pk)).pk)
             except Exception as exc:  # Captured so failures are asserted in the main test thread.
                 errors.append(exc)
             finally:
                 close_old_connections()
 
-        threads = [Thread(target=finish, args=(session.pk,)) for session in sessions]
+        threads = [Thread(target=start) for _ in range(2)]
         for thread in threads: thread.start()
         for thread in threads: thread.join()
 
-        self.assertEqual(errors, [])
-        subscription.refresh_from_db()
-        consumed = sum(InternetSession.objects.values_list('allowance_minutes_consumed', flat=True))
-        self.assertEqual(consumed, 60)
-        self.assertEqual(subscription.remaining_internet_minutes, 0)
+        self.assertEqual(len(session_ids), 1)
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(sum(InternetSession.objects.filter(status='active').values_list(
+            'reserved_minutes', flat=True)), 60)
 
 
 class PartnerSnapshotTests(TestCase):

@@ -1640,6 +1640,15 @@ class InternetEntitlement(TimeStampedModel, PublicCodeModel):
     partner_share_percent_snapshot = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     gross_amount_syp = models.DecimalField(max_digits=14, decimal_places=2, default=0)
 
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=(models.Q(total_minutes_allowed__isnull=True)
+                           | models.Q(minutes_used__lte=models.F('total_minutes_allowed'))),
+                name='internet_minutes_used_within_total',
+            ),
+        ]
+
     @property
     def minutes_remaining(self):
         return None if self.total_minutes_allowed is None else max(self.total_minutes_allowed - self.minutes_used, 0)
@@ -1750,6 +1759,11 @@ class InternetSession(TimeStampedModel, PublicCodeModel):
     ended_at = models.DateTimeField(null=True, blank=True)
     actual_duration_minutes = models.PositiveIntegerField(null=True, blank=True)
     allowance_minutes_consumed = models.PositiveIntegerField(default=0)
+    reserved_minutes = models.PositiveIntegerField(null=True, blank=True)
+    authorized_minutes = models.PositiveIntegerField(null=True, blank=True)
+    authorized_until = models.DateTimeField(null=True, blank=True)
+    reservation_business_date = models.DateField(null=True, blank=True)
+    overrun_minutes = models.PositiveIntegerField(default=0)
     duration_minutes = models.PositiveIntegerField(null=True, blank=True)
     rate_per_hour_syp = models.PositiveIntegerField(default=0)
     minimum_minutes = models.PositiveIntegerField(default=0)
@@ -1779,6 +1793,16 @@ class InternetSession(TimeStampedModel, PublicCodeModel):
     bandwidth_profile = models.CharField(max_length=120, blank=True)
     network_status = models.CharField(max_length=120, blank=True)
 
+    class Meta:
+        constraints = [
+            models.CheckConstraint(condition=models.Q(reserved_minutes__gte=0),
+                                   name='internet_session_reserved_nonnegative'),
+            models.CheckConstraint(condition=models.Q(authorized_minutes__gte=0),
+                                   name='internet_session_authorized_nonnegative'),
+            models.CheckConstraint(condition=models.Q(overrun_minutes__gte=0),
+                                   name='internet_session_overrun_nonnegative'),
+        ]
+
     @property
     def display_guest_name(self):
         return self.guest_name or self.customer_name
@@ -1803,6 +1827,12 @@ class InternetSession(TimeStampedModel, PublicCodeModel):
     def payable_total_syp(self):
         return self.manual_total_syp if self.manual_total_syp is not None else self.calculated_total_syp
 
+    @property
+    def is_overdue(self):
+        from django.utils import timezone
+        return (self.status == self.Status.ACTIVE and self.authorized_until is not None
+                and timezone.now() > self.authorized_until)
+
     def save(self, *args, **kwargs):
         if self.started_at is None and self.start_time is not None:
             self.started_at = self.start_time
@@ -1826,6 +1856,22 @@ class InternetSession(TimeStampedModel, PublicCodeModel):
         started = self.effective_started_at
         stamp = started.strftime('%Y-%m-%d %H:%M') if started else 'بدون وقت'
         return f'{customer} — {package} — {stamp}'
+
+
+class InternetUsageLedger(TimeStampedModel):
+    """Finalized allowance minutes attributed to a configured local business day."""
+    entitlement = models.ForeignKey(InternetEntitlement, on_delete=models.PROTECT,
+                                    related_name='usage_ledger')
+    session = models.ForeignKey(InternetSession, on_delete=models.PROTECT,
+                                related_name='usage_ledger')
+    business_date = models.DateField()
+    minutes = models.PositiveIntegerField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['session', 'business_date'],
+                                    name='unique_internet_session_usage_day'),
+        ]
 
 
 class Shift(TimeStampedModel, PublicCodeModel):

@@ -36,7 +36,8 @@ from reservations.services import change_reservation_status, create_reservation
 from vendors.models import Vendor, VendorParticipation
 from core.notifications import create_notification, notify_order_created
 from core.services.margins import item_margin, product_margin_from_values
-from core.services.internet_access import create_commercial_sale, effectively_active_entitlements
+from core.services.internet_access import (create_commercial_sale, daily_minutes_remaining,
+    daily_minutes_used, effectively_active_entitlements, get_effective_network_allowance)
 
 
 DAMASCUS_TZ = ZoneInfo('Asia/Damascus')
@@ -1760,6 +1761,9 @@ def staff_internet(request):
             'entitlement': entitlement, 'commercial_label': commercial_label,
             'entitlement_label': entitlement_label, 'backend_label': backend_label,
             'network_label': network_label,
+            'available_minutes': get_effective_network_allowance(entitlement, now),
+            'used_today': daily_minutes_used(entitlement),
+            'remaining_today': daily_minutes_remaining(entitlement, now),
         })
     today = timezone.localdate()
     expiring_today = active_entitlements.filter(valid_until__date=today).count()
@@ -1923,6 +1927,7 @@ def staff_internet_session(request, session_id):
     session = get_object_or_404(InternetSession.objects.select_related('member', 'package', 'linked_order', 'linked_payment', 'started_by', 'ended_by'), pk=session_id)
     ledger_entries = session.member.credit_ledger.order_by('-created_at')[:20] if session.member_id else []
     preview = _session_preview(session) if session.status == InternetSession.Status.ACTIVE else None
+    entitlement = session.entitlement
     return render(request, 'staff/internet_session.html', {
         'session': session,
         'preview': preview,
@@ -1930,6 +1935,9 @@ def staff_internet_session(request, session_id):
         'can_cancel_sessions': can_override_session_total(request.user),
         'can_override_total': can_override_session_total(request.user),
         'settings_obj': get_system_settings(),
+        'available_minutes': (get_effective_network_allowance(entitlement) if entitlement else None),
+        'used_today': (daily_minutes_used(entitlement) if entitlement else None),
+        'remaining_today': (daily_minutes_remaining(entitlement) if entitlement else None),
     })
 
 
