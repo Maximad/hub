@@ -388,17 +388,11 @@ def create_commercial_sale(package, *, payment_method, member=None, guest_name='
                 created_by=actor, idempotency_key=idempotency_key, purchased_at=sale_at,
                 charged_amount_syp=charged_price, pricing_benefit=pricing_benefit)
 
-    # Router I/O must never be part of the commercial/financial transaction.  A
-    # repeated checkout is also the retry mechanism for an unfinished provision.
-    from core.services.network_backends import get_network_backend
-    if entitlement.network_status != entitlement.NetworkStatus.PROVISIONED:
-        try:
-            get_network_backend(entitlement.network_backend).provision_access(entitlement)
-        except Exception as exc:  # external adapters expose several transport-specific exceptions
-            InternetEntitlement.objects.filter(pk=entitlement.pk).update(
-                network_status=entitlement.NetworkStatus.PROVISION_ERROR,
-                last_network_error=str(exc)[:500], last_network_sync_at=timezone.now())
-            entitlement.refresh_from_db()
+        # The durable row is committed with the sale; only its on-commit callback may
+        # touch a network backend. Repeated checkout resolves to the same logical job.
+        from core.models import InternetNetworkOperation
+        from core.services.network_operations import enqueue_network_operation
+        enqueue_network_operation(entitlement, InternetNetworkOperation.Operation.PROVISION)
     return entitlement
 
 

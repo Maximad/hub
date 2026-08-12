@@ -126,6 +126,12 @@ class MikroTikNetworkBackend:
             if not self.client.find_profile(values['profile']):
                 raise MikroTikConfigurationError('ملف مستخدم RouterOS المحدد غير موجود.')
             if user:
+                # A prior create may have succeeded remotely and timed out before Hub
+                # persisted its encrypted credential. Reconcile the owned identity by
+                # rotating to a newly persisted credential rather than creating again.
+                if not entitlement.network_credential_encrypted:
+                    password, encrypted = self._credential(entitlement)
+                    values = {**values, 'password': password}
                 self.client.update_hotspot_user(user['.id'], values)
             else:
                 password, encrypted = self._credential(entitlement)

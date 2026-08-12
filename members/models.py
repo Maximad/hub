@@ -1,5 +1,5 @@
 import uuid
-from django.db import models
+from django.db import models, transaction
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db.models import Q
@@ -121,14 +121,19 @@ class MembershipSubscription(models.Model):
         return self.effective_status(at) == self.Status.ACTIVE
 
     def activate(self, at=None):
-        at = at or timezone.now()
-        self.status = self.Status.ACTIVE
-        self.activated_at = self.activated_at or at
-        self.frozen_at = None
-        self.freeze_until = None
-        self.save(update_fields=['status', 'activated_at', 'frozen_at', 'freeze_until', 'updated_at'])
-        from members.internet_benefits import provision_subscription_internet
-        provision_subscription_internet(self)
+        # Status and the complete commercial bundle are one database unit. Network
+        # callbacks registered by provisioning cannot run until this outer unit commits.
+        with transaction.atomic():
+            locked = type(self).objects.select_for_update().get(pk=self.pk)
+            at = at or timezone.now()
+            locked.status = self.Status.ACTIVE
+            locked.activated_at = locked.activated_at or at
+            locked.frozen_at = None
+            locked.freeze_until = None
+            locked.save(update_fields=['status', 'activated_at', 'frozen_at', 'freeze_until', 'updated_at'])
+            from members.internet_benefits import provision_subscription_internet
+            provision_subscription_internet(locked)
+        self.refresh_from_db()
 
     def freeze(self, until=None, at=None):
         at = at or timezone.now()
@@ -241,6 +246,9 @@ class MembershipBenefitRule(models.Model):
     max_concurrent_devices = models.PositiveSmallIntegerField(null=True, blank=True)
     max_registered_devices = models.PositiveSmallIntegerField(null=True, blank=True)
     commercial_allocation_syp = models.PositiveBigIntegerField(null=True, blank=True)
+    complimentary_partner_service = models.BooleanField(
+        default=False,
+        help_text='Explicitly exempts a complimentary Internet benefit from partner revenue share.')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -263,6 +271,7 @@ class MembershipBenefitRule(models.Model):
             'max_concurrent_devices': self.max_concurrent_devices,
             'max_registered_devices': self.max_registered_devices,
             'commercial_allocation_syp': self.commercial_allocation_syp,
+            'complimentary_partner_service': self.complimentary_partner_service,
             # Stable compatibility targets for benefit rules created before the generic layer.
             'product_id': self.product_id, 'category_id': self.category_id,
             'menu_section_id': self.menu_section_id, 'tag_id': self.tag_id,
@@ -295,7 +304,13 @@ class CommercialAllocation(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=('subscription', 'component_type', 'source_benefit_rule_id'), name='unique_subscription_commercial_component')]
+        constraints = [
+            models.UniqueConstraint(fields=('subscription', 'component_type', 'source_benefit_rule_id'), name='unique_subscription_commercial_component'),
+            models.UniqueConstraint(
+                fields=('subscription',),
+                condition=Q(component_type='membership', source_benefit_rule_id__isnull=True),
+                name='unique_subscription_residual_membership'),
+        ]
 
     def clean(self):
         super().clean()
