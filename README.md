@@ -224,6 +224,12 @@ scp -i "C:\Users\USER\.ssh\hub_vps" "C:\Users\USER\Desktop\product-images\*" dep
 ## Apps
 - `core`, `accounts`, `catalog`, `locations`, `orders`, `payments`, `members`, `internet`, `reports`, `audit`
 
+## Product review
+
+- [UX vs. business review](docs/ux_business_review.md) — a heuristic assessment,
+  prioritized tensions, journey scorecard, validation plan, and business decisions
+  required before detailed interface changes.
+
 ## Phase 1.5 Flex Model
 - Public `MenuSection` display is intentionally separate from internal `Product` operational logic.
 - Products can be classified with `item_type`, subtypes, tags, stations, availability, and vendor/event/member rules without forcing customer menu layout.
