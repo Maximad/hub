@@ -21,7 +21,7 @@ from .models import (
     InternetPackage,
     InternetSession,
     InternetBandwidthProfile, InternetPartner, InternetPartnerUser,
-    InternetEntitlement, InternetAccessDevice, InternetRevenueShare,
+    InternetEntitlement, InternetAccessDevice, InternetRevenueShare, InternetNetworkOperation,
     DailyClose, PostingCommand, PostingReconciliationFailure,
     ExpenseCategory, Expense, CashMovement,
     InventoryItem, Purchase, PurchaseItem, StockMovement, ProductRecipeItem, ProductionBatch, ProductionBatchIngredient,
@@ -88,6 +88,15 @@ class InternetEntitlementAdmin(admin.ModelAdmin):
     list_filter = ('status', 'network_status', 'access_mode', 'partner')
     search_fields = ('access_code', 'guest_name', 'guest_phone', 'member__name_ar', 'member__phone')
     readonly_fields = ('public_code', 'access_code', 'minutes_used', 'created_at', 'updated_at')
+
+
+@admin.register(InternetNetworkOperation)
+class InternetNetworkOperationAdmin(admin.ModelAdmin):
+    list_display = ('id', 'entitlement', 'operation', 'status', 'attempt_count', 'last_attempt_at')
+    list_filter = ('operation', 'status')
+    readonly_fields = tuple(field.name for field in InternetNetworkOperation._meta.fields)
+    def has_add_permission(self, request): return False
+    def has_delete_permission(self, request, obj=None): return False
 
 
 @admin.register(InternetAccessDevice)

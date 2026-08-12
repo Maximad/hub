@@ -97,6 +97,10 @@ def _activate_committed_subscription(subscription_id, actor_id):
             status=MembershipSubscription.Status.PENDING, activated_at=None,
             activation_error=str(exc)[:1000])
         ActivityLog.objects.create(
+            actor_id=actor_id, action='membership.internet_activation_failed',
+            details={'subscription_id': str(subscription.uuid), 'error': str(exc)[:500]})
+        # Retain the established aggregate event name for existing audit consumers.
+        ActivityLog.objects.create(
             actor_id=actor_id, action='membership.sale_activation_failed',
             details={'subscription_id': str(subscription.uuid), 'error': str(exc)[:500]})
 

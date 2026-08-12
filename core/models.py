@@ -1676,6 +1676,36 @@ class InternetEntitlement(TimeStampedModel, PublicCodeModel):
         return super().save(*args, **kwargs)
 
 
+class InternetNetworkOperation(TimeStampedModel):
+    """Durable, idempotent network side effect for an Internet entitlement."""
+    class Operation(models.TextChoices):
+        PROVISION = 'provision', 'Provision'
+        REFRESH = 'refresh', 'Refresh'
+        DISCONNECT = 'disconnect', 'Disconnect'
+        EXPIRE = 'expire', 'Expire'
+
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        PROCESSING = 'processing', 'Processing'
+        SUCCEEDED = 'succeeded', 'Succeeded'
+        FAILED = 'failed', 'Failed'
+
+    entitlement = models.ForeignKey(
+        InternetEntitlement, on_delete=models.PROTECT, related_name='network_operations')
+    operation = models.CharField(max_length=20, choices=Operation.choices)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    idempotency_key = models.CharField(max_length=180, unique=True)
+    reason = models.CharField(max_length=200, blank=True)
+    attempt_count = models.PositiveIntegerField(default=0)
+    last_attempt_at = models.DateTimeField(null=True, blank=True)
+    next_attempt_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.CharField(max_length=500, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=('status', 'next_attempt_at'), name='internet_netop_ready_idx')]
+
+
 class InternetAccessDevice(TimeStampedModel):
     entitlement = models.ForeignKey(InternetEntitlement, on_delete=models.CASCADE, related_name='devices')
     device_mac = models.CharField(max_length=64)

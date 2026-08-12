@@ -4,7 +4,8 @@ from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 from accounts.permissions import require_staff_capability
-from core.models import ActivityLog, InternetBandwidthProfile, InternetPackage, InternetPartner
+from core.models import (ActivityLog, InternetBandwidthProfile, InternetNetworkOperation,
+                         InternetPackage, InternetPartner)
 from internet.models import WifiNetwork
 
 
@@ -34,6 +35,10 @@ def internet_settings(request):
         'mikrotik_enabled': settings.MIKROTIK_ENABLED,
         'mikrotik_configured': bool(settings.MIKROTIK_BASE_URL and settings.MIKROTIK_HOTSPOT_SERVER),
         'network_backends': WifiNetwork.objects.values_list('network_backend', flat=True).distinct(),
+        'pending_network_operations': InternetNetworkOperation.objects.filter(
+            status__in=('pending', 'processing')).count(),
+        'failed_network_operations': InternetNetworkOperation.objects.filter(status='failed').count(),
+        'last_network_operation': InternetNetworkOperation.objects.order_by('-updated_at').first(),
         'partner_form': PartnerForm(), 'profile_form': ProfileForm(),
     }
     return render(request, 'staff/internet_settings.html', context)
