@@ -15,6 +15,9 @@ from .services import change_reservation_status, create_reservation
 
 class ReservationWorkflowTests(TestCase):
     def setUp(self):
+        self.admin = get_user_model().objects.create_user(
+            username='reservation-admin', password='secret', is_superuser=True,
+        )
         self.room = Room.objects.create(name_ar='الاستوديو', name_en='Studio')
         self.other_room = Room.objects.create(name_ar='سفرة')
         self.table = TableArea.objects.create(room=self.room, name_ar='طاولة 1')
@@ -96,7 +99,8 @@ class ReservationWorkflowTests(TestCase):
         create_reservation(Reservation(reservation_type='event', event=self.event, name='أ', phone='1', party_size=3, status='pending'))
         candidate = Reservation.objects.create(reservation_type='event', event=self.event, name='ب', phone='2', party_size=3, status='cancelled')
         with self.assertRaises(ValidationError):
-            change_reservation_status(candidate.pk, 'confirmed')
+            change_reservation_status(candidate.pk, 'confirmed', actor=self.admin,
+                                      correction=True, reason='restore booking')
         candidate.refresh_from_db()
         self.assertEqual(candidate.status, 'cancelled')
 
@@ -118,13 +122,17 @@ class ConcurrentEventConfirmationTests(TransactionTestCase):
             Reservation.objects.create(reservation_type='event', event=event, name=str(i), phone=str(i), party_size=3, status='cancelled')
             for i in range(2)
         ]
+        admin = get_user_model().objects.create_user(
+            username='capacity-admin', password='secret', is_superuser=True,
+        )
         barrier = Barrier(2)
 
         def confirm(pk):
             close_old_connections()
             barrier.wait()
             try:
-                change_reservation_status(pk, 'confirmed')
+                change_reservation_status(pk, 'confirmed', actor=admin,
+                                          correction=True, reason='restore booking')
                 return True
             except ValidationError:
                 return False

@@ -89,12 +89,10 @@ def create_reservation(reservation):
 
 
 @transaction.atomic
-def change_reservation_status(reservation_id, new_status):
-    allowed = {choice for choice, _label in Reservation.Status.choices}
-    if new_status not in allowed:
-        raise ValidationError({'status': 'حالة الحجز غير صالحة.'})
-    reservation = Reservation.objects.select_for_update().get(pk=reservation_id)
-    reservation.status = new_status
-    _validate_for_status(reservation)
-    reservation.save(update_fields=['status', 'end_time', 'room', 'updated_at'])
-    return reservation
+def change_reservation_status(reservation_id, new_status, *, actor, correction=False, reason=''):
+    """Compatibility entry point; all mutations use the locked state machine."""
+    if correction:
+        return Reservation.correct_status(
+            reservation_id, actor=actor, new_status=new_status, reason=reason,
+        )
+    return Reservation.transition_status(reservation_id, actor=actor, new_status=new_status)
