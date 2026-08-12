@@ -36,6 +36,10 @@ class PostgreSQLConcurrentPostingTests(TransactionTestCase):
             code='cash:concurrency', name_ar='صندوق الاختبار', account_type='asset', scope='cashbox',
             is_active=True, negative_balance_policy='allow',
         )
+        self.revenue = FinancialAccount.objects.create(
+            code='revenue:concurrency', name_ar='إيراد الاختبار', account_type='revenue',
+            scope='operating', is_active=True, negative_balance_policy='allow',
+        )
         self.day = date(2026, 8, 7)
 
     def context(self, key):
@@ -101,6 +105,7 @@ class PostgreSQLConcurrentPostingTests(TransactionTestCase):
         self.assertEqual(Payment.objects.filter(order=order, is_active=True).count(), 1)
         self.assertEqual(CashMovement.objects.filter(related_order=order, is_cancelled=False).count(), 1)
         self.assertEqual(sum(Payment.objects.filter(order=order).values_list('amount_syp', flat=True)), 600)
+        self.assertEqual(PostingBatch.objects.filter(operation_type='order_payment.collect').count(), 1)
 
     def test_close_racing_with_expense_serializes_to_one_consistent_outcome(self):
         expense = self.expense()

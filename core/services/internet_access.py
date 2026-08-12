@@ -202,39 +202,57 @@ def snapshot_revenue_share(entitlement, business_date=None, share_percent=None):
     })[0]
 
 
-@transaction.atomic
 def create_commercial_sale(package, *, payment_method, member=None, guest_name='', guest_phone='',
                            subscription=None, actor=None, idempotency_key):
-    """Atomic staff checkout. The unique entitlement key is the server-side POST identity."""
-    package = InternetPackage.objects.select_for_update().get(pk=package.pk)
-    existing = InternetEntitlement.objects.filter(idempotency_key=idempotency_key).first()
-    if existing:
-        return existing
-    from members.benefits import resolve_internet_price
-    charged_price, pricing_benefit = resolve_internet_price(member, package)
-    charged_price = int(charged_price)
-    complimentary = package.access_mode == package.AccessMode.MEMBERSHIP_CREDIT or charged_price == 0
-    order = payment = None
-    if not complimentary:
-        order = Order.objects.create(member=member, notes=f'Internet package: {package.name_ar}')
-        category, _ = Category.objects.get_or_create(name_ar='خدمات الإنترنت', defaults={'name_en': 'Internet services'})
-        product, _ = Product.objects.get_or_create(
-            category=category, name_ar=package.name_ar, product_type=Product.ProductType.INTERNET,
-            defaults={'price_syp': package.price_syp, 'item_type': Product.ItemType.SERVICE,
-                      'service_type': Product.ServiceType.INTERNET, 'visible_on_pos': False,
-                      'orderable_on_pos': False, 'visible_on_qr': False, 'requires_preparation': False})
-        OrderItem.objects.create(order=order, product=product, quantity=1,
-            product_name_ar_snapshot=package.name_ar, unit_price_syp_snapshot=charged_price,
-            line_total_syp_snapshot=charged_price)
-        method = payment_method if payment_method in Payment.Method.values else Payment.Method.UNPAID
-        payment = Payment.objects.create(order=order, amount_syp=charged_price,
-                                         method=method, created_by=actor)
-    entitlement = create_entitlement(package, member=member, guest_name=guest_name,
-        guest_phone=guest_phone, order=order, payment=payment, subscription=subscription,
-        created_by=actor, idempotency_key=idempotency_key, charged_amount_syp=charged_price,
-        pricing_benefit=pricing_benefit)
+    """Commit checkout once, then provision as an independently retryable side effect."""
+    sale_at = timezone.now()
+    with transaction.atomic():
+        package = InternetPackage.objects.select_for_update().get(pk=package.pk)
+        existing = InternetEntitlement.objects.filter(idempotency_key=idempotency_key).first()
+        if existing:
+            entitlement = existing
+        else:
+            from members.benefits import resolve_internet_price
+            charged_price, pricing_benefit = resolve_internet_price(member, package)
+            charged_price = int(charged_price)
+            complimentary = package.access_mode == package.AccessMode.MEMBERSHIP_CREDIT or charged_price == 0
+            order = payment = None
+            if not complimentary:
+                order = Order.objects.create(member=member, notes=f'Internet package: {package.name_ar}')
+                category, _ = Category.objects.get_or_create(name_ar='خدمات الإنترنت', defaults={'name_en': 'Internet services'})
+                product, _ = Product.objects.get_or_create(
+                    category=category, name_ar=package.name_ar, product_type=Product.ProductType.INTERNET,
+                    defaults={'price_syp': package.price_syp, 'item_type': Product.ItemType.SERVICE,
+                              'service_type': Product.ServiceType.INTERNET, 'visible_on_pos': False,
+                              'orderable_on_pos': False, 'visible_on_qr': False, 'requires_preparation': False})
+                OrderItem.objects.create(order=order, product=product, quantity=1,
+                    product_name_ar_snapshot=package.name_ar, unit_price_syp_snapshot=charged_price,
+                    line_total_syp_snapshot=charged_price)
+                method = payment_method if payment_method in Payment.Method.values else Payment.Method.UNPAID
+                if method != Payment.Method.UNPAID:
+                    from core.services.posting.context import PostingContext
+                    from core.services.posting.order_payments import collect
+                    payment = collect(order, PostingContext(
+                        actor=actor, business_date=timezone.localdate(sale_at),
+                        idempotency_key=f'internet-sale:{idempotency_key}:payment',
+                        channel='internet-sale',
+                    ), charged_price, method)
+            entitlement = create_entitlement(package, member=member, guest_name=guest_name,
+                guest_phone=guest_phone, order=order, payment=payment, subscription=subscription,
+                created_by=actor, idempotency_key=idempotency_key, purchased_at=sale_at,
+                charged_amount_syp=charged_price, pricing_benefit=pricing_benefit)
+
+    # Router I/O must never be part of the commercial/financial transaction.  A
+    # repeated checkout is also the retry mechanism for an unfinished provision.
     from core.services.network_backends import get_network_backend
-    get_network_backend(entitlement.network_backend).provision_access(entitlement)
+    if entitlement.network_status != entitlement.NetworkStatus.PROVISIONED:
+        try:
+            get_network_backend(entitlement.network_backend).provision_access(entitlement)
+        except Exception as exc:  # external adapters expose several transport-specific exceptions
+            InternetEntitlement.objects.filter(pk=entitlement.pk).update(
+                network_status=entitlement.NetworkStatus.PROVISION_ERROR,
+                last_network_error=str(exc)[:500], last_network_sync_at=timezone.now())
+            entitlement.refresh_from_db()
     return entitlement
 
 
