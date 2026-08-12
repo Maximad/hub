@@ -1,4 +1,4 @@
-{% load static %}
+{% load static message_accessibility %}
 <!DOCTYPE html>
 <html lang="{% if system_settings %}{{ system_settings.default_language }}{% else %}ar{% endif %}" dir="rtl">
 <head>
@@ -33,7 +33,7 @@
       </div>
     {% endif %}
     {% if messages %}
-      <div class="hub-messages">{% for message in messages %}<div class="hub-message hub-message-{{ message.tags|default:'info' }}">{{ message }}</div>{% endfor %}</div>
+      <div class="hub-messages">{% for message in messages %}<div class="hub-message hub-message-{{ message.tags|default:'info' }}" role="{% message_role message %}">{{ message }}</div>{% endfor %}</div>
     {% endif %}
     {% block content %}{% endblock %}
   </main>
