@@ -67,6 +67,7 @@ if not DEBUG and (
 if not SECRET_KEY:
     SECRET_KEY = 'debug-only-not-for-production'
 ALLOWED_HOSTS = [host.strip() for host in os.getenv('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost').split(',') if host.strip()]
+RESERVATION_DEFAULT_DURATION_MINUTES = non_negative_int_env('RESERVATION_DEFAULT_DURATION_MINUTES', 120)
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
     for origin in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")

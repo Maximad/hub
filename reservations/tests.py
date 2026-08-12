@@ -1,12 +1,16 @@
 from datetime import datetime, time
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.db import close_old_connections
+from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 from core.models import Room, TableArea
 from events.models import Event
 from .models import Reservation
+from .services import change_reservation_status, create_reservation
 
 
 class ReservationWorkflowTests(TestCase):
@@ -51,3 +55,83 @@ class ReservationWorkflowTests(TestCase):
     def test_table_endpoint_rejects_anonymous(self):
         response = self.client.get(reverse('staff_reservation_tables'), {'room': self.room.pk})
         self.assertEqual(response.status_code, 302)
+
+    def regular(self, **overrides):
+        values = dict(reservation_type='regular', name='ضيف', phone='0930000000',
+                      reservation_date=self.event.starts_at.date(), start_time=time(10),
+                      end_time=time(11), room=self.room, status='pending')
+        values.update(overrides)
+        return create_reservation(Reservation(**values))
+
+    def test_boundary_touching_intervals_do_not_overlap(self):
+        self.regular(table_area=self.table)
+        second = self.regular(start_time=time(11), end_time=time(12), table_area=self.table)
+        self.assertIsNotNone(second.pk)
+
+    def test_cancelled_and_no_show_do_not_block(self):
+        for index, status in enumerate(('cancelled', 'no_show')):
+            table = TableArea.objects.create(room=self.room, name_ar=f'طاولة {index + 2}')
+            self.regular(table_area=table, status=status)
+            self.assertIsNotNone(self.regular(table_area=table).pk)
+
+    def test_missing_end_time_gets_configured_default(self):
+        row = self.regular(start_time=time(10), end_time=None)
+        self.assertEqual(row.end_time, time(12))
+
+    def test_room_only_booking_conflicts_with_table_booking(self):
+        self.regular(table_area=self.table)
+        with self.assertRaises(ValidationError):
+            self.regular(table_area=None)
+
+    def test_same_table_conflicts_but_other_table_does_not(self):
+        other_table = TableArea.objects.create(room=self.room, name_ar='طاولة أخرى')
+        self.regular(table_area=self.table)
+        with self.assertRaises(ValidationError):
+            self.regular(table_area=self.table)
+        self.assertIsNotNone(self.regular(table_area=other_table).pk)
+
+    def test_confirmed_event_cannot_exceed_active_attendance(self):
+        self.event.capacity = 5
+        self.event.save(update_fields=['capacity'])
+        create_reservation(Reservation(reservation_type='event', event=self.event, name='أ', phone='1', party_size=3, status='pending'))
+        candidate = Reservation.objects.create(reservation_type='event', event=self.event, name='ب', phone='2', party_size=3, status='cancelled')
+        with self.assertRaises(ValidationError):
+            change_reservation_status(candidate.pk, 'confirmed')
+        candidate.refresh_from_db()
+        self.assertEqual(candidate.status, 'cancelled')
+
+    def test_cancelled_event_attendance_does_not_consume_capacity(self):
+        self.event.capacity = 2
+        self.event.save(update_fields=['capacity'])
+        create_reservation(Reservation(reservation_type='event', event=self.event, name='أ', phone='1', party_size=2, status='cancelled'))
+        row = create_reservation(Reservation(reservation_type='event', event=self.event, name='ب', phone='2', party_size=2, status='confirmed'))
+        self.assertIsNotNone(row.pk)
+
+
+class ConcurrentEventConfirmationTests(TransactionTestCase):
+    reset_sequences = True
+
+    def test_concurrent_confirmations_cannot_both_exceed_capacity(self):
+        room = Room.objects.create(name_ar='قاعة')
+        event = Event.objects.create(title_ar='فعالية', starts_at=timezone.now(), room=room, capacity=5)
+        candidates = [
+            Reservation.objects.create(reservation_type='event', event=event, name=str(i), phone=str(i), party_size=3, status='cancelled')
+            for i in range(2)
+        ]
+        barrier = Barrier(2)
+
+        def confirm(pk):
+            close_old_connections()
+            barrier.wait()
+            try:
+                change_reservation_status(pk, 'confirmed')
+                return True
+            except ValidationError:
+                return False
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(confirm, [row.pk for row in candidates]))
+        self.assertEqual(results.count(True), 1)
+        self.assertEqual(Reservation.objects.filter(event=event, status='confirmed').count(), 1)

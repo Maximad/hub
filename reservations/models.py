@@ -33,6 +33,18 @@ class Reservation(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(end_time__isnull=True) | models.Q(start_time__isnull=True) | models.Q(end_time__gt=models.F('start_time')),
+                name='reservation_end_after_start',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['reservation_date', 'start_time', 'end_time', 'status'], name='reservation_interval_idx'),
+            models.Index(fields=['event', 'status'], name='reservation_event_idx'),
+        ]
+
     def __str__(self):
         return f'{self.name} — {self.effective_date or "—"} {self.effective_starts_at or "—"} — {self.phone}'
 
