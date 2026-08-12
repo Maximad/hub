@@ -9,6 +9,7 @@ from django.urls import reverse
 from core.admin import CashMovementAdmin, ExpenseAdmin, PurchaseAdmin
 from core.models import (
     CashMovement, DailyClose, Expense, ExpenseCategory, FinanceReviewItem, FinancialAccount, InventoryItem,
+    InternetEntitlement, InternetPackage,
     PostingBatch, PostingCommand, PostingReconciliationFailure,
     Purchase, PurchaseItem, PurchasePayment, PurchaseReceipt, PurchaseReturn,
     StockMovement, Transfer,
@@ -17,6 +18,7 @@ from core.services.posting import expenses, purchases, transfers
 from core.services.posting.context import PostingContext
 from core.services.posting.exceptions import ClosedPeriodError, IdempotencyConflict, InvalidTransition
 from core.services.posting.reconciliation import record_unsupported_bypasses
+from core.services.internet_access import create_commercial_sale
 
 
 class FinanceBoundaryTestCase(TestCase):
@@ -221,3 +223,24 @@ class FinanceBoundaryTestCase(TestCase):
         failure = PostingReconciliationFailure.objects.get(record_type='core.CashMovement', record_id=str(movement.pk))
         self.assertIn('Unsupported direct write', failure.reason)
         self.assertEqual(PostingReconciliationFailure.objects.filter(record_id=str(movement.pk)).count(), 1)
+
+    def test_internet_cash_sale_is_a_supported_idempotent_finance_posting(self):
+        FinancialAccount.objects.create(
+            code='revenue:internet-boundary', name_ar='إيراد الإنترنت',
+            account_type='revenue', scope='operating', is_active=True,
+            negative_balance_policy='allow')
+        package = InternetPackage.objects.create(
+            name_ar='باقة مالية', code='finance-reconciliation', duration_minutes=60,
+            price_syp=750, access_mode='timed_session', session_minutes_limit=60)
+
+        first = create_commercial_sale(
+            package, payment_method='cash', actor=self.actor,
+            idempotency_key='finance:internet:retry')
+        second = create_commercial_sale(
+            package, payment_method='cash', actor=self.actor,
+            idempotency_key='finance:internet:retry')
+        record_unsupported_bypasses()
+
+        self.assertEqual(first.pk, second.pk)
+        self.assertEqual(InternetEntitlement.objects.count(), 1)
+        self.assertFalse(PostingReconciliationFailure.objects.exists())

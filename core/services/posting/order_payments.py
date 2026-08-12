@@ -1,7 +1,9 @@
+from django.contrib.contenttypes.models import ContentType
 from django.utils import timezone
 from django.db.models import Sum
 
-from core.models import ActivityLog, CashMovement, FinancialAccount, Payment
+from core.models import (ActivityLog, CashMovement, FinancialAccount, Payment,
+                         PostingBatch, PostingEntry)
 from .engine import dispatch
 from .exceptions import InvalidTransition
 from .policy import require_active
@@ -16,8 +18,16 @@ def collect(order, context, amount, method, notes=''):
             raise InvalidTransition('مبلغ الدفعة يجب أن يكون موجباً.')
         if paid + amount > source.total_syp:
             raise InvalidTransition('المبلغ لا يجوز أن يتجاوز المتبقي على الطلب.')
+        if method in {Payment.Method.UNPAID, Payment.Method.FREE, Payment.Method.MEMBER_DISCOUNT}:
+            raise InvalidTransition('هذه الطريقة ليست دفعة محصلة.')
         payment=Payment(order=source, amount_syp=amount, method=method, notes=notes, created_by=context.actor)
         payment.full_clean(); payment.save()
+        revenue = FinancialAccount.objects.filter(
+            account_type=FinancialAccount.AccountType.REVENUE, is_active=True,
+        ).order_by('pk').first()
+        if not revenue:
+            raise InvalidTransition('لا يوجد حساب إيراد مالي نشط.')
+        require_active(revenue)
         if method == Payment.Method.CASH:
             account = FinancialAccount.objects.filter(
                 scope='cashbox', is_active=True,
@@ -29,6 +39,28 @@ def collect(order, context, amount, method, notes=''):
                 direction=CashMovement.Direction.IN, amount_syp=amount, related_order=source, related_payment=payment,
                 financial_account=account, is_generated=True,
                 title=f'دفع {source.display_number}', created_by=context.actor, approved_by=context.approver)
+        else:
+            account = FinancialAccount.objects.filter(
+                account_type=FinancialAccount.AccountType.CLEARING, is_active=True,
+            ).order_by('pk').first()
+            if not account:
+                raise InvalidTransition('لا يوجد حساب مقاصة مالي نشط.')
+            require_active(account)
+        batch = PostingBatch.objects.create(
+            operation_type='order_payment.collect',
+            source_content_type=ContentType.objects.get_for_model(payment),
+            source_object_id=str(payment.pk), business_date=context.date_for(source),
+            status=PostingBatch.Status.POSTED,
+            idempotency_key=f'{context.idempotency_key}:batch', actor=context.actor,
+            approver=context.approver, posted_at=timezone.now(), channel=context.channel,
+            metadata=dict(context.request_metadata),
+        )
+        PostingEntry.objects.bulk_create([
+            PostingEntry(batch=batch, account=account, debit=amount,
+                         description=f'تحصيل {source.display_number}'),
+            PostingEntry(batch=batch, account=revenue, credit=amount,
+                         description=f'إيراد {source.display_number}'),
+        ])
         ActivityLog.objects.create(actor=context.actor, action='payment_added', details={'payment_id':payment.pk,'posting_key':context.idempotency_key})
         return payment
     return dispatch('order_payment.collect', order, context, handle)

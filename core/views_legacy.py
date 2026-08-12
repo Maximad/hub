@@ -1792,11 +1792,10 @@ def staff_internet(request):
         'internet_metrics': {
             'active_sessions': active_sessions.count(), 'active_passes': active_entitlements.count(),
             'expiring_today': expiring_today,
-            # Count the commercial access once, at its entitlement identity.  New sales
-            # deliberately retain an ``unpaid`` Payment row, so NULL is not unpaid.
+            # An unpaid commercial sale is an order with no active collected payment.
             'unpaid': active_entitlements.filter(
                 order__isnull=False, gross_amount_syp__gt=0,
-                payment__method=Payment.Method.UNPAID,
+                payment__isnull=True,
             ).count(),
             'provision_errors': active_entitlements.filter(network_status=InternetEntitlement.NetworkStatus.PROVISION_ERROR).count(),
         },

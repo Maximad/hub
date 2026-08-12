@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 from decimal import Decimal
-from threading import Barrier, Thread
+from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.db import close_old_connections
@@ -8,14 +8,17 @@ from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from core.models import (InternetAccessDevice, InternetBandwidthProfile, InternetEntitlement,
+from core.models import (CashMovement, DailyClose, FinancialAccount, InternetAccessDevice, InternetBandwidthProfile, InternetEntitlement,
                          InternetPackage, InternetPartner, InternetPartnerUser, InternetRevenueShare,
-                         InternetRevenueShareAdjustment, InternetSession, Member, Order, Payment)
+                         InternetRevenueShareAdjustment, InternetSession, Member, Order, Payment,
+                         PostingBatch, PostingCommand)
 from core.services.internet_access import (create_entitlement, end_usage_session,
     create_commercial_sale, effectively_active_entitlements, get_default_internet_partner,
     record_payment_reversal_adjustment,
     register_device, start_usage_session, validity_end)
 from core.services.network_backends import ManualNetworkBackend, get_network_backend
+from core.services.posting.closing import close_totals
+from core.services.posting.exceptions import ClosedPeriodError
 from members.models import MembershipPlan, MembershipSubscription
 
 
@@ -380,6 +383,12 @@ class InternetHttpWorkflowTests(TestCase):
         self.staff = get_user_model().objects.create_user(username='cash', phone='0900', password='x', role='cashier')
         self.client = Client(); self.client.force_login(self.staff)
         self.partner = InternetPartner.objects.create(name='ISP', revenue_share_percent=Decimal('30'))
+        self.cashbox = FinancialAccount.objects.create(
+            code='cash:internet', name_ar='صندوق الإنترنت', account_type='asset',
+            scope='cashbox', is_active=True, negative_balance_policy='allow')
+        FinancialAccount.objects.create(
+            code='revenue:internet', name_ar='إيراد الإنترنت', account_type='revenue',
+            scope='operating', is_active=True, negative_balance_policy='allow')
         self.package = InternetPackage.objects.create(name_ar='أسبوعي', code='http-week', duration_minutes=0,
             price_syp=2000, access_mode='unlimited', validity_value=1, validity_unit='weeks', partner=self.partner)
 
@@ -392,6 +401,56 @@ class InternetHttpWorkflowTests(TestCase):
         self.assertEqual(Order.objects.count(), 1); self.assertEqual(Payment.objects.count(), 1)
         self.assertEqual(InternetRevenueShare.objects.count(), 1)
         self.assertEqual(ent.network_status, 'provisioned'); self.assertTrue(ent.external_network_identifier == '')
+
+    def test_cash_sale_posts_once_to_cashbox_and_daily_close(self):
+        first = create_commercial_sale(
+            self.package, payment_method=Payment.Method.CASH, actor=self.staff,
+            idempotency_key='cash-finance-once')
+        again = create_commercial_sale(
+            self.package, payment_method=Payment.Method.CASH, actor=self.staff,
+            idempotency_key='cash-finance-once')
+
+        self.assertEqual(first.pk, again.pk)
+        self.assertEqual(Payment.objects.filter(order=first.order).count(), 1)
+        movement = CashMovement.objects.get(related_order=first.order)
+        self.assertEqual((movement.financial_account, movement.amount_syp),
+                         (self.cashbox, Decimal('2000')))
+        self.assertEqual(PostingCommand.objects.filter(
+            key='internet-sale:cash-finance-once:payment').count(), 1)
+        self.assertEqual(PostingBatch.objects.filter(
+            operation_type='order_payment.collect').count(), 1)
+        totals = close_totals(self.cashbox, timezone.localdate())
+        self.assertEqual(totals['cash_receipts'], Decimal('2000'))
+
+    def test_cash_sale_respects_closed_period_without_partial_commercial_records(self):
+        DailyClose.objects.create(
+            account=self.cashbox, business_date=timezone.localdate(),
+            status=DailyClose.Status.CLOSED, is_finalized=True)
+
+        with self.assertRaises(ClosedPeriodError):
+            create_commercial_sale(
+                self.package, payment_method=Payment.Method.CASH, actor=self.staff,
+                idempotency_key='cash-closed-period')
+
+        self.assertFalse(InternetEntitlement.objects.filter(
+            idempotency_key='cash-closed-period').exists())
+        self.assertFalse(Order.objects.exists())
+
+    def test_router_failure_is_persisted_and_retried_without_duplicate_sale(self):
+        backend = ManualNetworkBackend()
+        with patch('core.services.network_backends.get_network_backend', return_value=backend), \
+             patch.object(backend, 'provision_access', side_effect=RuntimeError('router offline')):
+            failed = create_commercial_sale(
+                self.package, payment_method=Payment.Method.CASH, actor=self.staff,
+                idempotency_key='router-retry')
+        self.assertEqual(failed.network_status, InternetEntitlement.NetworkStatus.PROVISION_ERROR)
+        self.assertIn('router offline', failed.last_network_error)
+
+        retried = create_commercial_sale(
+            self.package, payment_method=Payment.Method.CASH, actor=self.staff,
+            idempotency_key='router-retry')
+        self.assertEqual(retried.network_status, InternetEntitlement.NetworkStatus.PROVISIONED)
+        self.assertEqual((Order.objects.count(), Payment.objects.count()), (1, 1))
 
     def test_expired_is_rendered_and_not_in_staff_metric(self):
         ent = create_entitlement(self.package)
@@ -507,6 +566,12 @@ class PartnerDashboardDateRangeTests(TestCase):
         from django.contrib.auth import get_user_model
         self.partner = InternetPartner.objects.create(
             name='Date range ISP', revenue_share_percent=Decimal('30'))
+        FinancialAccount.objects.create(
+            code='cash:date-range', name_ar='صندوق', account_type='asset', scope='cashbox',
+            is_active=True, negative_balance_policy='allow')
+        FinancialAccount.objects.create(
+            code='revenue:date-range', name_ar='إيراد', account_type='revenue', scope='operating',
+            is_active=True, negative_balance_policy='allow')
         self.package = InternetPackage.objects.create(
             name_ar='نطاق زمني', code='date-range', duration_minutes=60,
             price_syp=2000, access_mode='timed_session',
