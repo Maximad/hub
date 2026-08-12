@@ -8,8 +8,9 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Q
+from django.utils import timezone
 from decimal import Decimal
 
 
@@ -215,6 +216,30 @@ class Order(TimeStampedModel, PublicCodeModel):
         SERVED = 'served', 'تم التقديم'
         CANCELLED = 'cancelled', 'ملغى'
 
+    STATUS_TRANSITIONS = {
+        Status.NEW: frozenset({Status.ACCEPTED, Status.CANCELLED}),
+        Status.ACCEPTED: frozenset({Status.PREPARING, Status.CANCELLED}),
+        Status.PREPARING: frozenset({Status.READY, Status.CANCELLED}),
+        Status.READY: frozenset({Status.SERVED, Status.CANCELLED}),
+        Status.SERVED: frozenset(), Status.CANCELLED: frozenset(),
+    }
+    STATUS_CORRECTIONS = {
+        Status.SERVED: frozenset({Status.READY}),
+        Status.CANCELLED: frozenset({Status.NEW, Status.ACCEPTED, Status.PREPARING, Status.READY}),
+    }
+    DELIVERY_TRANSITIONS = {
+        DeliveryStatus.NEW: frozenset({DeliveryStatus.CONFIRMED, DeliveryStatus.CANCELLED}),
+        DeliveryStatus.CONFIRMED: frozenset({DeliveryStatus.PREPARING, DeliveryStatus.CANCELLED}),
+        DeliveryStatus.PREPARING: frozenset({DeliveryStatus.READY_FOR_DELIVERY, DeliveryStatus.CANCELLED}),
+        DeliveryStatus.READY_FOR_DELIVERY: frozenset({DeliveryStatus.OUT_FOR_DELIVERY, DeliveryStatus.CANCELLED}),
+        DeliveryStatus.OUT_FOR_DELIVERY: frozenset({DeliveryStatus.DELIVERED, DeliveryStatus.CANCELLED}),
+        DeliveryStatus.DELIVERED: frozenset(), DeliveryStatus.CANCELLED: frozenset(),
+    }
+    DELIVERY_CORRECTIONS = {
+        DeliveryStatus.DELIVERED: frozenset({DeliveryStatus.OUT_FOR_DELIVERY}),
+        DeliveryStatus.CANCELLED: frozenset({DeliveryStatus.NEW, DeliveryStatus.CONFIRMED, DeliveryStatus.PREPARING, DeliveryStatus.READY_FOR_DELIVERY, DeliveryStatus.OUT_FOR_DELIVERY}),
+    }
+
     table = models.ForeignKey(TableArea, on_delete=models.PROTECT, related_name='orders', null=True, blank=True)
     member = models.ForeignKey('Member', on_delete=models.PROTECT, related_name='orders', null=True, blank=True)
     service_mode = models.CharField(max_length=20, choices=ServiceMode.choices, default=ServiceMode.DINE_IN)
@@ -242,6 +267,74 @@ class Order(TimeStampedModel, PublicCodeModel):
     delivery_out_at = models.DateTimeField(null=True, blank=True, verbose_name='وقت الخروج للتوصيل')
     delivery_delivered_at = models.DateTimeField(null=True, blank=True, verbose_name='وقت تسليم التوصيل')
     delivery_cancelled_at = models.DateTimeField(null=True, blank=True, verbose_name='وقت إلغاء التوصيل')
+
+    @staticmethod
+    def _correction_authorized(actor):
+        return bool(getattr(actor, 'is_active', False) and (getattr(actor, 'is_superuser', False) or getattr(actor, 'role', '') == 'admin'))
+
+    @classmethod
+    def transition_status(cls, order_id, *, actor, new_status, cancellation_reason='', cancellation_notes=''):
+        return cls._change_state(order_id, actor=actor, field='status', new_status=new_status, reason=cancellation_reason, notes=cancellation_notes, correction=False)
+
+    @classmethod
+    def correct_status(cls, order_id, *, actor, new_status, reason):
+        return cls._change_state(order_id, actor=actor, field='status', new_status=new_status, reason=reason, correction=True)
+
+    @classmethod
+    def transition_delivery_status(cls, order_id, *, actor, new_status, cancellation_reason=''):
+        return cls._change_state(order_id, actor=actor, field='delivery_status', new_status=new_status, reason=cancellation_reason, correction=False)
+
+    @classmethod
+    def correct_delivery_status(cls, order_id, *, actor, new_status, reason):
+        return cls._change_state(order_id, actor=actor, field='delivery_status', new_status=new_status, reason=reason, correction=True)
+
+    @classmethod
+    def _change_state(cls, order_id, *, actor, field, new_status, reason, correction, notes=''):
+        """Perform the validation, locked mutation, timestamp cleanup, and audit atomically."""
+        maps = (cls.STATUS_CORRECTIONS if correction else cls.STATUS_TRANSITIONS) if field == 'status' else (cls.DELIVERY_CORRECTIONS if correction else cls.DELIVERY_TRANSITIONS)
+        with transaction.atomic():
+            order = cls.objects.select_for_update().get(pk=order_id)
+            old_status = getattr(order, field)
+            if new_status not in maps.get(old_status, ()):
+                raise ValidationError({field: f'Transition from {old_status} to {new_status} is not permitted.'})
+            reason = (reason or '').strip()
+            if correction and (not cls._correction_authorized(actor) or not reason):
+                raise ValidationError({'reason': 'A correction requires an administrator and a reason.'})
+            now = timezone.now()
+            update_fields = [field, 'updated_at']
+            setattr(order, field, new_status)
+            if field == 'status':
+                if new_status == cls.Status.CANCELLED:
+                    if reason not in CancellationReason.values:
+                        raise ValidationError({'cancellation_reason': 'A valid cancellation reason is required.'})
+                    order.cancellation_reason, order.cancellation_notes = reason, (notes or '').strip()
+                    order.cancelled_by, order.cancelled_at = actor, now
+                    update_fields += ['cancellation_reason', 'cancellation_notes', 'cancelled_by', 'cancelled_at']
+                elif old_status == cls.Status.CANCELLED:
+                    order.cancellation_reason = order.cancellation_notes = ''
+                    order.cancelled_by = order.cancelled_at = None
+                    update_fields += ['cancellation_reason', 'cancellation_notes', 'cancelled_by', 'cancelled_at']
+            else:
+                stamp_fields = {cls.DeliveryStatus.CONFIRMED: 'delivery_confirmed_at', cls.DeliveryStatus.OUT_FOR_DELIVERY: 'delivery_out_at', cls.DeliveryStatus.DELIVERED: 'delivery_delivered_at', cls.DeliveryStatus.CANCELLED: 'delivery_cancelled_at'}
+                if new_status in stamp_fields:
+                    setattr(order, stamp_fields[new_status], now); update_fields.append(stamp_fields[new_status])
+                if old_status in (cls.DeliveryStatus.DELIVERED, cls.DeliveryStatus.CANCELLED) and correction:
+                    stale = 'delivery_delivered_at' if old_status == cls.DeliveryStatus.DELIVERED else 'delivery_cancelled_at'
+                    setattr(order, stale, None); update_fields.append(stale)
+                    if old_status == cls.DeliveryStatus.CANCELLED and order.status != cls.Status.CANCELLED:
+                        order.cancellation_reason = ''; update_fields.append('cancellation_reason')
+            order.save(update_fields=update_fields)
+            AuditEvent.objects.create(actor=actor, action=f'order_{field}_{"correction" if correction else "transition"}', source=order,
+                                      before_snapshot={field: old_status}, after_snapshot={field: new_status, 'reason': reason}, channel='staff')
+            return order
+
+    @property
+    def allowed_status_transitions(self):
+        return self.STATUS_TRANSITIONS.get(self.status, frozenset())
+
+    @property
+    def allowed_delivery_transitions(self):
+        return self.DELIVERY_TRANSITIONS.get(self.delivery_status, frozenset())
 
     @property
     def display_number(self):
