@@ -281,8 +281,8 @@ class Order(TimeStampedModel, PublicCodeModel):
         return cls._change_state(order_id, actor=actor, field='status', new_status=new_status, reason=reason, correction=True)
 
     @classmethod
-    def transition_delivery_status(cls, order_id, *, actor, new_status, cancellation_reason=''):
-        return cls._change_state(order_id, actor=actor, field='delivery_status', new_status=new_status, reason=cancellation_reason, correction=False)
+    def transition_delivery_status(cls, order_id, *, actor, new_status, cancellation_reason='', cancellation_notes=''):
+        return cls._change_state(order_id, actor=actor, field='delivery_status', new_status=new_status, reason=cancellation_reason, notes=cancellation_notes, correction=False)
 
     @classmethod
     def correct_delivery_status(cls, order_id, *, actor, new_status, reason):
@@ -316,13 +316,21 @@ class Order(TimeStampedModel, PublicCodeModel):
                     update_fields += ['cancellation_reason', 'cancellation_notes', 'cancelled_by', 'cancelled_at']
             else:
                 stamp_fields = {cls.DeliveryStatus.CONFIRMED: 'delivery_confirmed_at', cls.DeliveryStatus.OUT_FOR_DELIVERY: 'delivery_out_at', cls.DeliveryStatus.DELIVERED: 'delivery_delivered_at', cls.DeliveryStatus.CANCELLED: 'delivery_cancelled_at'}
+                if new_status == cls.DeliveryStatus.CANCELLED:
+                    if reason not in CancellationReason.values:
+                        raise ValidationError({'cancellation_reason': 'A valid cancellation reason is required.'})
+                    order.cancellation_reason, order.cancellation_notes = reason, (notes or '').strip()
+                    order.cancelled_by = actor
+                    update_fields += ['cancellation_reason', 'cancellation_notes', 'cancelled_by']
                 if new_status in stamp_fields:
                     setattr(order, stamp_fields[new_status], now); update_fields.append(stamp_fields[new_status])
                 if old_status in (cls.DeliveryStatus.DELIVERED, cls.DeliveryStatus.CANCELLED) and correction:
                     stale = 'delivery_delivered_at' if old_status == cls.DeliveryStatus.DELIVERED else 'delivery_cancelled_at'
                     setattr(order, stale, None); update_fields.append(stale)
                     if old_status == cls.DeliveryStatus.CANCELLED and order.status != cls.Status.CANCELLED:
-                        order.cancellation_reason = ''; update_fields.append('cancellation_reason')
+                        order.cancellation_reason = order.cancellation_notes = ''
+                        order.cancelled_by = None
+                        update_fields += ['cancellation_reason', 'cancellation_notes', 'cancelled_by']
             order.save(update_fields=update_fields)
             AuditEvent.objects.create(actor=actor, action=f'order_{field}_{"correction" if correction else "transition"}', source=order,
                                       before_snapshot={field: old_status}, after_snapshot={field: new_status, 'reason': reason}, channel='staff')

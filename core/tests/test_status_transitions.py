@@ -1,11 +1,12 @@
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date, time
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import close_old_connections, connection
 from django.test import TestCase, TransactionTestCase
 
-from core.models import AuditEvent, CancellationReason, Order
+from core.models import AuditEvent, CancellationReason, Order, Room
 from reservations.models import Reservation
 
 
@@ -14,6 +15,7 @@ class StatusTransitionTests(TestCase):
         User = get_user_model()
         self.admin = User.objects.create_user(username='transition-admin', phone='10001', password='x', role='admin')
         self.waiter = User.objects.create_user(username='transition-waiter', phone='10002', password='x', role='waiter')
+        self.room = Room.objects.create(name_ar='Transition room')
 
     def test_every_declared_order_transition_is_allowed(self):
         for old, destinations in Order.STATUS_TRANSITIONS.items():
@@ -34,7 +36,10 @@ class StatusTransitionTests(TestCase):
     def test_reservation_transitions_and_backward_jump(self):
         for old, destinations in Reservation.TRANSITIONS.items():
             for new in destinations:
-                reservation = Reservation.objects.create(name='R', phone='1', status=old)
+                reservation = Reservation.objects.create(
+                    name='R', phone='1', status=old, room=self.room,
+                    reservation_date=date(2026, 8, 12), start_time=time(10), end_time=time(11),
+                )
                 self.assertEqual(Reservation.transition_status(reservation.pk, actor=self.waiter, new_status=new).status, new)
         reservation = Reservation.objects.create(name='R2', phone='2', status=Reservation.Status.CONFIRMED)
         with self.assertRaises(ValidationError):
@@ -65,6 +70,46 @@ class StatusTransitionTests(TestCase):
         order = Order.correct_delivery_status(order.pk, actor=self.admin,
                                               new_status=Order.DeliveryStatus.OUT_FOR_DELIVERY, reason='driver correction')
         self.assertIsNone(order.delivery_delivered_at)
+
+    def test_delivery_cancellation_requires_reason_and_correction_clears_fields(self):
+        order = Order.objects.create(
+            fulfillment_mode=Order.FulfillmentMode.DELIVERY,
+            delivery_status=Order.DeliveryStatus.OUT_FOR_DELIVERY,
+        )
+        with self.assertRaises(ValidationError):
+            Order.transition_delivery_status(
+                order.pk, actor=self.waiter, new_status=Order.DeliveryStatus.CANCELLED,
+            )
+        order = Order.transition_delivery_status(
+            order.pk, actor=self.waiter, new_status=Order.DeliveryStatus.CANCELLED,
+            cancellation_reason=CancellationReason.OTHER, cancellation_notes='No answer',
+        )
+        self.assertEqual(order.cancelled_by, self.waiter)
+        self.assertEqual(order.cancellation_notes, 'No answer')
+        self.assertIsNotNone(order.delivery_cancelled_at)
+        order = Order.correct_delivery_status(
+            order.pk, actor=self.admin, new_status=Order.DeliveryStatus.OUT_FOR_DELIVERY,
+            reason='Customer answered',
+        )
+        self.assertEqual(order.cancellation_reason, '')
+        self.assertEqual(order.cancellation_notes, '')
+        self.assertIsNone(order.cancelled_by)
+        self.assertIsNone(order.delivery_cancelled_at)
+
+    def test_reservation_terminal_correction_requires_admin_and_reason(self):
+        reservation = Reservation.objects.create(
+            name='Correct me', phone='3', status=Reservation.Status.CANCELLED,
+        )
+        with self.assertRaises(ValidationError):
+            Reservation.correct_status(
+                reservation.pk, actor=self.waiter,
+                new_status=Reservation.Status.PENDING, reason='mistake',
+            )
+        with self.assertRaises(ValidationError):
+            Reservation.correct_status(
+                reservation.pk, actor=self.admin,
+                new_status=Reservation.Status.PENDING, reason='',
+            )
 
 
 class ConcurrentStatusTransitionTests(TransactionTestCase):

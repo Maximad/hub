@@ -1066,7 +1066,11 @@ def staff_order_status(request, public_code):
                 if correction:
                     order = Order.correct_delivery_status(order.pk, actor=request.user, new_status=new_delivery_status, reason=reason)
                 else:
-                    order = Order.transition_delivery_status(order.pk, actor=request.user, new_status=new_delivery_status, cancellation_reason=request.POST.get('cancellation_reason', ''))
+                    order = Order.transition_delivery_status(
+                        order.pk, actor=request.user, new_status=new_delivery_status,
+                        cancellation_reason=request.POST.get('cancellation_reason', ''),
+                        cancellation_notes=request.POST.get('cancellation_notes', ''),
+                    )
                 event_map = {
                     Order.DeliveryStatus.CONFIRMED: 'delivery_order_confirmed',
                     Order.DeliveryStatus.READY_FOR_DELIVERY: 'delivery_ready_for_delivery',

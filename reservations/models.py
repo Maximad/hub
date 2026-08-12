@@ -71,7 +71,12 @@ class Reservation(models.Model):
                 if not (reason or '').strip():
                     raise ValidationError({'reason': 'A reason is required for a reservation correction.'})
             reservation.status = new_status
-            reservation.save(update_fields=['status', 'updated_at'])
+            # Status changes can make a reservation active again.  Re-run the
+            # domain availability/capacity checks under the same transaction
+            # and row/resource locks before persisting it.
+            from .services import _validate_for_status
+            _validate_for_status(reservation)
+            reservation.save(update_fields=['status', 'end_time', 'room', 'updated_at'])
             AuditEvent = apps.get_model('core', 'AuditEvent')
             AuditEvent.objects.create(
                 actor=actor, action='reservation_status_correction' if correction else 'reservation_status_transition',
