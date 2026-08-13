@@ -14,7 +14,7 @@ from core.services.internet_access import (create_commercial_sale, end_usage_ses
 from core.settings_helpers import get_system_settings
 
 
-@override_settings(ALLOWED_HOSTS=['testserver'], STORAGES={
+@override_settings(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False, STORAGES={
     'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
 class VisitInternetSelfServiceTests(TestCase):
     def setUp(self):

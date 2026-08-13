@@ -88,9 +88,23 @@ class BrowserCsrfHardeningTests(TestCase):
         client = self._client()
         stale_token = self._menu_token(client)
         old_cookie = client.cookies['csrftoken'].value
-        user = get_user_model().objects.create_user(
-            username='rotation-cashier', password='pass', phone='+963922222222', role='cashier')
-        client.force_login(user)
+        get_user_model().objects.create_superuser(
+            username='rotation-admin', password='pass', email='rotation@example.com',
+            phone='+963922222222')
+        login_page = client.get(reverse('admin:login'))
+        self.assertEqual(login_page.status_code, 200)
+        login_token = re.search(
+            r'name="csrfmiddlewaretoken" value="([^"]+)"',
+            login_page.content.decode(),
+        ).group(1)
+        login_response = client.post(reverse('admin:login'), {
+            'csrfmiddlewaretoken': login_token,
+            'username': 'rotation-admin',
+            'password': 'pass',
+            'next': reverse('admin:index'),
+        }, HTTP_REFERER=f'https://{PRODUCTION_HOST}{reverse("admin:login")}')
+        self.assertEqual(login_response.status_code, 302)
+        self.assertEqual(login_response.url, reverse('admin:index'))
         self.assertNotEqual(client.cookies['csrftoken'].value, old_cookie)
         response = client.post(
             reverse('menu_public'), self._payload(stale_token),
