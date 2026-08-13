@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% load hub_numbers %}
+{% block title %}جلستك اليوم{% endblock %}
+{% block content %}<main class="menu-public" dir="rtl">
+<header class="hub-card"><p class="menu-public__brand">جلستك اليوم</p><h1 class="hub-section-title">جلسة {{ visit.display_number }}</h1>
+<p>{% if visit.table %}الطاولة: <strong>{{ visit.table.display_name }}</strong>{% if visit.table.room_display_name %} — {{ visit.table.room_display_name }}{% endif %}{% else %}طلب عام داخل المكان{% endif %}</p><p>وقت الفتح: {{ visit.opened_at|date:"Y-m-d H:i" }}</p></header>
+<section class="hub-card"><h2>الطلبات</h2>{% for order in orders %}<article class="hub-card"><h3>{{ order.display_number }} — {{ order.get_status_display }}</h3><ul>{% for item in order.items.all %}<li>{{ item.product_name_ar_snapshot }} × {{ item.quantity }} — {{ item.line_total_syp_snapshot|format_syp }}</li>{% endfor %}</ul><strong>الإجمالي: {{ order.total_syp|format_syp }}</strong></article>{% empty %}<p>لا توجد طلبات.</p>{% endfor %}</section>
+<section class="hub-card"><h2>الحساب الحالي</h2><p>إجمالي الطلبات: <strong>{{ visit.gross_syp|format_syp }}</strong></p><p>الدفعات المسجلة: <strong>{{ visit.paid_syp|format_syp }}</strong></p><p>المتبقي: <strong>{{ visit.remaining_syp|format_syp }}</strong></p></section>
+<div class="hub-toolbar"><a class="hub-button hub-button-primary" href="{{ menu_url }}">اطلب المزيد</a><a class="hub-button" href="{{ menu_url }}">عودة إلى المنيو</a></div>
+</main>{% endblock %}

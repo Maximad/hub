@@ -1,4 +1,5 @@
-from django.db import transaction
+from django.db import DatabaseError, transaction
+import logging
 import uuid
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
@@ -28,7 +29,8 @@ from accounts.permissions import (
     require_staff_capability, user_has_capability,
 )
 from core.stock_recipes import deduct_order_item_stock
-from core.models import ActivityLog, CancellationReason, CashMovement, Category, DailyClose, Expense, InternetEntitlement, InternetPackage, InternetSession, Member, Order, OrderDiscount, OrderItem, Payment, PostingCommand, Product, Room, SystemSetting, TableArea
+from core.models import ActivityLog, CancellationReason, CashMovement, Category, DailyClose, Expense, HubVisit, InternetEntitlement, InternetPackage, InternetSession, Member, Order, OrderDiscount, OrderItem, Payment, PostingCommand, Product, Room, SystemSetting, TableArea
+from core.services.visits import issue_visit_credential, resolve_visit_credential, set_visit_cookie
 from core.services.posting.context import PostingContext
 from core.services.posting.order_payments import collect as collect_order_payment
 from events.models import Event
@@ -43,6 +45,7 @@ from core.services.internet_access import (create_commercial_sale, daily_minutes
 
 DAMASCUS_TZ = ZoneInfo('Asia/Damascus')
 PHONE_ALLOWED_PATTERN = re.compile(r'^[\d\s\-\+\(\)]+$')
+logger = logging.getLogger(__name__)
 
 
 def _qr_svg_response(data):
@@ -374,7 +377,16 @@ def _menu_context(table=None, request=None):
                 result = evaluate_membership_benefit(member_context, product)
                 product.member_price_syp = result.final_total
                 product.member_discount_syp = result.discount
-    return {'table': table, 'section_products': section_products, 'settings': settings, 'page_setting': page, 'default_fulfillment_mode': default_fulfillment_mode, 'fulfillment_choices': settings.available_fulfillment_modes(include_table=False), 'member_context': member_context}
+    current_visit = None
+    if request and settings.customer_visits_enabled:
+        try:
+            credential = resolve_visit_credential(request)
+            if credential and credential.visit.table_id == (table.id if table else None):
+                current_visit = credential.visit
+        except DatabaseError:
+            logger.exception('Optional HubVisit menu recognition failed; rendering normal menu')
+            current_visit = None
+    return {'table': table, 'section_products': section_products, 'settings': settings, 'page_setting': page, 'default_fulfillment_mode': default_fulfillment_mode, 'fulfillment_choices': settings.available_fulfillment_modes(include_table=False), 'member_context': member_context, 'current_visit': current_visit}
 
 
 def menu_public(request):
@@ -510,7 +522,7 @@ def _prep_defaults_for_product(product):
             station = None
     return station, OrderItem.PrepStatus.NEW
 
-def _create_order_from_selected_items(table, selected, note_parts, status=None, service_mode=None, fulfillment_mode=None, delivery_data=None, member_context=None):
+def _create_order_from_selected_items(table, selected, note_parts, status=None, service_mode=None, fulfillment_mode=None, delivery_data=None, member_context=None, visit=None):
     note = '\n'.join([part for part in note_parts if part])
     if table and service_mode is None:
         service_mode = Order.ServiceMode.TABLE
@@ -518,7 +530,7 @@ def _create_order_from_selected_items(table, selected, note_parts, status=None, 
     fulfillment_mode = fulfillment_mode or (Order.FulfillmentMode.TABLE if table else Order.FulfillmentMode.INSIDE_SPACE)
     delivery_data = delivery_data or {}
     with transaction.atomic():
-        order = Order.objects.create(table=table, member=member_context.member if member_context else None, service_mode=service_mode, fulfillment_mode=fulfillment_mode, status=status or Order.Status.NEW, notes=note, **delivery_data)
+        order = Order.objects.create(table=table, visit=visit, member=member_context.member if member_context else None, service_mode=service_mode, fulfillment_mode=fulfillment_mode, status=status or Order.Status.NEW, notes=note, **delivery_data)
         membership_discount = 0
         benefit_snapshots = []
         for product, qty, item_note, selected_options_snapshot, option_delta in selected:
@@ -580,8 +592,31 @@ def _create_order_from_menu(request, table=None):
     service_mode = Order.ServiceMode.TABLE if fulfillment_mode == Order.FulfillmentMode.TABLE else (Order.ServiceMode.TAKEAWAY if fulfillment_mode == Order.FulfillmentMode.TAKEAWAY else Order.ServiceMode.DINE_IN)
     note_parts = [f'الاسم: {customer_name}' if customer_name else '', f'الهاتف: {customer_phone}' if customer_phone else '', f'المكان: {_order_location_note(table, service_mode, fulfillment_mode)}', general_note]
     member_context = resolve_member_from_request(request)
-    order = _create_order_from_selected_items(table, selected, note_parts, service_mode=service_mode, fulfillment_mode=fulfillment_mode, delivery_data=delivery_data, member_context=member_context)
-    return redirect(reverse('order_public', kwargs={'public_code': order.public_code}))
+    visit = None
+    raw_visit_token = None
+    automate_visit = settings.customer_visits_enabled and fulfillment_mode in {Order.FulfillmentMode.TABLE, Order.FulfillmentMode.INSIDE_SPACE}
+    credential = None
+    if automate_visit:
+        try:
+            credential = resolve_visit_credential(request)
+        except DatabaseError:
+            logger.exception('Optional HubVisit order recognition failed; creating standalone order')
+            automate_visit = False
+    with transaction.atomic():
+        if automate_visit:
+            if credential and credential.visit.table_id == (table.id if table else None):
+                visit = credential.visit
+            if automate_visit and visit is None:
+                visit = HubVisit.objects.create(table=table, member=member_context.member if member_context else None)
+                _credential, raw_visit_token = issue_visit_credential(visit)
+                ActivityLog.objects.create(action='visit.created', details={'visit_id': visit.pk, 'source': 'public_order'})
+                ActivityLog.objects.create(action='visit.browser_bound', details={'visit_id': visit.pk})
+        order = _create_order_from_selected_items(table, selected, note_parts, service_mode=service_mode, fulfillment_mode=fulfillment_mode, delivery_data=delivery_data, member_context=member_context, visit=visit)
+        if visit:
+            HubVisit.objects.filter(pk=visit.pk).update(last_activity_at=timezone.now())
+            ActivityLog.objects.create(action='visit.order_linked', details={'visit_id': visit.pk, 'order_id': order.pk})
+    response = redirect(reverse('order_public', kwargs={'public_code': order.public_code}))
+    return set_visit_cookie(response, raw_visit_token) if raw_visit_token else response
 
 def order_public(request, public_code):
     try:
@@ -759,12 +794,15 @@ def staff_pos(request):
         )
 
     settings = get_system_settings()
+    requested_visit = HubVisit.objects.filter(public_code=request.GET.get('visit'), status=HubVisit.Status.OPEN).first() if request.GET.get('visit') else None
     context = {
         'section_products': section_products,
         'tables': tables,
         'member_query': member_query,
         'member_rows': member_rows,
         'settings': settings,
+        'open_visits': HubVisit.objects.filter(status=HubVisit.Status.OPEN).select_related('table').order_by('-last_activity_at'),
+        'selected_visit_id': str(requested_visit.pk) if requested_visit else '',
         'page_setting': get_page_setting('staff_pos', 'نقطة البيع', 'POS', 'إدخال طلبات داخل المكان أو على الطاولات.', 'Create table or in-space orders.'),
     }
     if request.method == 'POST':
@@ -803,6 +841,10 @@ def staff_pos(request):
         if member_id and not member:
             validation_errors.append('العضو المحدد غير صالح.')
         member_context = get_active_member_context(member) if member else None
+        visit_id = request.POST.get('visit_id', '').strip()
+        visit = HubVisit.objects.filter(pk=visit_id, status=HubVisit.Status.OPEN).first() if visit_id.isdigit() else None
+        if visit_id and visit is None:
+            validation_errors.append('الجلسة المحددة غير صالحة أو مغلقة.')
         if validation_errors:
             context.update({'error': ' '.join(validation_errors), 'form_values': request.POST, 'selected_table_id': table_id})
             return render(request, 'staff/pos.html', context)
@@ -818,7 +860,10 @@ def staff_pos(request):
             f'العضو: {member.name_ar} / {member.phone}' if member else '',
             general_note,
         ]
-        order = _create_order_from_selected_items(table, selected, note_parts, status=Order.Status.NEW, service_mode=service_mode, fulfillment_mode=fulfillment_mode, delivery_data=delivery_data, member_context=member_context)
+        order = _create_order_from_selected_items(table, selected, note_parts, status=Order.Status.NEW, service_mode=service_mode, fulfillment_mode=fulfillment_mode, delivery_data=delivery_data, member_context=member_context, visit=visit)
+        if visit:
+            HubVisit.objects.filter(pk=visit.pk).update(last_activity_at=timezone.now())
+            ActivityLog.objects.create(actor=request.user, action='visit.order_linked', details={'visit_id': visit.pk, 'order_id': order.pk, 'source': 'staff_pos'})
         ActivityLog.objects.create(
             actor=request.user,
             action='staff_pos_order_created',

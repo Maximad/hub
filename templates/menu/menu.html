@@ -4,6 +4,7 @@
 {% block body_class %}public-menu-page{% endblock %}
 {% block content %}
 <div class="menu-public public-menu-redesign menu-layout-{{ system_settings.safe_public_menu_layout|default:'comfortable' }} public-menu-layout-{{ system_settings.safe_public_menu_layout|default:'comfortable' }} mobile-density-{{ system_settings.safe_mobile_product_density|default:'compact' }} card-style-{{ system_settings.safe_card_style|default:'soft' }} menu-layout-{{ system_settings.menu_layout_preset|default:'default_masharib' }} menu-mobile-{{ system_settings.menu_mobile_layout|default:'one_column_cards' }} {{ system_settings.menu_mobile_layout_class|default:'layout-grid-1' }} {{ system_settings.menu_tablet_layout_class|default:'layout-tablet-2' }} {{ system_settings.menu_desktop_layout_class|default:'layout-grid-3' }} {{ system_settings.product_card_style_class|default:'card-image-first' }} sticky-cart-{{ system_settings.sticky_cart_style|default:'bottom_bar' }} cart-review-{{ system_settings.cart_review_position|default:'bottom' }}" dir="rtl">
+  {% if current_visit %}<aside class="hub-card"><strong>جلستك {{ current_visit.display_number }}</strong> — الحساب الحالي: {{ current_visit.remaining_syp }} ل.س <a class="hub-button hub-button-primary" href="{% url 'current_visit' %}">عرض جلستك</a></aside>{% endif %}
   {% if member_context %}<aside class="hub-card" aria-label="حالة العضوية">
     <strong>عضويتك مفعّلة</strong> — مرحباً، {{ member_context.member.name_ar }}<br>
     <small>خطة العضوية: {{ member_context.plan.name_ar }} — تم تطبيق مزايا عضويتك تلقائياً</small>

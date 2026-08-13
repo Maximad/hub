@@ -186,6 +186,62 @@ class CancellationReason(models.TextChoices):
     OTHER = 'other', 'سبب آخر'
 
 
+class HubVisit(TimeStampedModel, PublicCodeModel):
+    """Operational umbrella for a party's visit; never a financial ledger."""
+
+    class Status(models.TextChoices):
+        OPEN = 'open', 'مفتوحة'
+        CLOSED = 'closed', 'مغلقة'
+
+    table = models.ForeignKey(TableArea, on_delete=models.PROTECT, related_name='visits', null=True, blank=True)
+    member = models.ForeignKey('Member', on_delete=models.PROTECT, related_name='visits', null=True, blank=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN, db_index=True)
+    opened_at = models.DateTimeField(default=timezone.now)
+    closed_at = models.DateTimeField(null=True, blank=True)
+    last_activity_at = models.DateTimeField(default=timezone.now)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, related_name='created_hub_visits', null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-last_activity_at', '-id']
+
+    @property
+    def display_number(self):
+        return f'#{self.pk}' if self.pk else '#—'
+
+    @property
+    def active_orders(self):
+        return self.orders.exclude(status=Order.Status.CANCELLED)
+
+    @property
+    def gross_syp(self):
+        return sum(order.total_syp for order in self.active_orders)
+
+    @property
+    def paid_syp(self):
+        return sum(order.paid_syp for order in self.active_orders)
+
+    @property
+    def remaining_syp(self):
+        return sum(order.remaining_syp for order in self.active_orders)
+
+    def __str__(self):
+        return f'جلسة {self.display_number}'
+
+
+class HubVisitBrowserCredential(TimeStampedModel):
+    visit = models.ForeignKey(HubVisit, on_delete=models.CASCADE, related_name='browser_credentials')
+    token_hash = models.CharField(max_length=64, unique=True, editable=False)
+    last_seen_at = models.DateTimeField(default=timezone.now)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=['token_hash', 'revoked_at'])]
+
+    def __str__(self):
+        return f'{self.visit} — {"revoked" if self.revoked_at else "active"}'
+
+
 class Order(TimeStampedModel, PublicCodeModel):
     class ServiceMode(models.TextChoices):
         DINE_IN = 'dine_in', 'طلب عام داخل المكان'
@@ -241,6 +297,7 @@ class Order(TimeStampedModel, PublicCodeModel):
     }
 
     table = models.ForeignKey(TableArea, on_delete=models.PROTECT, related_name='orders', null=True, blank=True)
+    visit = models.ForeignKey(HubVisit, on_delete=models.SET_NULL, related_name='orders', null=True, blank=True)
     member = models.ForeignKey('Member', on_delete=models.PROTECT, related_name='orders', null=True, blank=True)
     service_mode = models.CharField(max_length=20, choices=ServiceMode.choices, default=ServiceMode.DINE_IN)
     fulfillment_mode = models.CharField(max_length=20, choices=FulfillmentMode.choices, default=FulfillmentMode.INSIDE_SPACE, verbose_name='وضع الاستلام/التنفيذ')
@@ -1617,6 +1674,7 @@ class InternetEntitlement(TimeStampedModel, PublicCodeModel):
         PROVISION_ERROR = 'provision_error', 'خطأ تجهيز'
 
     member = models.ForeignKey(Member, on_delete=models.PROTECT, null=True, blank=True, related_name='internet_entitlements')
+    visit = models.ForeignKey(HubVisit, on_delete=models.SET_NULL, null=True, blank=True, related_name='internet_entitlements')
     guest_name = models.CharField(max_length=120, blank=True)
     guest_phone = models.CharField(max_length=30, blank=True)
     package = models.ForeignKey(InternetPackage, on_delete=models.PROTECT, null=True, blank=True, related_name='entitlements')
@@ -1977,6 +2035,7 @@ class SystemSetting(TimeStampedModel):
     posting_ledger_writes_enabled = models.BooleanField(default=False, verbose_name='كتابة القيود المالية الجديدة')
     posting_dual_read_enabled = models.BooleanField(default=False, verbose_name='مقارنة القراءات القديمة والجديدة')
     posting_reports_enabled = models.BooleanField(default=False, verbose_name='استخدام القيود الجديدة في التقارير')
+    customer_visits_enabled = models.BooleanField(default=False, verbose_name='تفعيل جلسات الزبائن في المنيو')
     class Language(models.TextChoices):
         ARABIC = 'ar', 'العربية'
         ENGLISH = 'en', 'English'
