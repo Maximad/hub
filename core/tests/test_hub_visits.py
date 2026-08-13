@@ -41,6 +41,12 @@ class HubVisitPublicTests(TestCase):
         self.assertIsNone(Order.objects.get().visit)
         self.assertFalse(HubVisit.objects.exists())
         self.assertNotIn('hub_visit', response.cookies)
+        confirmation = self.client.get(response['Location'])
+        self.assertContains(confirmation, 'تم استلام طلبك')
+        self.assertContains(confirmation, reverse('order_qr', kwargs={
+            'public_code': Order.objects.get().public_code,
+        }))
+        self.assertNotContains(confirmation, 'تمت إضافة طلبك إلى جلستك')
 
     def test_scan_does_not_create_visit_and_first_valid_order_does(self):
         self.enable()
@@ -70,6 +76,53 @@ class HubVisitPublicTests(TestCase):
         menu = self.client.get(self.url)
         self.assertContains(menu, 'عرض جلستك')
         self.assertEqual(self.client.get(reverse('current_visit')).status_code, 200)
+
+    def test_visit_order_confirmation_and_current_visit_are_one_flow(self):
+        self.enable()
+        first = self.client.post(self.url, self.payload())
+        first_order = Order.objects.get()
+        confirmation = self.client.get(first['Location'])
+        self.assertContains(confirmation, 'تمت إضافة طلبك إلى جلستك')
+        self.assertContains(confirmation, 'عرض جلستك')
+        self.assertContains(confirmation, 'طلب المزيد')
+        self.assertContains(confirmation, 'إجمالي جلستك')
+        self.assertContains(confirmation, '1,000 ل.س')
+        self.assertNotContains(confirmation, reverse('order_qr', kwargs={
+            'public_code': first_order.public_code,
+        }))
+        self.assertNotContains(confirmation, 'احتفظ برمز QR')
+
+        second = self.client.post(self.url, self.payload())
+        second_order = Order.objects.exclude(pk=first_order.pk).get()
+        Payment.objects.create(order=first_order, amount_syp=500,
+                               method=Payment.Method.CASH)
+        page = self.client.get(reverse('current_visit'))
+        self.assertContains(page, 'جلستك اليوم')
+        self.assertContains(page, first_order.display_number)
+        self.assertContains(page, second_order.display_number)
+        self.assertLess(page.content.index(second_order.display_number.encode()),
+                        page.content.index(first_order.display_number.encode()))
+        self.assertContains(page, '2,000 ل.س')
+        self.assertContains(page, '500 ل.س')
+        self.assertContains(page, '1,500 ل.س')
+        self.assertContains(page, self.table.name_ar)
+        self.assertContains(page, self.room.name_ar)
+        self.assertContains(page, f'href="{self.url}"')
+
+    def test_same_browser_different_table_gets_separate_visit(self):
+        self.enable()
+        first = self.client.post(self.url, self.payload())
+        first_visit = Order.objects.get().visit
+        other_table = TableArea.objects.create(room=self.room, name_ar='طاولة 2')
+        other_url = reverse('menu_table', kwargs={'qr_token': other_table.qr_token})
+        second = self.client.post(other_url, self.payload())
+        second_visit = Order.objects.exclude(visit=first_visit).get().visit
+        self.assertNotEqual(first_visit, second_visit)
+        self.assertNotEqual(first.cookies['hub_visit'].value,
+                            second.cookies['hub_visit'].value)
+        current = self.client.get(reverse('current_visit'))
+        self.assertContains(current, other_table.name_ar)
+        self.assertNotContains(current, self.table.name_ar)
 
     def test_table_qr_never_shares_visit_between_browsers(self):
         self.enable()
