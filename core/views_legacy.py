@@ -41,6 +41,8 @@ from core.notifications import create_notification, notify_order_created
 from core.services.margins import item_margin, product_margin_from_values
 from core.services.internet_access import (create_commercial_sale, daily_minutes_remaining,
     daily_minutes_used, effectively_active_entitlements, get_effective_network_allowance)
+from core.services.visit_internet import customer_packages, self_service_enabled
+from members.benefits import resolve_internet_price
 
 
 DAMASCUS_TZ = ZoneInfo('Asia/Damascus')
@@ -386,7 +388,13 @@ def _menu_context(table=None, request=None):
         except DatabaseError:
             logger.exception('Optional HubVisit menu recognition failed; rendering normal menu')
             current_visit = None
-    return {'table': table, 'section_products': section_products, 'settings': settings, 'page_setting': page, 'default_fulfillment_mode': default_fulfillment_mode, 'fulfillment_choices': settings.available_fulfillment_modes(include_table=False), 'member_context': member_context, 'current_visit': current_visit}
+    internet_enabled = bool(table and self_service_enabled(settings))
+    internet_member = current_visit.member if current_visit and current_visit.member_id else (member_context.member if member_context else None)
+    internet_packages = customer_packages(internet_member) if internet_enabled else []
+    for package in internet_packages:
+        package.customer_price_syp = int(resolve_internet_price(internet_member, package)[0])
+    active_internet = bool(current_visit and current_visit.internet_sessions.filter(status=InternetSession.Status.ACTIVE).exists())
+    return {'table': table, 'section_products': section_products, 'settings': settings, 'page_setting': page, 'default_fulfillment_mode': default_fulfillment_mode, 'fulfillment_choices': settings.available_fulfillment_modes(include_table=False), 'member_context': member_context, 'current_visit': current_visit, 'internet_self_service_enabled': internet_enabled, 'internet_packages': internet_packages, 'internet_request_key': uuid.uuid4(), 'active_visit_internet': active_internet}
 
 
 def menu_public(request):
