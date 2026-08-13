@@ -3,6 +3,31 @@
 {% block title %}تأكيد الطلب{% endblock %}
 {% block content %}
 {% if order.member %}<p class="hub-card"><strong>تم تطبيق خصم العضوية</strong><br>{{ order.member.name_ar }} — خصم العضوية: {{ order.discount_syp }} ل.س</p>{% endif %}
+{% if order.visit_id %}
+<section class="hub-card order-confirm visit-order-confirm" dir="rtl">
+  <header class="order-confirm__header">
+    <p class="hub-badge hub-badge-info">تم إرسال الطلب</p>
+    <h1>تمت إضافة طلبك إلى جلستك</h1>
+  </header>
+  <div class="order-confirm__meta">
+    <div><span>رقم الطلب</span><strong class="hub-order-number latin-numbers">{{ order.display_number }}</strong></div>
+    <div><span>حالة الطلب</span><strong>{{ order.get_status_display }}</strong></div>
+    <div><span>الطاولة / المساحة</span><strong>{% if order.table %}{{ order.table.display_name }}{% if order.table.room_display_name %} / {{ order.table.room_display_name }}{% endif %}{% else %}داخل المكان{% endif %}</strong></div>
+    <div><span>إجمالي هذا الطلب</span><strong class="hub-money latin-numbers">{{ total|format_syp }}</strong></div>
+  </div>
+  <section class="order-confirm__totals" aria-label="ملخص الجلسة">
+    <h2>ملخص جلستك</h2>
+    <p><span>إجمالي جلستك</span><strong class="hub-money latin-numbers">{{ order.visit.gross_syp|format_syp }}</strong></p>
+    <p><span>المدفوع</span><strong class="hub-money latin-numbers">{{ order.visit.paid_syp|format_syp }}</strong></p>
+    <p class="order-confirm__grand-total"><span>المتبقي</span><strong class="hub-money latin-numbers">{{ order.visit.remaining_syp|format_syp }}</strong></p>
+  </section>
+  {% if needs_confirmation %}<p class="hub-badge hub-badge-warning">بعض العناصر تحتاج تأكيد من الفريق</p>{% endif %}
+  <nav class="visit-order-confirm__actions" aria-label="إجراءات الطلب والجلسة">
+    <a class="hub-button hub-button-primary" href="{% url 'current_visit' %}">عرض جلستك</a>
+    <a class="hub-button hub-button-secondary" href="{{ menu_url }}">طلب المزيد</a>
+  </nav>
+</section>
+{% else %}
 <section class="hub-card order-confirm" dir="rtl">
   <header class="order-confirm__header">
     <p class="hub-badge hub-badge-info">تم إرسال الطلب</p>
@@ -63,4 +88,5 @@
   {% if order.is_delivery %}<section class="hub-card order-confirm__delivery"><strong>بيانات التوصيل:</strong><br>الحالة: {{ order.get_delivery_status_display }}{% if order.delivery_area %}<br>المنطقة: {{ order.delivery_area }}{% endif %}{% if order.delivery_address %}<br>العنوان: {{ order.delivery_address }}{% endif %}</section>{% endif %}
   {% if needs_confirmation %}<p class="hub-badge hub-badge-warning">بعض العناصر تحتاج تأكيد من الفريق</p>{% endif %}
 </section>
+{% endif %}
 {% endblock %}

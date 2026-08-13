@@ -45,9 +45,13 @@ def current_visit(request):
     if not credential:
         return redirect('menu_public')
     visit = credential.visit
-    orders = visit.orders.exclude(status='cancelled').prefetch_related('items', 'discounts', 'payments').order_by('created_at')
+    orders = visit.orders.exclude(status='cancelled').prefetch_related(
+        'items', 'discounts', 'payments').order_by('-created_at', '-id')
     menu_url = reverse('menu_table', kwargs={'qr_token': visit.table.qr_token}) if visit.table_id else reverse('menu_public')
+    active_internet_session = visit.internet_sessions.select_related('package').filter(
+        status=InternetSession.Status.ACTIVE).order_by('-start_time').first()
     context = {'visit': visit, 'orders': orders, 'menu_url': menu_url,
+               'active_internet_session': active_internet_session,
                'internet_self_service_enabled': self_service_enabled(system_settings)}
     if context['internet_self_service_enabled']:
         context.update(_internet_context(visit, visit.member))
