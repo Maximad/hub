@@ -964,6 +964,23 @@ class PurchaseItem(TimeStampedModel):
         super().save(*args,**kwargs)
     def __str__(self): return f'{self.inventory_item} × {self.quantity}'
 
+
+class OperationsImportReceipt(TimeStampedModel):
+    """Stable identity for a purchase created by the operations workbook importer.
+
+    Purchase has no external-reference/metadata field.  Keeping importer identity
+    here avoids assigning business meaning to invoice numbers or free-form notes.
+    """
+    import_key = models.CharField(max_length=160, unique=True)
+    kind = models.CharField(max_length=40, default='purchase')
+    intent = models.JSONField(default=dict)
+    purchase = models.OneToOneField(
+        Purchase, on_delete=models.PROTECT, related_name='operations_import_receipt',
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+
 class PurchaseReceipt(TimeStampedModel):
     purchase = models.ForeignKey(Purchase, on_delete=models.PROTECT, related_name='receipts')
     business_date = models.DateField()
