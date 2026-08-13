@@ -64,6 +64,7 @@ class MembershipSubscription(models.Model):
     activated_at = models.DateTimeField(null=True, blank=True)
     frozen_at = models.DateTimeField(null=True, blank=True)
     freeze_until = models.DateTimeField(null=True, blank=True)
+    total_frozen_duration_seconds = models.PositiveBigIntegerField(default=0, editable=False)
     cancelled_at = models.DateTimeField(null=True, blank=True)
     cancellation_reason = models.TextField(blank=True)
     order = models.ForeignKey('core.Order', on_delete=models.SET_NULL, null=True, blank=True, related_name='membership_subscriptions')
@@ -107,7 +108,8 @@ class MembershipSubscription(models.Model):
         at = at or timezone.now()
         if self.status == self.Status.CANCELLED:
             return self.Status.CANCELLED
-        if self.ends_at is not None and at >= self.ends_at:
+        # A running freeze pauses the term.  ``ends_at`` is extended once, on thaw.
+        if self.status != self.Status.FROZEN and self.ends_at is not None and at >= self.ends_at:
             return self.Status.EXPIRED
         if at < self.starts_at:
             return self.Status.PENDING
@@ -126,6 +128,14 @@ class MembershipSubscription(models.Model):
         with transaction.atomic():
             locked = type(self).objects.select_for_update().get(pk=self.pk)
             at = at or timezone.now()
+            if locked.status in {self.Status.CANCELLED, self.Status.EXPIRED}:
+                raise ValidationError('A cancelled or expired subscription cannot be activated.')
+            if locked.status == self.Status.FROZEN:
+                raise ValidationError('A frozen subscription must use the unfreeze transition.')
+            if at < locked.starts_at:
+                raise ValidationError('A future subscription cannot be activated.')
+            if locked.ends_at is not None and at >= locked.ends_at:
+                raise ValidationError('An expired subscription cannot be activated.')
             locked.status = self.Status.ACTIVE
             locked.activated_at = locked.activated_at or at
             locked.frozen_at = None
@@ -136,27 +146,19 @@ class MembershipSubscription(models.Model):
         self.refresh_from_db()
 
     def freeze(self, until=None, at=None):
-        at = at or timezone.now()
-        if until is not None and until <= at:
-            raise ValidationError({'freeze_until': 'Freeze end must be after freeze start.'})
-        self.status = self.Status.FROZEN
-        self.frozen_at = at
-        self.freeze_until = until
-        self.save(update_fields=['status', 'frozen_at', 'freeze_until', 'updated_at'])
+        from core.services.internet_lifecycle import freeze_membership
+        freeze_membership(self, until=until, at=at)
+        self.refresh_from_db()
 
-    def unfreeze(self):
-        self.status = self.Status.ACTIVE
-        self.frozen_at = None
-        self.freeze_until = None
-        self.save(update_fields=['status', 'frozen_at', 'freeze_until', 'updated_at'])
+    def unfreeze(self, at=None):
+        from core.services.internet_lifecycle import unfreeze_membership
+        unfreeze_membership(self, at=at)
+        self.refresh_from_db()
 
     def cancel(self, reason='', at=None):
-        self.status = self.Status.CANCELLED
-        self.cancelled_at = at or timezone.now()
-        self.cancellation_reason = reason
-        self.save(update_fields=['status', 'cancelled_at', 'cancellation_reason', 'updated_at'])
-        from members.internet_benefits import invalidate_subscription_internet
-        invalidate_subscription_internet(self, reason=reason)
+        from core.services.internet_lifecycle import cancel_membership
+        cancel_membership(self, reason=reason, at=at)
+        self.refresh_from_db()
 
 
 class MemberAttribute(models.Model):
