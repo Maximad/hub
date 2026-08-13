@@ -451,9 +451,11 @@ class InternetHttpWorkflowTests(TestCase):
         ent = InternetEntitlement.objects.get()
         self.assertEqual(Order.objects.count(), 1); self.assertEqual(Payment.objects.count(), 1)
         self.assertEqual(InternetRevenueShare.objects.count(), 1)
-        self.assertEqual(ent.network_status, InternetEntitlement.NetworkStatus.PENDING)
-        self.assertEqual(InternetNetworkOperation.objects.filter(
-            entitlement=ent, operation=InternetNetworkOperation.Operation.PROVISION).count(), 1)
+        self.assertEqual(
+            ent.network_status, InternetEntitlement.NetworkStatus.NOT_PROVISIONED)
+        operation = InternetNetworkOperation.objects.get(
+            entitlement=ent, operation=InternetNetworkOperation.Operation.PROVISION)
+        self.assertEqual(operation.status, InternetNetworkOperation.Status.PENDING)
 
     def test_cash_sale_posts_once_to_cashbox_and_daily_close(self):
         first = create_commercial_sale(
