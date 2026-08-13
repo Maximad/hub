@@ -38,6 +38,7 @@
           {% endfor %}
         </select>
       </div>
+      <div><label for="visit_id"><strong>الحساب المفتوح (اختياري)</strong></label><select class="hub-input" name="visit_id" id="visit_id"><option value="">بدون جلسة</option>{% for visit in open_visits %}<option value="{{ visit.pk }}" {% if selected_visit_id == visit.pk|stringformat:'s' %}selected{% endif %}>جلسة {{ visit.display_number }} — {{ visit.table|default:'بدون طاولة' }}</option>{% endfor %}</select></div>
       <div>
         <label for="customer_name"><strong>اسم اختياري</strong></label>
         <input class="hub-input" type="text" name="customer_name" id="customer_name" value="{{ form_values.customer_name|default:'' }}" autocomplete="off">

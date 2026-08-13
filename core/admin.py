@@ -18,6 +18,7 @@ from .models import (
     ActivityLog,
     CancellationReason,
     Category,
+    HubVisit, HubVisitBrowserCredential,
     InternetPackage,
     InternetSession,
     InternetBandwidthProfile, InternetPartner, InternetPartnerUser,
@@ -39,6 +40,29 @@ from .models import (
     TableArea,
     ExchangeRate, CurrencyEntrySnapshot,
 )
+
+
+@admin.register(HubVisit)
+class HubVisitAdmin(admin.ModelAdmin):
+    list_display = ('id', 'status', 'table', 'member', 'opened_at', 'last_activity_at', 'closed_at')
+    list_filter = ('status', 'table')
+    search_fields = ('id', 'public_code', 'member__name_ar', 'member__phone', 'notes')
+    readonly_fields = ('public_code', 'opened_at', 'closed_at', 'created_at', 'updated_at', 'last_activity_at')
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(HubVisitBrowserCredential)
+class HubVisitBrowserCredentialAdmin(admin.ModelAdmin):
+    list_display = ('visit', 'created_at', 'last_seen_at', 'revoked_at')
+    readonly_fields = ('visit', 'token_hash', 'created_at', 'updated_at', 'last_seen_at', 'revoked_at')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(InternetBandwidthProfile)
@@ -374,7 +398,7 @@ class SystemSettingAdmin(admin.ModelAdmin):
             'description': 'إعدادات الهوية التي تظهر في واجهات مشاريب العامة وواجهات الفريق.',
         }),
         ('الطلبات', {
-            'fields': ('enable_table_orders', 'enable_general_in_space_orders', 'show_internal_order_uuid', 'default_order_mode'),
+            'fields': ('enable_table_orders', 'enable_general_in_space_orders', 'customer_visits_enabled', 'show_internal_order_uuid', 'default_order_mode'),
         }),
         ('التوصيل', {
             'fields': (

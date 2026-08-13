@@ -22,6 +22,8 @@ from accounts.views_staff import (
 )
 from members import views as member_device_views
 from core.views.internet_partner import internet_partner_dashboard
+from core.views.visits import current_visit
+from core.views.staff_visits import staff_visits, staff_visit_detail
 
 
 urlpatterns = [
@@ -30,6 +32,7 @@ urlpatterns = [
     path('', menu.dashboard, name='dashboard'),
     path('menu/', menu.menu_public, name='menu_public'),
     path('menu/table/<uuid:qr_token>/', menu.menu_table, name='menu_table'),
+    path('visit/current/', current_visit, name='current_visit'),
     path('member/activate/<str:token>/', member_device_views.activate_member_device, name='member_activate'),
     path('member/device/deactivate/', member_device_views.deactivate_member_device, name='member_device_deactivate'),
     path('order/<uuid:public_code>/', menu.order_public, name='order_public'),
@@ -37,6 +40,8 @@ urlpatterns = [
     path('table/<uuid:qr_token>/qr.svg', menu.table_qr, name='table_qr'),
     path('staff/', menu.staff_home, name='staff_home'),
     path('staff/pos/', menu.staff_pos, name='staff_pos'),
+    path('staff/visits/', staff_visits, name='staff_visits'),
+    path('staff/visits/<uuid:public_code>/', staff_visit_detail, name='staff_visit_detail'),
     path('staff/notifications/', staff_notifications, name='staff_notifications'),
     path('staff/notifications/poll/', staff_notifications_poll, name='staff_notifications_poll'),
     path('staff/notifications/mark-read/', staff_notifications_mark_read, name='staff_notifications_mark_read'),
