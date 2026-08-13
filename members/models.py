@@ -258,6 +258,29 @@ class MembershipBenefitRule(models.Model):
         target = self.product or self.category or self.menu_section or self.tag or self.item_type or 'قاعدة عامة'
         return f'{self.plan} — {target}'
 
+    def clean(self):
+        super().clean()
+        errors = {}
+        if self.benefit_type == self.BenefitType.INTERNET_MEMBER_PRICE:
+            if self.value_decimal is None or self.value_decimal < 0:
+                errors['value_decimal'] = 'سعر الإنترنت للعضو يجب أن يكون صفراً أو أكثر.'
+            if self.scope_code and self.value_decimal is not None:
+                from core.models import InternetPackage
+                package = InternetPackage.objects.filter(code=self.scope_code).first()
+                if package is None:
+                    try:
+                        package = InternetPackage.objects.filter(public_code=self.scope_code).first()
+                    except (ValueError, ValidationError):
+                        package = None
+                if package and self.value_decimal > package.price_syp:
+                    errors['value_decimal'] = 'سعر العضو لا يمكن أن يكون أعلى من السعر الأساسي.'
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
     def as_snapshot(self):
         """Return the immutable, JSON-safe benefit definition stored on a subscription."""
         return {
@@ -312,6 +335,8 @@ class CommercialAllocation(models.Model):
                 fields=('subscription',),
                 condition=Q(component_type='membership', source_benefit_rule_id__isnull=True),
                 name='unique_subscription_residual_membership'),
+            models.CheckConstraint(condition=Q(allocated_amount_syp__gte=0), name='commercial_allocation_amount_nonnegative'),
+            models.CheckConstraint(condition=Q(partner_share_percent__isnull=True) | (Q(partner_share_percent__gte=0) & Q(partner_share_percent__lte=100)), name='commercial_allocation_share_percent_range'),
         ]
 
     def clean(self):

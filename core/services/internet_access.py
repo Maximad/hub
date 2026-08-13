@@ -1,5 +1,8 @@
 """Commercial Internet policy engine; deliberately independent of routers and views."""
 import calendar
+import hashlib
+import json
+import re
 from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -89,10 +92,21 @@ def get_default_internet_partner():
 
 
 def resolve_internet_partner(package):
-    """Resolve a sale's provider; an inactive package override is never selected."""
-    if package.partner_id and package.partner.active:
+    """Resolve a new sale's provider, failing closed on an explicit bad override."""
+    if package.partner_id:
+        if not package.partner.active:
+            raise ValidationError('لا يمكن تعيين شريك غير فعّال لهذه الباقة.')
         return package.partner
     return get_default_internet_partner()
+
+
+def normalize_mac_address(value):
+    """Validate and return the canonical AA:BB:CC:DD:EE:FF device identity."""
+    compact = re.sub(r'[:-]', '', (value or '').strip())
+    if not re.fullmatch(r'[0-9A-Fa-f]{12}', compact):
+        raise ValidationError({'device_mac': 'عنوان MAC غير صالح. الصيغة المطلوبة AA:BB:CC:DD:EE:FF.'})
+    compact = compact.upper()
+    return ':'.join(compact[index:index + 2] for index in range(0, 12, 2))
 
 
 def resolve_partner_share_percent(package, partner=None):
@@ -141,8 +155,10 @@ def create_entitlement(package, *, member=None, guest_name='', guest_phone='', o
             return existing
     if not package.is_active:
         raise ValidationError('لا يمكن بيع باقة غير فعالة.')
-    if package.member_only and member is None:
-        raise ValidationError('هذه الباقة للأعضاء فقط.')
+    if package.member_only:
+        from members.benefits import is_member_eligible_for_internet_package
+        if not is_member_eligible_for_internet_package(member, package, purchased_at):
+            raise ValidationError('هذه الباقة تتطلب اشتراك عضوية مؤهلاً وفعّالاً حالياً.')
     if member is None and not package.guest_allowed:
         raise ValidationError('هذه الباقة لا تسمح للزوار.')
     if package.access_mode == package.AccessMode.MEMBERSHIP_CREDIT and (member is None or subscription is None):
@@ -156,6 +172,10 @@ def create_entitlement(package, *, member=None, guest_name='', guest_phone='', o
     activate = package.activation_policy == package.ActivationPolicy.ON_PURCHASE
     partner = resolve_internet_partner(package)
     partner_share_percent = resolve_partner_share_percent(package, partner)
+    if partner is None and partner_share_percent is not None:
+        raise ValidationError('لا يمكن تحديد نسبة حصة دون شريك إنترنت فعّال.')
+    if package.bandwidth_profile_id and not package.bandwidth_profile.is_active:
+        raise ValidationError('ملف سرعة الباقة غير فعّال.')
     entitlement = InternetEntitlement.objects.create(
         package=package, member=member, guest_name=guest_name, guest_phone=guest_phone,
         order=order, payment=payment, subscription=subscription, created_by=created_by,
@@ -209,13 +229,14 @@ def _register_device_locked(entitlement, device_mac, nickname=''):
     """Register while the caller holds the entitlement lock."""
     if entitlement.effective_status() != entitlement.Status.ACTIVE:
         raise ValidationError('الاستحقاق غير فعال.')
-    device = InternetAccessDevice.objects.filter(entitlement=entitlement, device_mac__iexact=device_mac).first()
+    device_mac = normalize_mac_address(device_mac)
+    device = InternetAccessDevice.objects.filter(entitlement=entitlement, device_mac=device_mac).first()
     if device:
         device.is_active = True; device.nickname = nickname or device.nickname; device.save()
         return device
     if entitlement.devices.count() >= entitlement.max_registered_devices:
         raise ValidationError('تم بلوغ الحد الأقصى للأجهزة المسجلة.')
-    return InternetAccessDevice.objects.create(entitlement=entitlement, device_mac=device_mac.upper(), nickname=nickname)
+    return InternetAccessDevice.objects.create(entitlement=entitlement, device_mac=device_mac, nickname=nickname)
 
 
 @transaction.atomic
@@ -347,7 +368,8 @@ def snapshot_revenue_share(entitlement, business_date=None, share_percent=None):
     gross = Decimal(entitlement.gross_amount_syp)
     partner_amount = (gross * Decimal(percent) / Decimal('100')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     return InternetRevenueShare.objects.get_or_create(entitlement=entitlement, defaults={
-        'partner': entitlement.partner, 'package': entitlement.package, 'order': entitlement.order,
+        'partner': entitlement.partner, 'partner_name_snapshot': entitlement.partner_name_snapshot,
+        'package': entitlement.package, 'order': entitlement.order,
         'payment': entitlement.payment, 'gross_amount_syp': gross, 'share_percent': percent,
         'partner_amount_syp': partner_amount, 'hub_amount_syp': gross - partner_amount,
         'business_date': business_date or timezone.localdate(),
@@ -360,13 +382,25 @@ def create_commercial_sale(package, *, payment_method, member=None, guest_name='
     sale_at = timezone.now()
     with transaction.atomic():
         package = InternetPackage.objects.select_for_update().get(pk=package.pk)
+        from members.benefits import resolve_internet_price
+        charged_price, pricing_benefit = resolve_internet_price(member, package, sale_at)
+        charged_price = int(charged_price)
+        effective_payment_method = (payment_method if payment_method in Payment.Method.values
+                                    else Payment.Method.UNPAID)
+        identity = {'member_id': member.pk if member else None,
+                    'guest_name': '' if member else guest_name.strip(),
+                    'guest_phone': '' if member else guest_phone.strip()}
+        fingerprint = hashlib.sha256(json.dumps({
+            'package_id': package.pk, **identity, 'charged_amount_syp': charged_price,
+            'payment_method': effective_payment_method,
+            'subscription_id': subscription.pk if subscription else None,
+        }, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
         existing = InternetEntitlement.objects.filter(idempotency_key=idempotency_key).first()
         if existing:
+            if not existing.sale_request_fingerprint or existing.sale_request_fingerprint != fingerprint:
+                raise ValidationError({'idempotency_key': 'استُخدم رمز المحاولة لعملية بيع إنترنت مختلفة.'})
             entitlement = existing
         else:
-            from members.benefits import resolve_internet_price
-            charged_price, pricing_benefit = resolve_internet_price(member, package)
-            charged_price = int(charged_price)
             complimentary = package.access_mode == package.AccessMode.MEMBERSHIP_CREDIT or charged_price == 0
             order = payment = None
             if not complimentary:
@@ -380,7 +414,7 @@ def create_commercial_sale(package, *, payment_method, member=None, guest_name='
                 OrderItem.objects.create(order=order, product=product, quantity=1,
                     product_name_ar_snapshot=package.name_ar, unit_price_syp_snapshot=charged_price,
                     line_total_syp_snapshot=charged_price)
-                method = payment_method if payment_method in Payment.Method.values else Payment.Method.UNPAID
+                method = effective_payment_method
                 if method != Payment.Method.UNPAID:
                     from core.services.posting.context import PostingContext
                     from core.services.posting.order_payments import collect
@@ -393,6 +427,8 @@ def create_commercial_sale(package, *, payment_method, member=None, guest_name='
                 guest_phone=guest_phone, order=order, payment=payment, subscription=subscription,
                 created_by=actor, idempotency_key=idempotency_key, purchased_at=sale_at,
                 charged_amount_syp=charged_price, pricing_benefit=pricing_benefit)
+            entitlement.sale_request_fingerprint = fingerprint
+            entitlement.save(update_fields=['sale_request_fingerprint', 'updated_at'])
 
         # The durable row is committed with the sale; only its on-commit callback may
         # touch a network backend. Repeated checkout resolves to the same logical job.
