@@ -46,9 +46,44 @@ class MemberRecognitionTests(TestCase):
                 self.assert_token_unused(token)
 
         self.assertNotContains(response, raw)
-        self.assertEqual(response.headers['Referrer-Policy'], 'no-referrer')
-        self.assertNotContains(response, '<script', html=False)
+        self.assertEqual(response.headers['Referrer-Policy'], 'same-origin')
+        self.assertContains(response, '<meta name="referrer" content="same-origin">', html=True)
+        self.assertNotContains(response, 'no-referrer')
+        self.assertContains(response, '/static/js/csrf.js')
         self.assertNotContains(response, '<link', html=False)
+
+    @override_settings(
+        ALLOWED_HOSTS=['hubsweida.jwtalenthouse.com'],
+        CSRF_TRUSTED_ORIGINS=['https://hubsweida.jwtalenthouse.com'],
+        SECURE_PROXY_SSL_HEADER=('HTTP_X_FORWARDED_PROTO', 'https'),
+    )
+    def test_activation_accepts_production_https_referer_and_rejects_cross_origin(self):
+        host = 'hubsweida.jwtalenthouse.com'
+        token, raw = create_activation_token(self.member)
+        url = reverse('member_activate', kwargs={'token': raw})
+        client = Client(enforce_csrf_checks=True, HTTP_HOST=host, HTTP_X_FORWARDED_PROTO='https')
+        preview = client.get(url)
+        self.assertEqual(preview.status_code, 200)
+        self.assertIn('csrftoken', preview.cookies)
+        self.assertContains(preview, 'csrfmiddlewaretoken')
+
+        rejected = client.post(
+            url, {'confirm': 'yes', 'csrfmiddlewaretoken': client.cookies['csrftoken'].value},
+            HTTP_REFERER='https://attacker.example/',
+        )
+        self.assertEqual(rejected.status_code, 403)
+        self.assert_token_unused(token)
+
+        response = client.post(
+            url, {'confirm': 'yes', 'next': '/menu/',
+                  'csrfmiddlewaretoken': client.cookies['csrftoken'].value},
+            HTTP_REFERER=f'https://{host}{url}',
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, '/menu/')
+        self.assertIn('hub_member_device', response.cookies)
+        token.refresh_from_db()
+        self.assertIsNotNone(token.consumed_at)
 
     def test_failed_confirmation_does_not_consume_token(self):
         token, raw = create_activation_token(self.member)

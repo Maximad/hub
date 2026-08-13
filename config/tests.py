@@ -19,6 +19,7 @@ class ProductionSettingsTests(SimpleTestCase):
         self.assertTrue(settings.SECURE_SSL_REDIRECT)
         self.assertTrue(settings.SESSION_COOKIE_SECURE)
         self.assertTrue(settings.CSRF_COOKIE_SECURE)
+        self.assertFalse(settings.CSRF_COOKIE_HTTPONLY)
         self.assertEqual(settings.SECURE_HSTS_SECONDS, 3600)
         self.assertFalse(settings.SECURE_HSTS_INCLUDE_SUBDOMAINS)
         self.assertFalse(settings.SECURE_HSTS_PRELOAD)
@@ -105,3 +106,9 @@ class ProxySecurityTests(SimpleTestCase):
         with mock.patch.object(admin.site, 'each_context', return_value={}):
             response = self.https_client.get('/admin/login/')
         self.assertTrue(response.cookies[settings.CSRF_COOKIE_NAME]['secure'])
+
+    def test_csrf_rejections_have_a_dedicated_console_logger(self):
+        logger = settings.LOGGING['loggers']['django.security.csrf']
+        self.assertEqual(logger['handlers'], ['console'])
+        self.assertEqual(logger['level'], 'WARNING')
+        self.assertFalse(logger['propagate'])

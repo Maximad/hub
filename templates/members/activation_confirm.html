@@ -1,9 +1,10 @@
+{% load static %}
 <!doctype html>
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="referrer" content="no-referrer">
+  <meta name="referrer" content="same-origin">
   <title>تأكيد تفعيل العضوية</title>
   <style>
     body { margin: 0; background: #f5f1e8; color: #29251f; font-family: system-ui, sans-serif; }
@@ -22,5 +23,6 @@
       <button type="submit">تفعيل على هذا الجهاز</button>
     </form>
   </main>
+  <script src="{% static 'js/csrf.js' %}"></script>
 </body>
 </html>
