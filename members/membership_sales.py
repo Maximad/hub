@@ -118,7 +118,8 @@ def create_membership_sale(*, member, plan, payment_method, actor, idempotency_k
         raise ValidationError({'starts_at': 'تاريخ البداية يجب أن يتضمن المنطقة الزمنية.'})
 
     with transaction.atomic():
-        plan = MembershipPlan.objects.select_for_update().select_related('catalog_product').get(pk=plan.pk)
+        # catalog_product is nullable: keep it out of PostgreSQL's locked query.
+        plan = MembershipPlan.objects.select_for_update().get(pk=plan.pk)
         member = type(member).objects.select_for_update().get(pk=member.pk)
         existing = MembershipSubscription.objects.select_related('order', 'payment').filter(
             sale_idempotency_key=key).first()

@@ -308,7 +308,29 @@ def start_usage_session(entitlement, *, actor=None, device_mac='', ip_address=''
 
 @transaction.atomic
 def end_usage_session(session, *, actor=None, at=None):
-    session = InternetSession.objects.select_for_update().select_related('entitlement').get(pk=session.pk)
+    # Keep the aggregate lock order used by starts and membership lifecycle work:
+    # subscription -> entitlement -> session.  Read only foreign-key IDs before
+    # taking locks; joining nullable provenance into a FOR UPDATE query is rejected
+    # by PostgreSQL, and locking the session first would invert the lifecycle order.
+    entitlement_id = (InternetSession.objects.filter(pk=session.pk)
+                      .values_list('entitlement_id', flat=True).get())
+    subscription_id = None
+    if entitlement_id:
+        subscription_id = (InternetEntitlement.objects.filter(pk=entitlement_id)
+                           .values_list('subscription_id', flat=True).get())
+    subscription = None
+    if subscription_id:
+        from members.models import MembershipSubscription
+        subscription = MembershipSubscription.objects.select_for_update().get(
+            pk=subscription_id)
+    entitlement = None
+    if entitlement_id:
+        entitlement = InternetEntitlement.objects.select_for_update().get(pk=entitlement_id)
+        if entitlement.subscription_id != subscription_id:
+            raise ValidationError('تغيّر اشتراك مصدر الاستحقاق؛ يرجى إعادة المحاولة.')
+    session = InternetSession.objects.select_for_update().get(pk=session.pk)
+    if session.entitlement_id != entitlement_id:
+        raise ValidationError('تغيّر استحقاق جلسة الإنترنت؛ يرجى إعادة المحاولة.')
     if session.status != session.Status.ACTIVE:
         return session
     at = at or timezone.now()
@@ -320,8 +342,8 @@ def end_usage_session(session, *, actor=None, at=None):
     session.ended_by = actor
     consume = 0
     membership_consume = 0
-    if session.entitlement_id:
-        ent = InternetEntitlement.objects.select_for_update().get(pk=session.entitlement_id)
+    if entitlement is not None:
+        ent = entitlement
         if ent.access_mode == InternetPackage.AccessMode.ALLOWANCE:
             # New sessions settle against their immutable reservation. Legacy nullable
             # sessions conservatively use the balance available while holding this lock.
@@ -332,11 +354,8 @@ def end_usage_session(session, *, actor=None, at=None):
             ent.minutes_used = min(ent.minutes_used + consume, ent.total_minutes_allowed or 0)
             ent.save(update_fields=['minutes_used', 'updated_at'])
         elif ent.access_mode == InternetPackage.AccessMode.MEMBERSHIP_CREDIT:
-            from members.models import MembershipSubscription
             if not ent.subscription_id:
                 raise ValidationError('لا يوجد اشتراك مرتبط برصيد العضوية.')
-            subscription = MembershipSubscription.objects.select_for_update().get(
-                pk=ent.subscription_id)
             if subscription.member_id != ent.member_id:
                 raise ValidationError('الاشتراك لا يعود لصاحب الاستحقاق.')
             # The same cap-at-balance rule applies when concurrent sessions finish.

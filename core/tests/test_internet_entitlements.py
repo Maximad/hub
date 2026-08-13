@@ -693,9 +693,12 @@ class PartnerDashboardDateRangeTests(TestCase):
 
 
 class PostgreSQLNullableEntitlementLockTests(TransactionTestCase):
-    def test_start_locks_entitlement_without_nullable_outer_joins(self):
+    def require_postgresql(self):
         if connection.vendor != 'postgresql':
             self.skipTest('PostgreSQL-specific select_for_update regression')
+
+    def test_start_locks_entitlement_without_nullable_outer_joins(self):
+        self.require_postgresql()
         package = InternetPackage.objects.create(
             name_ar='قفل PostgreSQL', code='postgres-nullable-lock', price_syp=100,
             access_mode=InternetPackage.AccessMode.ALLOWANCE, total_minutes_limit=100,
@@ -712,3 +715,30 @@ class PostgreSQLNullableEntitlementLockTests(TransactionTestCase):
             start_usage_session(member_entitlement).status,
             InternetSession.Status.ACTIVE,
         )
+
+    def test_end_locks_nullable_entitlement_without_outer_join(self):
+        self.require_postgresql()
+        package = InternetPackage.objects.create(
+            name_ar='تسوية PostgreSQL', code='postgres-end-lock', price_syp=100,
+            access_mode=InternetPackage.AccessMode.ALLOWANCE, total_minutes_limit=100,
+        )
+        entitlement = create_entitlement(package)
+        started = timezone.now().replace(second=0, microsecond=0)
+        session = start_usage_session(entitlement, at=started)
+
+        ended = end_usage_session(session, at=started + timedelta(minutes=12))
+        entitlement.refresh_from_db()
+        self.assertEqual(ended.status, InternetSession.Status.ENDED)
+        self.assertEqual(ended.allowance_minutes_consumed, 12)
+        self.assertEqual(entitlement.minutes_remaining, 88)
+        self.assertEqual(start_usage_session(
+            entitlement, at=started + timedelta(minutes=13)).status,
+            InternetSession.Status.ACTIVE)
+
+        legacy = InternetSession.objects.create(
+            entitlement=None, package=package, start_time=started, started_at=started,
+            billing_mode=InternetSession.BillingMode.PREPAID,
+            status=InternetSession.Status.ACTIVE)
+        self.assertEqual(
+            end_usage_session(legacy, at=started + timedelta(minutes=3)).status,
+            InternetSession.Status.ENDED)

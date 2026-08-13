@@ -21,6 +21,16 @@ def _audit(actor, action, **details):
     ActivityLog.objects.create(actor=actor, action=action, details=details)
 
 
+def _lock_subscription_provenance(entitlement):
+    """Lock nullable membership provenance before its Internet entitlement."""
+    subscription_id = (InternetEntitlement.objects.filter(pk=entitlement.pk)
+                       .values_list('subscription_id', flat=True).get())
+    if subscription_id:
+        from members.models import MembershipSubscription
+        MembershipSubscription.objects.select_for_update().get(pk=subscription_id)
+    return subscription_id
+
+
 @transaction.atomic
 def terminate_active_sessions(entitlement, *, reason, at=None, actor=None):
     """Settle all active sessions at the true authorization/lifecycle boundary."""
@@ -48,7 +58,10 @@ def _network(entitlement, operation, reason, key):
 
 @transaction.atomic
 def cancel_internet_entitlement(entitlement, *, actor=None, reason, effective_at=None):
+    subscription_id = _lock_subscription_provenance(entitlement)
     entitlement = InternetEntitlement.objects.select_for_update().get(pk=entitlement.pk)
+    if entitlement.subscription_id != subscription_id:
+        raise ValidationError('Internet entitlement subscription changed; retry the operation.')
     if entitlement.status == entitlement.Status.CANCELLED:
         return entitlement
     if entitlement.status == entitlement.Status.EXPIRED:
@@ -70,7 +83,10 @@ def cancel_internet_entitlement(entitlement, *, actor=None, reason, effective_at
 
 @transaction.atomic
 def expire_internet_entitlement(entitlement, *, actor=None, reason='validity_expired', effective_at=None):
+    subscription_id = _lock_subscription_provenance(entitlement)
     entitlement = InternetEntitlement.objects.select_for_update().get(pk=entitlement.pk)
+    if entitlement.subscription_id != subscription_id:
+        raise ValidationError('Internet entitlement subscription changed; retry the operation.')
     if entitlement.status in {entitlement.Status.EXPIRED, entitlement.Status.CANCELLED}:
         return entitlement
     boundary = effective_at or entitlement.valid_until
