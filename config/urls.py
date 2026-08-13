@@ -22,7 +22,8 @@ from accounts.views_staff import (
 )
 from members import views as member_device_views
 from core.views.internet_partner import internet_partner_dashboard
-from core.views.visits import current_visit
+from core.views.visits import (current_visit, visit_internet_purchase_start,
+    visit_internet_entitlement_start, visit_internet_session_stop)
 from core.views.staff_visits import staff_visits, staff_visit_detail
 
 
@@ -33,6 +34,9 @@ urlpatterns = [
     path('menu/', menu.menu_public, name='menu_public'),
     path('menu/table/<uuid:qr_token>/', menu.menu_table, name='menu_table'),
     path('visit/current/', current_visit, name='current_visit'),
+    path('visit/internet/start/', visit_internet_purchase_start, name='visit_internet_start'),
+    path('visit/internet/entitlement/<uuid:public_code>/start/', visit_internet_entitlement_start, name='visit_internet_entitlement_start'),
+    path('visit/internet/session/<uuid:public_code>/stop/', visit_internet_session_stop, name='visit_internet_session_stop'),
     path('member/activate/<str:token>/', member_device_views.activate_member_device, name='member_activate'),
     path('member/device/deactivate/', member_device_views.deactivate_member_device, name='member_device_deactivate'),
     path('order/<uuid:public_code>/', menu.order_public, name='order_public'),

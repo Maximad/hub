@@ -1877,6 +1877,7 @@ class InternetSession(TimeStampedModel, PublicCodeModel):
     member = models.ForeignKey(Member, on_delete=models.PROTECT, related_name='internet_sessions', null=True, blank=True)
     package = models.ForeignKey(InternetPackage, on_delete=models.PROTECT, related_name='sessions', null=True, blank=True)
     entitlement = models.ForeignKey(InternetEntitlement, on_delete=models.PROTECT, related_name='sessions', null=True, blank=True)
+    visit = models.ForeignKey(HubVisit, on_delete=models.SET_NULL, related_name='internet_sessions', null=True, blank=True)
     customer_name = models.CharField(max_length=120, blank=True)
     customer_phone = models.CharField(max_length=30, blank=True)
     guest_name = models.CharField(max_length=120, blank=True)
@@ -2036,6 +2037,7 @@ class SystemSetting(TimeStampedModel):
     posting_dual_read_enabled = models.BooleanField(default=False, verbose_name='مقارنة القراءات القديمة والجديدة')
     posting_reports_enabled = models.BooleanField(default=False, verbose_name='استخدام القيود الجديدة في التقارير')
     customer_visits_enabled = models.BooleanField(default=False, verbose_name='تفعيل جلسات الزبائن في المنيو')
+    customer_internet_self_service_enabled = models.BooleanField(default=False, verbose_name='تفعيل خدمة الإنترنت الذاتية للزبائن')
     class Language(models.TextChoices):
         ARABIC = 'ar', 'العربية'
         ENGLISH = 'en', 'English'

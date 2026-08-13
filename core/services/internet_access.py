@@ -147,7 +147,7 @@ def validity_end(start, value, unit):
 @transaction.atomic
 def create_entitlement(package, *, member=None, guest_name='', guest_phone='', order=None,
                        payment=None, subscription=None, created_by=None, idempotency_key=None,
-                       purchased_at=None, charged_amount_syp=None, pricing_benefit=None):
+                       purchased_at=None, charged_amount_syp=None, pricing_benefit=None, visit=None):
     package = InternetPackage.objects.select_for_update().get(pk=package.pk)
     if idempotency_key:
         existing = InternetEntitlement.objects.filter(idempotency_key=idempotency_key).first()
@@ -177,7 +177,7 @@ def create_entitlement(package, *, member=None, guest_name='', guest_phone='', o
     if package.bandwidth_profile_id and not package.bandwidth_profile.is_active:
         raise ValidationError('ملف سرعة الباقة غير فعّال.')
     entitlement = InternetEntitlement.objects.create(
-        package=package, member=member, guest_name=guest_name, guest_phone=guest_phone,
+        package=package, member=member, visit=visit, guest_name=guest_name, guest_phone=guest_phone,
         order=order, payment=payment, subscription=subscription, created_by=created_by,
         idempotency_key=idempotency_key, access_mode=package.access_mode,
         activation_policy=package.activation_policy, activated_at=now if activate else None,
@@ -196,7 +196,8 @@ def create_entitlement(package, *, member=None, guest_name='', guest_phone='', o
         source_benefit_rule_id=(pricing_benefit.definition.get('rule_id') if pricing_benefit else None),
         status=InternetEntitlement.Status.ACTIVE if activate else InternetEntitlement.Status.PENDING,
     )
-    ActivityLog.objects.create(actor=created_by, action='internet.entitlement_created', details={'entitlement': str(entitlement.public_code), 'voucher': entitlement.access_code})
+    ActivityLog.objects.create(actor=created_by, action='internet.entitlement_created',
+                               details={'entitlement': str(entitlement.public_code)})
     snapshot_revenue_share(entitlement, share_percent=partner_share_percent)
     return entitlement
 
@@ -240,7 +241,7 @@ def _register_device_locked(entitlement, device_mac, nickname=''):
 
 
 @transaction.atomic
-def start_usage_session(entitlement, *, actor=None, device_mac='', ip_address='', at=None):
+def start_usage_session(entitlement, *, actor=None, device_mac='', ip_address='', at=None, visit=None):
     entitlement = InternetEntitlement.objects.select_for_update().select_related(
         'member', 'subscription').get(pk=entitlement.pk)
     at = at or timezone.now()
@@ -253,6 +254,11 @@ def start_usage_session(entitlement, *, actor=None, device_mac='', ip_address=''
         entitlement = activate_entitlement(entitlement, actor=actor, at=at)
     if entitlement.effective_status(at) != entitlement.Status.ACTIVE:
         raise ValidationError('الاستحقاق غير فعال.')
+    # A timed purchase is one finite session, not a reusable duration bucket.  The
+    # entitlement row lock makes this check authoritative under concurrent starts.
+    if (entitlement.access_mode == InternetPackage.AccessMode.TIMED_SESSION and
+            InternetSession.objects.filter(entitlement=entitlement).exists()):
+        raise ValidationError('تم استخدام هذه الباقة ذات الجلسة الواحدة.')
     if entitlement.access_mode == InternetPackage.AccessMode.MEMBERSHIP_CREDIT:
         from members.models import MembershipSubscription
         if not entitlement.subscription_id:
@@ -280,7 +286,7 @@ def start_usage_session(entitlement, *, actor=None, device_mac='', ip_address=''
     if entitlement.daily_minutes_limit is not None:
         deadlines.append(_next_business_midnight(at))
     authorized_until = min(deadlines) if deadlines else None
-    return InternetSession.objects.create(entitlement=entitlement, package=entitlement.package,
+    return InternetSession.objects.create(entitlement=entitlement, package=entitlement.package, visit=visit,
         member=entitlement.member, guest_name=entitlement.guest_name, guest_phone=entitlement.guest_phone,
         customer_name=entitlement.guest_name, customer_phone=entitlement.guest_phone,
         start_time=at, started_at=at, billing_mode=InternetSession.BillingMode.PREPAID,
@@ -377,7 +383,7 @@ def snapshot_revenue_share(entitlement, business_date=None, share_percent=None):
 
 
 def create_commercial_sale(package, *, payment_method, member=None, guest_name='', guest_phone='',
-                           subscription=None, actor=None, idempotency_key):
+                           subscription=None, actor=None, idempotency_key, visit=None):
     """Commit checkout once, then provision as an independently retryable side effect."""
     sale_at = timezone.now()
     with transaction.atomic():
@@ -390,11 +396,16 @@ def create_commercial_sale(package, *, payment_method, member=None, guest_name='
         identity = {'member_id': member.pk if member else None,
                     'guest_name': '' if member else guest_name.strip(),
                     'guest_phone': '' if member else guest_phone.strip()}
-        fingerprint = hashlib.sha256(json.dumps({
+        fingerprint_data = {
             'package_id': package.pk, **identity, 'charged_amount_syp': charged_price,
             'payment_method': effective_payment_method,
             'subscription_id': subscription.pk if subscription else None,
-        }, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+        }
+        # Preserve the exact pre-visit fingerprint for every historical/manual retry.
+        if visit is not None:
+            fingerprint_data['visit_id'] = visit.pk
+        fingerprint = hashlib.sha256(json.dumps(
+            fingerprint_data, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
         existing = InternetEntitlement.objects.filter(idempotency_key=idempotency_key).first()
         if existing:
             if not existing.sale_request_fingerprint or existing.sale_request_fingerprint != fingerprint:
@@ -404,7 +415,7 @@ def create_commercial_sale(package, *, payment_method, member=None, guest_name='
             complimentary = package.access_mode == package.AccessMode.MEMBERSHIP_CREDIT or charged_price == 0
             order = payment = None
             if not complimentary:
-                order = Order.objects.create(member=member, notes=f'Internet package: {package.name_ar}')
+                order = Order.objects.create(member=member, visit=visit, notes=f'Internet package: {package.name_ar}')
                 category, _ = Category.objects.get_or_create(name_ar='خدمات الإنترنت', defaults={'name_en': 'Internet services'})
                 product, _ = Product.objects.get_or_create(
                     category=category, name_ar=package.name_ar, product_type=Product.ProductType.INTERNET,
@@ -426,7 +437,7 @@ def create_commercial_sale(package, *, payment_method, member=None, guest_name='
             entitlement = create_entitlement(package, member=member, guest_name=guest_name,
                 guest_phone=guest_phone, order=order, payment=payment, subscription=subscription,
                 created_by=actor, idempotency_key=idempotency_key, purchased_at=sale_at,
-                charged_amount_syp=charged_price, pricing_benefit=pricing_benefit)
+                charged_amount_syp=charged_price, pricing_benefit=pricing_benefit, visit=visit)
             entitlement.sale_request_fingerprint = fingerprint
             entitlement.save(update_fields=['sale_request_fingerprint', 'updated_at'])
 

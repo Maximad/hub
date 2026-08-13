@@ -398,7 +398,7 @@ class SystemSettingAdmin(admin.ModelAdmin):
             'description': 'إعدادات الهوية التي تظهر في واجهات مشاريب العامة وواجهات الفريق.',
         }),
         ('الطلبات', {
-            'fields': ('enable_table_orders', 'enable_general_in_space_orders', 'customer_visits_enabled', 'show_internal_order_uuid', 'default_order_mode'),
+            'fields': ('enable_table_orders', 'enable_general_in_space_orders', 'customer_visits_enabled', 'customer_internet_self_service_enabled', 'show_internal_order_uuid', 'default_order_mode'),
         }),
         ('التوصيل', {
             'fields': (
