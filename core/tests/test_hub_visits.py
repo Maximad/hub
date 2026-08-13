@@ -9,7 +9,8 @@ from core.models import ActivityLog, Category, HubVisit, HubVisitBrowserCredenti
 from core.settings_helpers import get_system_settings
 
 
-@override_settings(ALLOWED_HOSTS=['testserver'], STORAGES={'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
+@override_settings(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False,
+                   STORAGES={'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
 class HubVisitPublicTests(TestCase):
     def setUp(self):
         self.room = Room.objects.create(name_ar='الصالة')
@@ -94,7 +95,7 @@ class HubVisitPublicTests(TestCase):
         self.assertRedirects(self.client.get(reverse('current_visit')), reverse('menu_public'))
 
 
-@override_settings(ALLOWED_HOSTS=['testserver'])
+@override_settings(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False)
 class HubVisitStaffTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_superuser(username='visit-admin', password='pass', email='v@example.com', phone='+963900001111')

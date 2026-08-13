@@ -242,12 +242,24 @@ def _register_device_locked(entitlement, device_mac, nickname=''):
 
 @transaction.atomic
 def start_usage_session(entitlement, *, actor=None, device_mac='', ip_address='', at=None, visit=None):
-    entitlement = InternetEntitlement.objects.select_for_update().select_related(
-        'member', 'subscription').get(pk=entitlement.pk)
+    # Membership lifecycle transitions lock subscription -> entitlement.  Follow
+    # that order here as well, while keeping the entitlement row as the
+    # authoritative session-start lock.  In particular, do not select_related()
+    # nullable provenance rows into the FOR UPDATE query: PostgreSQL cannot lock
+    # the nullable side of those outer joins.
+    subscription = None
+    subscription_id = (InternetEntitlement.objects.filter(pk=entitlement.pk)
+                       .values_list('subscription_id', flat=True).get())
+    if subscription_id:
+        from members.models import MembershipSubscription
+        subscription = MembershipSubscription.objects.select_for_update().get(pk=subscription_id)
+    entitlement = InternetEntitlement.objects.select_for_update().get(pk=entitlement.pk)
+    if entitlement.subscription_id != subscription_id:
+        raise ValidationError('تغيّر اشتراك مصدر الاستحقاق؛ يرجى إعادة المحاولة.')
     at = at or timezone.now()
     # Membership provenance is authoritative even if reconciliation has not yet
     # copied a frozen/terminal state onto the entitlement.
-    if entitlement.subscription_id and not entitlement.subscription.is_active_at(at):
+    if subscription is not None and not subscription.is_active_at(at):
         raise ValidationError('اشتراك العضوية المصدر غير فعال.')
     # Business first use is precisely creation of the first real Hub usage session.
     if entitlement.activation_policy == InternetPackage.ActivationPolicy.ON_FIRST_USE and not entitlement.activated_at:
@@ -260,11 +272,8 @@ def start_usage_session(entitlement, *, actor=None, device_mac='', ip_address=''
             InternetSession.objects.filter(entitlement=entitlement).exists()):
         raise ValidationError('تم استخدام هذه الباقة ذات الجلسة الواحدة.')
     if entitlement.access_mode == InternetPackage.AccessMode.MEMBERSHIP_CREDIT:
-        from members.models import MembershipSubscription
         if not entitlement.subscription_id:
             raise ValidationError('لا يوجد اشتراك مرتبط برصيد العضوية.')
-        subscription = MembershipSubscription.objects.select_for_update().get(
-            pk=entitlement.subscription_id)
         if subscription.member_id != entitlement.member_id:
             raise ValidationError('الاشتراك لا يعود لصاحب الاستحقاق.')
         if not subscription.is_active_at(at):

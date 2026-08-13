@@ -4,7 +4,7 @@ from unittest.mock import patch
 from threading import Barrier, Thread
 
 from django.core.exceptions import ValidationError
-from django.db import close_old_connections
+from django.db import close_old_connections, connection
 from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -690,3 +690,25 @@ class PartnerDashboardDateRangeTests(TestCase):
             set(response.context['shares'].values_list('pk', flat=True)),
             {shares[0].pk, shares[1].pk})
         self.assertEqual(response.context['totals']['gross'], Decimal('3900'))
+
+
+class PostgreSQLNullableEntitlementLockTests(TransactionTestCase):
+    def test_start_locks_entitlement_without_nullable_outer_joins(self):
+        if connection.vendor != 'postgresql':
+            self.skipTest('PostgreSQL-specific select_for_update regression')
+        package = InternetPackage.objects.create(
+            name_ar='قفل PostgreSQL', code='postgres-nullable-lock', price_syp=100,
+            access_mode=InternetPackage.AccessMode.ALLOWANCE, total_minutes_limit=100,
+        )
+        guest = create_entitlement(package)
+        self.assertIsNone(guest.member_id)
+        self.assertIsNone(guest.subscription_id)
+        self.assertEqual(start_usage_session(guest).status, InternetSession.Status.ACTIVE)
+
+        member = Member.objects.create(name_ar='عضو دون اشتراك', phone='0999999998')
+        member_entitlement = create_entitlement(package, member=member)
+        self.assertIsNone(member_entitlement.subscription_id)
+        self.assertEqual(
+            start_usage_session(member_entitlement).status,
+            InternetSession.Status.ACTIVE,
+        )
