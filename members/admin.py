@@ -33,7 +33,8 @@ class MembershipSubscriptionAdmin(admin.ModelAdmin):
     search_fields = ('member__name_ar', 'member__phone', 'plan__name_ar', 'plan__code')
     autocomplete_fields = ('member', 'plan', 'order', 'payment', 'created_by')
     readonly_fields = ('sale_idempotency_key', 'sale_request_fingerprint', 'is_complimentary',
-                       'activation_error', 'created_at', 'updated_at')
+                       'activation_error', 'total_frozen_duration_seconds',
+                       'created_at', 'updated_at')
     date_hierarchy = 'starts_at'
 
     def has_add_permission(self, request):

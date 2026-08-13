@@ -84,10 +84,22 @@ class InternetPackageAdmin(admin.ModelAdmin):
 
 @admin.register(InternetEntitlement)
 class InternetEntitlementAdmin(admin.ModelAdmin):
-    list_display = ('access_code', 'package', 'member', 'guest_name', 'status', 'network_status', 'valid_until', 'minutes_remaining')
+    list_display = ('access_code', 'package', 'member', 'guest_name', 'status',
+                    'network_status', 'subscription', 'active_sessions',
+                    'disconnect_state', 'valid_until', 'minutes_remaining')
     list_filter = ('status', 'network_status', 'access_mode', 'partner')
     search_fields = ('access_code', 'guest_name', 'guest_phone', 'member__name_ar', 'member__phone')
-    readonly_fields = ('public_code', 'access_code', 'minutes_used', 'created_at', 'updated_at')
+    readonly_fields = ('public_code', 'access_code', 'minutes_used', 'lifecycle_reason',
+                       'created_at', 'updated_at')
+
+    @admin.display(description='الجلسات الفعالة')
+    def active_sessions(self, obj):
+        return obj.sessions.filter(status='active').count()
+
+    @admin.display(description='عملية الفصل')
+    def disconnect_state(self, obj):
+        operation = obj.network_operations.filter(operation__in=('disconnect', 'expire')).order_by('-created_at').first()
+        return operation.get_status_display() if operation else '—'
 
 
 @admin.register(InternetNetworkOperation)

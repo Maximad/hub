@@ -1594,6 +1594,7 @@ class InternetEntitlement(TimeStampedModel, PublicCodeModel):
         ACTIVE = 'active', 'فعال'
         EXPIRED = 'expired', 'منتهي'
         CANCELLED = 'cancelled', 'ملغى'
+        SUSPENDED = 'suspended', 'معلّق'
     class NetworkStatus(models.TextChoices):
         NOT_PROVISIONED = 'not_provisioned', 'غير مجهز'
         PROVISIONED = 'provisioned', 'مجهز'
@@ -1635,6 +1636,7 @@ class InternetEntitlement(TimeStampedModel, PublicCodeModel):
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_internet_entitlements')
     cancelled_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='cancelled_internet_entitlements')
     cancellation_reason = models.TextField(blank=True)
+    lifecycle_reason = models.CharField(max_length=200, blank=True)
     partner = models.ForeignKey(InternetPartner, on_delete=models.PROTECT, null=True, blank=True, related_name='entitlements')
     partner_name_snapshot = models.CharField(max_length=120, blank=True)
     partner_share_percent_snapshot = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
@@ -1822,6 +1824,7 @@ class InternetSession(TimeStampedModel, PublicCodeModel):
     ip_address = models.CharField(max_length=64, blank=True)
     bandwidth_profile = models.CharField(max_length=120, blank=True)
     network_status = models.CharField(max_length=120, blank=True)
+    lifecycle_end_reason = models.CharField(max_length=200, blank=True)
 
     class Meta:
         constraints = [

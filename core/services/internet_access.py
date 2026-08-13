@@ -184,8 +184,10 @@ def create_entitlement(package, *, member=None, guest_name='', guest_phone='', o
 @transaction.atomic
 def activate_entitlement(entitlement, *, actor=None, at=None):
     entitlement = InternetEntitlement.objects.select_for_update().get(pk=entitlement.pk)
-    if entitlement.effective_status(at) in {entitlement.Status.EXPIRED, entitlement.Status.CANCELLED}:
-        raise ValidationError('لا يمكن تفعيل استحقاق منتهٍ أو ملغى.')
+    if entitlement.effective_status(at) in {
+            entitlement.Status.EXPIRED, entitlement.Status.CANCELLED,
+            entitlement.Status.SUSPENDED}:
+        raise ValidationError('لا يمكن تفعيل استحقاق منتهٍ أو ملغى أو معلّق.')
     if entitlement.activated_at:
         return entitlement
     at = at or timezone.now()
@@ -221,6 +223,10 @@ def start_usage_session(entitlement, *, actor=None, device_mac='', ip_address=''
     entitlement = InternetEntitlement.objects.select_for_update().select_related(
         'member', 'subscription').get(pk=entitlement.pk)
     at = at or timezone.now()
+    # Membership provenance is authoritative even if reconciliation has not yet
+    # copied a frozen/terminal state onto the entitlement.
+    if entitlement.subscription_id and not entitlement.subscription.is_active_at(at):
+        raise ValidationError('اشتراك العضوية المصدر غير فعال.')
     # Business first use is precisely creation of the first real Hub usage session.
     if entitlement.activation_policy == InternetPackage.ActivationPolicy.ON_FIRST_USE and not entitlement.activated_at:
         entitlement = activate_entitlement(entitlement, actor=actor, at=at)
