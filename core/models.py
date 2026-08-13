@@ -1514,6 +1514,11 @@ class InternetPackage(TimeStampedModel, PublicCodeModel):
     notes = models.TextField(blank=True)
     backend_config = models.JSONField(default=dict, blank=True)
 
+    class Meta:
+        constraints = [
+            models.CheckConstraint(condition=models.Q(partner_share_percent__isnull=True) | (models.Q(partner_share_percent__gte=0) & models.Q(partner_share_percent__lte=100)), name='internet_package_share_percent_range'),
+        ]
+
     def clean(self):
         errors = {}
         validity = bool(self.validity_value and self.validity_unit)
@@ -1528,6 +1533,15 @@ class InternetPackage(TimeStampedModel, PublicCodeModel):
         if self.access_mode == self.AccessMode.MEMBERSHIP_CREDIT:
             if not self.member_only or self.guest_allowed: errors['member_only'] = 'رصيد العضوية مخصص للأعضاء فقط.'
             if self.total_minutes_limit: errors['total_minutes_limit'] = 'رصيد العضوية يأتي من الاشتراك، لا من الباقة.'
+        if self.daily_minutes_limit and self.total_minutes_limit and self.daily_minutes_limit > self.total_minutes_limit:
+            errors['daily_minutes_limit'] = 'الحد اليومي لا يمكن أن يتجاوز إجمالي الدقائق.'
+        if self.partner_id and not self.partner.active:
+            errors['partner'] = 'لا يمكن تعيين شريك غير فعّال لهذه الباقة.'
+        if (self.partner_share_percent is not None and not self.partner_id and
+                not InternetPartner.objects.filter(active=True, is_default=True).exists()):
+            errors['partner_share_percent'] = 'لا يمكن تحديد نسبة حصة دون شريك إنترنت فعّال.'
+        if self.bandwidth_profile_id and not self.bandwidth_profile.is_active:
+            errors['bandwidth_profile'] = 'لا يمكن استخدام ملف سرعة غير فعّال.'
         if errors: raise ValidationError(errors)
 
     def save(self, *args, **kwargs):
@@ -1559,6 +1573,7 @@ class InternetPartner(TimeStampedModel):
 
     class Meta:
         constraints = [
+            models.CheckConstraint(condition=models.Q(revenue_share_percent__gte=0) & models.Q(revenue_share_percent__lte=100), name='internet_partner_share_percent_range'),
             models.CheckConstraint(
                 condition=models.Q(is_default=False) | models.Q(active=True),
                 name='internet_partner_default_must_be_active',
@@ -1611,6 +1626,7 @@ class InternetEntitlement(TimeStampedModel, PublicCodeModel):
     source_benefit_rule_id = models.PositiveBigIntegerField(null=True, blank=True)
     origin_type = models.CharField(max_length=30, default='direct_package')
     idempotency_key = models.CharField(max_length=100, null=True, blank=True, unique=True)
+    sale_request_fingerprint = models.CharField(max_length=64, blank=True, editable=False)
     access_code = models.CharField(max_length=12, unique=True, editable=False)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     access_mode = models.CharField(max_length=24, choices=InternetPackage.AccessMode.choices)
@@ -1644,6 +1660,8 @@ class InternetEntitlement(TimeStampedModel, PublicCodeModel):
 
     class Meta:
         constraints = [
+            models.CheckConstraint(condition=models.Q(gross_amount_syp__gte=0), name='internet_entitlement_gross_nonnegative'),
+            models.CheckConstraint(condition=models.Q(partner_share_percent_snapshot__isnull=True) | (models.Q(partner_share_percent_snapshot__gte=0) & models.Q(partner_share_percent_snapshot__lte=100)), name='internet_entitlement_share_percent_range'),
             models.CheckConstraint(
                 condition=(models.Q(total_minutes_allowed__isnull=True)
                            | models.Q(minutes_used__lte=models.F('total_minutes_allowed'))),
@@ -1716,12 +1734,24 @@ class InternetAccessDevice(TimeStampedModel):
     last_seen_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
     class Meta:
-        constraints = [models.UniqueConstraint(fields=['entitlement', 'device_mac'], name='unique_entitlement_device')]
+        constraints = [
+            models.UniqueConstraint(fields=['entitlement', 'device_mac'], name='unique_entitlement_device'),
+            models.UniqueConstraint(models.functions.Lower('device_mac'), 'entitlement', name='unique_entitlement_device_mac_ci'),
+        ]
+
+    def clean(self):
+        from core.services.internet_access import normalize_mac_address
+        self.device_mac = normalize_mac_address(self.device_mac)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
 
 class InternetRevenueShare(TimeStampedModel):
     entitlement = models.OneToOneField(InternetEntitlement, on_delete=models.PROTECT, related_name='revenue_share')
     partner = models.ForeignKey(InternetPartner, on_delete=models.PROTECT, related_name='revenue_shares')
+    partner_name_snapshot = models.CharField(max_length=120, blank=True)
     package = models.ForeignKey(InternetPackage, on_delete=models.PROTECT, null=True, blank=True, related_name='revenue_shares')
     subscription = models.ForeignKey('members.MembershipSubscription', on_delete=models.PROTECT, null=True, blank=True, related_name='internet_revenue_shares')
     order = models.ForeignKey(Order, on_delete=models.SET_NULL, null=True, blank=True)
@@ -1731,6 +1761,15 @@ class InternetRevenueShare(TimeStampedModel):
     partner_amount_syp = models.DecimalField(max_digits=14, decimal_places=2)
     hub_amount_syp = models.DecimalField(max_digits=14, decimal_places=2)
     business_date = models.DateField()
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(condition=models.Q(share_percent__gte=0) & models.Q(share_percent__lte=100), name='internet_revenue_share_percent_range'),
+            models.CheckConstraint(condition=models.Q(gross_amount_syp__gte=0), name='internet_revenue_share_gross_nonnegative'),
+            models.CheckConstraint(condition=models.Q(partner_amount_syp__gte=0), name='internet_revenue_share_partner_nonnegative'),
+            models.CheckConstraint(condition=models.Q(hub_amount_syp__gte=0), name='internet_revenue_share_hub_nonnegative'),
+            models.CheckConstraint(condition=models.Q(partner_amount_syp=models.F('gross_amount_syp') - models.F('hub_amount_syp')), name='internet_revenue_share_arithmetic'),
+        ]
 
 
 class InternetRevenueShareAdjustment(TimeStampedModel):

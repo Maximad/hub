@@ -139,7 +139,8 @@ def provision_subscription_internet(subscription):
             raise ValidationError('Existing Internet allocation conflicts with benefit snapshot.')
         if share_amount is not None:
             InternetRevenueShare.objects.get_or_create(entitlement=entitlement, defaults={
-                'partner': item.partner, 'subscription': subscription,
+                'partner': item.partner, 'partner_name_snapshot': item.partner.name,
+                'subscription': subscription,
                 'gross_amount_syp': item.allocation, 'share_percent': item.percent,
                 'partner_amount_syp': share_amount,
                 'hub_amount_syp': Decimal(item.allocation) - share_amount,

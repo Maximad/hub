@@ -131,8 +131,11 @@ class EntitlementWorkflowTests(TestCase):
         with self.assertRaises(ValidationError): start_usage_session(ent)
         from core.services.internet_access import activate_entitlement
         ent = activate_entitlement(ent)
-        register_device(ent, 'AA:BB')
-        with self.assertRaises(ValidationError): register_device(ent, 'CC:DD')
+        device = register_device(ent, 'aa-bb-cc-dd-ee-ff')
+        self.assertEqual(device.device_mac, 'AA:BB:CC:DD:EE:FF')
+        self.assertEqual(register_device(ent, 'AA:BB:CC:DD:EE:FF').pk, device.pk)
+        with self.assertRaises(ValidationError): register_device(ent, '11:22:33:44:55:66')
+        with self.assertRaises(ValidationError): register_device(ent, 'AA:BB')
         backend = ManualNetworkBackend(); backend.provision_access(ent); backend.provision_access(ent)
         ent.refresh_from_db(); self.assertEqual(ent.network_status, 'provisioned')
         backend.disconnect_access(ent); ent.refresh_from_db(); self.assertEqual(ent.network_status, 'disconnected')
@@ -142,7 +145,8 @@ class EntitlementWorkflowTests(TestCase):
         member = Member.objects.create(name_ar='عضو', phone='0888888888')
         plan = MembershipPlan.objects.create(code='m', name_ar='عضوية')
         subscription = MembershipSubscription.objects.create(member=member, plan=plan,
-            starts_at=timezone.now(), remaining_internet_minutes=90)
+            starts_at=timezone.now(), status='active', remaining_internet_minutes=90,
+            benefit_snapshot=[{'rule_id': 1, 'benefit_type': 'internet_minutes', 'value_integer': 90}])
         package = InternetPackage.objects.create(name_ar='رصيد عضو', code='credit', duration_minutes=0,
             price_syp=0, access_mode='membership_credit', member_only=True, guest_allowed=False)
         ent = create_entitlement(package, member=member, subscription=subscription)
@@ -154,7 +158,8 @@ class EntitlementWorkflowTests(TestCase):
         plan = MembershipPlan.objects.create(code=f'credit-{member.pk}', name_ar='عضوية')
         subscription = MembershipSubscription.objects.create(
             member=member, plan=plan, starts_at=timezone.now() - timedelta(days=1),
-            ends_at=ends_at, status=status, remaining_internet_minutes=minutes)
+            ends_at=ends_at, status=status, remaining_internet_minutes=minutes,
+            benefit_snapshot=[{'rule_id': 1, 'benefit_type': 'internet_minutes', 'value_integer': minutes}])
         package = InternetPackage.objects.create(
             name_ar='رصيد عضو', code=f'credit-{member.pk}', duration_minutes=0,
             price_syp=0, access_mode='membership_credit', member_only=True,
@@ -175,13 +180,10 @@ class EntitlementWorkflowTests(TestCase):
 
     def test_exhausted_and_expired_memberships_cannot_start(self):
         _, exhausted = self.membership_credit(minutes=0)
-        _, expired = self.membership_credit(
-            minutes=10, ends_at=timezone.now() - timedelta(seconds=1))
-
         with self.assertRaises(ValidationError):
             start_usage_session(exhausted)
         with self.assertRaises(ValidationError):
-            start_usage_session(expired)
+            self.membership_credit(minutes=10, ends_at=timezone.now() - timedelta(seconds=1))
 
     def test_membership_end_retry_is_idempotent(self):
         subscription, entitlement = self.membership_credit(minutes=30)
@@ -204,7 +206,8 @@ class MembershipCreditConcurrencyTests(TransactionTestCase):
         plan = MembershipPlan.objects.create(code='concurrent-credit', name_ar='عضوية')
         subscription = MembershipSubscription.objects.create(
             member=member, plan=plan, starts_at=timezone.now() - timedelta(days=1),
-            status='active', remaining_internet_minutes=60)
+            status='active', remaining_internet_minutes=60,
+            benefit_snapshot=[{'rule_id': 1, 'benefit_type': 'internet_minutes', 'value_integer': 60}])
         package = InternetPackage.objects.create(
             name_ar='رصيد متزامن', code='concurrent-credit', duration_minutes=0,
             price_syp=0, access_mode='membership_credit', member_only=True,
@@ -455,6 +458,24 @@ class InternetHttpWorkflowTests(TestCase):
         totals = close_totals(self.cashbox, timezone.localdate())
         self.assertEqual(totals['cash_receipts'], Decimal('2000'))
 
+    def test_idempotency_key_reuse_for_different_sale_intent_is_rejected(self):
+        original = create_commercial_sale(
+            self.package, payment_method=Payment.Method.CASH, guest_name='Guest A',
+            actor=self.staff, idempotency_key='sale-intent')
+        with self.assertRaises(ValidationError):
+            create_commercial_sale(
+                self.package, payment_method=Payment.Method.CASH, guest_name='Guest B',
+                actor=self.staff, idempotency_key='sale-intent')
+        other = InternetPackage.objects.create(
+            name_ar='باقة أخرى', code='other-intent', duration_minutes=60,
+            price_syp=2000, access_mode='timed_session', session_minutes_limit=60)
+        with self.assertRaises(ValidationError):
+            create_commercial_sale(
+                other, payment_method=Payment.Method.CASH, guest_name='Guest A',
+                actor=self.staff, idempotency_key='sale-intent')
+        self.assertEqual(InternetEntitlement.objects.get(), original)
+        self.assertEqual((Order.objects.count(), Payment.objects.count()), (1, 1))
+
     def test_cash_sale_respects_closed_period_without_partial_commercial_records(self):
         DailyClose.objects.create(
             account=self.cashbox, business_date=timezone.localdate(),
@@ -524,8 +545,9 @@ class InternetHttpWorkflowTests(TestCase):
         member = Member.objects.create(name_ar='عضو', phone='0999000000')
         plan = MembershipPlan.objects.create(code='metric-plan', name_ar='عضوية')
         subscription = MembershipSubscription.objects.create(
-            member=member, plan=plan, starts_at=timezone.now(),
-            remaining_internet_minutes=60)
+            member=member, plan=plan, starts_at=timezone.now(), status='active',
+            remaining_internet_minutes=60,
+            benefit_snapshot=[{'rule_id': 1, 'benefit_type': 'internet_minutes', 'value_integer': 60}])
         credit = InternetPackage.objects.create(
             name_ar='رصيد عضوية', code='metric-credit', duration_minutes=0,
             price_syp=0, access_mode=InternetPackage.AccessMode.MEMBERSHIP_CREDIT,

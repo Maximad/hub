@@ -177,6 +177,26 @@ def get_internet_member_pricing_eligibility(member, at=None):
                for benefit in get_effective_benefits(member, at))
 
 
+def is_member_eligible_for_internet_package(member, package, at=None):
+    """Whether a current, effectively-active subscription qualifies for member Internet.
+
+    Eligibility is typed by INTERNET_MEMBER_PRICE or INTERNET_MINUTES (which authorizes
+    a membership-credit entitlement), never inferred from a Member row or mutable plan
+    name. Scope matching uses the same stable package identities as price resolution.
+    """
+    if member is None:
+        return False
+    for benefit in get_internet_benefits(member, at):
+        if benefit.benefit_type not in {
+                MembershipBenefitRule.BenefitType.INTERNET_MEMBER_PRICE,
+                MembershipBenefitRule.BenefitType.INTERNET_MINUTES}:
+            continue
+        scope = str(benefit.definition.get('scope_code') or '')
+        if not scope or scope in {str(package.pk), str(package.public_code), package.code or ''}:
+            return True
+    return False
+
+
 def get_internet_benefits(member, at=None):
     types = {MembershipBenefitRule.BenefitType.INTERNET_MINUTES,
              MembershipBenefitRule.BenefitType.INTERNET_MEMBER_PRICE}
@@ -196,6 +216,9 @@ def resolve_internet_price(member, package, at=None):
         price = _decimal(definition)
         if price >= 0:
             candidates.append((price, benefit))
+    base = Decimal(package.price_syp)
     if not candidates:
-        return Decimal(package.price_syp), None
-    return sorted(candidates, key=lambda row: (row[0], -int(row[1].definition.get('priority') or 0), row[1].subscription.pk))[0]
+        return base, None
+    price, benefit = sorted(candidates, key=lambda row: (row[0], -int(row[1].definition.get('priority') or 0), row[1].subscription.pk))[0]
+    # Runtime is authoritative even when legacy configuration escaped validation.
+    return (price, benefit) if price < base else (base, None)
