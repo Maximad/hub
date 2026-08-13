@@ -220,6 +220,13 @@ LOGGING = {
             'level': 'ERROR',
             'propagate': False,
         },
+        # CsrfViewMiddleware logs only the sanitized rejection reason and path;
+        # it does not include cookies, submitted data, or token values.
+        'django.security.csrf': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
     },
 }
 

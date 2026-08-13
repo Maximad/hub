@@ -39,7 +39,9 @@ def activate_member_device(request, token):
             'destination': destination,
         })
         response.headers['Cache-Control'] = 'no-store'
-        response.headers['Referrer-Policy'] = 'no-referrer'
+        # Keep the one-time token URL out of cross-origin Referer headers while
+        # retaining the same-origin Referer Django needs for HTTPS CSRF checks.
+        response.headers['Referrer-Policy'] = 'same-origin'
         return response
 
     if request.POST.get('confirm') != 'yes':
