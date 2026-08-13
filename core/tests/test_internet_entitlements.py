@@ -5,12 +5,12 @@ from threading import Barrier, Thread
 
 from django.core.exceptions import ValidationError
 from django.db import close_old_connections, connection
-from django.test import Client, TestCase, TransactionTestCase
+from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from core.models import (CashMovement, DailyClose, FinancialAccount, InternetAccessDevice, InternetBandwidthProfile, InternetEntitlement,
-                         InternetPackage, InternetPartner, InternetPartnerUser, InternetRevenueShare,
+                         InternetNetworkOperation, InternetPackage, InternetPartner, InternetPartnerUser, InternetRevenueShare,
                          InternetRevenueShareAdjustment, InternetSession, InternetUsageLedger, Member, Order, Payment,
                          PostingBatch, PostingCommand)
 from core.services.internet_access import (create_entitlement, end_usage_session,
@@ -19,6 +19,7 @@ from core.services.internet_access import (create_entitlement, end_usage_session
     record_payment_reversal_adjustment,
     register_device, start_usage_session, validity_end)
 from core.services.network_backends import ManualNetworkBackend, get_network_backend
+from core.services.network_operations import process_network_operation
 from core.services.posting.closing import close_totals
 from core.services.posting.exceptions import ClosedPeriodError
 from members.models import MembershipPlan, MembershipSubscription
@@ -93,7 +94,8 @@ class EntitlementWorkflowTests(TestCase):
     def test_intersected_limits_reservation_settlement_and_overrun(self):
         package = InternetPackage.objects.create(name_ar='حدود', code='limits', duration_minutes=0,
             price_syp=1, access_mode='allowance', total_minutes_limit=90,
-            daily_minutes_limit=40, session_minutes_limit=60, max_concurrent_devices=2)
+            daily_minutes_limit=40, session_minutes_limit=60, max_concurrent_devices=2,
+            max_registered_devices=2)
         ent = create_entitlement(package)
         now = timezone.now().replace(second=0, microsecond=0)
         ent.valid_until = now + timedelta(minutes=25, seconds=30)
@@ -163,7 +165,7 @@ class EntitlementWorkflowTests(TestCase):
         package = InternetPackage.objects.create(
             name_ar='رصيد عضو', code=f'credit-{member.pk}', duration_minutes=0,
             price_syp=0, access_mode='membership_credit', member_only=True,
-            guest_allowed=False, max_concurrent_devices=2)
+            guest_allowed=False, max_concurrent_devices=2, max_registered_devices=2)
         return subscription, create_entitlement(package, member=member, subscription=subscription)
 
     def test_membership_session_longer_than_balance_caps_consumption(self):
@@ -211,7 +213,7 @@ class MembershipCreditConcurrencyTests(TransactionTestCase):
         package = InternetPackage.objects.create(
             name_ar='رصيد متزامن', code='concurrent-credit', duration_minutes=0,
             price_syp=0, access_mode='membership_credit', member_only=True,
-            guest_allowed=False, max_concurrent_devices=2)
+            guest_allowed=False, max_concurrent_devices=2, max_registered_devices=2)
         entitlement = create_entitlement(package, member=member, subscription=subscription)
         barrier = Barrier(2)
         errors = []
@@ -282,7 +284,18 @@ class PartnerSnapshotTests(TestCase):
         self.assertIsNone(entitlement.partner)
         self.assertFalse(InternetRevenueShare.objects.filter(entitlement=entitlement).exists())
 
-    def test_inactive_partner_cannot_be_default_and_is_never_implicitly_selected(self):
+    def test_inactive_partner_cannot_be_default(self):
+        inactive = InternetPartner(name='Inactive ISP', active=False, is_default=True)
+        with self.assertRaises(ValidationError):
+            inactive.save()
+
+    def test_explicit_inactive_package_partner_is_rejected(self):
+        inactive = InternetPartner.objects.create(name='Inactive ISP', active=False)
+
+        with self.assertRaises(ValidationError):
+            self.package(partner=inactive)
+
+    def test_package_without_explicit_partner_inherits_active_default(self):
         inactive = InternetPartner(name='Inactive ISP', active=False, is_default=True)
         with self.assertRaises(ValidationError):
             inactive.save()
@@ -290,7 +303,7 @@ class PartnerSnapshotTests(TestCase):
         inactive.save()
         fallback = InternetPartner.objects.create(name='Default ISP', is_default=True)
 
-        entitlement = create_entitlement(self.package(partner=inactive))
+        entitlement = create_entitlement(self.package())
 
         self.assertEqual(get_default_internet_partner(), fallback)
         self.assertEqual(entitlement.partner, fallback)
@@ -413,12 +426,14 @@ class HardeningRegressionTests(TestCase):
         ent.revenue_share.refresh_from_db(); self.assertEqual(ent.revenue_share.share_percent, Decimal('25'))
 
 
+@override_settings(SECURE_SSL_REDIRECT=False)
 class InternetHttpWorkflowTests(TestCase):
     def setUp(self):
         from django.contrib.auth import get_user_model
         self.staff = get_user_model().objects.create_user(username='cash', phone='0900', password='x', role='cashier')
         self.client = Client(); self.client.force_login(self.staff)
         self.partner = InternetPartner.objects.create(name='ISP', revenue_share_percent=Decimal('30'))
+        FinancialAccount.objects.filter(scope='cashbox').update(is_active=False)
         self.cashbox = FinancialAccount.objects.create(
             code='cash:internet', name_ar='صندوق الإنترنت', account_type='asset',
             scope='cashbox', is_active=True, negative_balance_policy='allow')
@@ -436,7 +451,9 @@ class InternetHttpWorkflowTests(TestCase):
         ent = InternetEntitlement.objects.get()
         self.assertEqual(Order.objects.count(), 1); self.assertEqual(Payment.objects.count(), 1)
         self.assertEqual(InternetRevenueShare.objects.count(), 1)
-        self.assertEqual(ent.network_status, 'provisioned'); self.assertTrue(ent.external_network_identifier == '')
+        self.assertEqual(ent.network_status, InternetEntitlement.NetworkStatus.PENDING)
+        self.assertEqual(InternetNetworkOperation.objects.filter(
+            entitlement=ent, operation=InternetNetworkOperation.Operation.PROVISION).count(), 1)
 
     def test_cash_sale_posts_once_to_cashbox_and_daily_close(self):
         first = create_commercial_sale(
@@ -492,19 +509,35 @@ class InternetHttpWorkflowTests(TestCase):
 
     def test_router_failure_is_persisted_and_retried_without_duplicate_sale(self):
         backend = ManualNetworkBackend()
-        with patch('core.services.network_backends.get_network_backend', return_value=backend), \
-             patch.object(backend, 'provision_access', side_effect=RuntimeError('router offline')):
-            failed = create_commercial_sale(
-                self.package, payment_method=Payment.Method.CASH, actor=self.staff,
-                idempotency_key='router-retry')
-        self.assertEqual(failed.network_status, InternetEntitlement.NetworkStatus.PROVISION_ERROR)
-        self.assertIn('router offline', failed.last_network_error)
-
-        retried = create_commercial_sale(
+        entitlement = create_commercial_sale(
             self.package, payment_method=Payment.Method.CASH, actor=self.staff,
             idempotency_key='router-retry')
-        self.assertEqual(retried.network_status, InternetEntitlement.NetworkStatus.PROVISIONED)
-        self.assertEqual((Order.objects.count(), Payment.objects.count()), (1, 1))
+        operation = InternetNetworkOperation.objects.get(
+            entitlement=entitlement, operation=InternetNetworkOperation.Operation.PROVISION)
+        self.assertEqual((Order.objects.count(), Payment.objects.count(),
+                          InternetEntitlement.objects.count()), (1, 1, 1))
+        self.assertEqual(operation.status, InternetNetworkOperation.Status.PENDING)
+
+        with patch('core.services.network_operations.get_network_backend', return_value=backend), \
+             patch.object(backend, 'provision_access', side_effect=RuntimeError('router offline')):
+            self.assertFalse(process_network_operation(operation))
+        operation.refresh_from_db(); entitlement.refresh_from_db()
+        self.assertEqual(operation.status, InternetNetworkOperation.Status.FAILED)
+        self.assertEqual(operation.attempt_count, 1)
+        self.assertIn('router offline', operation.last_error)
+        self.assertEqual(entitlement.network_status, InternetEntitlement.NetworkStatus.PROVISION_ERROR)
+
+        operation.next_attempt_at = timezone.now()
+        operation.save(update_fields=['next_attempt_at', 'updated_at'])
+        with patch('core.services.network_operations.get_network_backend', return_value=backend):
+            self.assertTrue(process_network_operation(operation))
+        operation.refresh_from_db(); entitlement.refresh_from_db()
+        self.assertEqual(operation.status, InternetNetworkOperation.Status.SUCCEEDED)
+        self.assertEqual(operation.attempt_count, 2)
+        self.assertEqual(entitlement.network_status, InternetEntitlement.NetworkStatus.PROVISIONED)
+        self.assertEqual((Order.objects.count(), Payment.objects.count(),
+                          InternetEntitlement.objects.count(),
+                          InternetNetworkOperation.objects.count()), (1, 1, 1, 1))
 
     def test_expired_is_rendered_and_not_in_staff_metric(self):
         ent = create_entitlement(self.package)
@@ -616,6 +649,7 @@ class InternetHttpWorkflowTests(TestCase):
         self.assertEqual(response.context['totals']['partner'], Decimal('0'))
 
 
+@override_settings(SECURE_SSL_REDIRECT=False)
 class PartnerDashboardDateRangeTests(TestCase):
     def setUp(self):
         from django.contrib.auth import get_user_model
