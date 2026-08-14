@@ -5,11 +5,19 @@
   <div class="hub-section-header">
     <div>
       <h2 class="hub-section-title hub-page-header__title">الاستيراد الجماعي</h2>
-      <p class="hub-muted">أدوات آمنة للمدير لإضافة أو تحديث البيانات من ملفات CSV بترميز UTF-8.</p>
+      <p class="hub-muted">أدوات آمنة لإضافة أو تحديث البيانات من ملفات CSV وExcel، مع المعاينة والتحقق قبل الحفظ.</p>
     </div>
     <a class="hub-button hub-button-secondary" href="{% url 'staff_home' %}">العودة للفريق</a>
   </div>
   <div class="hub-grid hub-grid-3">
+      <article class="hub-card">
+        <h3 class="hub-page-header__title">استيراد العمليات والمخزون</h3>
+        <p>استيراد المشتريات، بنود المشتريات، دفعات الطلبات، مواد المخزون، والوصفات من ملف Excel واحد.</p>
+        <div class="hub-actions">
+          <a class="hub-button" href="{% url 'staff_operations_import_upload' %}">رفع ملف Excel</a>
+          <a class="hub-button hub-button-secondary" href="{% url 'staff_operations_import_template' %}">تحميل قالب Excel</a>
+        </div>
+      </article>
     {% for importer in importers %}
       <article class="hub-card">
         <h3 class="hub-page-header__title">{{ importer.title }}</h3>

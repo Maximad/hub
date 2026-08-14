@@ -12,6 +12,8 @@ from core.views.staff_reservations import staff_reservations, staff_reservation_
 from core.views.staff_vendors import staff_vendors, staff_vendor_new, staff_vendor_detail, staff_vendor_participation_new
 from core.views.staff_import import (
     staff_import_home, staff_import_upload, staff_import_template, staff_import_preview, staff_import_confirm,
+    staff_operations_import_upload, staff_operations_import_template, staff_operations_import_preview,
+    staff_operations_import_confirm,
 )
 from core.views.kitchen import staff_kitchen, staff_kitchen_partial, staff_kitchen_order, staff_kitchen_item_status, staff_prep, staff_prep_station
 from core.views.staff_finance import *
@@ -62,6 +64,10 @@ urlpatterns = [
     path('staff/users/<int:user_id>/password/', staff_user_password, name='staff_user_password'),
     path('staff/users/<int:user_id>/toggle-active/', staff_user_toggle_active, name='staff_user_toggle_active'),
     path('staff/import/', staff_import_home, name='staff_import_home'),
+    path('staff/import/operations/', staff_operations_import_upload, name='staff_operations_import_upload'),
+    path('staff/import/operations/template.xlsx', staff_operations_import_template, name='staff_operations_import_template'),
+    path('staff/import/operations/preview/', staff_operations_import_preview, name='staff_operations_import_preview'),
+    path('staff/import/operations/confirm/', staff_operations_import_confirm, name='staff_operations_import_confirm'),
     path('staff/import/<str:import_type>/', staff_import_upload, name='staff_import_upload'),
     path('staff/import/<str:import_type>/template.csv', staff_import_template, name='staff_import_template'),
     path('staff/import/<str:import_type>/preview/', staff_import_preview, name='staff_import_preview'),

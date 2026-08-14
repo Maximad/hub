@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}معاينة استيراد العمليات والمخزون{% endblock %}
+{% block content %}
+<section class="hub-section" dir="rtl">
+ <div class="hub-section-header"><div><h2 class="hub-section-title hub-page-header__title">معاينة استيراد العمليات والمخزون</h2><p class="hub-muted">هذه معاينة فقط ولم تُحفظ أي تغييرات.</p></div><a class="hub-button hub-button-secondary" href="{% url 'staff_operations_import_upload' %}">رفع ملف آخر</a></div>
+ {% if file_errors %}<div class="hub-card hub-alert hub-alert-error"><h3>أخطاء في الملف</h3><ul>{% for error in file_errors %}<li>{{ error }}</li>{% endfor %}</ul></div>{% endif %}
+ {% if plan %}
+ <div class="hub-card"><h3>ملخص العمليات</h3><div class="hub-table-wrap"><table class="hub-table"><thead><tr><th>القسم</th><th>النتائج</th></tr></thead><tbody>{% for key,label,counts in sections %}<tr><td>{{ label }}</td><td>{% for action,count in counts %}<span>{{ action }}: {{ count }}</span>{% if not forloop.last %}، {% endif %}{% empty %}0{% endfor %}</td></tr>{% endfor %}</tbody></table></div></div>
+ <div class="hub-grid hub-grid-2">
+  <div class="hub-card"><h3>تأثير المخزون المتوقع</h3><ul>{% for code,quantity in plan.stock.items %}<li>{{ code }} +{{ quantity }}</li>{% empty %}<li>لا يوجد</li>{% endfor %}</ul></div>
+  <div class="hub-card"><h3>تأثير الدفعات المتوقع</h3><ul>{% for method,amount in plan.payments.items %}<li>{% if method == 'cash' %}نقداً{% else %}تحويل يدوي{% endif %}: {{ amount }}</li>{% empty %}<li>لا يوجد</li>{% endfor %}</ul></div>
+ </div>
+ {% if plan.errors %}<div class="hub-card hub-alert hub-alert-error"><h3>الأخطاء ({{ plan.errors|length }})</h3><ul>{% for error in plan.errors %}<li>{{ error }}</li>{% endfor %}</ul></div>{% endif %}
+ {% if plan.warnings %}<div class="hub-card hub-alert"><h3>التحذيرات ({{ plan.warnings|length }})</h3><ul>{% for warning in plan.warnings %}<li>{{ warning }}</li>{% endfor %}</ul></div>{% endif %}
+ <form method="post" action="{% url 'staff_operations_import_confirm' %}" class="hub-form hub-form-section">{% csrf_token %}
+  {% if has_warnings and not has_errors %}<label><input type="checkbox" name="confirm_warnings" value="yes"> أؤكد المتابعة رغم التحذيرات الظاهرة.</label>{% endif %}
+  <button class="hub-button" type="submit" {% if has_errors %}disabled{% endif %}>تأكيد الاستيراد</button>
+  {% if has_errors %}<p class="hub-muted">لا يمكن الحفظ قبل إصلاح الأخطاء.</p>{% endif %}
+ </form>
+ {% endif %}
+</section>
+{% endblock %}
