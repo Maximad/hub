@@ -777,6 +777,11 @@ def _plan_signature(plan):
 def _operations_context(plan=None, file_errors=None):
     return {
         'plan': plan,
+        'stock_effects': [
+            (code, quantity, plan.stock_units.get(code, ''))
+            for code, quantity in plan.stock.items()
+        ] if plan else [],
+        'payment_effects': list(plan.payments.items()) if plan else [],
         'sections': [(section, SHEETS[section], [(OPERATIONS_COUNT_LABELS.get(key, key), value) for key, value in plan.counts[section].items()] if plan else []) for section in ORDER],
         'file_errors': file_errors or [],
         'has_errors': bool(file_errors or (plan and plan.errors)),
@@ -829,7 +834,13 @@ def staff_operations_import_preview(request):
         return render(request, 'staff/operations_import_preview.html', _operations_context(file_errors=['تعذر قراءة ملف Excel أو أن بنيته غير صالحة.']))
     request.session[OPERATIONS_SESSION_KEY] = {'token': token, 'signature': _plan_signature(plan)}
     request.session.modified = True
-    return render(request, 'staff/operations_import_preview.html', _operations_context(plan))
+    try:
+        return render(request, 'staff/operations_import_preview.html', _operations_context(plan))
+    except Exception:
+        # The upload has already been persisted, so do not orphan it if response
+        # rendering unexpectedly fails before the session can be saved.
+        _cleanup_operations_upload(request)
+        raise
 
 
 @require_staff_capability('imports')
