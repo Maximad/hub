@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}استيراد العمليات والمخزون{% endblock %}
+{% block content %}
+<section class="hub-section" dir="rtl">
+  <div class="hub-section-header"><div><h2 class="hub-section-title hub-page-header__title">استيراد العمليات والمخزون</h2><p class="hub-muted">يرفع هذا الملف خمس أوراق:</p></div><a class="hub-button hub-button-secondary" href="{% url 'staff_import_home' %}">كل أدوات الاستيراد</a></div>
+  <div class="hub-card">
+    <ul><li>المشتريات</li><li>بنود المشتريات</li><li>دفعات الطلبات</li><li>مواد المخزون</li><li>الوصفات</li></ul>
+    <a class="hub-button hub-button-secondary" href="{% url 'staff_operations_import_template' %}">تحميل قالب Excel</a>
+    <form method="post" enctype="multipart/form-data" action="{% url 'staff_operations_import_preview' %}" class="hub-form hub-form-section" style="margin-top:1rem;">
+      {% csrf_token %}
+      <label>ملف Excel<input type="file" name="xlsx_file" required accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
+      <p class="hub-muted">الحد الأقصى لحجم الملف 5 MB. المعاينة لا تحفظ أي تغييرات.</p>
+      <button class="hub-button" type="submit">معاينة وتحقق</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

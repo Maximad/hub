@@ -1,5 +1,7 @@
 import csv
 import io
+import os
+import tempfile
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -21,6 +23,20 @@ from core.models import ActivityLog, Category, InternetPackage, Member, Product,
 from events.models import Event, EventTicketType
 from members.models import MembershipPlan, MembershipSubscription, MemberCreditLedger
 from vendors.models import Vendor
+from core.management.commands.generate_hub_operations_template import workbook_bytes
+from core.services.operations_import import OperationsImportEngine, ORDER, SHEETS
+
+OPERATIONS_XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+OPERATIONS_MAX_SIZE = 5 * 1024 * 1024
+OPERATIONS_SESSION_KEY = 'bulk_import_operations_upload'
+OPERATIONS_TEMP_DIR = os.path.join(tempfile.gettempdir(), 'hub-operations-imports')
+OPERATIONS_COUNT_LABELS = {
+    'create_draft': 'إنشاء مسودة', 'create_and_receive': 'إنشاء واستلام',
+    'matched': 'مطابق', 'collect': 'دفعات للتحصيل', 'duplicate': 'مكرر مسبقاً',
+    'create_inactive': 'إنشاء غير نشط', 'create': 'إنشاء', 'create_active': 'وصفات جديدة نشطة',
+    'update_inactive': 'وصفات محدثة غير نشطة', 'active_existing_preserved': 'وصفات نشطة محفوظة',
+    'skipped': 'صفوف متجاوزة',
+}
 
 IMPORT_MODES = {
     'dry_run': 'معاينة فقط',
@@ -727,3 +743,125 @@ def staff_import_confirm(request, import_type):
         messages.success(request, 'تم تنفيذ الاستيراد الجماعي بنجاح.')
     request.session.pop(session_key(import_type), None)
     return render(request, 'staff/import_result.html', {'importer': importer, 'summary': summary, 'results': results, 'mode': importer.mode})
+
+
+def _operations_path(token):
+    if not token or not isinstance(token, str):
+        return None
+    try:
+        safe_token = str(uuid.UUID(token))
+    except ValueError:
+        return None
+    return os.path.join(OPERATIONS_TEMP_DIR, f'{safe_token}.xlsx')
+
+
+def _cleanup_operations_upload(request):
+    stored = request.session.pop(OPERATIONS_SESSION_KEY, None)
+    path = _operations_path(stored.get('token')) if isinstance(stored, dict) else None
+    if path:
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+
+
+def _plan_signature(plan):
+    return {
+        'counts': {section: dict(plan.counts[section]) for section in ORDER},
+        'errors': list(plan.errors), 'warnings': list(plan.warnings),
+        'stock': {key: str(value) for key, value in plan.stock.items()},
+        'payments': dict(plan.payments),
+    }
+
+
+def _operations_context(plan=None, file_errors=None):
+    return {
+        'plan': plan,
+        'sections': [(section, SHEETS[section], [(OPERATIONS_COUNT_LABELS.get(key, key), value) for key, value in plan.counts[section].items()] if plan else []) for section in ORDER],
+        'file_errors': file_errors or [],
+        'has_errors': bool(file_errors or (plan and plan.errors)),
+        'has_warnings': bool(plan and plan.warnings),
+    }
+
+
+@require_staff_capability('imports')
+def staff_operations_import_upload(request):
+    return render(request, 'staff/operations_import_upload.html')
+
+
+@require_staff_capability('imports')
+def staff_operations_import_template(request):
+    response = HttpResponse(workbook_bytes(), content_type=OPERATIONS_XLSX_MIME)
+    response['Content-Disposition'] = 'attachment; filename="hub_operations_template.xlsx"'
+    return response
+
+
+@require_staff_capability('imports')
+def staff_operations_import_preview(request):
+    if request.method != 'POST':
+        return redirect('staff_operations_import_upload')
+    uploaded = request.FILES.get('xlsx_file')
+    if not uploaded:
+        messages.error(request, 'اختر ملف Excel أولاً.')
+        return redirect('staff_operations_import_upload')
+    if not uploaded.name.lower().endswith('.xlsx'):
+        messages.error(request, 'يجب رفع ملف Excel بامتداد .xlsx.')
+        return redirect('staff_operations_import_upload')
+    if uploaded.size > OPERATIONS_MAX_SIZE:
+        messages.error(request, 'حجم الملف يتجاوز الحد المسموح وهو 5 MB.')
+        return redirect('staff_operations_import_upload')
+    _cleanup_operations_upload(request)
+    os.makedirs(OPERATIONS_TEMP_DIR, mode=0o700, exist_ok=True)
+    token = str(uuid.uuid4())
+    path = _operations_path(token)
+    with open(path, 'xb') as destination:
+        for chunk in uploaded.chunks():
+            destination.write(chunk)
+    os.chmod(path, 0o600)
+    try:
+        plan = OperationsImportEngine().preview(path, request.user)
+    except Exception:
+        _cleanup_operations_upload(request)
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+        return render(request, 'staff/operations_import_preview.html', _operations_context(file_errors=['تعذر قراءة ملف Excel أو أن بنيته غير صالحة.']))
+    request.session[OPERATIONS_SESSION_KEY] = {'token': token, 'signature': _plan_signature(plan)}
+    request.session.modified = True
+    return render(request, 'staff/operations_import_preview.html', _operations_context(plan))
+
+
+@require_staff_capability('imports')
+def staff_operations_import_confirm(request):
+    if request.method != 'POST':
+        return redirect('staff_operations_import_upload')
+    stored = request.session.get(OPERATIONS_SESSION_KEY)
+    path = _operations_path(stored.get('token')) if isinstance(stored, dict) else None
+    if not path or not os.path.isfile(path):
+        _cleanup_operations_upload(request)
+        messages.error(request, 'انتهت جلسة المعاينة أو لم يعد الملف متاحاً. أعد رفع الملف.')
+        return redirect('staff_operations_import_upload')
+    engine = OperationsImportEngine()
+    try:
+        plan = engine.preview(path, request.user)
+    except Exception:
+        _cleanup_operations_upload(request)
+        return render(request, 'staff/operations_import_preview.html', _operations_context(file_errors=['تعذر إعادة التحقق من ملف Excel. أعد رفع الملف.']))
+    if plan.errors or _plan_signature(plan) != stored.get('signature'):
+        messages.error(request, 'تغيّرت نتيجة التحقق أو ظهرت أخطاء. راجع المعاينة الحالية قبل المتابعة.')
+        stored['signature'] = _plan_signature(plan)
+        request.session.modified = True
+        return render(request, 'staff/operations_import_preview.html', _operations_context(plan))
+    if plan.warnings and request.POST.get('confirm_warnings') != 'yes':
+        messages.error(request, 'توجد تحذيرات. فعّل خيار تأكيد المتابعة مع التحذيرات قبل الحفظ.')
+        return render(request, 'staff/operations_import_preview.html', _operations_context(plan))
+    try:
+        applied = engine.apply(path, request.user)
+    except Exception:
+        messages.error(request, 'تعذر تنفيذ الاستيراد. تم التراجع عن جميع التغييرات.')
+        return render(request, 'staff/operations_import_preview.html', _operations_context(plan))
+    _cleanup_operations_upload(request)
+    messages.success(request, 'تم تنفيذ الاستيراد الجماعي بنجاح.')
+    sections = [(section, SHEETS[section], [(OPERATIONS_COUNT_LABELS.get(key, key), value) for key, value in applied.counts[section].items()]) for section in ORDER]
+    return render(request, 'staff/operations_import_result.html', {'plan': applied, 'sections': sections})
