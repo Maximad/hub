@@ -2,10 +2,7 @@
 
 ## Authority and confirmation state
 
-On **2026-08-11**, owner/finance lead **Maxim Abou Diab** approved only
-**D01, D02, D03, D04, D12, D13, and D14** for the Hub launch. No other
-decision is implied or approved. D05-D11 remain **UNCONFIRMED / POSTING
-BLOCKED**, and their candidate accounts and posting paths must remain inactive.
+On **2026-08-11**, owner/finance lead **Maxim Abou Diab** approved D01-D04 and D12-D14. On **2026-08-22**, D07, D08, D09, and D11 were approved for Hub Sweida. D05, D06, and D10 remain **UNCONFIRMED / POSTING BLOCKED**; no policy is implied for them.
 
 The sole operating unit is **Hub Sweida / هَب السويداء**. Approved launch
 accounts use the existing blank/global `business_unit`; rooms are not accounting
@@ -69,33 +66,16 @@ Every item below deliberately contains the six requested answer dimensions.
 **Reporting/settlement:** payable allocation and bank/cash reconciliation: TBD.
 
 ### D07 — Purchase receipt and supplier liability
-**Status/confirmation:** UNCONFIRMED / POSTING BLOCKED — owner/finance lead and date: TBD.
-**Accounts and scope:** candidate debit `inventory:purchases`, credit
-`payable:suppliers`; both remain inactive until unit and ownership are confirmed.
-**Perform/approve:** receiver, purchase approver, quantity/value tolerances: TBD.
-**Recognition:** current candidate is goods receipt; owner confirmation: TBD.
-**Posting/close date:** receipt business date candidate: TBD.
-**Cancellation/reversal:** return/reverse only if stock is available; override: TBD.
-**Reporting/settlement:** receipt-to-PO/invoice match, inventory and payable reports: TBD.
+**Status/confirmation:** CONFIRMED — 2026-08-22.
+**Executable policy:** goods receipt recognizes only actual received quantity at original `PurchaseItem.unit_cost_syp`, on `PurchaseReceipt.business_date`: debit global `inventory:purchases`, credit global `payable:suppliers`. Each partial receipt posts independently. The authorized operational receiver triggers the system posting without discretionary finance approval. Stock and over-receipt controls remain unchanged; historical operational receipts are not backfilled.
 
 ### D08 — Supplier payment
-**Status/confirmation:** UNCONFIRMED / POSTING BLOCKED — owner/finance lead and date: TBD.
-**Accounts and scope:** debit `payable:suppliers`; credit active selected cash,
-bank, or owner-paid clearing account; unit allocation: TBD.
-**Perform/approve:** payment maker, approver, threshold, self-approval: TBD.
-**Recognition:** liability reduction on payment/settlement event: TBD.
-**Posting/close date:** payment business date: TBD.
-**Cancellation/reversal:** linked payment reversal; paid-return handling: TBD.
-**Reporting/settlement:** supplier allocation, remittance, bank/cash match: TBD.
+**Status/confirmation:** CONFIRMED — 2026-08-22.
+**Executable policy:** on settlement `business_date`, debit global `payable:suppliers` and credit only global `cash:main` or `bank:main` (plus the D11 methods below). Partial payment is allowed only up to purchase-specific posted, unreversed D07 liability less posted D09 reversals and active unreversed payments. Old unposted receipts and unreceived value cannot be paid. Admin/finance may self-approve below 50,000 SYP_NEW; at or above it a different active admin approves. A posted payment is immutable; correction is a linked equal-and-opposite reversal on an open date with a reason. Cash payment and reversal project OUT and IN supplier-payment cash movements respectively; other sources do not.
 
 ### D09 — Purchase return / receipt reversal
-**Status/confirmation:** UNCONFIRMED / POSTING BLOCKED — owner/finance lead and date: TBD.
-**Accounts and scope:** reverse D07 inventory/payable; price variance account: TBD.
-**Perform/approve:** inventory actor and finance approver: TBD.
-**Recognition:** dispatch, supplier acceptance, or credit-note date: TBD.
-**Posting/close date:** open return business date; original-period policy: TBD.
-**Cancellation/reversal:** linked to receipt; consumed-stock exception is blocked.
-**Reporting/settlement:** stock return, supplier credit, payable allocation: TBD.
+**Status/confirmation:** CONFIRMED — 2026-08-22.
+**Executable policy:** physically valid returned stock is valued at original item cost. Up to outstanding purchase-specific payable, debit `payable:suppliers` and credit `inventory:purchases` on the return business date. If return value exceeds unpaid liability, physical return completes, only the matched amount posts, and the excess becomes `paid_purchase_return_requires_finance_resolution`. No supplier receivable, credit note, cash refund, price variance, or negative payable is inferred. Existing consumed-stock protection remains.
 
 ### D10 — Inventory adjustment, waste, or production consumption
 **Status/confirmation:** UNCONFIRMED / POSTING BLOCKED — owner/finance lead and date: TBD.
@@ -107,15 +87,9 @@ by reason and unit: TBD.
 **Cancellation/reversal:** opposite stock and value movement; negative stock policy: TBD.
 **Reporting/settlement:** quantity/value variance and recipe/production reconciliation: TBD.
 
-### D11 — Owner contribution or owner-paid purchase
-**Status/confirmation:** UNCONFIRMED / POSTING BLOCKED — owner/finance lead and date: TBD.
-**Accounts and scope:** candidate `clearing:owner_paid` versus owner equity/loan;
-legal owner and unit allocation: TBD.
-**Perform/approve:** recorder, owner confirmation, finance approval: TBD.
-**Recognition:** contribution, reimbursable liability, or settlement timing: TBD.
-**Posting/close date:** funding/payment business date: TBD.
-**Cancellation/reversal:** linked reversal; reimbursement treatment: TBD.
-**Reporting/settlement:** owner statement, reimbursement and equity/loan reporting: TBD.
+### D11 — Owner-paid supplier purchase
+**Status/confirmation:** CONFIRMED — 2026-08-22.
+**Executable policy:** an owner payment expecting reimbursement debits `payable:suppliers` and credits global `payable:owner`; a permanent contribution debits `payable:suppliers` and credits global `equity:owner_contribution`. Both are supplier settlements under the D08 threshold, create no Hub cash movement, and never use `clearing:owner_paid`, which remains inactive for new postings.
 
 ### D12 — Cash correction, deposit, or withdrawal
 **Status/confirmation:** CONFIRMED — Maxim Abou Diab, 2026-08-11.
@@ -133,10 +107,10 @@ legal owner and unit allocation: TBD.
 
 | Artifact | Confirmed conversion | Current safe state |
 |---|---|---|
-| Account seed data | D01-D04, D12-D14 launch accounts via `bootstrap_launch_finance` | D05-D11 candidate accounts remain inactive. |
-| Posting rules | D01-D04, D12-D14 only | Purchase account resolution now rejects missing, inactive, or wrong-type accounts. |
+| Account seed data | D01-D04 and D12-D14 via `bootstrap_launch_finance`; D07-D09/D11 via `bootstrap_purchase_finance` | D05/D06/D10 candidates and `clearing:owner_paid` remain inactive. |
+| Posting rules | D01-D04, D07-D09, D11-D14 | D05/D06/D10 posting remains blocked; purchase resolution fails closed. |
 | Permissions | Admin/finance self-approval; D13 threshold exception | Other roles cannot approve launch finance operations. |
-| Acceptance-test fixtures | Role, closed-date, inactive-account, threshold, and bootstrap fixtures | D05-D11 blocking fixtures remain in force. |
+| Acceptance-test fixtures | Role, closed-date, inactive-account, threshold, purchase and bootstrap fixtures | D05/D06/D10 blocking fixtures remain in force. |
 
 After confirmation, each implementation change must cite decision IDs in its
 migration/rule/test, activate only the approved codes and scopes, and add both a

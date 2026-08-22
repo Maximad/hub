@@ -1,1 +1,33 @@
-{% extends "staff/finance_base.html" %}{% block finance_content %}<h3 class="hub-page-header__title">شراء #{{ purchase.id }} — {{ purchase.get_status_display }}</h3><p><strong>المعالجة: تشغيلية فقط — غير مرحلة مالياً</strong></p><p>{{ purchase.business_date }} | {{ purchase.supplier_label }} | {{ purchase.invoice_number }} | الإجمالي {{ purchase.total_syp }} | المدفوع {{ purchase.amount_paid_syp }}</p><p><a class="hub-btn" href="{% url 'staff_purchase_edit' purchase.id %}">تعديل</a></p><h4>البنود</h4><div class="hub-table-wrap"><table class="hub-table"><tr><th>المادة</th><th>الكمية</th><th>الوحدة</th><th>الكلفة</th><th>الإجمالي</th></tr>{% for i in purchase.items.all %}<tr><td>{{ i.inventory_item }}</td><td>{{ i.quantity }}</td><td>{{ i.get_unit_display }}</td><td>{{ i.unit_cost_syp }}</td><td>{{ i.line_total_syp }}</td></tr>{% endfor %}</table></div><form class="hub-form-section" method="post">{% csrf_token %}<fieldset><legend>الكميات الفعلية المستلمة (عدّلها عند الاستلام الجزئي)</legend>{% for i in purchase.items.all %}<label>{{ i.inventory_item }} <input type="number" min="0" step="0.001" name="quantity_{{ i.pk }}" value="{{ i.quantity }}"></label>{% endfor %}</fieldset><button name="action" value="receive" class="hub-btn" type="submit">تأكيد استلام الشراء</button></form><form class="hub-form-section" method="post">{% csrf_token %}<label>سبب الإلغاء <textarea name="reason"></textarea></label><button name="action" value="cancel" class="hub-btn" type="submit">تأكيد إلغاء الشراء</button></form><h4>حركات المخزون</h4><ul>{% for m in purchase.stock_movements.all %}<li>{{ m.get_movement_type_display }} — {{ m.get_direction_display }} — {{ m.inventory_item }} — {{ m.quantity }}</li>{% empty %}<li>لا توجد حركات</li>{% endfor %}</ul>{% endblock %}
+{% extends "staff/finance_base.html" %}
+{% block finance_content %}
+<h3 class="hub-page-header__title">شراء #{{ purchase.id }} — {{ purchase.get_status_display }}</h3>
+<div class="hub-grid hub-grid-3">
+  <div class="hub-card">إجمالي الشراء: <strong>{{ purchase.total_syp }}</strong></div>
+  <div class="hub-card">قيمة المستلم المعترف بها مالياً: <strong>{{ financial_state.received_recognized }}</strong></div>
+  <div class="hub-card">التزام المورد القائم: <strong>{{ financial_state.outstanding }}</strong></div>
+</div>
+<p>{{ purchase.business_date }} | {{ purchase.supplier_label }} | {{ purchase.invoice_number }} | التسويات {{ financial_state.paid }}</p>
+{% for review in finance_reviews %}<p class="hub-alert hub-alert--warning"><strong>تنبيه مراجعة مالية:</strong> {{ review.reason }}</p>{% endfor %}
+<p><a class="hub-btn" href="{% url 'staff_purchase_edit' purchase.id %}">تعديل</a></p>
+
+<h4>البنود</h4><div class="hub-table-wrap"><table class="hub-table"><tr><th>المادة</th><th>الكمية</th><th>الوحدة</th><th>الكلفة</th><th>الإجمالي</th></tr>{% for i in purchase.items.all %}<tr><td>{{ i.inventory_item }}</td><td>{{ i.quantity }}</td><td>{{ i.get_unit_display }}</td><td>{{ i.unit_cost_syp }}</td><td>{{ i.line_total_syp }}</td></tr>{% endfor %}</table></div>
+
+<form class="hub-form-section" method="post">{% csrf_token %}<fieldset><legend>الكميات الفعلية المستلمة (عدّلها عند الاستلام الجزئي)</legend>{% for i in purchase.items.all %}<label>{{ i.inventory_item }} <input type="number" min="0" step="0.001" name="quantity_{{ i.pk }}" value="{{ i.quantity }}"></label>{% endfor %}</fieldset><button name="action" value="receive" class="hub-btn" type="submit">تأكيد استلام الشراء</button></form>
+
+<h4>دفعة / تسوية مورد</h4>
+<form class="hub-form-section" method="post">{% csrf_token %}
+  <label>المبلغ <input type="number" min="0.01" step="0.01" name="amount_syp" required></label>
+  <label>العملة <select name="currency_currency">{% for value,label in currency_component.currencies %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+  <label><input type="checkbox" name="currency_acknowledged"> أقر بصحة الرقم الكبير المدخل</label>
+  <label>تاريخ التسوية <input type="date" name="business_date" value="{{ business_date|date:'Y-m-d' }}" required></label>
+  <label>مصدر التسوية <select name="source_account" required><option value="">—</option>{% for account in settlement_accounts %}<option value="{{ account.pk }}">{% if account.code == 'payable:owner' %}دفعه المالك — مستحق للمالك{% elif account.code == 'equity:owner_contribution' %}دفعه المالك — مساهمة دائمة{% else %}{{ account }}{% endif %}</option>{% endfor %}</select></label>
+  <label>المعتمد (إلزامي عند {{ approval_limit }} فأكثر) <select name="approver"><option value="">اعتماد ذاتي للمبلغ الأدنى</option>{% for user in approvers %}<option value="{{ user.pk }}">{{ user }}</option>{% endfor %}</select></label>
+  <button name="action" value="pay" class="hub-btn" type="submit">ترحيل دفعة المورد</button>
+</form>
+
+<h4>دفعات المورد</h4><div class="hub-table-wrap"><table class="hub-table"><tr><th>المبلغ</th><th>التاريخ</th><th>المصدر</th><th>المنفذ</th><th>المعتمد</th><th>الحالة / العكس</th></tr>
+{% for payment in purchase.payments.all %}<tr><td>{{ payment.amount_syp }}</td><td>{{ payment.business_date }}</td><td>{{ payment.source_account }}</td><td>{{ payment.actor|default:'—' }}</td><td>{{ payment.approver|default:'—' }}</td><td>{% if payment.reversed_at %}معكوسة {{ payment.reversed_at }}{% else %}<form method="post">{% csrf_token %}<input type="hidden" name="payment_id" value="{{ payment.pk }}"><input type="date" name="reversal_business_date" value="{{ business_date|date:'Y-m-d' }}" required><input name="reversal_reason" placeholder="سبب العكس" required><button name="action" value="reverse_payment">عكس الدفعة</button></form>{% endif %}</td></tr>{% empty %}<tr><td colspan="6">لا توجد تسويات.</td></tr>{% endfor %}</table></div>
+
+<form class="hub-form-section" method="post">{% csrf_token %}<label>سبب الإلغاء <textarea name="reason"></textarea></label><button name="action" value="cancel" class="hub-btn" type="submit">تأكيد إلغاء الشراء</button></form>
+<h4>حركات المخزون</h4><ul>{% for m in purchase.stock_movements.all %}<li>{{ m.get_movement_type_display }} — {{ m.get_direction_display }} — {{ m.inventory_item }} — {{ m.quantity }}</li>{% empty %}<li>لا توجد حركات</li>{% endfor %}</ul>
+{% endblock %}
