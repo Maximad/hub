@@ -188,7 +188,14 @@ def fulfill_internet_items_for_order(order):
     No second Order or OrderItem is created. Package policy remains authoritative,
     while the normal cart OrderItem keeps the customer's commercial snapshot.
     """
-    order = Order.objects.select_for_update().select_related('visit', 'member', 'table').get(pk=order.pk)
+    # visit/member/table are nullable relations, so PostgreSQL cannot lock every
+    # row produced by their LEFT OUTER JOINs. Keep the convenient related-object
+    # fetch, but scope FOR UPDATE to the authoritative Order row only.
+    order = (
+        Order.objects.select_related('visit', 'member', 'table')
+        .select_for_update(of=('self',))
+        .get(pk=order.pk)
+    )
     pairs = _internet_items(order)
     if not pairs:
         return []
