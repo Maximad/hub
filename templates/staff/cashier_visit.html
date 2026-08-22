@@ -4,7 +4,7 @@
 <section dir="rtl">
   <header class="hub-page-header">
     <div>
-      <p class="staff-workspace__eyebrow">حساب مجمع</p>
+      <p class="staff-workspace__eyebrow">الحساب المجمع</p>
       <h2 class="hub-page-header__title">{% if visit.table %}{{ visit.table }}{% else %}جلسة {{ visit.display_number }}{% endif %}</h2>
       <p class="hub-page-header__meta">{{ visit.display_number }} — {{ visit.get_status_display }}{% if visit.member %} — {{ visit.member }}{% endif %}</p>
     </div>
@@ -36,7 +36,14 @@
         <div class="hub-toolbar" style="justify-content:space-between"><strong class="hub-order-number">{{ order.display_number }}</strong><span class="hub-badge">{{ order.get_status_display }}</span></div>
         <ul>{% for item in order.items.all %}<li>{{ item.product_name_ar_snapshot }} × {{ item.quantity }} — <span class="hub-money">{% widthratio item.quantity 1 item.unit_price_syp_snapshot %} ل.س</span></li>{% empty %}<li>لا توجد عناصر.</li>{% endfor %}</ul>
         <p>الإجمالي <strong>{{ order.total_syp|format_syp }}</strong> — المدفوع {{ order.paid_syp|format_syp }} — المتبقي <strong>{{ order.remaining_syp|format_syp }}</strong></p>
-        {% if order.discounts.all %}<div class="hub-help-text">الخصومات: {% for discount in order.discounts.all %}{% if discount.is_active %}{{ discount.get_discount_type_display }} {{ discount.amount_syp|format_syp }}{% if not forloop.last %}، {% endif %}{% endif %}{% endfor %}</div>{% endif %}
+        {% if order.discounts.all %}
+          <div class="hub-help-text">
+            <strong>الخصومات:</strong>
+            {% for discount in order.discounts.all %}
+              {% if discount.is_active %}<div>{{ discount.get_discount_type_display }} {{ discount.amount_syp|format_syp }} — {{ discount.reason }}{% if discount.notes %} — {{ discount.notes }}{% endif %}</div>{% endif %}
+            {% endfor %}
+          </div>
+        {% endif %}
         <div class="hub-toolbar"><a class="hub-button" href="{% url 'staff_order_edit' order.public_code %}">عرض/تعديل الطلب</a><a class="hub-button" href="{% url 'staff_order_receipt' order.public_code %}">إيصال هذا الطلب فقط</a></div>
         {% if can_manage_partial and visit.status == 'open' %}
           <details class="menu-note-details"><summary class="hub-button">إضافة خصم لهذا الطلب</summary>
