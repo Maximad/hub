@@ -1,6 +1,8 @@
 import logging
 import uuid
+from urllib.parse import urljoin
 
+from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -9,6 +11,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from core.models import ActivityLog, HubVisit, InternetEntitlement, InternetPackage, InternetSession, TableArea
+from core.services.hotspot_connect import build_hotspot_login_payload, one_tap_connect_configured
 from core.services.internet_access import end_usage_session
 from core.services.visit_internet import (create_visit_internet_sale_and_start, customer_packages,
     self_service_enabled, start_existing_visit_entitlement, usable_member_entitlements)
@@ -31,8 +34,10 @@ def _internet_context(visit=None, member=None):
     for package in packages:
         package.customer_price_syp = int(resolve_internet_price(member, package)[0])
     entitlements = usable_member_entitlements(visit) if visit else InternetEntitlement.objects.none()
-    sessions = (visit.internet_sessions.select_related('entitlement', 'package')
-                .order_by('-start_time') if visit else InternetSession.objects.none())
+    sessions = list(visit.internet_sessions.select_related('entitlement', 'package')
+                    .order_by('-start_time')) if visit else []
+    for session in sessions:
+        session.one_tap_connect_available = one_tap_connect_configured(session.entitlement)
     return {'internet_packages': packages, 'internet_entitlements': entitlements,
             'internet_sessions': sessions, 'internet_request_key': uuid.uuid4()}
 
@@ -48,14 +53,25 @@ def current_visit(request):
     orders = visit.orders.exclude(status='cancelled').prefetch_related(
         'items', 'discounts', 'payments').order_by('-created_at', '-id')
     menu_url = reverse('menu_table', kwargs={'qr_token': visit.table.qr_token}) if visit.table_id else reverse('menu_public')
-    active_internet_session = visit.internet_sessions.select_related('package').filter(
+    active_internet_session = visit.internet_sessions.select_related('package', 'entitlement').filter(
         status=InternetSession.Status.ACTIVE).order_by('-start_time').first()
+    if active_internet_session:
+        active_internet_session.one_tap_connect_available = one_tap_connect_configured(
+            active_internet_session.entitlement)
     context = {'visit': visit, 'orders': orders, 'menu_url': menu_url,
                'active_internet_session': active_internet_session,
                'internet_self_service_enabled': self_service_enabled(system_settings)}
     if context['internet_self_service_enabled']:
         context.update(_internet_context(visit, visit.member))
     return render(request, 'menu/current_visit.html', context)
+
+
+def _current_visit_destination(request):
+    path = reverse('current_visit')
+    base = (getattr(settings, 'PUBLIC_BASE_URL', '') or '').strip()
+    if base:
+        return urljoin(base.rstrip('/') + '/', path.lstrip('/'))
+    return request.build_absolute_uri(path)
 
 
 @require_POST
@@ -124,6 +140,56 @@ def visit_internet_entitlement_start(request, public_code):
     except ValidationError as exc:
         messages.error(request, _error_text(exc))
     return redirect('current_visit')
+
+
+@require_POST
+def visit_internet_session_connect(request, public_code):
+    """Relay an authorized current-visit browser into its RouterOS HotSpot login."""
+    if not self_service_enabled(get_system_settings()):
+        messages.error(request, 'خدمة الإنترنت الذاتية غير متاحة حالياً.')
+        return redirect('menu_public')
+    credential = resolve_visit_credential(request)
+    if not credential:
+        messages.error(request, 'الجلسة مغلقة.')
+        return redirect('menu_public')
+    session = get_object_or_404(
+        InternetSession.objects.select_related('entitlement'),
+        public_code=public_code,
+        visit=credential.visit,
+        status=InternetSession.Status.ACTIVE,
+    )
+    if not session.entitlement_id:
+        messages.error(request, 'لا توجد باقة شبكة قابلة للاتصال لهذه الجلسة.')
+        return redirect('current_visit')
+    try:
+        payload = build_hotspot_login_payload(
+            session.entitlement,
+            destination_url=_current_visit_destination(request),
+        )
+    except Exception as exc:
+        # Do not log exception repr/arguments here; they are adjacent to credential
+        # handling. Customer-visible errors are intentionally generic unless they
+        # are controlled ValidationError messages.
+        logger.warning('Customer HotSpot relay unavailable for entitlement_id=%s',
+                       session.entitlement_id)
+        messages.error(request, _error_text(exc))
+        return redirect('current_visit')
+
+    ActivityLog.objects.create(action='visit.internet_connect_relay_issued', details={
+        'visit_id': credential.visit_id,
+        'session_id': session.pk,
+        'entitlement_id': session.entitlement_id,
+    })
+    response = render(request, 'menu/hotspot_connect.html', payload)
+    response['Cache-Control'] = 'no-store, private, max-age=0'
+    response['Pragma'] = 'no-cache'
+    response['Referrer-Policy'] = 'no-referrer'
+    response['X-Robots-Tag'] = 'noindex, nofollow, noarchive'
+    response['Content-Security-Policy'] = (
+        "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
+        f"form-action {payload['login_origin']}; base-uri 'none'; frame-ancestors 'none'"
+    )
+    return response
 
 
 @require_POST
