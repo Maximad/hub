@@ -2,7 +2,7 @@
 {% block title %}جلستك اليوم{% endblock %}
 {% block body_class %}customer-space-page{% endblock %}
 {% block content %}
-<main class="menu-public customer-space" dir="rtl" data-customer-space data-has-visit="true" data-menu-url="{{ menu_url }}" data-visit-url="{% url 'current_visit' %}" data-orders-url="#customer-orders" data-services-url="{% if internet_self_service_enabled %}#internet{% else %}{{ menu_url }}{% endif %}">
+<main class="menu-public customer-space" dir="rtl" data-customer-space data-has-visit="true" data-menu-url="{{ menu_url }}" data-visit-url="{% url 'current_visit' %}" data-orders-url="#customer-orders" data-services-url="{% if internet_self_service_enabled %}#internet{% endif %}">
   <header class="hub-card current-visit__header">
     <div>
       <p class="menu-public__brand">جلستك اليوم</p>
