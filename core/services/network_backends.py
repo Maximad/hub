@@ -12,6 +12,14 @@ from core.services.mikrotik import (MikroTikConfigurationError, MikroTikConnecti
                                      MikroTikProvisioningError, RouterOSClient)
 
 
+def _safe_network_error(exc):
+    text = str(exc).replace('\r', ' ').replace('\n', ' ')
+    lowered = text.lower()
+    if any(marker in lowered for marker in ('password', 'authorization', 'credential', 'mikrotik_password')):
+        return 'Network operation failed; sensitive details were removed.'
+    return text[:500]
+
+
 class ManualNetworkBackend:
     code = 'manual'
     def provision_access(self, entitlement):
@@ -114,7 +122,7 @@ class MikroTikNetworkBackend:
 
     def _record_failure(self, entitlement, exc):
         entitlement.network_status = entitlement.NetworkStatus.PROVISION_ERROR
-        entitlement.last_network_error = str(exc)[:500]
+        entitlement.last_network_error = _safe_network_error(exc)
         entitlement.last_network_sync_at = timezone.now()
         entitlement.save(update_fields=['network_status', 'last_network_error', 'last_network_sync_at', 'updated_at'])
 
