@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% load hub_numbers %}
+{% extends "base.html" %}{% load static hub_numbers %}
 {% block title %}مساحة العمليات{% endblock %}
 {% block body_class %}staff-workspace-page{% endblock %}
 {% block content %}
@@ -35,7 +35,7 @@
       <div class="staff-workspace__visit-grid">
         {% for row in visit_rows %}{% with visit=row.visit %}
           <article class="staff-workspace__visit">
-            <a class="staff-workspace__visit-main" href="{% url 'staff_visit_detail' visit.public_code %}">
+            <a class="staff-workspace__visit-main" href="{% url 'staff_visit_detail' visit.public_code %}" data-visit-context-url="{% url 'staff_visit_detail' visit.public_code %}?panel=1" aria-haspopup="dialog">
               <div class="staff-workspace__visit-title">
                 <strong>{% if visit.table %}{{ visit.table }}{% else %}جلسة {{ visit.display_number }}{% endif %}</strong>
                 {% if visit.member %}<span>{{ visit.member }}</span>{% endif %}
@@ -99,4 +99,19 @@
     </nav>
   </section>
 </section>
+
+{% if staff_caps.orders %}
+<dialog id="staff-context-drawer" class="staff-context-drawer" aria-labelledby="staff-context-drawer-title">
+  <section class="staff-context-drawer__surface" dir="rtl">
+    <header class="staff-context-drawer__header">
+      <div><p class="staff-workspace__eyebrow">سياق سريع</p><h2 id="staff-context-drawer-title">تفاصيل الجلسة</h2></div>
+      <button type="button" class="staff-context-drawer__close" data-close-staff-context aria-label="إغلاق">×</button>
+    </header>
+    <div id="staff-context-drawer-body" class="staff-context-drawer__body" aria-live="polite">
+      <div class="staff-context-drawer__loading">اختر جلسة لعرض تفاصيلها.</div>
+    </div>
+  </section>
+</dialog>
+<script src="{% static 'js/staff_workspace.js' %}" defer></script>
+{% endif %}
 {% endblock %}
