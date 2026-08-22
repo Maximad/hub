@@ -36,6 +36,7 @@
   ].filter(Boolean).join('');
   nav.style.setProperty('--customer-nav-items', String(nav.children.length || 1));
   body.appendChild(nav);
+  body.classList.add('customer-space-nav-active');
 
   if (isMenu) {
     const cartButton = nav.querySelector('[data-customer-cart]');
