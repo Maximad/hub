@@ -1,0 +1,29 @@
+{% extends "base.html" %}{% load hub_numbers %}{% block title %}إيصال جلسة {{ visit.display_number }}{% endblock %}{% block content %}
+<section class="print-sheet receipt-print" dir="rtl">
+  <div class="print-actions"><button class="hub-button hub-button-primary" onclick="window.print()">طباعة الإيصال المجمع</button><a class="hub-button" href="{% url 'staff_cashier_visit' visit.public_code %}">رجوع</a></div>
+  <header class="print-header"><h1>{{ business_name }}</h1><h2>إيصال حساب مجمع</h2></header>
+  <div class="print-meta">
+    <span><strong>الجلسة:</strong> {{ visit.display_number }}</span>
+    <span><strong>فتح الحساب:</strong> {{ visit.opened_at|date:"Y-m-d H:i" }}</span>
+    {% if visit.closed_at %}<span><strong>إغلاق الحساب:</strong> {{ visit.closed_at|date:"Y-m-d H:i" }}</span>{% endif %}
+    {% if visit.table_id %}<span><strong>الطاولة:</strong> {{ visit.table.name_ar }}{% if visit.table.room_id %} — {{ visit.table.room.name_ar }}{% endif %}</span>{% endif %}
+    {% if visit.member %}<span><strong>العضو:</strong> {{ visit.member }}</span>{% endif %}
+  </div>
+
+  {% for order in orders %}
+    <h3>طلب {{ order.display_number }}</h3>
+    <table class="print-table"><thead><tr><th>الصنف</th><th>الكمية</th><th>السعر</th><th>المجموع</th></tr></thead><tbody>
+      {% for item in order.items.all %}<tr><td><strong>{{ item.product_name_ar_snapshot }}</strong>{% if item.selected_options_snapshot %}<ul>{% for group in item.selected_options_snapshot %}{% for option in group.options %}<li>{{ option.name_ar }}{% if option.price_delta_syp %} ({{ option.price_delta_syp }} ل.س){% endif %}</li>{% endfor %}{% endfor %}</ul>{% endif %}{% if item.item_note %}<small>ملاحظة: {{ item.item_note }}</small>{% endif %}</td><td>{{ item.quantity }}</td><td>{{ item.unit_price_syp_snapshot }}</td><td>{% widthratio item.quantity 1 item.unit_price_syp_snapshot %}</td></tr>{% endfor %}
+    </tbody></table>
+    <p>إجمالي الطلب {{ order.total_syp|format_syp }}{% if order.discount_syp %} — الخصم {{ order.discount_syp|format_syp }}{% endif %}</p>
+  {% endfor %}
+
+  <dl class="print-totals">
+    <div><dt>إجمالي الجلسة</dt><dd>{{ total|format_syp }}</dd></div>
+    <div><dt>المدفوع</dt><dd>{{ paid|format_syp }}</dd></div>
+    <div><dt>المتبقي</dt><dd>{{ remaining|format_syp }}</dd></div>
+    <div><dt>حالة الدفع</dt><dd>{{ payment_label }}</dd></div>
+    <div><dt>طرق الدفع</dt><dd>{% for p in payments %}{{ p.get_method_display }}{% if not forloop.last %}، {% endif %}{% empty %}غير مدفوع{% endfor %}</dd></div>
+  </dl>
+  <footer class="print-footer">{{ receipt_footer_text|default:'شكراً لزيارتكم' }}</footer>
+</section>{% endblock %}
