@@ -51,16 +51,26 @@
 .public-menu-redesign .public-menu-cart-items{max-height:none!important;overflow:visible!important}
 
 @media(max-width:1023px){
-  .public-menu-redesign .public-menu-cart-sheet{height:auto;max-height:calc(100vh - .5rem)!important;padding-bottom:0!important}
+  /* customer_space.js supplies the canonical mobile cart trigger in the bottom nav. */
+  body.customer-space-nav-active .menu-sticky-cart.public-menu-cart-bar{display:none!important}
+  body.public-menu-cart-open{overflow:hidden;overscroll-behavior:none}
+  body.public-menu-cart-open.customer-space-nav-active .customer-space-nav{visibility:hidden;pointer-events:none}
+  body.public-menu-cart-open .public-menu-cart-backdrop{z-index:70!important}
+
+  /* A true viewport-bounded flex sheet keeps the checkout footer on-screen. */
+  .public-menu-redesign .public-menu-cart-sheet.is-open{display:flex!important;flex-direction:column!important;position:fixed!important;inset-block-start:auto!important;inset-block-end:0!important;bottom:0!important;height:calc(100vh - max(.5rem,env(safe-area-inset-top)))!important;max-height:calc(100vh - max(.5rem,env(safe-area-inset-top)))!important;min-height:0!important;overflow:hidden!important;padding-bottom:0!important;z-index:80!important}
   .public-menu-redesign .public-menu-cart-scroll{display:block!important;flex:1 1 auto;min-height:0;overflow-y:auto!important;overflow-x:hidden!important;padding:0 0 .75rem;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
-  .public-menu-redesign .public-menu-cart-header{padding-inline:1rem}
+  .public-menu-redesign .public-menu-cart-header{flex:0 0 auto;padding-inline:1rem}
   .public-menu-redesign .public-menu-cart-scroll>.menu-cart-helper,.public-menu-redesign .public-menu-cart-scroll>.public-menu-cart-items,.public-menu-redesign .public-menu-cart-scroll>.public-menu-cart-summary,.public-menu-redesign .public-menu-cart-scroll>.public-menu-checkout{margin-inline:1rem}
   .public-menu-redesign .public-menu-cart-submit-footer{padding-inline:1rem}
 }
 @supports(height:100dvh){
-  @media(max-width:1023px){.public-menu-redesign .public-menu-cart-sheet{max-height:calc(100dvh - max(.5rem,env(safe-area-inset-top)))!important}}
+  @media(max-width:1023px){.public-menu-redesign .public-menu-cart-sheet.is-open{height:calc(100dvh - max(.5rem,env(safe-area-inset-top)))!important;max-height:calc(100dvh - max(.5rem,env(safe-area-inset-top)))!important}}
 }
+/* Prefer the smallest guaranteed viewport on mobile browser chrome. It may leave a
+   little breathing room when the bars collapse, but it never puts submit below them. */
 @supports(height:100svh){
+  @media(max-width:1023px){.public-menu-redesign .public-menu-cart-sheet.is-open{height:calc(100svh - max(.5rem,env(safe-area-inset-top)))!important;max-height:calc(100svh - max(.5rem,env(safe-area-inset-top)))!important}}
   .table-entry-page #hub-main-content{min-height:100svh}
 }
 @media(min-width:1024px){
