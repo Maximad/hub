@@ -4,25 +4,54 @@
   }
 
   function loadingMarkup() {
-    return '<div class="staff-context-drawer__loading" role="status">جاري تحميل الجلسة…</div>';
+    return '<div class="staff-context-drawer__loading" role="status">جاري تحميل التفاصيل…</div>';
   }
 
   function errorMarkup(fallbackUrl) {
     var wrapper = document.createElement('div');
     wrapper.className = 'hub-empty-state';
-    wrapper.textContent = 'تعذر تحميل تفاصيل الجلسة هنا.';
+    wrapper.textContent = 'تعذر تحميل التفاصيل داخل مساحة العمليات.';
     var link = document.createElement('a');
     link.className = 'hub-button';
     link.href = fallbackUrl;
-    link.textContent = 'فتح صفحة الجلسة';
+    link.textContent = 'فتح الصفحة الكاملة';
     wrapper.appendChild(document.createElement('br'));
     wrapper.appendChild(link);
     return wrapper;
   }
 
+  function syncPaymentApproval(panel) {
+    if (!panel) return;
+    var amount = panel.querySelector('[data-currency-amount]');
+    var currency = panel.querySelector('[data-currency-select]');
+    var approval = panel.querySelector('[data-manager-approval]');
+    if (!amount || !approval) return;
+
+    if (!amount.value) {
+      amount.value = panel.getAttribute('data-default-amount') || '';
+    }
+
+    var remaining = Number(panel.getAttribute('data-remaining') || '0');
+    var entered = Number(amount.value || '0');
+    var currencyValue = currency ? currency.value : 'SYP_NEW';
+
+    // For USD the final base amount is server-calculated, so keep manager
+    // credentials available instead of incorrectly comparing USD to SYP.
+    var couldBePartial = currencyValue !== 'SYP_NEW' || (entered > 0 && entered < remaining);
+    approval.hidden = !couldBePartial;
+  }
+
+  function initializeDynamicPanel(body) {
+    if (window.htmx && typeof window.htmx.process === 'function') {
+      window.htmx.process(body);
+    }
+    syncPaymentApproval(body.querySelector('[data-payment-panel]'));
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     var dialog = document.getElementById('staff-context-drawer');
     var body = document.getElementById('staff-context-drawer-body');
+    var title = document.getElementById('staff-context-drawer-title');
     if (!supportsDialog(dialog) || !body) return;
 
     var closeButton = dialog.querySelector('[data-close-staff-context]');
@@ -36,32 +65,48 @@
       if (event.target === dialog) dialog.close();
     });
 
-    document.querySelectorAll('[data-visit-context-url]').forEach(function (link) {
-      link.addEventListener('click', function (event) {
-        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    document.addEventListener('click', function (event) {
+      var link = event.target.closest('[data-staff-context-url], [data-visit-context-url]');
+      if (!link) return;
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 
-        var panelUrl = link.getAttribute('data-visit-context-url');
-        if (!panelUrl) return;
+      var panelUrl = link.getAttribute('data-staff-context-url') || link.getAttribute('data-visit-context-url');
+      if (!panelUrl) return;
 
-        event.preventDefault();
-        body.innerHTML = loadingMarkup();
-        dialog.showModal();
+      event.preventDefault();
+      if (title) title.textContent = link.getAttribute('data-context-title') || 'تفاصيل';
+      body.innerHTML = loadingMarkup();
+      if (!dialog.open) dialog.showModal();
 
-        fetch(panelUrl, {
-          credentials: 'same-origin',
-          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      fetch(panelUrl, {
+        credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      })
+        .then(function (response) {
+          if (!response.ok) throw new Error('staff-context-' + response.status);
+          return response.text();
         })
-          .then(function (response) {
-            if (!response.ok) throw new Error('visit-panel-' + response.status);
-            return response.text();
-          })
-          .then(function (html) {
-            body.innerHTML = html;
-          })
-          .catch(function () {
-            body.replaceChildren(errorMarkup(link.href));
-          });
-      });
+        .then(function (html) {
+          body.innerHTML = html;
+          initializeDynamicPanel(body);
+        })
+        .catch(function () {
+          body.replaceChildren(errorMarkup(link.href));
+        });
+    });
+
+    document.addEventListener('input', function (event) {
+      var panel = event.target.closest('[data-payment-panel]');
+      if (panel && event.target.matches('[data-currency-amount]')) syncPaymentApproval(panel);
+    });
+
+    document.addEventListener('change', function (event) {
+      var panel = event.target.closest('[data-payment-panel]');
+      if (panel && event.target.matches('[data-currency-select]')) syncPaymentApproval(panel);
+    });
+
+    document.body.addEventListener('htmx:afterSwap', function (event) {
+      if (event.target === body || body.contains(event.target)) initializeDynamicPanel(body);
     });
   });
 })();
