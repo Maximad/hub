@@ -12,7 +12,8 @@
 <section class="hub-section">
   <div class="hub-page-header"><div><p class="staff-workspace__eyebrow">الحساب هو الجلسة، وليس الطلب المنفرد</p><h3>الطاولات والجلسات المفتوحة</h3></div></div>
   <div class="hub-grid hub-grid-2 cashier-layout-{{ system_settings.cashier_layout|default:'single_column' }}">
-    {% for row in visit_rows %}{% with visit=row.visit %}
+    {% for row in visit_rows %}
+      {% with visit=row.visit %}
       <article class="hub-card">
         <div class="hub-toolbar" style="justify-content:space-between;align-items:flex-start">
           <div>
@@ -25,7 +26,10 @@
         <div>الإجمالي <span class="hub-money">{{ row.total|format_syp }}</span> | المدفوع <span class="hub-money">{{ row.paid|format_syp }}</span> | <strong>المتبقي <span class="hub-money">{{ row.remaining|format_syp }}</span></strong></div>
         <div class="hub-toolbar" style="margin-top:.75rem"><a class="hub-button hub-button-primary" href="{% url 'staff_cashier_order' visit.public_code %}">فتح الحساب المجمع</a><a class="hub-button" href="{% url 'staff_visit_detail' visit.public_code %}">تفاصيل الجلسة</a></div>
       </article>
-    {% empty %}<p class="hub-empty-state">لا توجد جلسات مفتوحة مطابقة.</p>{% endfor %}
+      {% endwith %}
+    {% empty %}
+      <p class="hub-empty-state">لا توجد جلسات مفتوحة مطابقة.</p>
+    {% endfor %}
   </div>
 </section>
 
