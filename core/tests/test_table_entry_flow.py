@@ -123,7 +123,46 @@ class TableEntryFlowTests(TestCase):
 
         self.assertContains(response, 'جلستك')
         self.assertContains(response, 'الإنترنت فعال الآن')
+        self.assertContains(response, 'إدارة جلستك الحالية')
+        self.assertNotContains(response, 'ابدأ الإنترنت')
         self.assertContains(response, reverse('current_visit'))
+
+    def test_second_package_is_rejected_while_visit_session_is_active(self):
+        first = self.client.post(
+            reverse('visit_internet_start'),
+            {
+                'package': str(self.package.public_code),
+                'table': str(self.table.qr_token),
+                'request_key': 'table-entry-first-session',
+            },
+        )
+        self.client.cookies['hub_visit'] = first.cookies['hub_visit'].value
+        second_package = InternetPackage.objects.create(
+            name_ar='ثلاث ساعات',
+            code='entry-three-hours',
+            price_syp=900,
+            access_mode=InternetPackage.AccessMode.TIMED_SESSION,
+            session_minutes_limit=180,
+            visible_to_customer=True,
+        )
+
+        response = self.client.post(
+            reverse('visit_internet_start'),
+            {
+                'package': str(second_package.public_code),
+                'table': str(self.table.qr_token),
+                'request_key': 'table-entry-second-session',
+                'next': 'menu',
+            },
+            HTTP_REFERER=self.entry_url,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], self.entry_url)
+        self.assertEqual(HubVisit.objects.count(), 1)
+        self.assertEqual(Order.objects.count(), 1)
+        self.assertEqual(InternetEntitlement.objects.count(), 1)
+        self.assertEqual(InternetSession.objects.filter(status=InternetSession.Status.ACTIVE).count(), 1)
 
     def test_current_visit_returns_directly_to_catalog(self):
         first = self.client.post(
