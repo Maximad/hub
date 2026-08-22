@@ -94,6 +94,66 @@ class FinanceBoundaryTestCase(TestCase):
         self.assertFalse(PurchasePayment.objects.filter(purchase=purchase).exists())
         self.assertFalse(PostingBatch.objects.filter(operation_type='purchase.payment').exists())
 
+    def test_supplier_payment_reversal_posts_equal_and_opposite_entries(self):
+        purchase, _ = self.purchase()
+        receipt = purchases.receive(purchase, self.context('receipt:before-payment'))
+        receipt_batch = PostingBatch.objects.get(
+            operation_type='purchase.receipt.liability', source_object_id=str(receipt.pk),
+        )
+        self.assertEqual(receipt_batch.status, PostingBatch.Status.POSTED)
+
+        payment = purchases.pay(
+            purchase, self.context('purchase-pay:cash'), Decimal('100'), self.cash, 'cash',
+        )
+        original_batch = payment.posting_batch
+        self.assertEqual(original_batch.status, PostingBatch.Status.POSTED)
+        original_snapshot = list(original_batch.entries.order_by('pk').values(
+            'account_id', 'debit', 'credit', 'description',
+        ))
+
+        reversed_payment = purchases.reverse_payment(
+            payment, self.context('purchase-pay:reverse'), 'تصحيح دفعة المورد',
+        )
+        reversed_payment.refresh_from_db()
+        reversal_batch = reversed_payment.reversal_batch
+        self.assertEqual(reversal_batch.status, PostingBatch.Status.POSTED)
+        self.assertEqual(reversal_batch.reversal_of, original_batch)
+        self.assertEqual(reversal_batch.entries.count(), 2)
+        self.assertEqual(
+            (reversal_batch.entries.get(account=self.cash).debit,
+             reversal_batch.entries.get(account=self.cash).credit),
+            (Decimal('100'), None),
+        )
+        self.assertEqual(
+            (reversal_batch.entries.get(account=self.supplier_payable).debit,
+             reversal_batch.entries.get(account=self.supplier_payable).credit),
+            (None, Decimal('100')),
+        )
+
+        original_batch.refresh_from_db()
+        self.assertEqual(original_batch.status, PostingBatch.Status.POSTED)
+        self.assertIsNone(original_batch.reversal_of)
+        self.assertEqual(
+            list(original_batch.entries.order_by('pk').values(
+                'account_id', 'debit', 'credit', 'description',
+            )),
+            original_snapshot,
+        )
+        self.assertIsNotNone(reversed_payment.reversed_at)
+        self.assertEqual(reversed_payment.reversal_batch, reversal_batch)
+        self.assertEqual(
+            purchases.financial_state(purchase),
+            {'recognized': Decimal('200'), 'received_recognized': Decimal('200'),
+             'financially_reversed': Decimal('0'), 'paid': Decimal('0'),
+             'outstanding': Decimal('200')},
+        )
+        cash_reversals = CashMovement.objects.filter(
+            movement_type=CashMovement.MovementType.SUPPLIER_PAYMENT,
+            direction=CashMovement.Direction.IN, financial_account=self.cash,
+        )
+        self.assertEqual(cash_reversals.count(), 1)
+        self.assertEqual(cash_reversals.get().amount_syp, Decimal('100'))
+
     def test_repeated_receipt_cancellation_return_and_reversal_requests_do_not_drift(self):
         purchase, item = self.purchase()
         receipt = purchases.receive(purchase, self.context('receipt:retry'))
