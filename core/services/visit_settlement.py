@@ -5,6 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from core.models import ActivityLog, HubVisit, Order, Payment
+from core.services.posting.engine import dispatch
 from core.services.posting.order_payments import collect as collect_order_payment
 
 
@@ -50,11 +51,12 @@ def visit_financials(visit, *, orders=None):
 
 
 def allocate_visit_payment(visit, context, amount_syp, method, notes=''):
-    """Collect one table/visit payment and allocate it across unpaid orders.
+    """Collect one visit payment and allocate it across unpaid orders.
 
-    Orders remain the accounting documents. The visit is only the settlement
-    umbrella, so this function creates ordinary Payment rows, oldest unpaid
-    order first, while one ActivityLog entry records the combined allocation.
+    The outer PostingCommand is the idempotency boundary for the combined
+    cashier action. Child order payments get deterministic derived keys.
+    Orders remain the accounting documents; HubVisit remains an operational
+    umbrella rather than a ledger.
     """
     amount = Decimal(str(amount_syp))
     if amount <= 0:
@@ -62,15 +64,15 @@ def allocate_visit_payment(visit, context, amount_syp, method, notes=''):
     if method not in dict(COLLECTIBLE_PAYMENT_METHODS):
         raise ValidationError('طريقة الدفع المختارة غير قابلة للتحصيل.')
 
-    with transaction.atomic():
-        locked_visit = HubVisit.objects.select_for_update().get(pk=visit.pk)
+    allocations = []
+
+    def handle(locked_visit):
         orders = list(active_visit_orders(locked_visit, for_update=True))
         financial = visit_financials(locked_visit, orders=orders)
         if amount > Decimal(str(financial['remaining'])):
             raise ValidationError('المبلغ لا يجوز أن يتجاوز الرصيد المتبقي على الجلسة.')
 
         left = amount
-        allocations = []
         for order in orders:
             if left <= 0:
                 break
@@ -111,4 +113,8 @@ def allocate_visit_payment(visit, context, amount_syp, method, notes=''):
                 ],
             },
         )
-        return locked_visit, allocations
+        return locked_visit
+
+    with transaction.atomic():
+        result = dispatch('visit_payment.collect', visit, context, handle)
+    return result, allocations
