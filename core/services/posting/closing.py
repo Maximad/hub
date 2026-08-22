@@ -59,10 +59,14 @@ def close(daily_close, context, actual_cash_counted_syp, notes='', opening_cash_
     require_finance_actor(context, 'الإغلاق اليومي')
     if actual_cash_counted_syp is None:
         raise InvalidTransition('العد الفعلي للنقد مطلوب.')
-    source = DailyClose.objects.select_for_update().select_related('account').get(pk=daily_close.pk)
-    if not source.account_id:
+    account_id = DailyClose.objects.values_list('account_id', flat=True).get(pk=daily_close.pk)
+    if not account_id:
         raise InvalidTransition('يجب تحديد الحساب المالي للإغلاق.')
-    FinancialAccount.objects.select_for_update().get(pk=source.account_id)
+    account = FinancialAccount.objects.select_for_update().get(pk=account_id)
+    source = DailyClose.objects.select_for_update().get(pk=daily_close.pk)
+    if source.account_id != account_id:
+        raise InvalidTransition('تم تغيير الحساب المالي للإغلاق.')
+    source.account = account
     if source.status == DailyClose.Status.CLOSED and source.closed_at:
         return source
     totals = close_totals(source.account, source.business_date)

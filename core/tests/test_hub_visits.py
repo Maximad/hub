@@ -74,7 +74,8 @@ class HubVisitPublicTests(TestCase):
         self.assertEqual(Order.objects.count(), 2)
         self.assertEqual(Order.objects.values('visit_id').distinct().count(), 1)
         menu = self.client.get(self.url)
-        self.assertContains(menu, 'عرض جلستك')
+        self.assertContains(menu, 'عرض الجلسة')
+        self.assertContains(menu, f'href="{reverse("current_visit")}"')
         self.assertEqual(self.client.get(reverse('current_visit')).status_code, 200)
 
     def test_visit_order_confirmation_and_current_visit_are_one_flow(self):

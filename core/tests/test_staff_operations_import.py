@@ -6,8 +6,9 @@ from zipfile import ZipFile
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils.formats import localize
 
 from core.management.commands.generate_hub_operations_template import workbook_bytes
 from core.management.commands.import_hub_operations_batch import ORDER, SHEETS
@@ -16,6 +17,7 @@ from core.services.operations_import import Plan
 from vendors.models import Vendor
 
 
+@override_settings(SECURE_SSL_REDIRECT=False)
 class StaffOperationsImportTests(TestCase):
     def setUp(self):
         users = get_user_model().objects
@@ -66,13 +68,14 @@ class StaffOperationsImportTests(TestCase):
 
         response = self.client.post(reverse('staff_operations_import_preview'), {'xlsx_file': upload})
 
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(response.context['has_errors'])
-        self.assertContains(response, 'ING-HOTFIX')
-        self.assertContains(response, '2.500 kg')
         item.refresh_from_db()
         self.assertEqual((Purchase.objects.count(), StockMovement.objects.count(), item.current_quantity), before)
         self.assertNotIn('items', response.context['plan'].stock)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context['has_errors'])
+        self.assertContains(response, 'ING-HOTFIX')
+        self.assertContains(response, f'{localize(item._meta.get_field("current_quantity").to_python("2.500"))} kg')
 
     def test_payment_effect_preview_renders_without_mutating_defaultdict(self):
         self.client.force_login(self.admin)
