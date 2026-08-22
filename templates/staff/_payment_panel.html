@@ -1,0 +1,64 @@
+{% load hub_numbers %}
+<section class="staff-payment-panel" dir="rtl" data-payment-panel data-remaining="{{ remaining }}" data-default-amount="{{ payment_amount_default }}">
+  <header class="staff-payment-panel__header">
+    <div>
+      <p class="staff-workspace__eyebrow">قبض الطلب</p>
+      <h3 class="hub-order-number">{{ order.display_number }}</h3>
+      <p class="staff-payment-panel__meta">{% if order.table %}{{ order.table }}{% else %}{{ order.get_fulfillment_label }}{% endif %}</p>
+    </div>
+    <a href="{% url 'staff_order_edit' order.public_code %}" data-staff-context-url="{% url 'staff_order_edit' order.public_code %}?panel=context" data-context-title="تفاصيل الطلب" aria-haspopup="dialog">← الطلب</a>
+  </header>
+
+  {% if messages %}
+    <div class="staff-payment-panel__messages">
+      {% for message in messages %}<div class="hub-message hub-message-{{ message.tags|default:'info' }}">{{ message }}</div>{% endfor %}
+    </div>
+  {% endif %}
+
+  <section class="staff-order-panel__totals" aria-label="حساب الطلب">
+    <div><span>الإجمالي</span><strong>{{ total|format_syp }}</strong></div>
+    <div><span>المدفوع</span><strong>{{ paid|format_syp }}</strong></div>
+    <div><span>المتبقي</span><strong>{{ remaining|format_syp }}</strong></div>
+  </section>
+
+  {% if remaining > 0 %}
+    <form method="post"
+          action="{% url 'staff_cashier_pay' order.public_code %}"
+          hx-post="{% url 'staff_cashier_pay' order.public_code %}?panel=payment"
+          hx-target="#staff-context-drawer-body"
+          hx-swap="innerHTML"
+          class="hub-form hub-form-section staff-payment-panel__form">
+      {% csrf_token %}
+      {% include "components/currency_entry.html" %}
+      <p class="hub-help-text">المبلغ يبدأ بالرصيد المتبقي. إذا أدخلت مبلغاً أقل، تطبق قواعد الدفع الجزئي وموافقة المدير الحالية دون تغيير.</p>
+
+      <div class="hub-manager-approval" data-manager-approval hidden>
+        <label>اسم المدير<input class="hub-input" type="text" name="manager_username" autocomplete="username"></label>
+        <label>كلمة المرور<input class="hub-input" type="password" name="manager_password" autocomplete="current-password"></label>
+      </div>
+
+      <label>طريقة الدفع
+        <select class="hub-input" name="method" required>
+          {% for value, label in methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>ملاحظات الدفع<textarea class="hub-input" name="notes" rows="2"></textarea></label>
+      <button class="hub-button hub-button-primary" type="submit">حفظ الدفعة</button>
+    </form>
+  {% else %}
+    <div class="hub-message hub-message-success">تم تسديد هذا الطلب بالكامل.</div>
+  {% endif %}
+
+  <section class="staff-payment-panel__history">
+    <div class="staff-order-panel__section-head"><h4>سجل الدفعات</h4><span>{{ order.payments.all|length }}</span></div>
+    <div class="staff-payment-panel__payments">
+      {% for payment in order.payments.all %}
+        <div><span>{{ payment.get_method_display }}</span><strong>{{ payment.amount_syp|format_syp }}</strong></div>
+      {% empty %}<p class="hub-help-text">لا توجد دفعات بعد.</p>{% endfor %}
+    </div>
+  </section>
+
+  <footer class="staff-payment-panel__footer">
+    <a class="hub-button" href="{% url 'staff_cashier_order' order.public_code %}">فتح صفحة الكاشير كاملة</a>
+  </footer>
+</section>
