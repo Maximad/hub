@@ -10,7 +10,7 @@ from pathlib import Path
 from django.apps import apps
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, no_translations
 from django.db import connection
 from django.db.migrations.autodetector import MigrationAutodetector
 from django.db.migrations.executor import MigrationExecutor
@@ -77,6 +77,7 @@ class Command(BaseCommand):
         self.results.append({'status': status, 'code': code, 'message': message,
                              'resolution': resolution})
 
+    @no_translations
     def _migrations(self):
         executor = MigrationExecutor(connection)
         pending = executor.migration_plan(executor.loader.graph.leaf_nodes())
