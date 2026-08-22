@@ -22,7 +22,7 @@
 
   <div class="table-entry__choices">
     {% if internet_self_service_enabled %}
-    <details class="table-entry__choice table-entry__choice--internet" {% if not active_internet_session %}open{% endif %}>
+    <details class="table-entry__choice table-entry__choice--internet">
       <summary>
         <span class="table-entry__choice-icon" aria-hidden="true">⌁</span>
         <span><strong>الإنترنت</strong><small>{% if active_internet_session %}عرض جلستك أو بدء باقة أخرى{% else %}اختر باقة وابدأ مباشرة{% endif %}</small></span>
