@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -7,7 +8,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
 
 from core.management.commands.launch_readiness import Command
-from core.models import AuditEvent, FinancialAccount
+from core.models import AuditEvent, DailyClose, FinancialAccount, Order
 from core.services.finance_reconciliation import FinanceReconciler
 from core.services.posting.closing import _snapshot_number
 from reservations.models import Reservation
@@ -34,15 +35,36 @@ class FinanceAuditScopeTests(TestCase):
 
         self.assertEqual(reconciler.findings, [])
 
-    def test_core_finance_audit_still_requires_operation_provenance(self):
+    def test_core_operational_order_audit_is_not_a_finance_finding(self):
+        order = Order.objects.create()
+        AuditEvent.objects.create(
+            actor=self.user,
+            action='order_status_transition',
+            source_content_type=ContentType.objects.get_for_model(Order),
+            source_object_id=str(order.pk),
+            before_snapshot={'status': Order.Status.NEW},
+            after_snapshot={'status': Order.Status.ACCEPTED, 'reason': ''},
+            channel='staff',
+        )
+
+        reconciler = FinanceReconciler()
+        reconciler._audits()
+
+        self.assertEqual(reconciler.findings, [])
+
+    def test_finance_close_audit_still_requires_operation_provenance(self):
         account = FinancialAccount.objects.create(
             code='cash:audit-test', name_ar='اختبار', account_type='asset', is_active=True
         )
+        close = DailyClose.objects.create(
+            account=account,
+            business_date=date(2026, 8, 22),
+        )
         AuditEvent.objects.create(
             actor=self.user,
-            action='finance_test',
-            source_content_type=ContentType.objects.get_for_model(FinancialAccount),
-            source_object_id=str(account.pk),
+            action='account_period_closed',
+            source_content_type=ContentType.objects.get_for_model(DailyClose),
+            source_object_id=str(close.pk),
             channel='staff',
         )
 
