@@ -1,12 +1,21 @@
-"""Menu and core operations views; no member/internet/report domain logic."""
+"""Menu and core operations views with thin composition over legacy flows."""
+
+from urllib.parse import urlsplit
+
+from django.core.exceptions import ValidationError
+from django.db import transaction
+from django.shortcuts import get_object_or_404, render
+from django.urls import resolve
 
 from accounts.permissions import user_has_capability
+from core.models import Order, TableArea
 from core.views.staff_context import render_order_context_panel, render_payment_panel
 from core.views.staff_workspace import staff_home
+from internet.catalog import decorate_menu_context, fulfill_internet_items_for_order
 from core.views_legacy import (
+    _create_order_from_menu,
+    _menu_context,
     dashboard,
-    menu_public,
-    menu_table,
     order_public,
     staff_pos,
     staff_qr_links,
@@ -34,6 +43,66 @@ from core.views_legacy import (
     staff_order_prep_ticket,
     staff_order_delivery_ticket,
 )
+
+
+def _validation_message(error):
+    if hasattr(error, 'message_dict'):
+        return ' '.join(
+            message
+            for field_messages in error.message_dict.values()
+            for message in field_messages
+        )
+    return ' '.join(getattr(error, 'messages', [str(error)]))
+
+
+def _render_customer_menu(request, *, table=None, error=''):
+    context = decorate_menu_context(_menu_context(table=table, request=request), table=table)
+    if error:
+        context['error'] = error
+        context['form_values'] = request.POST
+    return render(request, 'menu/menu.html', context)
+
+
+def _created_order_from_response(response):
+    if not (300 <= response.status_code < 400):
+        return None
+    location = response.get('Location', '')
+    if not location:
+        return None
+    try:
+        match = resolve(urlsplit(location).path)
+    except Exception:
+        return None
+    if match.url_name != 'order_public':
+        return None
+    public_code = match.kwargs.get('public_code')
+    return Order.objects.select_related('visit', 'member', 'table').filter(public_code=public_code).first()
+
+
+def _customer_order_from_menu(request, *, table=None):
+    """Create the canonical order, then fulfill any Internet cart line atomically."""
+    try:
+        with transaction.atomic():
+            response = _create_order_from_menu(request, table=table)
+            order = _created_order_from_response(response)
+            if order is not None:
+                fulfill_internet_items_for_order(order)
+            return response
+    except ValidationError as error:
+        return _render_customer_menu(request, table=table, error=_validation_message(error))
+
+
+def menu_public(request):
+    if request.method == 'POST':
+        return _customer_order_from_menu(request, table=None)
+    return _render_customer_menu(request, table=None)
+
+
+def menu_table(request, qr_token):
+    table = get_object_or_404(TableArea.objects.select_related('room'), qr_token=qr_token)
+    if request.method == 'POST':
+        return _customer_order_from_menu(request, table=table)
+    return _render_customer_menu(request, table=table)
 
 
 def staff_order_edit(request, public_code):
