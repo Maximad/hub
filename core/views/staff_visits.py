@@ -4,13 +4,39 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
-from accounts.permissions import require_staff_capability
+from accounts.permissions import require_staff_capability, user_has_capability
 from core.models import ActivityLog, HubVisit, InternetSession, Member, Order, TableArea
 from core.services.internet_access import end_usage_session
 
 
 def _log(request, action, visit, **details):
     ActivityLog.objects.create(actor=request.user, action=action, details={'visit_id': visit.pk, **details})
+
+
+def _visit_context(request, visit):
+    orders = list(visit.orders.all())
+    unpaid_order = next(
+        (
+            order
+            for order in orders
+            if order.status != Order.Status.CANCELLED and order.remaining_syp > 0
+        ),
+        None,
+    )
+    return {
+        'visit': visit,
+        'tables': TableArea.objects.select_related('room'),
+        'members': Member.objects.order_by('name_ar')[:200],
+        'internet_entitlements': visit.internet_entitlements.select_related('package', 'order'),
+        'internet_sessions': visit.internet_sessions.select_related('package', 'entitlement').order_by('-start_time'),
+        'unpaid_order': unpaid_order,
+        'visit_caps': {
+            'pos': user_has_capability(request.user, 'pos'),
+            'cashier': user_has_capability(request.user, 'cashier'),
+            'internet_billing': user_has_capability(request.user, 'internet_billing'),
+            'order_edit': user_has_capability(request.user, 'order_edit'),
+        },
+    }
 
 
 @require_staff_capability('orders')
@@ -83,4 +109,8 @@ def staff_visit_detail(request, public_code):
                 return redirect('staff_visit_detail', public_code=visit.public_code)
         messages.success(request, 'تم تحديث الجلسة.')
         return redirect('staff_visit_detail', public_code=visit.public_code)
-    return render(request, 'staff/visit_detail.html', {'visit': visit, 'tables': TableArea.objects.select_related('room'), 'members': Member.objects.order_by('name_ar')[:200], 'internet_entitlements': visit.internet_entitlements.select_related('package', 'order'), 'internet_sessions': visit.internet_sessions.select_related('package', 'entitlement').order_by('-start_time')})
+
+    context = _visit_context(request, visit)
+    if request.GET.get('panel') == '1':
+        return render(request, 'staff/_visit_panel.html', context)
+    return render(request, 'staff/visit_detail.html', context)

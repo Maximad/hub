@@ -52,6 +52,40 @@ class StaffWorkspaceTests(TestCase):
         self.assertContains(response, '+ طلب جديد')
         self.assertNotContains(response, 'وصول سريع إلى مساحات التشغيل اليومية حسب صلاحياتك.')
 
+    def test_visit_card_progressively_opens_context_drawer(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse('staff_home'))
+
+        detail_url = reverse('staff_visit_detail', kwargs={'public_code': self.visit.public_code})
+        self.assertContains(response, 'id="staff-context-drawer"')
+        self.assertContains(response, 'data-visit-context-url="{}?panel=1"'.format(detail_url))
+        self.assertContains(response, 'js/staff_workspace.js')
+
+    def test_visit_panel_is_compact_context_not_full_page(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(
+            reverse('staff_visit_detail', kwargs={'public_code': self.visit.public_code}),
+            {'panel': '1'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'staff/_visit_panel.html')
+        self.assertContains(response, self.table.name_ar)
+        self.assertContains(response, '+ طلب لهذه الجلسة')
+        self.assertContains(response, self.order.display_number)
+        self.assertNotContains(response, '<!DOCTYPE html>')
+
+    def test_context_bound_pos_preselects_requested_open_visit(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(
+            reverse('staff_pos'),
+            {'visit': str(self.visit.public_code)},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['selected_visit_id'], str(self.visit.pk))
+        self.assertContains(response, 'value="{}" selected'.format(self.visit.pk))
+
     def test_staff_pages_share_persistent_navigation_shell(self):
         self.client.force_login(self.waiter)
         response = self.client.get(reverse('staff_orders'))
