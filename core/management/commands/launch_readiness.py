@@ -34,6 +34,7 @@ class Command(BaseCommand):
     requires_system_checks = []
 
     ROUTES = ('/menu/', '/admin/login/', '/staff/', '/staff/orders/', '/staff/pos/')
+    PRE_LEDGER_EXPECTED_FINDINGS = frozenset({'payment_missing_posting'})
 
     def add_arguments(self, parser):
         parser.add_argument('--json', action='store_true', dest='as_json')
@@ -159,9 +160,37 @@ class Command(BaseCommand):
 
     def _integrity(self):
         findings = FinanceReconciler().run()
-        unresolved = PostingReconciliationFailure.objects.filter(resolved_at__isnull=True).count() + FinanceReviewItem.objects.filter(resolved_at__isnull=True).count()
-        count = len(findings) + unresolved
-        self.add('FAIL' if count else 'PASS', 'integrity_reconciliation', f'نتائج سلامة/تسوية: {count}.', 'شغّل reconcile_finance وreconcile_postings وعالج كل نتيجة؛ لا تستخدم التدقيق للتنظيف.')
+        rollout = current_rollout()
+        expected_pre_ledger = []
+        blocking_findings = findings
+        if not rollout.ledger_writes:
+            expected_pre_ledger = [
+                row for row in findings if row.get('code') in self.PRE_LEDGER_EXPECTED_FINDINGS
+            ]
+            blocking_findings = [
+                row for row in findings if row.get('code') not in self.PRE_LEDGER_EXPECTED_FINDINGS
+            ]
+
+        unresolved = (
+            PostingReconciliationFailure.objects.filter(resolved_at__isnull=True).count()
+            + FinanceReviewItem.objects.filter(resolved_at__isnull=True).count()
+        )
+        blocking_count = len(blocking_findings) + unresolved
+
+        if blocking_count:
+            self.add(
+                'FAIL', 'integrity_reconciliation',
+                f'نتائج سلامة/تسوية مانعة: {blocking_count}.',
+                'شغّل reconcile_finance وreconcile_postings وعالج كل نتيجة مانعة؛ لا تستخدم التدقيق للتنظيف.',
+            )
+        elif expected_pre_ledger:
+            self.add(
+                'WARN', 'integrity_reconciliation',
+                f'نتائج متوقعة قبل تفعيل ledger writes: {len(expected_pre_ledger)}.',
+                'تبقى ظاهرة في reconcile_finance؛ عالجها قبل تفعيل POSTING_LEDGER_WRITES_ENABLED.',
+            )
+        else:
+            self.add('PASS', 'integrity_reconciliation', 'لا توجد نتائج سلامة/تسوية مانعة.')
 
     def _operational(self, allowed):
         count = sum(apps.get_model(label).objects.count() for label in DELETE_MODELS)
