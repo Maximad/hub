@@ -15,6 +15,18 @@ def _amount(value):
     return value or Decimal('0')
 
 
+def _snapshot_number(value):
+    """Serialize numeric snapshot values canonically across database backends.
+
+    PostgreSQL aggregate results retain the DecimalField scale (for example
+    ``Decimal('125.00')``) while other backends/test paths may produce
+    ``Decimal('125')``.  Persisting ``str(value)`` directly therefore makes the
+    JSON snapshot depend on the database backend even though the monetary value
+    is identical.  Normalize trailing zeroes while keeping fixed-point notation.
+    """
+    return format(Decimal(str(value or 0)).normalize(), 'f')
+
+
 def close_totals(account, business_date):
     """Return cash changes from posted ledger entries only.
 
@@ -50,9 +62,11 @@ def snapshot_for(close, totals=None):
     totals = totals or close_totals(close.account, close.business_date)
     return {
         'account_id': close.account_id, 'business_date': close.business_date.isoformat(),
-        'opening_amount': str(close.opening_cash_syp), **{key: str(value) for key, value in totals.items()},
-        'expected_amount': str(close.expected_cash_syp), 'counted_amount': str(close.actual_cash_counted_syp),
-        'difference': str(close.cash_difference_syp), 'closer_id': close.closed_by_id,
+        'opening_amount': _snapshot_number(close.opening_cash_syp),
+        **{key: _snapshot_number(value) for key, value in totals.items()},
+        'expected_amount': _snapshot_number(close.expected_cash_syp),
+        'counted_amount': _snapshot_number(close.actual_cash_counted_syp),
+        'difference': _snapshot_number(close.cash_difference_syp), 'closer_id': close.closed_by_id,
         'approver_id': close.approved_by_id, 'closed_at': close.closed_at.isoformat() if close.closed_at else None,
     }
 
