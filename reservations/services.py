@@ -99,7 +99,7 @@ def _matching_member(reservation):
     phone = (reservation.phone or '').strip()
     if not phone:
         return None
-    return Member.objects.filter(phone=phone).first()
+    return Member.objects.select_for_update().filter(phone=phone).first()
 
 
 @transaction.atomic
