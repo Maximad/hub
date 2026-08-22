@@ -3,7 +3,7 @@ from django.test import TestCase, override_settings
 
 from core.models import InternetBandwidthProfile, InternetEntitlement, InternetPackage
 from core.services.internet_access import create_entitlement
-from core.services.mikrotik import MikroTikProvisioningError
+from core.services.mikrotik import MikroTikConfigurationError, MikroTikProvisioningError
 from core.services.network_backends import (ManualNetworkBackend, MikroTikNetworkBackend,
                                              get_network_backend)
 
@@ -88,7 +88,15 @@ class MikroTikBackendTests(TestCase):
     def test_health_read(self): self.assertTrue(self.backend.test_connection())
 
 
-class ManualFallbackTests(TestCase):
+class BackendSelectionTests(TestCase):
+    def test_manual_is_the_explicit_safe_default(self):
+        self.assertIsInstance(get_network_backend('manual'), ManualNetworkBackend)
+
     @override_settings(MIKROTIK_ENABLED=False)
-    def test_disabled_mikrotik_falls_back_to_unchanged_manual(self):
-        self.assertIsInstance(get_network_backend('mikrotik'), ManualNetworkBackend)
+    def test_explicit_mikrotik_fails_closed_when_disabled(self):
+        with self.assertRaises(MikroTikConfigurationError):
+            get_network_backend('mikrotik')
+
+    def test_unknown_backend_is_rejected(self):
+        with self.assertRaises(ValidationError):
+            get_network_backend('unknown')

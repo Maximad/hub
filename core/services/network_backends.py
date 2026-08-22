@@ -12,6 +12,14 @@ from core.services.mikrotik import (MikroTikConfigurationError, MikroTikConnecti
                                      MikroTikProvisioningError, RouterOSClient)
 
 
+def _safe_network_error(exc):
+    text = str(exc).replace('\r', ' ').replace('\n', ' ')
+    lowered = text.lower()
+    if any(marker in lowered for marker in ('password', 'authorization', 'credential', 'mikrotik_password')):
+        return 'Network operation failed; sensitive details were removed.'
+    return text[:500]
+
+
 class ManualNetworkBackend:
     code = 'manual'
     def provision_access(self, entitlement):
@@ -114,7 +122,7 @@ class MikroTikNetworkBackend:
 
     def _record_failure(self, entitlement, exc):
         entitlement.network_status = entitlement.NetworkStatus.PROVISION_ERROR
-        entitlement.last_network_error = str(exc)[:500]
+        entitlement.last_network_error = _safe_network_error(exc)
         entitlement.last_network_sync_at = timezone.now()
         entitlement.save(update_fields=['network_status', 'last_network_error', 'last_network_sync_at', 'updated_at'])
 
@@ -147,6 +155,19 @@ class MikroTikNetworkBackend:
         entitlement.save(update_fields=['external_network_identifier', 'network_credential_encrypted', 'network_status', 'last_network_error', 'last_network_sync_at', 'updated_at'])
         return entitlement
 
+    def connection_credentials(self, entitlement):
+        """Decrypt an already-provisioned HotSpot identity without rotating it."""
+        if entitlement.network_status != entitlement.NetworkStatus.PROVISIONED:
+            raise ValidationError('لم يكتمل تجهيز بيانات دخول الشبكة.')
+        if not entitlement.network_credential_encrypted:
+            raise MikroTikConfigurationError('بيانات دخول الشبكة المشفرة غير موجودة.')
+        password, encrypted = self._credential(entitlement)
+        if encrypted is not None:
+            # _credential() may generate only when no encrypted value exists; the
+            # guard above means a customer relay must never rotate credentials.
+            raise MikroTikConfigurationError('تعذر قراءة بيانات دخول الشبكة بأمان.')
+        return entitlement.external_network_identifier or self.username(entitlement), password
+
     def refresh_access(self, entitlement):
         if entitlement.effective_status() in {entitlement.Status.EXPIRED, entitlement.Status.CANCELLED}:
             return self.disconnect_access(entitlement)
@@ -170,6 +191,10 @@ class MikroTikNetworkBackend:
 
 
 def get_network_backend(code='manual'):
-    if code == 'mikrotik' and settings.MIKROTIK_ENABLED:
+    if code == 'manual':
+        return ManualNetworkBackend()
+    if code == 'mikrotik':
+        # An entitlement explicitly snapshotted as MikroTik must never be marked
+        # provisioned by the Manual backend when the router integration is disabled.
         return MikroTikNetworkBackend()
-    return ManualNetworkBackend()
+    raise ValidationError('مزود تنفيذ الشبكة غير مدعوم.')

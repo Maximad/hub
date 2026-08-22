@@ -14,9 +14,11 @@ STALE_AFTER = timedelta(minutes=15)
 def _safe_error(exc):
     # Keep operational context, never exception repr/arguments which may contain credentials.
     text = str(exc).replace('\r', ' ').replace('\n', ' ')
-    for marker in ('password=', 'Authorization:', 'MIKROTIK_PASSWORD='):
-        if marker.lower() in text.lower():
-            return 'Network operation failed; sensitive details were removed.'
+    lowered = text.lower()
+    if any(marker in lowered for marker in (
+        'password', 'authorization', 'credential', 'mikrotik_password',
+    )):
+        return 'Network operation failed; sensitive details were removed.'
     return text[:500]
 
 
@@ -67,12 +69,13 @@ def _execute_claimed(claimed_id):
     except Exception as exc:
         now = timezone.now()
         delay = (1, 5, 15)[min(max(job.attempt_count - 1, 0), 2)]
+        safe_error = _safe_error(exc)
         InternetNetworkOperation.objects.filter(pk=job.pk).update(
-            status=job.Status.FAILED, last_error=_safe_error(exc),
+            status=job.Status.FAILED, last_error=safe_error,
             next_attempt_at=now + timedelta(minutes=delay), updated_at=now)
         InternetEntitlement.objects.filter(pk=entitlement.pk).update(
             network_status=InternetEntitlement.NetworkStatus.PROVISION_ERROR,
-            last_network_error=_safe_error(exc), last_network_sync_at=now, updated_at=now)
+            last_network_error=safe_error, last_network_sync_at=now, updated_at=now)
         return False
     now = timezone.now()
     InternetNetworkOperation.objects.filter(pk=job.pk).update(
