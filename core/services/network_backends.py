@@ -147,6 +147,19 @@ class MikroTikNetworkBackend:
         entitlement.save(update_fields=['external_network_identifier', 'network_credential_encrypted', 'network_status', 'last_network_error', 'last_network_sync_at', 'updated_at'])
         return entitlement
 
+    def connection_credentials(self, entitlement):
+        """Decrypt an already-provisioned HotSpot identity without rotating it."""
+        if entitlement.network_status != entitlement.NetworkStatus.PROVISIONED:
+            raise ValidationError('لم يكتمل تجهيز بيانات دخول الشبكة.')
+        if not entitlement.network_credential_encrypted:
+            raise MikroTikConfigurationError('بيانات دخول الشبكة المشفرة غير موجودة.')
+        password, encrypted = self._credential(entitlement)
+        if encrypted is not None:
+            # _credential() may generate only when no encrypted value exists; the
+            # guard above means a customer relay must never rotate credentials.
+            raise MikroTikConfigurationError('تعذر قراءة بيانات دخول الشبكة بأمان.')
+        return entitlement.external_network_identifier or self.username(entitlement), password
+
     def refresh_access(self, entitlement):
         if entitlement.effective_status() in {entitlement.Status.EXPIRED, entitlement.Status.CANCELLED}:
             return self.disconnect_access(entitlement)
