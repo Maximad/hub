@@ -21,3 +21,27 @@ class WifiNetwork(models.Model):
 
     def __str__(self):
         return self.name_ar or self.ssid
+
+
+class InternetCatalogBinding(models.Model):
+    """Stable storefront identity for an InternetPackage.
+
+    InternetPackage remains authoritative for commercial/access policy. Product is
+    only the catalog/cart representation used by the normal Hub ordering flow.
+    """
+
+    package = models.OneToOneField(
+        'core.InternetPackage',
+        on_delete=models.CASCADE,
+        related_name='catalog_binding',
+    )
+    product = models.OneToOneField(
+        'core.Product',
+        on_delete=models.PROTECT,
+        related_name='internet_catalog_binding',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.package} → {self.product}'
