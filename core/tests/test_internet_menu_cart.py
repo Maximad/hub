@@ -32,7 +32,6 @@ class InternetMenuCartTests(TestCase):
             customer_visits_enabled=True,
             customer_internet_self_service_enabled=True,
         )
-        get_system_settings.cache_clear()
 
         self.food_category = Category.objects.create(name_ar='سناك')
         self.food_section = MenuSection.objects.create(name_ar='سناك')
@@ -47,6 +46,32 @@ class InternetMenuCartTests(TestCase):
             orderable_on_qr=True,
         )
         self.food.menu_sections.add(self.food_section)
+
+        service_category = Category.objects.create(name_ar='خدمات')
+        self.metered_product = Product.objects.create(
+            category=service_category,
+            name_ar='إنترنت حسب الوقت',
+            price_syp=0,
+            is_available=True,
+            product_type=Product.ProductType.INTERNET,
+            item_type=Product.ItemType.SERVICE,
+            service_type=Product.ServiceType.INTERNET,
+            requires_preparation=False,
+            visible_on_pos=False,
+            orderable_on_pos=False,
+            visible_on_qr=False,
+            orderable_on_qr=False,
+            available_for_events=False,
+            available_for_takeaway=False,
+            not_discountable=True,
+            track_margin=False,
+        )
+        self.settings.default_rate_per_hour_syp = 3500
+        self.settings.internet_service_product = self.metered_product
+        self.settings.save(update_fields=[
+            'default_rate_per_hour_syp', 'internet_service_product', 'updated_at',
+        ])
+        get_system_settings.cache_clear()
 
         self.package = InternetPackage.objects.create(
             name_ar='إنترنت سريع — ساعة',
@@ -85,7 +110,8 @@ class InternetMenuCartTests(TestCase):
         self.assertContains(response, 'الإنترنت')
         self.assertContains(response, self.package.name_ar)
         self.assertContains(response, 'name="package"')
-        self.assertContains(response, 'ابدأ الإنترنت')
+        self.assertContains(response, 'ابدأ الإنترنت الآن')
+        self.assertContains(response, 'اختر باقة')
         self.assertNotContains(response, f'name="qty_{self.internet_product.pk}"')
         self.assertNotContains(response, 'اتصال إنترنت')
         self.assertNotContains(response, self.food.name_ar)
