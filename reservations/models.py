@@ -35,6 +35,28 @@ class Reservation(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=['reservation_date', 'start_time', 'end_time', 'status'],
+                name='reservation_interval_idx',
+            ),
+            models.Index(
+                fields=['event', 'status'],
+                name='reservation_event_idx',
+            ),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(end_time__isnull=True)
+                    | models.Q(start_time__isnull=True)
+                    | models.Q(end_time__gt=models.F('start_time'))
+                ),
+                name='reservation_end_after_start',
+            ),
+        ]
+
     TRANSITIONS = {
         Status.PENDING: frozenset({Status.CONFIRMED, Status.CANCELLED}),
         Status.CONFIRMED: frozenset({Status.COMPLETED, Status.NO_SHOW, Status.CANCELLED}),
