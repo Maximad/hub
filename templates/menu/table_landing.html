@@ -25,14 +25,14 @@
     <details class="table-entry__choice table-entry__choice--internet">
       <summary>
         <span class="table-entry__choice-icon" aria-hidden="true">⌁</span>
-        <span><strong>الإنترنت</strong><small>{% if active_internet_session %}عرض جلستك أو بدء باقة أخرى{% else %}اختر باقة وابدأ مباشرة{% endif %}</small></span>
+        <span><strong>الإنترنت</strong><small>{% if active_internet_session %}إدارة جلستك الحالية{% else %}اختر باقة وابدأ مباشرة{% endif %}</small></span>
         <span class="table-entry__chevron" aria-hidden="true">⌄</span>
       </summary>
       <div class="table-entry__internet-body">
         {% if active_internet_session %}
-          <a class="hub-button hub-button-secondary table-entry__session-link" href="{% url 'current_visit' %}">عرض جلسة الإنترنت الحالية</a>
-        {% endif %}
-        {% if internet_packages %}
+          <p class="table-entry__internet-note">لديك جلسة إنترنت فعالة. يمكنك إنهاؤها أو متابعة تفاصيلها من صفحة جلستك.</p>
+          <a class="hub-button hub-button-primary table-entry__session-link" href="{% url 'current_visit' %}">عرض جلسة الإنترنت</a>
+        {% elif internet_packages %}
         <form method="post" action="{% url 'visit_internet_start' %}" class="table-entry__internet-form">
           {% csrf_token %}
           <input type="hidden" name="table" value="{{ table.qr_token }}">
