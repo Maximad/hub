@@ -1,4 +1,4 @@
-from datetime import time
+from datetime import time, timedelta
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -76,6 +76,17 @@ class ReservationVisitInvariantTests(TestCase):
             )
 
         self.assertEqual(HubVisit.objects.count(), 1)
+
+    def test_future_reservation_cannot_check_in_early(self):
+        self.reservation.reservation_date = timezone.localdate() + timedelta(days=1)
+        self.reservation.save(update_fields=['reservation_date', 'updated_at'])
+
+        with self.assertRaises(ValidationError):
+            check_in_reservation(
+                self.reservation.pk, actor=self.waiter, table_id=self.table.pk
+            )
+
+        self.assertEqual(HubVisit.objects.count(), 0)
 
     def test_manual_visit_creation_reuses_existing_open_table_visit(self):
         existing = HubVisit.objects.create(table=self.table, created_by=self.admin)
