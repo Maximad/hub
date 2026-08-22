@@ -108,6 +108,11 @@ def staff_reservation_detail(request, reservation_id):
 
     phone = (reservation.phone or '').strip()
     matching_member = Member.objects.filter(phone=phone).first() if phone else None
+    checkin_allowed = (
+        reservation.status == Reservation.Status.CONFIRMED
+        and reservation.visit_id is None
+        and reservation.effective_date == timezone.localdate()
+    )
     return render(
         request,
         'staff/reservation_detail.html',
@@ -116,6 +121,7 @@ def staff_reservation_detail(request, reservation_id):
             'statuses': Reservation.Status.choices,
             'checkin_tables': checkin_tables,
             'matching_member': matching_member,
+            'checkin_allowed': checkin_allowed,
         },
     )
 
