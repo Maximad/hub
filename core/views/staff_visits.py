@@ -7,6 +7,8 @@ from django.views.decorators.http import require_http_methods
 from accounts.permissions import require_staff_capability, user_has_capability
 from core.models import ActivityLog, HubVisit, InternetSession, Member, Order, TableArea
 from core.services.internet_access import end_usage_session
+from reservations.models import Reservation
+from reservations.services import complete_reservation_for_visit
 
 
 def _log(request, action, visit, **details):
@@ -67,6 +69,10 @@ def staff_visit_detail(request, public_code):
     if request.method == 'POST':
         action = request.POST.get('action')
         with transaction.atomic():
+            # Reservation check-in locks Reservation -> HubVisit. Keep that same
+            # order for closure so a repeated check-in cannot deadlock closure.
+            if action == 'close':
+                Reservation.objects.select_for_update().filter(visit_id=visit.pk).first()
             visit = HubVisit.objects.select_for_update().get(pk=visit.pk)
             if action == 'attach_order':
                 order = get_object_or_404(Order, public_code=request.POST.get('order_code'))
@@ -103,6 +109,7 @@ def staff_visit_detail(request, public_code):
                 visit.status = HubVisit.Status.CLOSED; visit.closed_at = now; visit.last_activity_at = now
                 visit.save(update_fields=['status', 'closed_at', 'last_activity_at', 'updated_at'])
                 visit.browser_credentials.filter(revoked_at__isnull=True).update(revoked_at=now)
+                complete_reservation_for_visit(visit.pk, actor=request.user)
                 _log(request, 'visit.closed', visit)
             else:
                 messages.error(request, 'الإجراء غير صالح.')
