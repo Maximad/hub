@@ -20,7 +20,7 @@
   {% if active_internet_sessions %}<div class="hub-message hub-message-warning">الإنترنت فعال. الدفع العادي لا يغلق الجلسة؛ استخدم الصفحة الكاملة عند المغادرة ليتم إيقاف الإنترنت واحتساب المبلغ النهائي أولاً.</div>{% endif %}
 
   {% if visit.status == 'open' and remaining > 0 %}
-    <form method="post" action="{% url 'staff_cashier_visit_pay' visit.public_code %}" hx-post="{% url 'staff_cashier_visit_pay' visit.public_code %}?panel=payment" hx-target="#staff-context-drawer-body" hx-swap="innerHTML" class="hub-form hub-form-section staff-payment-panel__form">
+    <form method="post" action="{% url 'staff_cashier_pay' visit.public_code %}" hx-post="{% url 'staff_cashier_pay' visit.public_code %}?panel=payment" hx-target="#staff-context-drawer-body" hx-swap="innerHTML" class="hub-form hub-form-section staff-payment-panel__form">
       {% csrf_token %}
       {% include "components/currency_entry.html" %}
       <p class="hub-help-text">توزّع الدفعة تلقائياً على طلبات الجلسة غير المسددة، الأقدم أولاً.</p>
@@ -39,5 +39,5 @@
     {% for order in orders %}<div><span>{{ order.display_number }}</span><strong>متبقي {{ order.remaining_syp|format_syp }}</strong></div>{% endfor %}
   </section>
 
-  <footer class="staff-payment-panel__footer"><a class="hub-button hub-button-primary" href="{% url 'staff_cashier_visit' visit.public_code %}">فتح الحساب المجمع</a></footer>
+  <footer class="staff-payment-panel__footer"><a class="hub-button hub-button-primary" href="{% url 'staff_cashier_order' visit.public_code %}">فتح الحساب المجمع</a></footer>
 </section>
