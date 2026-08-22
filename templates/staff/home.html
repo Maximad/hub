@@ -14,17 +14,19 @@
       {% if staff_caps.orders %}<a class="hub-button" href="{% url 'staff_visits' %}">+ جلسة جديدة</a>{% endif %}
       {% if workspace_caps.cashier %}<a class="hub-button" href="{% url 'staff_cashier' %}">قبض</a>{% endif %}
       {% if workspace_caps.internet_billing %}<a class="hub-button" href="{% url 'staff_members' %}">بحث عن عضو</a>{% endif %}
+      {% if not staff_caps.orders and staff_caps.kitchen_board %}<a class="hub-button hub-button-primary" href="{% url 'staff_kitchen' %}">فتح لوحة التحضير</a>{% endif %}
     </div>
   </header>
 
   <section class="staff-workspace__stats" aria-label="ملخص الوردية">
-    <a class="staff-workspace__stat" href="{% url 'staff_visits' %}"><span>الجلسات المفتوحة</span><strong>{{ workspace_stats.open_visits }}</strong></a>
-    <a class="staff-workspace__stat" href="{% url 'staff_orders' %}"><span>الطلبات النشطة</span><strong>{{ workspace_stats.active_orders }}</strong></a>
-    <a class="staff-workspace__stat" href="{% url 'staff_orders' %}"><span>جاهز للتسليم</span><strong>{{ workspace_stats.ready_orders }}</strong></a>
+    {% if staff_caps.orders %}<a class="staff-workspace__stat" href="{% url 'staff_visits' %}"><span>الجلسات المفتوحة</span><strong>{{ workspace_stats.open_visits }}</strong></a>{% endif %}
+    <a class="staff-workspace__stat" href="{% if staff_caps.orders %}{% url 'staff_orders' %}{% else %}{% url 'staff_kitchen' %}{% endif %}"><span>الطلبات النشطة</span><strong>{{ workspace_stats.active_orders }}</strong></a>
+    <a class="staff-workspace__stat" href="{% if staff_caps.orders %}{% url 'staff_orders' %}{% else %}{% url 'staff_kitchen' %}{% endif %}"><span>جاهز للتسليم</span><strong>{{ workspace_stats.ready_orders }}</strong></a>
     {% if workspace_caps.cashier %}<a class="staff-workspace__stat" href="{% url 'staff_cashier' %}"><span>بحاجة إلى تسديد</span><strong>{{ workspace_stats.unpaid_orders }}</strong></a>{% endif %}
   </section>
 
   <div class="staff-workspace__columns">
+    {% if staff_caps.orders %}
     <section class="hub-card staff-workspace__panel">
       <div class="staff-workspace__panel-head">
         <div><p class="staff-workspace__eyebrow">Who is here?</p><h3>الجلسات والطاولات المفتوحة</h3></div>
@@ -53,11 +55,12 @@
         {% endfor %}
       </div>
     </section>
+    {% endif %}
 
     <section class="hub-card staff-workspace__panel">
       <div class="staff-workspace__panel-head">
         <div><p class="staff-workspace__eyebrow">What needs attention?</p><h3>الطلبات النشطة</h3></div>
-        <a href="{% url 'staff_orders' %}">لوحة الطلبات</a>
+        <a href="{% if staff_caps.orders %}{% url 'staff_orders' %}{% else %}{% url 'staff_kitchen' %}{% endif %}">{% if staff_caps.orders %}لوحة الطلبات{% else %}لوحة التحضير{% endif %}</a>
       </div>
       <div class="staff-workspace__orders">
         {% for order in active_orders %}
@@ -87,13 +90,13 @@
     <div class="staff-workspace__panel-head"><div><p class="staff-workspace__eyebrow">More</p><h3>الإدارة والخدمات</h3></div></div>
     <nav class="staff-workspace__secondary-links" aria-label="الخدمات والإدارة">
       {% if staff_caps.kitchen_board %}<a href="{% url 'staff_kitchen' %}">المطبخ والتحضير</a>{% endif %}
-      <a href="{% url 'staff_reservations' %}">الحجوزات</a>
-      <a href="{% url 'staff_events' %}">الفعاليات</a>
+      {% if staff_caps.reservations %}<a href="{% url 'staff_reservations' %}">الحجوزات</a>{% endif %}
+      {% if staff_caps.events %}<a href="{% url 'staff_events' %}">الفعاليات</a>{% endif %}
       {% if workspace_caps.internet_billing %}<a href="{% url 'staff_internet' %}">الإنترنت والعمل</a><a href="{% url 'staff_members' %}">الأعضاء</a>{% endif %}
       {% if workspace_caps.inventory %}<a href="{% url 'staff_inventory_home' %}">المخزون</a>{% endif %}
       {% if workspace_caps.finance %}<a href="{% url 'staff_finance_home' %}">المالية</a>{% endif %}
       {% if workspace_caps.reports %}<a href="{% url 'staff_reports_home' %}">التقارير</a>{% endif %}
-      <a href="{% url 'staff_menu_tools' %}">أدوات القائمة</a>
+      {% if staff_caps.orders %}<a href="{% url 'staff_menu_tools' %}">أدوات القائمة</a>{% endif %}
       {% if workspace_caps.settings %}<a href="{% url 'staff_users_list' %}">المستخدمون والصلاحيات</a>{% endif %}
     </nav>
   </section>
