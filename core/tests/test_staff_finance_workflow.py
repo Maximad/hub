@@ -6,7 +6,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from core.finance import finalize_daily_close, reopen_daily_close
-from core.models import AuditEvent, DailyClose, DailyCloseRevision, InventoryItem, Purchase, PurchaseItem, StockMovement
+from core.models import AuditEvent, DailyClose, DailyCloseRevision, FinancialAccount, InventoryItem, Purchase, PurchaseItem, StockMovement
 
 
 class StaffFinanceWorkflowTests(TestCase):
@@ -14,6 +14,8 @@ class StaffFinanceWorkflowTests(TestCase):
         self.user = get_user_model().objects.create_user(username='finance-admin', password='pass', phone='+9901', role='admin')
         self.client.force_login(self.user)
         self.item = InventoryItem.objects.create(name_ar='قهوة', unit=InventoryItem.Unit.KG, current_quantity=Decimal('0'))
+        FinancialAccount.objects.create(code='inventory:purchases',name_ar='مخزون',account_type='asset',is_active=True)
+        FinancialAccount.objects.create(code='payable:suppliers',name_ar='موردون',account_type='liability',is_active=True)
 
     def test_reopen_requires_reason_and_preserves_revision(self):
         close, created = finalize_daily_close(date(2026, 7, 17), self.user, 1000)

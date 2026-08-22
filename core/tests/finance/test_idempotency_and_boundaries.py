@@ -28,9 +28,11 @@ class FinanceBoundaryTestCase(TestCase):
         self.approver = users.objects.create_superuser(username='boundary-owner', password='x', phone='+990021')
         self.day = date(2026, 8, 7)
         self.cash = FinancialAccount.objects.create(
-            code='cash:boundary', name_ar='صندوق', account_type='asset', scope='cashbox', is_active=True,
+            code='cash:main', name_ar='صندوق', account_type='asset', scope='cashbox', is_active=True,
             negative_balance_policy='allow',
         )
+        self.inventory_account = FinancialAccount.objects.create(code='inventory:purchases',name_ar='مخزون',account_type='asset',is_active=True)
+        self.supplier_payable = FinancialAccount.objects.create(code='payable:suppliers',name_ar='موردون',account_type='liability',is_active=True)
 
     def context(self, key, channel='service-test'):
         return PostingContext(
@@ -85,12 +87,12 @@ class FinanceBoundaryTestCase(TestCase):
         self.assertEqual((batch.actor, batch.approver, batch.channel), (self.actor, self.approver, 'service-test'))
         self.assertEqual(batch.metadata, {'request_id': 'transfer:retry'})
 
-    def test_supplier_payment_is_blocked_while_purchase_decisions_are_unconfirmed(self):
+    def test_supplier_payment_is_blocked_before_recognized_receipt(self):
         purchase, _ = self.purchase()
-        with self.assertRaisesMessage(InvalidTransition, 'D07–D11 غير معتمدة'):
+        with self.assertRaisesMessage(InvalidTransition, 'لا يوجد التزام مورد معترف'):
             purchases.pay(purchase, self.context('purchase-pay:blocked'), 100, self.cash, 'cash')
         self.assertFalse(PurchasePayment.objects.filter(purchase=purchase).exists())
-        self.assertFalse(PostingBatch.objects.filter(operation_type__startswith='purchase.').exists())
+        self.assertFalse(PostingBatch.objects.filter(operation_type='purchase.payment').exists())
 
     def test_repeated_receipt_cancellation_return_and_reversal_requests_do_not_drift(self):
         purchase, item = self.purchase()
@@ -107,7 +109,8 @@ class FinanceBoundaryTestCase(TestCase):
         self.assertEqual(PurchaseReturn.objects.filter(purchase=purchase).count(), 1)
         self.assertEqual(StockMovement.objects.filter(related_purchase=purchase, direction='out').count(), 1)
         item.refresh_from_db(); self.assertEqual(item.current_quantity, Decimal('0'))
-        self.assertFalse(PostingBatch.objects.filter(operation_type__startswith='purchase.').exists())
+        self.assertEqual(PostingBatch.objects.filter(operation_type='purchase.receipt.liability').count(), 1)
+        self.assertEqual(PostingBatch.objects.filter(operation_type='purchase.return.liability_reversal').count(), 1)
         for batch in PostingBatch.objects.all():
             self.assert_balanced(batch)
 
@@ -168,7 +171,7 @@ class FinanceBoundaryTestCase(TestCase):
         command = PostingCommand.objects.get(key='staff-receipt-retry')
         self.assertEqual((command.actor, command.channel), (self.actor, 'staff'))
 
-    def test_draft_partial_receipt_review_and_closed_date_controls(self):
+    def test_draft_partial_receipt_posting_and_closed_date_controls(self):
         purchase, item = self.purchase(quantity=Decimal('5'))
         self.assertEqual(item.current_quantity, Decimal('0'))
         self.assertFalse(StockMovement.objects.filter(related_purchase=purchase).exists())
@@ -181,12 +184,11 @@ class FinanceBoundaryTestCase(TestCase):
         movement = receipt.lines.get().stock_movement
         self.assertEqual((movement.related_purchase, movement.related_purchase_item),
                          (purchase, purchase.items.get()))
-        review = FinanceReviewItem.objects.get(
-            issue_code='purchase_finance_policy_unconfirmed', record_id=str(purchase.pk))
-        self.assertIn('تشغيلي فقط', review.reason)
-        self.assertFalse(PostingBatch.objects.filter(operation_type__startswith='purchase.').exists())
+        batch = PostingBatch.objects.get(operation_type='purchase.receipt.liability')
+        self.assertTrue(batch.is_balanced())
+        self.assertEqual(batch.entries.get(account=self.inventory_account).debit, Decimal('250'))
 
-        DailyClose.objects.create(account=self.cash, business_date=self.day,
+        DailyClose.objects.create(account=self.inventory_account, business_date=self.day,
                                   status=DailyClose.Status.CLOSED, is_finalized=True)
         other, _ = self.purchase()
         with self.assertRaises(ClosedPeriodError):

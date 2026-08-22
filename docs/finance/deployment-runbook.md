@@ -334,9 +334,10 @@ reads until the separately approved retention-period release described above.
 
 ## 9. Bootstrap approved launch finance policy
 
-This bootstrap covers **only D01-D04 and D12-D14**. It uses global scope for
-Hub Sweida and does not activate supplier, inventory, payable, or owner accounts
-covered by D05-D11. Run the preview first and retain its output:
+The launch bootstrap covers D01-D04 and D12-D14. The separate, explicit
+`bootstrap_purchase_finance` command covers the D07-D09/D11 accounts approved
+on 2026-08-22. Both use global scope for Hub Sweida. Neither activates D05,
+D06, D10, or `clearing:owner_paid`. Run each preview first and retain its output:
 
 ```bash
 cd /opt/hub
@@ -344,6 +345,9 @@ export DC='docker compose -f docker-compose.prod.yml --env-file .env'
 $DC exec -T web python manage.py bootstrap_launch_finance --dry-run
 $DC exec -T web python manage.py bootstrap_launch_finance --apply
 $DC exec -T web python manage.py bootstrap_launch_finance --apply
+$DC exec -T web python manage.py bootstrap_purchase_finance --dry-run
+$DC exec -T web python manage.py bootstrap_purchase_finance --apply
+$DC exec -T web python manage.py bootstrap_purchase_finance --apply
 $DC exec -T web python manage.py reconcile_finance --check --format=json
 $DC exec -T web python manage.py shell -c \
   "from core.services.posting.rollout import current_rollout; print(current_rollout())"

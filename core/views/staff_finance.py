@@ -13,7 +13,7 @@ from core.finance import finance_summary_for_date, current_business_date
 from core.currency_forms import CurrencyEntryFormService
 from core.services.posting.context import PostingContext
 from core.services.posting import expenses as expense_posting, purchases as purchase_posting, closing as closing_posting, transfers as transfer_posting
-from core.models import ActivityLog, CashMovement, DailyClose, Expense, ExpenseCategory, FinancialAccount, InventoryItem, PostingCommand, Purchase, PurchaseItem, StockMovement, Transfer
+from core.models import ActivityLog, CashMovement, DailyClose, Expense, ExpenseCategory, FinanceReviewItem, FinancialAccount, InventoryItem, PostingCommand, Purchase, PurchaseItem, PurchasePayment, StockMovement, Transfer
 from core.views_legacy import DAMASCUS_TZ, _build_day_report, _parse_report_date
 from vendors.models import Vendor
 
@@ -296,7 +296,34 @@ def staff_purchase_detail(request,purchase_id):
         return _receive_purchase(request,p)
     if request.method=='POST' and request.POST.get('action')=='cancel':
         return _cancel_purchase(request,p)
-    return render(request,'staff/finance_purchase_detail.html',{'purchase':p,'business_date':current_business_date()})
+    if request.method=='POST' and request.POST.get('action')=='pay':
+        business_date=_parse_report_date(request.POST.get('business_date'))
+        approver=get_user_model().objects.filter(pk=request.POST.get('approver') or None).first()
+        service=CurrencyEntryFormService(request,operation='purchase_payment',business_date=business_date,approver=approver)
+        try:
+            entry=service.clean(request.POST.get('amount_syp'))
+            account=FinancialAccount.objects.get(pk=request.POST.get('source_account'))
+            with transaction.atomic():
+                payment=purchase_posting.pay(p,_posting_context(request,business_date,approver),entry.base_amount,account)
+                service.snapshot(payment,entry,'amount_syp')
+            messages.success(request,'تم ترحيل دفعة المورد.')
+        except Exception as error:
+            for message in _validation_messages(error): messages.error(request,message)
+        return redirect('staff_purchase_detail',purchase_id=p.pk)
+    if request.method=='POST' and request.POST.get('action')=='reverse_payment':
+        try:
+            payment=get_object_or_404(PurchasePayment,purchase=p,pk=request.POST.get('payment_id'))
+            day=_parse_report_date(request.POST.get('reversal_business_date'))
+            purchase_posting.reverse_payment(payment,_posting_context(request,day),request.POST.get('reversal_reason',''))
+            messages.success(request,'تم ترحيل عكس دفعة المورد.')
+        except Exception as error:
+            for message in _validation_messages(error): messages.error(request,message)
+        return redirect('staff_purchase_detail',purchase_id=p.pk)
+    state=purchase_posting.financial_state(p)
+    accounts=FinancialAccount.objects.filter(is_active=True,business_unit='',code__in=purchase_posting.SETTLEMENT_CODES).order_by('code')
+    reviews=FinanceReviewItem.objects.filter(resolved_at__isnull=True).filter(Q(record_type=p._meta.label,record_id=str(p.pk))|Q(details__purchase_id=p.pk))
+    approvers=get_user_model().objects.filter(is_active=True).filter(Q(is_superuser=True)|Q(role='admin'))
+    return render(request,'staff/finance_purchase_detail.html',{'purchase':p,'business_date':current_business_date(),'financial_state':state,'settlement_accounts':accounts,'approvers':approvers,'finance_reviews':reviews,'approval_limit':purchase_posting.approval_limit(),'currency_component':CurrencyEntryFormService(request,operation='purchase_payment').context})
 
 @require_staff_capability('finance')
 def staff_purchase_edit(request,purchase_id):

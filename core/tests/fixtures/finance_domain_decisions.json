@@ -1,8 +1,8 @@
 {
   "decision_id": "D07",
-  "status": "UNCONFIRMED",
+  "status": "CONFIRMED_2026-08-22",
   "operation": "purchase.receipt.liability",
   "candidate_accounts": ["inventory:purchases", "payable:suppliers"],
-  "expected_result": "blocked",
-  "reason": "A missing or inactive candidate account requires owner/finance-lead confirmation"
+  "expected_result": "post_when_exact_active_global_accounts_exist",
+  "reason": "Approved D07 still fails closed for missing, inactive, wrong-type, or non-global accounts"
 }
