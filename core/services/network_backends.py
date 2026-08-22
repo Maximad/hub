@@ -183,6 +183,10 @@ class MikroTikNetworkBackend:
 
 
 def get_network_backend(code='manual'):
-    if code == 'mikrotik' and settings.MIKROTIK_ENABLED:
+    if code == 'manual':
+        return ManualNetworkBackend()
+    if code == 'mikrotik':
+        # An entitlement explicitly snapshotted as MikroTik must never be marked
+        # provisioned by the Manual backend when the router integration is disabled.
         return MikroTikNetworkBackend()
-    return ManualNetworkBackend()
+    raise ValidationError('مزود تنفيذ الشبكة غير مدعوم.')
