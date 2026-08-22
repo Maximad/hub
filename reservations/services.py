@@ -5,6 +5,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q, Sum
+from django.utils import timezone
 
 from core.models import ActivityLog, HubVisit, Member, Room, TableArea
 from events.models import Event
@@ -106,7 +107,7 @@ def _matching_member(reservation):
 def check_in_reservation(reservation_id, *, actor, table_id=None):
     """Create exactly one operational HubVisit for a confirmed reservation.
 
-    The reservation row is the idempotency lock.  A repeated check-in returns the
+    The reservation row is the idempotency lock. A repeated check-in returns the
     already-open visit; a previously completed/closed visit is never recreated.
     """
     reservation = (
@@ -122,6 +123,10 @@ def check_in_reservation(reservation_id, *, actor, table_id=None):
         if visit.status == HubVisit.Status.OPEN:
             return visit, False
         raise ValidationError({'visit': 'تم تسجيل وصول هذا الحجز سابقاً وانتهت جلسته.'})
+
+    arrival_date = reservation.effective_date
+    if arrival_date and arrival_date != timezone.localdate():
+        raise ValidationError({'date': 'يمكن تسجيل الوصول في يوم الحجز فقط.'})
 
     table = _checkin_table(reservation, table_id)
     if table:
