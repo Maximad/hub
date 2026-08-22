@@ -52,7 +52,10 @@ def current_visit(request):
     visit = credential.visit
     orders = visit.orders.exclude(status='cancelled').prefetch_related(
         'items', 'discounts', 'payments').order_by('-created_at', '-id')
-    menu_url = reverse('menu_table', kwargs={'qr_token': visit.table.qr_token}) if visit.table_id else reverse('menu_public')
+    menu_url = (
+        reverse('menu_table', kwargs={'qr_token': visit.table.qr_token}) + '?view=menu'
+        if visit.table_id else reverse('menu_public')
+    )
     active_internet_session = visit.internet_sessions.select_related('package', 'entitlement').filter(
         status=InternetSession.Status.ACTIVE).order_by('-start_time').first()
     if active_internet_session:
@@ -111,8 +114,12 @@ def visit_internet_purchase_start(request):
                 raise ValidationError('تعذر مطابقة العضوية. يرجى طلب المساعدة من الفريق.')
             create_visit_internet_sale_and_start(visit=visit, credential=credential,
                 package=package, request_key=request.POST.get('request_key', ''), member=member)
-        messages.success(request, 'بدأت جلسة الإنترنت. إذا احتجت كلمة مرور الشبكة، اطلبها من الفريق.')
-        response = redirect('current_visit')
+        messages.success(request, 'بدأت جلسة الإنترنت.')
+        if request.POST.get('next') == 'menu' and table:
+            target = reverse('menu_table', kwargs={'qr_token': table.qr_token}) + '?view=menu&internet_started=1'
+            response = redirect(target)
+        else:
+            response = redirect('current_visit')
         return set_visit_cookie(response, raw_cookie) if raw_cookie else response
     except (ValidationError, InternetPackage.DoesNotExist) as exc:
         messages.error(request, _error_text(exc))
@@ -167,9 +174,6 @@ def visit_internet_session_connect(request, public_code):
             destination_url=_current_visit_destination(request),
         )
     except Exception as exc:
-        # Do not log exception repr/arguments here; they are adjacent to credential
-        # handling. Customer-visible errors are intentionally generic unless they
-        # are controlled ValidationError messages.
         logger.warning('Customer HotSpot relay unavailable for entitlement_id=%s',
                        session.entitlement_id)
         messages.error(request, _error_text(exc))
