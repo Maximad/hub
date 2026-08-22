@@ -5,7 +5,7 @@
 <section class="staff-workspace" dir="rtl">
   <header class="staff-workspace__hero">
     <div>
-      <p class="staff-workspace__eyebrow">Hub Operations</p>
+      <p class="staff-workspace__eyebrow">تشغيل هَبّ</p>
       <h2 class="hub-page-header__title">مساحة العمليات</h2>
       <p class="hub-page-header__meta">كل ما يحتاجه الفريق خلال الوردية من مكان واحد.</p>
     </div>
@@ -29,7 +29,7 @@
     {% if staff_caps.orders %}
     <section class="hub-card staff-workspace__panel">
       <div class="staff-workspace__panel-head">
-        <div><p class="staff-workspace__eyebrow">Who is here?</p><h3>الجلسات والطاولات المفتوحة</h3></div>
+        <div><p class="staff-workspace__eyebrow">من هنا الآن؟</p><h3>الجلسات والطاولات المفتوحة</h3></div>
         <a href="{% url 'staff_visits' %}">عرض الكل</a>
       </div>
       <div class="staff-workspace__visit-grid">
@@ -57,7 +57,7 @@
 
     <section class="hub-card staff-workspace__panel">
       <div class="staff-workspace__panel-head">
-        <div><p class="staff-workspace__eyebrow">What needs attention?</p><h3>الطلبات النشطة</h3></div>
+        <div><p class="staff-workspace__eyebrow">ما الذي يحتاج انتباهاً؟</p><h3>الطلبات النشطة</h3></div>
         <a href="{% if staff_caps.orders %}{% url 'staff_orders' %}{% else %}{% url 'staff_kitchen' %}{% endif %}">{% if staff_caps.orders %}لوحة الطلبات{% else %}لوحة التحضير{% endif %}</a>
       </div>
       <div class="staff-workspace__orders">
@@ -85,7 +85,7 @@
   </div>
 
   <section class="hub-card staff-workspace__secondary">
-    <div class="staff-workspace__panel-head"><div><p class="staff-workspace__eyebrow">More</p><h3>الإدارة والخدمات</h3></div></div>
+    <div class="staff-workspace__panel-head"><div><p class="staff-workspace__eyebrow">المزيد</p><h3>الإدارة والخدمات</h3></div></div>
     <nav class="staff-workspace__secondary-links" aria-label="الخدمات والإدارة">
       {% if staff_caps.kitchen_board %}<a href="{% url 'staff_kitchen' %}">المطبخ والتحضير</a>{% endif %}
       {% if staff_caps.reservations %}<a href="{% url 'staff_reservations' %}">الحجوزات</a>{% endif %}
