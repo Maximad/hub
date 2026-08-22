@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q, Sum
 
-from core.models import Room, TableArea
+from core.models import ActivityLog, HubVisit, Member, Room, TableArea
 from events.models import Event
 from .models import Reservation
 
@@ -81,6 +81,89 @@ def _validate_for_status(reservation):
     reservation.full_clean()
 
 
+def _checkin_table(reservation, table_id):
+    chosen_id = table_id or reservation.table_area_id
+    if not chosen_id:
+        return None
+    try:
+        table = TableArea.objects.select_for_update().select_related('room').get(pk=chosen_id)
+    except (TableArea.DoesNotExist, TypeError, ValueError):
+        raise ValidationError({'table': 'الطاولة المختارة غير صالحة.'})
+    effective_room = reservation.effective_room
+    if effective_room and table.room_id != effective_room.pk:
+        raise ValidationError({'table': 'الطاولة المختارة لا تتبع لمساحة الحجز.'})
+    return table
+
+
+def _matching_member(reservation):
+    phone = (reservation.phone or '').strip()
+    if not phone:
+        return None
+    return Member.objects.filter(phone=phone).first()
+
+
+@transaction.atomic
+def check_in_reservation(reservation_id, *, actor, table_id=None):
+    """Create exactly one operational HubVisit for a confirmed reservation.
+
+    The reservation row is the idempotency lock.  A repeated check-in returns the
+    already-open visit; a previously completed/closed visit is never recreated.
+    """
+    reservation = (
+        Reservation.objects.select_for_update()
+        .select_related('visit', 'table_area__room', 'room', 'event__room')
+        .get(pk=reservation_id)
+    )
+    if reservation.status != Reservation.Status.CONFIRMED:
+        raise ValidationError({'status': 'يجب تأكيد الحجز قبل تسجيل الوصول.'})
+
+    if reservation.visit_id:
+        visit = HubVisit.objects.select_for_update().get(pk=reservation.visit_id)
+        if visit.status == HubVisit.Status.OPEN:
+            return visit, False
+        raise ValidationError({'visit': 'تم تسجيل وصول هذا الحجز سابقاً وانتهت جلسته.'})
+
+    table = _checkin_table(reservation, table_id)
+    if table:
+        occupied = (
+            HubVisit.objects.select_for_update()
+            .filter(table=table, status=HubVisit.Status.OPEN)
+            .first()
+        )
+        if occupied:
+            raise ValidationError({'table': f'الطاولة مرتبطة حالياً بـ {occupied}. اختر طاولة أخرى أو افتح الجلسة الموجودة.'})
+
+    member = _matching_member(reservation)
+    if member:
+        existing_member_visit = (
+            HubVisit.objects.select_for_update()
+            .filter(member=member, status=HubVisit.Status.OPEN)
+            .first()
+        )
+        if existing_member_visit:
+            raise ValidationError({'member': f'لدى العضو جلسة مفتوحة بالفعل: {existing_member_visit}.'})
+
+    visit = HubVisit.objects.create(
+        table=table,
+        member=member,
+        notes=(reservation.notes or '').strip(),
+        created_by=actor,
+    )
+    reservation.visit = visit
+    reservation.save(update_fields=['visit', 'updated_at'])
+    ActivityLog.objects.create(
+        actor=actor,
+        action='reservation.checked_in',
+        details={
+            'reservation_id': reservation.pk,
+            'visit_id': visit.pk,
+            'table_id': visit.table_id,
+            'member_id': visit.member_id,
+        },
+    )
+    return visit, True
+
+
 @transaction.atomic
 def create_reservation(reservation):
     _validate_for_status(reservation)
@@ -96,3 +179,15 @@ def change_reservation_status(reservation_id, new_status, *, actor, correction=F
             reservation_id, actor=actor, new_status=new_status, reason=reason,
         )
     return Reservation.transition_status(reservation_id, actor=actor, new_status=new_status)
+
+
+def complete_reservation_for_visit(visit_id, *, actor):
+    """Complete a linked confirmed reservation when its operational visit closes."""
+    reservation = Reservation.objects.filter(visit_id=visit_id).first()
+    if reservation and reservation.status == Reservation.Status.CONFIRMED:
+        return change_reservation_status(
+            reservation.pk,
+            Reservation.Status.COMPLETED,
+            actor=actor,
+        )
+    return reservation
