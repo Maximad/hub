@@ -1,16 +1,70 @@
 {% extends "base.html" %}{% load hub_numbers %}
 {% block title %}جلستك اليوم{% endblock %}
-{% block content %}<main class="menu-public" dir="rtl">
-<header class="hub-card current-visit__header"><p class="menu-public__brand">جلستك اليوم</p><h1 class="hub-section-title">جلستك اليوم</h1>
-<p>{% if visit.table %}الطاولة: <strong>{{ visit.table.display_name }}</strong>{% if visit.table.room_display_name %}<br>المساحة: <strong>{{ visit.table.room_display_name }}</strong>{% endif %}{% else %}طلب عام داخل المكان{% endif %}</p></header>
-{% if visit.member %}<aside class="hub-card"><h2>العضوية</h2><p><strong>{{ visit.member.name_ar }}</strong>{% if visit.member.phone %} · {{ visit.member.phone }}{% endif %}</p></aside>{% endif %}
-{% if active_internet_session %}<aside class="hub-card"><h2>الإنترنت</h2><p><span class="hub-badge hub-badge-info">فعال الآن</span> {{ active_internet_session.package.name_ar|default:'جلسة إنترنت' }} · بدأ {{ active_internet_session.start_time|date:"H:i" }}</p></aside>{% endif %}
-<section class="hub-card current-visit__totals" aria-label="حساب الجلسة"><h2>حساب جلستك</h2><div><p>إجمالي جلستك<strong>{{ visit.gross_syp|format_syp }}</strong></p><p>المدفوع<strong>{{ visit.paid_syp|format_syp }}</strong></p><p>المتبقي<strong>{{ visit.remaining_syp|format_syp }}</strong></p></div></section>
-<section class="hub-card"><h2>طلبات جلستك</h2><div class="current-visit__orders">{% for order in orders %}<article class="current-visit__order"><div><h3>رقم الطلب: <span class="hub-order-number">{{ order.display_number }}</span></h3><span class="hub-badge hub-badge-info">{{ order.get_status_display }}</span></div><strong class="hub-money">{{ order.total_syp|format_syp }}</strong></article>{% empty %}<p>لا توجد طلبات.</p>{% endfor %}</div></section>
-{% if internet_self_service_enabled %}<section class="hub-card" id="internet"><h2>الإنترنت</h2>
-{% for session in internet_sessions %}{% if session.status == 'active' %}<article class="hub-card"><h3>جلسة فعالة</h3><p>{{ session.package.name_ar|default:'الإنترنت' }}</p><p>بدأت: {{ session.start_time|date:"H:i" }}{% if session.authorized_until %} — تنتهي بحد أقصى: {{ session.authorized_until|date:"H:i" }}{% endif %}</p><form method="post" action="{% url 'visit_internet_session_stop' session.public_code %}">{% csrf_token %}<button class="hub-button" type="submit">إيقاف الاستخدام</button></form></article>{% endif %}{% endfor %}
-<h3>رصيدك الحالي</h3>{% for entitlement in internet_entitlements %}<article><strong>{{ entitlement.package.name_ar }}</strong>{% if entitlement.minutes_remaining != None %}<p>{{ entitlement.minutes_remaining }} دقيقة متبقية</p>{% endif %}<form method="post" action="{% url 'visit_internet_entitlement_start' entitlement.public_code %}">{% csrf_token %}<button class="hub-button hub-button-primary">ابدأ الاستخدام</button></form></article>{% empty %}<p>لا يوجد رصيد إنترنت متاح.</p>{% endfor %}
-<h3>شراء باقة إضافية</h3>{% for package in internet_packages %}<article class="hub-card"><strong>{{ package.name_ar }}</strong><p>{{ package.customer_price_syp|format_syp }}{% if package.customer_price_syp != package.price_syp %} — سعر العضو{% endif %}</p><form method="post" action="{% url 'visit_internet_start' %}">{% csrf_token %}<input type="hidden" name="package" value="{{ package.public_code }}"><input type="hidden" name="request_key" value="{{ internet_request_key }}:{{ package.public_code }}"><button class="hub-button hub-button-primary">ابدأ الآن</button></form></article>{% empty %}<p>لا توجد باقات إضافية متاحة.</p>{% endfor %}
-<p>إذا احتجت كلمة مرور الشبكة، اطلبها من الفريق.</p></section>{% endif %}
-<div class="hub-toolbar"><a class="hub-button hub-button-primary" href="{{ menu_url }}">طلب المزيد</a></div>
-</main>{% endblock %}
+{% block body_class %}customer-space-page{% endblock %}
+{% block content %}
+<main class="menu-public customer-space" dir="rtl" data-customer-space data-has-visit="true" data-menu-url="{{ menu_url }}" data-visit-url="{% url 'current_visit' %}" data-orders-url="#customer-orders" data-services-url="{% if internet_self_service_enabled %}#internet{% else %}{{ menu_url }}{% endif %}">
+  <header class="hub-card current-visit__header">
+    <div>
+      <p class="menu-public__brand">جلستك اليوم</p>
+      <h1 class="hub-section-title">{% if visit.table %}{{ visit.table.display_name }}{% else %}جلسة {{ visit.display_number }}{% endif %}</h1>
+      <p>{% if visit.table %}{% if visit.table.room_display_name %}{{ visit.table.room_display_name }}{% else %}داخل هَبّ{% endif %}{% else %}طلب عام داخل المكان{% endif %}</p>
+    </div>
+    <a class="hub-button hub-button-primary" href="{{ menu_url }}">+ طلب جديد</a>
+  </header>
+
+  <section class="hub-card current-visit__totals" aria-label="حساب الجلسة">
+    <h2>حساب جلستك</h2>
+    <div>
+      <p><span>الإجمالي</span><strong>{{ visit.gross_syp|format_syp }}</strong></p>
+      <p><span>المدفوع</span><strong>{{ visit.paid_syp|format_syp }}</strong></p>
+      <p><span>المتبقي</span><strong>{{ visit.remaining_syp|format_syp }}</strong></p>
+    </div>
+  </section>
+
+  {% if visit.member or active_internet_session %}
+  <section class="customer-space-service-grid" aria-label="حالة الجلسة">
+    {% if visit.member %}<aside class="hub-card customer-space-service-card"><span class="hub-badge hub-badge-success">عضوية مفعّلة</span><strong>{{ visit.member.name_ar }}</strong>{% if visit.member.phone %}<small>{{ visit.member.phone }}</small>{% endif %}</aside>{% endif %}
+    {% if active_internet_session %}<aside class="hub-card customer-space-service-card"><span class="hub-badge hub-badge-info">الإنترنت فعال الآن</span><strong>{{ active_internet_session.package.name_ar|default:'جلسة إنترنت' }}</strong><small>بدأ {{ active_internet_session.start_time|date:"H:i" }}</small></aside>{% endif %}
+  </section>
+  {% endif %}
+
+  <section class="hub-card" id="customer-orders">
+    <div class="menu-section-heading"><span aria-hidden="true"></span><h2>طلبات جلستك</h2></div>
+    <div class="current-visit__orders">
+      {% for order in orders %}
+      <article class="current-visit__order">
+        <div>
+          <h3>طلب <span class="hub-order-number">{{ order.display_number }}</span></h3>
+          <span class="hub-badge {% if order.status == 'ready' %}hub-badge-success{% else %}hub-badge-info{% endif %}">{{ order.get_status_display }}</span>
+        </div>
+        <div><strong class="hub-money">{{ order.total_syp|format_syp }}</strong>{% if order.remaining_syp > 0 %}<small>متبقي {{ order.remaining_syp|format_syp }}</small>{% else %}<small>مدفوع</small>{% endif %}</div>
+      </article>
+      {% empty %}<p>لا توجد طلبات.</p>{% endfor %}
+    </div>
+  </section>
+
+  {% if internet_self_service_enabled %}
+  <section class="hub-card" id="internet">
+    <div class="menu-section-heading"><span aria-hidden="true"></span><h2>الإنترنت والخدمات</h2></div>
+    {% for session in internet_sessions %}{% if session.status == 'active' %}
+      <article class="customer-space-service-card">
+        <span class="hub-badge hub-badge-info">فعال الآن</span>
+        <strong>{{ session.package.name_ar|default:'الإنترنت' }}</strong>
+        <p>بدأت: {{ session.start_time|date:"H:i" }}{% if session.authorized_until %} — حتى {{ session.authorized_until|date:"H:i" }}{% endif %}</p>
+        <form method="post" action="{% url 'visit_internet_session_stop' session.public_code %}">{% csrf_token %}<button class="hub-button" type="submit">إيقاف الاستخدام</button></form>
+      </article>
+    {% endif %}{% endfor %}
+
+    {% if internet_entitlements %}<h3>رصيدك الحالي</h3><div class="customer-space-service-grid">{% for entitlement in internet_entitlements %}
+      <article class="customer-space-service-card"><strong>{{ entitlement.package.name_ar }}</strong>{% if entitlement.minutes_remaining != None %}<p>{{ entitlement.minutes_remaining }} دقيقة متبقية</p>{% endif %}<form method="post" action="{% url 'visit_internet_entitlement_start' entitlement.public_code %}">{% csrf_token %}<button class="hub-button hub-button-primary">ابدأ الاستخدام</button></form></article>
+    {% endfor %}</div>{% endif %}
+
+    <h3>باقات إضافية</h3>
+    <div class="customer-space-service-grid">{% for package in internet_packages %}
+      <article class="customer-space-service-card"><strong>{{ package.name_ar }}</strong><p>{{ package.customer_price_syp|format_syp }}{% if package.customer_price_syp != package.price_syp %} — سعر العضو{% endif %}</p><form method="post" action="{% url 'visit_internet_start' %}">{% csrf_token %}<input type="hidden" name="package" value="{{ package.public_code }}"><input type="hidden" name="request_key" value="{{ internet_request_key }}:{{ package.public_code }}"><button class="hub-button hub-button-primary">ابدأ الآن</button></form></article>
+    {% empty %}<p>لا توجد باقات إضافية متاحة.</p>{% endfor %}</div>
+    <p class="hub-help-text">إذا احتجت كلمة مرور الشبكة، اطلبها من الفريق.</p>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}
