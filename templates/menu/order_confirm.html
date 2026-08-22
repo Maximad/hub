@@ -1,13 +1,16 @@
 {% extends "base.html" %}
 {% load menu_form %}
 {% block title %}تأكيد الطلب{% endblock %}
+{% block body_class %}customer-order-confirm-page{% endblock %}
 {% block content %}
+<div data-customer-space data-has-visit="{% if order.visit_id %}true{% else %}false{% endif %}" data-menu-url="{{ menu_url }}" data-visit-url="{% url 'current_visit' %}" data-orders-url="{% if order.visit_id %}{% url 'current_visit' %}#customer-orders{% endif %}" data-services-url=""></div>
 {% if order.member %}<p class="hub-card"><strong>تم تطبيق خصم العضوية</strong><br>{{ order.member.name_ar }} — خصم العضوية: {{ order.discount_syp }} ل.س</p>{% endif %}
 {% if order.visit_id %}
 <section class="hub-card order-confirm visit-order-confirm" dir="rtl">
   <header class="order-confirm__header">
-    <p class="hub-badge hub-badge-info">تم إرسال الطلب</p>
-    <h1>تمت إضافة طلبك إلى جلستك</h1>
+    <p class="hub-badge hub-badge-success">تم إرسال الطلب</p>
+    <h1>أُضيف طلبك إلى جلستك</h1>
+    <p class="order-confirm__lead">يمكنك متابعة حالته أو طلب المزيد من نفس الواجهة.</p>
   </header>
   <div class="order-confirm__meta">
     <div><span>رقم الطلب</span><strong class="hub-order-number latin-numbers">{{ order.display_number }}</strong></div>
@@ -23,56 +26,36 @@
   </section>
   {% if needs_confirmation %}<p class="hub-badge hub-badge-warning">بعض العناصر تحتاج تأكيد من الفريق</p>{% endif %}
   <nav class="visit-order-confirm__actions" aria-label="إجراءات الطلب والجلسة">
-    <a class="hub-button hub-button-primary" href="{% url 'current_visit' %}">عرض جلستك</a>
-    <a class="hub-button hub-button-secondary" href="{{ menu_url }}">طلب المزيد</a>
+    <a class="hub-button hub-button-primary" href="{{ menu_url }}">طلب المزيد</a>
+    <a class="hub-button hub-button-secondary" href="{% url 'current_visit' %}">متابعة جلستك</a>
   </nav>
 </section>
 {% else %}
 <section class="hub-card order-confirm" dir="rtl">
   <header class="order-confirm__header">
-    <p class="hub-badge hub-badge-info">تم إرسال الطلب</p>
+    <p class="hub-badge hub-badge-success">تم إرسال الطلب</p>
     <h2>تم استلام طلبك</h2>
     <p class="order-confirm__lead">طلبك بانتظار تأكيد الفريق. احتفظ برمز QR لمتابعة الطلب.</p>
   </header>
 
   <div class="order-confirm__meta">
-    <div>
-      <span>رقم الطلب</span>
-      <strong class="hub-order-number latin-numbers">{{ order.display_number }}</strong>
-    </div>
-    <div>
-      <span>الحالة</span>
-      <strong>{{ order.get_status_display }}</strong>
-    </div>
-    <div>
-      <span>طريقة الطلب</span>
-      <strong>{{ order.get_fulfillment_label }}</strong>
-    </div>
+    <div><span>رقم الطلب</span><strong class="hub-order-number latin-numbers">{{ order.display_number }}</strong></div>
+    <div><span>الحالة</span><strong>{{ order.get_status_display }}</strong></div>
+    <div><span>طريقة الطلب</span><strong>{{ order.get_fulfillment_label }}</strong></div>
   </div>
   {% if system_settings.show_internal_order_uuid %}<p class="hub-help-text">الرمز الداخلي: <span class="hub-order-number latin-numbers">{{ order.public_code }}</span></p>{% endif %}
   {% if order.location_detail %}<p class="hub-location-detail">{{ order.location_detail }}</p>{% endif %}
 
-  <div class="order-confirm__qr">
-    <img class="hub-qr" src="{{ qr_url }}" alt="QR رابط الطلب {{ order.display_number }}">
-  </div>
+  <div class="order-confirm__qr"><img class="hub-qr" src="{{ qr_url }}" alt="QR رابط الطلب {{ order.display_number }}"></div>
 
   <section class="order-confirm__section">
     <h3>عناصر الطلب</h3>
     <ul class="order-confirm__items">
       {% for item in order.items.all %}
       <li class="order-confirm__item">
-        <div class="order-confirm__item-row">
-          <strong>{{ item.product_name_ar_snapshot }}</strong>
-          <span><span class="hub-number latin-numbers">{{ item.quantity }}</span> × <span class="hub-money latin-numbers">{{ item.unit_price_syp_snapshot|format_syp }}</span></span>
-        </div>
+        <div class="order-confirm__item-row"><strong>{{ item.product_name_ar_snapshot }}</strong><span><span class="hub-number latin-numbers">{{ item.quantity }}</span> × <span class="hub-money latin-numbers">{{ item.unit_price_syp_snapshot|format_syp }}</span></span></div>
         <p class="order-confirm__line-total">الإجمالي: <strong class="hub-money latin-numbers">{% widthratio item.quantity 1 item.unit_price_syp_snapshot %} ل.س</strong></p>
-        {% if item.selected_options_snapshot %}
-          <ul class="order-confirm__options">
-            {% for group in item.selected_options_snapshot %}
-              {% for option in group.options %}<li>{{ option.name_ar }}{% if option.price_delta_syp %} <span class="hub-money latin-numbers">({% if option.price_delta_syp > 0 %}+{% endif %}{{ option.price_delta_syp|format_syp }})</span>{% endif %}</li>{% endfor %}
-            {% endfor %}
-          </ul>
-        {% endif %}
+        {% if item.selected_options_snapshot %}<ul class="order-confirm__options">{% for group in item.selected_options_snapshot %}{% for option in group.options %}<li>{{ option.name_ar }}{% if option.price_delta_syp %} <span class="hub-money latin-numbers">({% if option.price_delta_syp > 0 %}+{% endif %}{{ option.price_delta_syp|format_syp }})</span>{% endif %}</li>{% endfor %}{% endfor %}</ul>{% endif %}
         {% if item.item_note %}<p class="order-confirm__note">ملاحظة: {{ item.item_note }}</p>{% endif %}
       </li>
       {% endfor %}
@@ -87,6 +70,7 @@
 
   {% if order.is_delivery %}<section class="hub-card order-confirm__delivery"><strong>بيانات التوصيل:</strong><br>الحالة: {{ order.get_delivery_status_display }}{% if order.delivery_area %}<br>المنطقة: {{ order.delivery_area }}{% endif %}{% if order.delivery_address %}<br>العنوان: {{ order.delivery_address }}{% endif %}</section>{% endif %}
   {% if needs_confirmation %}<p class="hub-badge hub-badge-warning">بعض العناصر تحتاج تأكيد من الفريق</p>{% endif %}
+  <nav class="visit-order-confirm__actions" aria-label="إجراءات الطلب"><a class="hub-button hub-button-primary" href="{{ menu_url }}">العودة إلى المنيو</a></nav>
 </section>
 {% endif %}
 {% endblock %}
