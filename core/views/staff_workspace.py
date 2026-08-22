@@ -26,6 +26,14 @@ def _payment_prefetch():
     )
 
 
+def _workspace_order_queryset():
+    return (
+        Order.objects.select_related("table", "table__room")
+        .prefetch_related("items", "discounts", _payment_prefetch())
+        .order_by("-created_at")
+    )
+
+
 @require_staff_capability("staff_home")
 def staff_home(request):
     """Make /staff/ the single daily-operations landing workspace.
@@ -41,19 +49,28 @@ def staff_home(request):
         .prefetch_related(
             Prefetch(
                 "orders",
-                queryset=Order.objects.select_related("table")
-                .prefetch_related(_payment_prefetch())
-                .order_by("-created_at"),
+                queryset=_workspace_order_queryset().exclude(status=Order.Status.CANCELLED),
+                to_attr="workspace_orders",
             )
         )
         .order_by("-last_activity_at")[:12]
     )
+    visit_rows = []
+    for visit in open_visits:
+        orders = visit.workspace_orders
+        visit_rows.append(
+            {
+                "visit": visit,
+                "gross_syp": sum(order.total_syp for order in orders),
+                "remaining_syp": sum(order.remaining_syp for order in orders),
+                "latest_order": orders[0] if orders else None,
+            }
+        )
 
     active_orders = list(
-        Order.objects.filter(status__in=ACTIVE_ORDER_STATUSES)
-        .select_related("table", "table__room", "visit")
-        .prefetch_related("items", _payment_prefetch())
-        .order_by("-created_at")[:16]
+        _workspace_order_queryset()
+        .filter(status__in=ACTIVE_ORDER_STATUSES)
+        .select_related("visit")[:16]
     )
 
     ready_count = sum(order.status == Order.Status.READY for order in active_orders)
@@ -77,7 +94,7 @@ def staff_home(request):
         request,
         "staff/home.html",
         {
-            "open_visits": open_visits,
+            "visit_rows": visit_rows,
             "active_orders": active_orders,
             "workspace_stats": {
                 "open_visits": len(open_visits),
