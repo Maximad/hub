@@ -33,24 +33,22 @@
         <a href="{% url 'staff_visits' %}">عرض الكل</a>
       </div>
       <div class="staff-workspace__visit-grid">
-        {% for visit in open_visits %}
+        {% for row in visit_rows %}{% with visit=row.visit %}
           <article class="staff-workspace__visit">
             <a class="staff-workspace__visit-main" href="{% url 'staff_visit_detail' visit.public_code %}">
               <div class="staff-workspace__visit-title">
                 <strong>{% if visit.table %}{{ visit.table }}{% else %}جلسة {{ visit.display_number }}{% endif %}</strong>
                 {% if visit.member %}<span>{{ visit.member }}</span>{% endif %}
               </div>
-              <div class="staff-workspace__money"><strong>{{ visit.gross_syp|format_syp }}</strong><small>المتبقي {{ visit.remaining_syp|format_syp }}</small></div>
+              <div class="staff-workspace__money"><strong>{{ row.gross_syp|format_syp }}</strong><small>المتبقي {{ row.remaining_syp|format_syp }}</small></div>
               <small>آخر نشاط {{ visit.last_activity_at|timesince }} مضت</small>
             </a>
             <div class="staff-workspace__visit-actions">
               {% if workspace_caps.pos %}<a class="hub-button hub-button-primary" href="{% url 'staff_pos' %}?visit={{ visit.public_code }}">+ طلب</a>{% endif %}
-              {% if workspace_caps.cashier and visit.orders.all %}
-                {% with latest_order=visit.orders.all.0 %}{% if latest_order %}<a class="hub-button" href="{% url 'staff_cashier_order' latest_order.public_code %}">دفع</a>{% endif %}{% endwith %}
-              {% endif %}
+              {% if workspace_caps.cashier and row.latest_order %}<a class="hub-button" href="{% url 'staff_cashier_order' row.latest_order.public_code %}">دفع</a>{% endif %}
             </div>
           </article>
-        {% empty %}
+        {% endwith %}{% empty %}
           <div class="hub-empty-state">لا توجد جلسات مفتوحة حالياً. ابدأ طلباً أو جلسة جديدة.</div>
         {% endfor %}
       </div>
