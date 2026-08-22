@@ -73,9 +73,9 @@ class HubVisitPublicTests(TestCase):
         self.assertEqual(HubVisit.objects.count(), 1)
         self.assertEqual(Order.objects.count(), 2)
         self.assertEqual(Order.objects.values('visit_id').distinct().count(), 1)
-        menu = self.client.get(self.url)
-        self.assertContains(menu, 'عرض الجلسة')
-        self.assertContains(menu, f'href="{reverse("current_visit")}"')
+        entry = self.client.get(self.url)
+        self.assertContains(entry, 'جلستك')
+        self.assertContains(entry, f'href="{reverse("current_visit")}"')
         self.assertEqual(self.client.get(reverse('current_visit')).status_code, 200)
 
     def test_visit_order_confirmation_and_current_visit_are_one_flow(self):
@@ -108,7 +108,7 @@ class HubVisitPublicTests(TestCase):
         self.assertContains(page, '1,500 ل.س')
         self.assertContains(page, self.table.name_ar)
         self.assertContains(page, self.room.name_ar)
-        self.assertContains(page, f'href="{self.url}"')
+        self.assertContains(page, f'href="{self.url}?view=menu"')
 
     def test_same_browser_different_table_gets_separate_visit(self):
         self.enable()
@@ -131,7 +131,7 @@ class HubVisitPublicTests(TestCase):
         visit_a = Order.objects.get().visit
         other = Client()
         page = other.get(self.url)
-        self.assertNotContains(page, 'عرض جلستك')
+        self.assertNotContains(page, 'جلستك')
         other.post(self.url, self.payload())
         self.assertEqual(HubVisit.objects.count(), 2)
         self.assertNotEqual(Order.objects.exclude(visit=visit_a).get().visit, visit_a)
