@@ -110,7 +110,7 @@ class StaffOrderContextDrawerTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "staff/cashier_order.html")
-        self.assertNotEqual(response.templates[0].name, "staff/_payment_panel.html")
+        self.assertTemplateNotUsed(response, "staff/_payment_panel.html")
 
     def test_kitchen_workspace_does_not_expose_order_payment_drawer(self):
         self.client.force_login(self.kitchen)
