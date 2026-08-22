@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% load menu_form %}
+{% block title %}هَبّ{% endblock %}
+{% block body_class %}table-entry-page{% endblock %}
+{% block content %}
+<section class="table-entry" dir="rtl">
+  <header class="table-entry__hero">
+    {% if system_settings.brand_logo_url %}<img class="table-entry__logo" src="{{ system_settings.brand_logo_url }}" alt="{{ system_settings.public_brand_title }}">{% endif %}
+    <div>
+      <p class="table-entry__eyebrow">أهلاً بك في {% if system_settings %}{{ system_settings.public_brand_title }}{% else %}هَبّ{% endif %}</p>
+      <h2>{{ table.display_name }}</h2>
+      {% if table.room_display_name %}<p>{{ table.room_display_name }}</p>{% endif %}
+    </div>
+  </header>
+
+  {% if active_internet_session %}
+  <a class="table-entry__active-session" href="{% url 'current_visit' %}">
+    <span><strong>الإنترنت فعال الآن</strong><small>{{ active_internet_session.package.name_ar }}</small></span>
+    <span aria-hidden="true">←</span>
+  </a>
+  {% endif %}
+
+  <div class="table-entry__choices">
+    {% if internet_self_service_enabled %}
+    <details class="table-entry__choice table-entry__choice--internet" {% if not active_internet_session %}open{% endif %}>
+      <summary>
+        <span class="table-entry__choice-icon" aria-hidden="true">⌁</span>
+        <span><strong>الإنترنت</strong><small>{% if active_internet_session %}عرض جلستك أو بدء باقة أخرى{% else %}اختر باقة وابدأ مباشرة{% endif %}</small></span>
+        <span class="table-entry__chevron" aria-hidden="true">⌄</span>
+      </summary>
+      <div class="table-entry__internet-body">
+        {% if active_internet_session %}
+          <a class="hub-button hub-button-secondary table-entry__session-link" href="{% url 'current_visit' %}">عرض جلسة الإنترنت الحالية</a>
+        {% endif %}
+        {% if internet_packages %}
+        <form method="post" action="{% url 'visit_internet_start' %}" class="table-entry__internet-form">
+          {% csrf_token %}
+          <input type="hidden" name="table" value="{{ table.qr_token }}">
+          <input type="hidden" name="request_key" value="{{ internet_request_key }}">
+          <input type="hidden" name="next" value="menu">
+          <label for="internet-package">الباقة</label>
+          <select class="hub-input" id="internet-package" name="package" required>
+            {% for package in internet_packages %}
+            <option value="{{ package.public_code }}">{{ package.name_ar }} — {{ package.customer_price_syp|format_syp }}</option>
+            {% endfor %}
+          </select>
+          <p class="table-entry__internet-note">تبدأ الجلسة فور التأكيد، ثم تنتقل مباشرة إلى المنيو.</p>
+          <button class="hub-button hub-button-primary table-entry__primary-action" type="submit">ابدأ الإنترنت</button>
+        </form>
+        {% else %}
+          <p class="hub-empty-state">لا توجد باقات متاحة حالياً.</p>
+        {% endif %}
+      </div>
+    </details>
+    {% endif %}
+
+    <a class="table-entry__choice table-entry__choice--menu" href="{{ full_menu_url }}">
+      <span class="table-entry__choice-icon" aria-hidden="true">☕</span>
+      <span><strong>المنيو</strong><small>مشروبات وطعام</small></span>
+      <span class="table-entry__chevron" aria-hidden="true">←</span>
+    </a>
+
+    {% if current_visit %}
+    <a class="table-entry__choice table-entry__choice--session" href="{% url 'current_visit' %}">
+      <span class="table-entry__choice-icon" aria-hidden="true">●</span>
+      <span><strong>جلستك</strong><small>طلباتك · الإنترنت · الرصيد</small></span>
+      <span class="table-entry__chevron" aria-hidden="true">←</span>
+    </a>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
