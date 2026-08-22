@@ -208,9 +208,16 @@ def _metered_order_note(session):
 @transaction.atomic
 def finalize_visit_metered_session(session, *, actor=None, at=None):
     """End a package-less metered session and materialize its charge on the visit."""
-    session = InternetSession.objects.select_for_update().select_related(
-        'visit', 'visit__table', 'visit__member', 'member', 'linked_order',
-    ).get(pk=session.pk)
+    # Nullable provenance relations are useful for the billing/order work below,
+    # but PostgreSQL cannot apply FOR UPDATE to the nullable side of their outer
+    # joins. Lock the InternetSession row only, mirroring the other Internet locks.
+    session = (
+        InternetSession.objects.select_related(
+            'visit', 'visit__table', 'visit__member', 'member', 'linked_order',
+        )
+        .select_for_update(of=('self',))
+        .get(pk=session.pk)
+    )
     if session.entitlement_id:
         raise ValidationError('هذه الجلسة مرتبطة بباقة وليست جلسة محسوبة حسب الوقت.')
     if session.status != InternetSession.Status.ACTIVE:
