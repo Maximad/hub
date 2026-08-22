@@ -3,7 +3,6 @@ from decimal import Decimal
 
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
-from django.db import transaction
 from django.db.models import Count, Q, Sum
 
 from core.models import (AuditEvent, CashMovement, DailyClose, Expense, FinanceReconciliationState,
@@ -64,7 +63,6 @@ class FinanceReconciler:
                     if expected_values[key] != actual_values[key]: differences[key] = {'expected': str(expected_values[key]), 'actual': str(actual_values[key])}
                 if movement.movement_type != CashMovement.MovementType.CASH_EXPENSE: differences['movement_type'] = {'expected': 'cash_expense', 'actual': movement.movement_type}
                 if differences: self.add('expense_movement_mismatch', movement, 'Cash movement projection differs from its expense.', differences=differences)
-            # Identity collisions require people, never a fuzzy match.
             if expense.vendor_id and expense.supplier_name.strip() and expense.supplier_name.strip() not in {expense.vendor.name_ar, expense.vendor.name_en}:
                 self.add('ambiguous_supplier_identity', expense, 'Registered vendor and free-text supplier disagree.', review=True,
                          vendor_id=expense.vendor_id, supplier_name=expense.supplier_name)
@@ -114,7 +112,7 @@ class FinanceReconciler:
         if self.scope == 'expenses':
             return
         for movement in self.dated(StockMovement.objects.filter(movement_type__in=['purchase_received', 'return_to_vendor'])):
-            if movement.movement_type == 'purchase_received' and not movement.purchase_receipt_line_id: self.add('orphaned_stock_movement', movement, 'Purchase receipt stock movement has no receipt line.')
+            if movement.movement_type == 'purchase_received' and not movement.purchase_receipt_line_id: self.add('orphaned_stock_movement', movement, 'Receipt stock movement has no receipt line.')
             if movement.movement_type == 'return_to_vendor' and not movement.purchase_return_line_id: self.add('orphaned_stock_movement', movement, 'Return stock movement has no return line.')
         for line in PurchaseReceiptLine.objects.select_related('receipt'):
             if not hasattr(line, 'stock_movement'): self.add('orphaned_receipt_row', line, 'Receipt line has no stock movement.')
@@ -138,7 +136,6 @@ class FinanceReconciler:
                         self.add('received_quantity_mismatch', line, 'Received quantity is inconsistent with stock movement.', received=str(line.received_quantity), moved=str(getattr(movement, 'quantity', 0)))
             if purchase.vendor_id and purchase.supplier_name.strip() and purchase.supplier_name.strip() not in {purchase.vendor.name_ar, purchase.vendor.name_en}:
                 self.add('ambiguous_supplier_identity', purchase, 'Registered vendor and free-text supplier disagree.', review=True, vendor_id=purchase.vendor_id, supplier_name=purchase.supplier_name)
-            # Liability entries should equal receipts less returns and supplier payments.
             if payable and purchase.vendor_id:
                 source_ids = [str(purchase.pk)]
                 ledger = PostingEntry.objects.filter(account=payable, batch__source_object_id__in=source_ids, batch__status__in=['posted', 'reversed']).aggregate(d=Sum('debit'), c=Sum('credit'))
@@ -172,6 +169,11 @@ class FinanceReconciler:
         events = AuditEvent.objects.select_related('source_content_type')
         if source_model is not None:
             events = events.filter(source_content_type=ContentType.objects.get_for_model(source_model))
+        else:
+            # AuditEvent is shared across domains (for example reservations). Finance
+            # reconciliation must not impose posting-request provenance on unrelated
+            # operational audit events.
+            events = events.filter(source_content_type__app_label='core')
         for event in events:
             if not event.actor_id: self.add('audit_missing_actor', event, 'Audit event has no actor.')
             if not event.request_key or not event.source_content_type_id or not event.source_object_id or event.source is None:
