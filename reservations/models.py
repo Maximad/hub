@@ -24,6 +24,13 @@ class Reservation(models.Model):
     table_area = models.ForeignKey('core.TableArea', on_delete=models.SET_NULL, null=True, blank=True)
     room = models.ForeignKey('core.Room', on_delete=models.SET_NULL, null=True, blank=True, related_name='reservations')
     event = models.ForeignKey('events.Event', on_delete=models.SET_NULL, null=True, blank=True)
+    visit = models.OneToOneField(
+        'core.HubVisit',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reservation',
+    )
     reservation_date = models.DateField(null=True, blank=True)
     start_time = models.TimeField(null=True, blank=True)
     end_time = models.TimeField(null=True, blank=True)
@@ -110,6 +117,21 @@ class Reservation(models.Model):
     @property
     def allowed_status_transitions(self):
         return self.TRANSITIONS.get(self.status, frozenset())
+
+    @property
+    def operational_status_label(self):
+        if self.visit_id:
+            if self.visit.status == 'open':
+                return 'داخل الجلسة'
+            return 'انتهت الجلسة'
+        labels = {
+            self.Status.PENDING: 'بانتظار التأكيد',
+            self.Status.CONFIRMED: 'مؤكد — بانتظار الوصول',
+            self.Status.CANCELLED: 'ملغى',
+            self.Status.COMPLETED: 'منتهٍ',
+            self.Status.NO_SHOW: 'لم يحضر',
+        }
+        return labels.get(self.status, self.get_status_display())
 
     def __str__(self):
         return f'{self.name} — {self.effective_date or "—"} {self.effective_starts_at or "—"} — {self.phone}'
