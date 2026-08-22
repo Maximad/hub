@@ -19,11 +19,45 @@ cleanup() { docker rm -f "$container" >/dev/null 2>&1 || true; }
 trap cleanup EXIT INT TERM
 
 docker run -d --name "$container" -e POSTGRES_PASSWORD=verify-only -e POSTGRES_DB=hub_restore postgres:16 >/dev/null
+
+# The official Postgres image starts a temporary initialization server before
+# shutting it down and exec'ing the final server. pg_isready can briefly
+# succeed against that temporary server, so first wait for initialization to
+# complete and only then wait for the final database to accept SQL queries.
+init_complete=false
 for _ in {1..60}; do
-    docker exec "$container" pg_isready -U postgres -d hub_restore >/dev/null 2>&1 && break
+    if docker logs "$container" 2>&1 | grep -q 'PostgreSQL init process complete; ready for start up'; then
+        init_complete=true
+        break
+    fi
+    if [[ "$(docker inspect -f '{{.State.Running}}' "$container" 2>/dev/null || true)" != "true" ]]; then
+        echo "Restore verification Postgres container exited during initialization" >&2
+        docker logs "$container" >&2 || true
+        exit 1
+    fi
     sleep 1
 done
-docker exec "$container" pg_isready -U postgres -d hub_restore >/dev/null
+[[ "$init_complete" == true ]] || {
+    echo "Restore verification Postgres initialization timed out" >&2
+    docker logs "$container" >&2 || true
+    exit 1
+}
+
+ready=false
+for _ in {1..30}; do
+    if docker exec "$container" pg_isready -U postgres -d hub_restore >/dev/null 2>&1 && \
+       docker exec "$container" psql -X -U postgres -d hub_restore -v ON_ERROR_STOP=1 -c 'SELECT 1' >/dev/null 2>&1; then
+        ready=true
+        break
+    fi
+    sleep 1
+done
+[[ "$ready" == true ]] || {
+    echo "Restore verification Postgres did not become stably ready" >&2
+    docker logs "$container" >&2 || true
+    exit 1
+}
+
 docker exec -i "$container" psql -X -U postgres -d hub_restore -v ON_ERROR_STOP=1 <"$backup/database.sql" >/dev/null
 
 actual="$(mktemp)"
