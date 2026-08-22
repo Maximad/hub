@@ -10,7 +10,7 @@ from django.urls import resolve, reverse
 
 from accounts.permissions import user_has_capability
 from core.models import InternetSession, Order, TableArea
-from core.services.visit_internet import customer_packages, self_service_enabled
+from core.services.visit_internet import customer_packages, metered_customer_error, self_service_enabled
 from core.views.staff_context import render_order_context_panel, render_payment_panel
 from core.views.staff_workspace import staff_home
 from internet.catalog import decorate_menu_context, fulfill_internet_items_for_order
@@ -91,10 +91,16 @@ def _render_table_landing(request, table):
             .first()
         )
 
+    metered_error = metered_customer_error(settings_obj, member) if settings_obj else 'غير متاح'
     context.update({
         'table': table,
         'internet_packages': packages,
         'internet_self_service_enabled': bool(settings_obj and self_service_enabled(settings_obj)),
+        'internet_metered_available': not metered_error,
+        'internet_metered_unavailable_reason': metered_error or '',
+        'internet_metered_rate_syp': int(getattr(settings_obj, 'default_rate_per_hour_syp', 0) or 0),
+        'internet_metered_minimum_minutes': int(getattr(settings_obj, 'default_minimum_minutes', 0) or 0),
+        'internet_metered_requires_phone': bool(getattr(settings_obj, 'require_phone_for_guest_session', False) and member is None),
         'internet_request_key': uuid.uuid4(),
         'active_internet_session': active_session,
         'full_menu_url': reverse('menu_table', kwargs={'qr_token': table.qr_token}) + '?view=menu',
