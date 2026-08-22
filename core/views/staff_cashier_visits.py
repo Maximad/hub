@@ -67,7 +67,6 @@ def _standalone_rows(query=''):
             'total': order.total_syp,
             'paid': order.paid_syp,
             'remaining': order.remaining_syp,
-            'payment_label': order.payment_status,
         })
     return rows
 
@@ -144,11 +143,11 @@ def staff_cashier(request):
         order = Order.objects.select_related('visit').filter(pk=int(normalized)).first()
         if order:
             if order.visit_id:
-                return redirect('staff_cashier_visit', public_code=order.visit.public_code)
+                return redirect('staff_cashier_order', public_code=order.visit.public_code)
             return redirect('staff_cashier_order', public_code=order.public_code)
         visit = HubVisit.objects.filter(pk=int(normalized)).first()
         if visit:
-            return redirect('staff_cashier_visit', public_code=visit.public_code)
+            return redirect('staff_cashier_order', public_code=visit.public_code)
 
     visits = _visit_queryset().filter(status=HubVisit.Status.OPEN)
     if query:
@@ -186,7 +185,7 @@ def staff_cashier_visit_pay(request, public_code):
     visit = get_object_or_404(HubVisit.objects.select_related('table'), public_code=public_code)
     if visit.status != HubVisit.Status.OPEN:
         messages.error(request, 'هذه الجلسة مغلقة ولا تقبل دفعات جديدة.')
-        return redirect('staff_cashier_visit', public_code=visit.public_code)
+        return redirect('staff_cashier_order', public_code=visit.public_code)
 
     current = visit_financials(visit)
     remaining = current['remaining']
@@ -218,7 +217,7 @@ def staff_cashier_visit_pay(request, public_code):
             channel='cashier',
             request_metadata={'path': request.path, 'visit_id': visit.pk},
         )
-        settled_visit, allocations = allocate_visit_payment(
+        settled_visit, _allocations = allocate_visit_payment(
             visit,
             context,
             amount,
@@ -251,7 +250,7 @@ def staff_cashier_visit_pay(request, public_code):
     if request.GET.get('panel') == 'payment':
         visit = get_object_or_404(_visit_queryset(), public_code=public_code)
         return render(request, 'staff/_visit_payment_panel.html', _visit_detail_context(request, visit))
-    return redirect('staff_cashier_visit', public_code=visit.public_code)
+    return redirect('staff_cashier_order', public_code=visit.public_code)
 
 
 @require_staff_capability('cashier')
@@ -269,7 +268,7 @@ def staff_cashier_visit_settle(request, public_code):
             visit = HubVisit.objects.select_for_update().get(pk=visit.pk)
             if visit.status != HubVisit.Status.OPEN:
                 messages.info(request, 'الجلسة مغلقة بالفعل.')
-                return redirect('staff_cashier_visit', public_code=visit.public_code)
+                return redirect('staff_cashier_order', public_code=visit.public_code)
 
             now = timezone.now()
             sessions = list(
@@ -326,7 +325,7 @@ def staff_cashier_visit_settle(request, public_code):
         messages.success(request, 'تم تسديد كامل حساب الجلسة وإغلاقها.')
     except (ValidationError, PermissionDenied) as error:
         messages.error(request, ' '.join(getattr(error, 'messages', [str(error)])))
-    return redirect('staff_cashier_visit', public_code=visit.public_code)
+    return redirect('staff_cashier_order', public_code=visit.public_code)
 
 
 def _receipt_context(request, visit, template_kind):
