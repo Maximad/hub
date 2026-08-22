@@ -1,0 +1,85 @@
+{% extends "base.html" %}{% load hub_numbers %}
+{% block title %}حساب {{ visit.display_number }}{% endblock %}
+{% block content %}
+<section dir="rtl">
+  <header class="hub-page-header">
+    <div>
+      <p class="staff-workspace__eyebrow">حساب مجمع</p>
+      <h2 class="hub-page-header__title">{% if visit.table %}{{ visit.table }}{% else %}جلسة {{ visit.display_number }}{% endif %}</h2>
+      <p class="hub-page-header__meta">{{ visit.display_number }} — {{ visit.get_status_display }}{% if visit.member %} — {{ visit.member }}{% endif %}</p>
+    </div>
+    <div class="hub-toolbar">
+      <a class="hub-button" href="{% url 'staff_cashier' %}">← الكاشير</a>
+      <a class="hub-button" href="{% url 'staff_visit_detail' visit.public_code %}">تفاصيل الجلسة</a>
+      <a class="hub-button hub-button-primary" href="{% url 'staff_cashier_visit_receipt' visit.public_code %}">إيصال مجمع</a>
+      <a class="hub-button" href="{% url 'staff_cashier_visit_receipt_thermal' visit.public_code %}">إيصال حراري</a>
+    </div>
+  </header>
+
+  {% if messages %}<div class="hub-messages">{% for message in messages %}<div class="hub-message hub-message-{{ message.tags|default:'info' }}">{{ message }}</div>{% endfor %}</div>{% endif %}
+
+  <section class="hub-card hub-section">
+    <h3>ملخص الحساب</h3>
+    <div class="staff-order-panel__totals">
+      <div><span>الإجمالي</span><strong>{{ total|format_syp }}</strong></div>
+      <div><span>المدفوع</span><strong>{{ paid|format_syp }}</strong></div>
+      <div><span>المتبقي</span><strong>{{ remaining|format_syp }}</strong></div>
+    </div>
+    <p><span class="hub-badge {% if remaining == 0 %}hub-badge-success{% else %}hub-badge-info{% endif %}">{{ payment_label }}</span></p>
+    {% if active_internet_sessions %}<div class="hub-message hub-message-warning"><strong>الإنترنت ما زال فعالاً.</strong> عند استخدام «تسديد كامل وإغلاق الجلسة» سيوقف النظام جلسات الإنترنت أولاً ويضيف أي كلفة مترية مستحقة قبل احتساب المبلغ النهائي.</div>{% endif %}
+  </section>
+
+  <section class="hub-card hub-section">
+    <div class="staff-order-panel__section-head"><h3>الطلبات ضمن الحساب</h3><span>{{ orders|length }}</span></div>
+    {% for order in orders %}
+      <article class="hub-card" style="margin:.65rem 0">
+        <div class="hub-toolbar" style="justify-content:space-between"><strong class="hub-order-number">{{ order.display_number }}</strong><span class="hub-badge">{{ order.get_status_display }}</span></div>
+        <ul>{% for item in order.items.all %}<li>{{ item.product_name_ar_snapshot }} × {{ item.quantity }} — <span class="hub-money">{% widthratio item.quantity 1 item.unit_price_syp_snapshot %} ل.س</span></li>{% empty %}<li>لا توجد عناصر.</li>{% endfor %}</ul>
+        <p>الإجمالي <strong>{{ order.total_syp|format_syp }}</strong> — المدفوع {{ order.paid_syp|format_syp }} — المتبقي <strong>{{ order.remaining_syp|format_syp }}</strong></p>
+        <div class="hub-toolbar"><a class="hub-button" href="{% url 'staff_order_edit' order.public_code %}">عرض/تعديل الطلب</a><a class="hub-button" href="{% url 'staff_order_receipt' order.public_code %}">إيصال هذا الطلب فقط</a></div>
+      </article>
+    {% empty %}<p class="hub-empty-state">لا توجد طلبات في الجلسة.</p>{% endfor %}
+  </section>
+
+  {% if visit.status == 'open' %}
+  <section class="hub-grid hub-grid-2 hub-section">
+    <article class="hub-card">
+      <h3>دفعة على الحساب</h3>
+      <p class="hub-help-text">توزّع الدفعة تلقائياً على أقدم الطلبات غير المسددة أولاً. تبقى الجلسة مفتوحة بعد الدفع.</p>
+      {% if remaining > 0 %}
+      <form method="post" action="{% url 'staff_cashier_visit_pay' visit.public_code %}" class="hub-form hub-form-section" id="visit-payment-form">
+        {% csrf_token %}
+        {% include "components/currency_entry.html" %}
+        <p class="hub-help-text">المبلغ الافتراضي هو كامل الرصيد الحالي. إدخال مبلغ أقل يعتبر دفعة جزئية ويحتاج موافقة مدير عندما لا يملك الكاشير الصلاحية.</p>
+        <div class="hub-manager-approval" id="visit-manager-approval" hidden>
+          <label>اسم المدير<input class="hub-input" type="text" name="manager_username" autocomplete="username"></label>
+          <label>كلمة المرور<input class="hub-input" type="password" name="manager_password" autocomplete="current-password"></label>
+        </div>
+        <label>طريقة الدفع<select class="hub-input" name="method" required>{% for value,label in methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+        <label>ملاحظات<textarea class="hub-input" name="notes" rows="2"></textarea></label>
+        <button class="hub-button hub-button-primary" type="submit">حفظ الدفعة</button>
+      </form>
+      <script>(function(){const amount=document.getElementById('payment-amount');const approval=document.getElementById('visit-manager-approval');if(!amount||!approval)return;const remaining=Number(amount.dataset.remaining||'{{ remaining }}');function toggle(){approval.hidden=!(Number(amount.value||'0')>0&&Number(amount.value||'0')<remaining);}amount.addEventListener('input',toggle);toggle();})();</script>
+      {% else %}<div class="hub-message hub-message-success">الرصيد الحالي مسدد بالكامل. يمكنك إبقاء الجلسة مفتوحة لطلبات إضافية أو إغلاقها.</div>{% endif %}
+    </article>
+
+    <article class="hub-card">
+      <h3>إنهاء الحساب</h3>
+      <p class="hub-help-text">هذا هو الإجراء المناسب عندما يغادر أصحاب الطاولة: يوقف الإنترنت، يحسب أي كلفة جديدة، يسدد كامل الرصيد، ثم يغلق الجلسة.</p>
+      <form method="post" action="{% url 'staff_cashier_visit_settle' visit.public_code %}" class="hub-form hub-form-section">
+        {% csrf_token %}
+        <label>طريقة الدفع<select class="hub-input" name="method">{% for value,label in methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+        <label>ملاحظات<textarea class="hub-input" name="notes" rows="2"></textarea></label>
+        <button class="hub-button hub-button-primary" type="submit">تسديد كامل وإغلاق الجلسة</button>
+      </form>
+      <p class="hub-help-text">إذا كان الرصيد صفراً، سيغلق النظام الجلسة مباشرة. لا يتم شطب أي رصيد تلقائياً.</p>
+    </article>
+  </section>
+  {% else %}<div class="hub-message hub-message-success">هذه الجلسة مغلقة. الصفحة متاحة للمراجعة وطباعة الإيصال فقط.</div>{% endif %}
+
+  <section class="hub-card hub-section">
+    <div class="staff-order-panel__section-head"><h3>سجل الدفعات المجمع</h3><span>{{ payments|length }}</span></div>
+    {% for payment in payments %}<p>{{ payment.created_at }} — {{ payment.order.display_number }} — {{ payment.get_method_display }} — <strong>{{ payment.amount_syp|format_syp }}</strong></p>{% empty %}<p class="hub-help-text">لا توجد دفعات بعد.</p>{% endfor %}
+  </section>
+</section>
+{% endblock %}
