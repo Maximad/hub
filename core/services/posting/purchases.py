@@ -43,7 +43,7 @@ def _batch(source, context, operation, entries, *, reversal_of=None, reason=''):
         operation_type=operation, source_content_type=ContentType.objects.get_for_model(source),
         source_object_id=str(source.pk), business_date=context.date_for(source),
         idempotency_key=f'{context.idempotency_key}:batch', actor=context.actor,
-        approver=context.approver, reversal_of=reversal_of, reason=reason,
+        approver=context.approver, reason=reason,
         channel=context.channel, metadata=dict(context.request_metadata),
     )
     PostingEntry.objects.bulk_create([
@@ -51,7 +51,12 @@ def _batch(source, context, operation, entries, *, reversal_of=None, reason=''):
                      credit=amount if side == 'credit' else None, description=description)
         for account, side, amount, description in entries
     ])
-    return post_balanced_batch(batch)
+    batch = post_balanced_batch(batch)
+    if reversal_of is not None:
+        batch.reversal_of = reversal_of
+        batch.full_clean()
+        batch.save(update_fields=['reversal_of', 'updated_at'])
+    return batch
 
 
 def _audit(context, action, source, details, *, approver=None):
