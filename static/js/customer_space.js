@@ -11,7 +11,8 @@
   const menuUrl = marker?.dataset.menuUrl || (isMenu ? `${location.pathname}${location.search}` : '/menu/');
   const visitUrl = marker?.dataset.visitUrl || '/visit/current/';
   const ordersUrl = marker?.dataset.ordersUrl || (isVisit ? '#customer-orders' : hasVisit ? `${visitUrl}#customer-orders` : '');
-  const servicesUrl = marker?.dataset.servicesUrl || (document.getElementById('internet') ? '#internet' : hasVisit ? `${visitUrl}#internet` : '');
+  const explicitServicesUrl = marker?.dataset.servicesUrl || '';
+  const servicesUrl = explicitServicesUrl || (document.getElementById('internet') ? '#internet' : '');
 
   function navItem(label, href, active) {
     if (!href) return '';
