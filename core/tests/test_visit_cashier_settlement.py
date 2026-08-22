@@ -123,7 +123,7 @@ class VisitCashierSettlementTests(TestCase):
         self.assertEqual([order.pk for order in row['orders']], [first.pk, second.pk])
         self.assertEqual((row['total'], row['paid'], row['remaining']), (300, 0, 300))
         self.assertEqual([row['order'].pk for row in response.context['standalone_rows']], [standalone.pk])
-        self.assertContains(response, '2</strong> طلبات مرتبطة بهذه الجلسة', html=True)
+        self.assertContains(response, '<p><strong>2</strong> طلبات مرتبطة بهذه الجلسة</p>', html=True)
 
     def test_order_cashier_link_resolves_to_combined_visit_account(self):
         visit = self.visit()
