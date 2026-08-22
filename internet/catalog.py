@@ -73,7 +73,7 @@ def ensure_package_catalog_product(package):
         product = Product.objects.select_for_update().get(pk=binding.product_id)
     else:
         product = (
-            Product.objects.select_for_update()
+            Product.objects.select_for_update(of=('self',))
             .filter(category=category, name_ar=package.name_ar, product_type=Product.ProductType.INTERNET)
             .filter(internet_catalog_binding__isnull=True)
             .order_by('pk')
