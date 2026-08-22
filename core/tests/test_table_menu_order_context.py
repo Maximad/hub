@@ -117,7 +117,8 @@ class TableMenuOrderContextTests(TestCase):
             self.assertNotContains(response, 'menu-public__header')
 
     def test_table_menu_returns_200_uses_same_controls_and_displays_context(self):
-        response = self.client.get(reverse('menu_table', kwargs={'qr_token': self.table.qr_token}))
+        url = reverse('menu_table', kwargs={'qr_token': self.table.qr_token}) + '?view=menu'
+        response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'menu/menu.html')
         for expected in [
