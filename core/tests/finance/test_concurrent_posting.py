@@ -48,6 +48,12 @@ class PostgreSQLConcurrentPostingTests(TransactionTestCase):
             idempotency_key=key, channel='concurrent-test', request_metadata={'worker': key},
         )
 
+    def close_context(self, key):
+        return PostingContext(
+            actor=self.approver, approver=None, business_date=self.day,
+            idempotency_key=key, channel='concurrent-test', request_metadata={'worker': key},
+        )
+
     def concurrently(self, *calls):
         def invoke(call):
             close_old_connections()
@@ -111,7 +117,7 @@ class PostgreSQLConcurrentPostingTests(TransactionTestCase):
         expense = self.expense()
         daily_close = DailyClose.objects.create(business_date=self.day, account=self.cash)
         results = self.concurrently(
-            lambda: closing.close(daily_close, self.context('close:a'), 0),
+            lambda: closing.close(daily_close, self.close_context('close:a'), 0),
             lambda: expenses.pay_immediately(expense, self.context('expense:close-race'), self.cash, Expense.PaymentMethod.CASH),
         )
         self.assertEqual([state for state, _ in results].count('ok'), 1)
