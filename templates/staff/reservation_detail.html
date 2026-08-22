@@ -43,7 +43,7 @@
         <a class="hub-button" href="{% url 'staff_visit_detail' reservation.visit.public_code %}">عرض الجلسة المنتهية</a>
       {% endif %}
     </section>
-  {% elif reservation.status == 'confirmed' %}
+  {% elif checkin_allowed %}
     <section class="hub-card hub-section">
       <h3>وصول الضيف</h3>
       <p>أكد مكان الجلوس ثم افتح جلسة التشغيل. لن تحتاج إلى إعادة إدخال بيانات الحجز.</p>
@@ -65,10 +65,15 @@
         <button class="hub-button hub-button-primary" type="submit">تسجيل الوصول وفتح الجلسة</button>
       </form>
     </section>
+  {% elif reservation.status == 'confirmed' %}
+    <section class="hub-card hub-section">
+      <h3>بانتظار يوم الحجز</h3>
+      <p>تسجيل الوصول وفتح الجلسة متاحان في يوم الحجز فقط.</p>
+    </section>
   {% elif reservation.status == 'pending' %}
     <section class="hub-card hub-section">
       <h3>الوصول غير متاح بعد</h3>
-      <p>أكد الحجز أولاً، ثم سيظهر إجراء تسجيل الوصول وفتح الجلسة.</p>
+      <p>أكد الحجز أولاً، ثم سيظهر إجراء تسجيل الوصول وفتح الجلسة في يوم الحجز.</p>
     </section>
   {% endif %}
 
