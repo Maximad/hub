@@ -54,8 +54,9 @@ class StaffWorkspaceTests(TestCase):
 
     def test_staff_pages_share_persistent_navigation_shell(self):
         self.client.force_login(self.waiter)
-        response = self.client.get(reverse('staff_home'))
+        response = self.client.get(reverse('staff_orders'))
 
+        self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'التنقل التشغيلي')
         self.assertContains(response, 'الطلبات')
         self.assertContains(response, 'الجلسات')
