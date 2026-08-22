@@ -22,7 +22,7 @@
     {% if staff_caps.orders %}<a class="staff-workspace__stat" href="{% url 'staff_visits' %}"><span>الجلسات المفتوحة</span><strong>{{ workspace_stats.open_visits }}</strong></a>{% endif %}
     <a class="staff-workspace__stat" href="{% if staff_caps.orders %}{% url 'staff_orders' %}{% else %}{% url 'staff_kitchen' %}{% endif %}"><span>الطلبات النشطة</span><strong>{{ workspace_stats.active_orders }}</strong></a>
     <a class="staff-workspace__stat" href="{% if staff_caps.orders %}{% url 'staff_orders' %}{% else %}{% url 'staff_kitchen' %}{% endif %}"><span>جاهز للتسليم</span><strong>{{ workspace_stats.ready_orders }}</strong></a>
-    {% if workspace_caps.cashier %}<a class="staff-workspace__stat" href="{% url 'staff_cashier' %}"><span>بحاجة إلى تسديد</span><strong>{{ workspace_stats.unpaid_orders }}</strong></a>{% endif %}
+    {% if workspace_caps.cashier %}<a class="staff-workspace__stat" href="{% url 'staff_cashier' %}"><span>حسابات بحاجة إلى تسديد</span><strong>{{ workspace_stats.unpaid_orders }}</strong></a>{% endif %}
   </section>
 
   <div class="staff-workspace__columns">
@@ -45,7 +45,7 @@
             </a>
             <div class="staff-workspace__visit-actions">
               {% if workspace_caps.pos %}<a class="hub-button hub-button-primary" href="{% url 'staff_pos' %}?visit={{ visit.public_code }}">+ طلب</a>{% endif %}
-              {% if workspace_caps.cashier and row.latest_order %}<a class="hub-button" href="{% url 'staff_cashier_order' row.latest_order.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' row.latest_order.public_code %}?panel=payment" data-context-title="قبض الطلب" aria-haspopup="dialog">دفع</a>{% endif %}
+              {% if workspace_caps.cashier %}<a class="hub-button" href="{% url 'staff_cashier_order' visit.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' visit.public_code %}?panel=payment" data-context-title="قبض حساب الجلسة" aria-haspopup="dialog">الحساب</a>{% endif %}
             </div>
           </article>
         {% endwith %}{% empty %}
@@ -74,7 +74,9 @@
             </div>
             <div class="staff-workspace__order-actions">
               {% if staff_caps.order_edit %}<a href="{% url 'staff_order_edit' order.public_code %}" data-staff-context-url="{% url 'staff_order_edit' order.public_code %}?panel=context" data-context-title="تفاصيل الطلب" aria-haspopup="dialog">عرض</a><a href="{% url 'staff_order_edit' order.public_code %}">تعديل</a>{% endif %}
-              {% if workspace_caps.cashier and order.remaining_syp > 0 %}<a href="{% url 'staff_cashier_order' order.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' order.public_code %}?panel=payment" data-context-title="قبض الطلب" aria-haspopup="dialog">دفع</a>{% endif %}
+              {% if workspace_caps.cashier and order.remaining_syp > 0 %}
+                {% if order.visit_id %}<a href="{% url 'staff_cashier_order' order.visit.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' order.visit.public_code %}?panel=payment" data-context-title="قبض حساب الجلسة" aria-haspopup="dialog">دفع الحساب</a>{% else %}<a href="{% url 'staff_cashier_order' order.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' order.public_code %}?panel=payment" data-context-title="قبض الطلب" aria-haspopup="dialog">دفع</a>{% endif %}
+              {% endif %}
             </div>
           </article>
         {% empty %}
