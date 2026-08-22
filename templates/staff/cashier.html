@@ -1,4 +1,48 @@
-{% extends "base.html" %}{% block title %}الكاشير{% endblock %}{% block content %}
-<h2 class="hub-section-title hub-page-header__title">{{ page_setting.title|default:"شاشة الكاشير" }}</h2>{% if page_setting.subtitle %}<p>{{ page_setting.subtitle }}</p>{% endif %}<div class="hub-toolbar"><a class="hub-button" href="{% url 'staff_orders' %}">لوحة الطلبات</a><a class="hub-button" href="{% url 'staff_pos' %}">نقطة البيع / POS</a><a class="hub-button" href="{% url 'menu_public' %}">القائمة العامة</a></div>
-<form method="get" class="hub-card hub-toolbar hub-form-section"><label>بحث برقم الطلب</label><input class="hub-input hub-order-number" type="text" name="q" value="{{ query|format_order_number }}"><button class="hub-button hub-button-primary" type="submit">بحث</button></form>
-<div class="hub-grid hub-grid-2 cashier-layout-{{ system_settings.cashier_layout|default:'single_column' }}">{% for row in rows %}{% with order=row.order %}<article class="hub-card"><div><strong class="hub-order-number">{{ order.display_number|format_order_number }}</strong></div><div><span class="hub-badge hub-badge-info">{{ order.get_fulfillment_label }}</span>{% if order.location_detail %}<div class="hub-location-detail">{{ order.location_detail }}</div>{% endif %}</div>{% if order.is_delivery %}<div>الهاتف/العنوان: {{ order.delivery_area }} {{ order.delivery_address|truncatechars:80 }}<br>حالة التوصيل: {{ order.get_delivery_status_display }}</div>{% endif %}<div>العناصر <span class="hub-money">{{ order.subtotal_syp|format_syp }}</span>{% if order.delivery_fee_syp %} | التوصيل <span class="hub-money">{{ order.delivery_fee_syp|format_syp }}</span>{% endif %} | المجموع <span class="hub-money">{{ row.total|format_syp }}</span> | المدفوع <span class="hub-money">{{ row.paid|format_syp }}</span> | المتبقي <span class="hub-money">{{ row.remaining|format_syp }}</span></div><div><span class="hub-badge hub-badge-info">{{ row.payment_label }}</span></div><a class="hub-button hub-button-primary" href="{% url 'staff_cashier_order' order.public_code %}">فتح</a></article>{% endwith %}{% empty %}<p class="hub-empty-state">لا توجد طلبات مطابقة.</p>{% endfor %}</div>{% endblock %}
+{% extends "base.html" %}{% load hub_numbers %}{% block title %}الكاشير{% endblock %}{% block content %}
+<h2 class="hub-section-title hub-page-header__title">{{ page_setting.title|default:"شاشة الكاشير" }}</h2>
+{% if page_setting.subtitle %}<p>{{ page_setting.subtitle }}</p>{% endif %}
+<div class="hub-toolbar"><a class="hub-button" href="{% url 'staff_orders' %}">لوحة الطلبات</a><a class="hub-button" href="{% url 'staff_pos' %}">نقطة البيع / POS</a><a class="hub-button" href="{% url 'staff_visits' %}">الجلسات والطاولات</a></div>
+
+<form method="get" class="hub-card hub-toolbar hub-form-section">
+  <label>بحث برقم الطلب أو الجلسة أو اسم الطاولة</label>
+  <input class="hub-input hub-order-number" type="text" name="q" value="{{ query }}">
+  <button class="hub-button hub-button-primary" type="submit">بحث</button>
+</form>
+
+<section class="hub-section">
+  <div class="hub-page-header"><div><p class="staff-workspace__eyebrow">الحساب هو الجلسة، وليس الطلب المنفرد</p><h3>الطاولات والجلسات المفتوحة</h3></div></div>
+  <div class="hub-grid hub-grid-2 cashier-layout-{{ system_settings.cashier_layout|default:'single_column' }}">
+    {% for row in visit_rows %}{% with visit=row.visit %}
+      <article class="hub-card">
+        <div class="hub-toolbar" style="justify-content:space-between;align-items:flex-start">
+          <div>
+            <strong>{% if visit.table %}{{ visit.table }}{% else %}جلسة {{ visit.display_number }}{% endif %}</strong>
+            <div class="hub-location-detail">{{ visit.display_number }}{% if visit.member %} — {{ visit.member }}{% endif %}</div>
+          </div>
+          <span class="hub-badge {% if row.remaining == 0 %}hub-badge-success{% else %}hub-badge-info{% endif %}">{{ row.payment_label }}</span>
+        </div>
+        <p><strong>{{ row.orders|length }}</strong> طلبات مرتبطة بهذه الجلسة</p>
+        <div>الإجمالي <span class="hub-money">{{ row.total|format_syp }}</span> | المدفوع <span class="hub-money">{{ row.paid|format_syp }}</span> | <strong>المتبقي <span class="hub-money">{{ row.remaining|format_syp }}</span></strong></div>
+        <div class="hub-toolbar" style="margin-top:.75rem"><a class="hub-button hub-button-primary" href="{% url 'staff_cashier_visit' visit.public_code %}">فتح الحساب المجمع</a><a class="hub-button" href="{% url 'staff_visit_detail' visit.public_code %}">تفاصيل الجلسة</a></div>
+      </article>
+    {% empty %}<p class="hub-empty-state">لا توجد جلسات مفتوحة مطابقة.</p>{% endfor %}
+  </div>
+</section>
+
+{% if standalone_rows %}
+<section class="hub-section">
+  <h3>طلبات منفردة خارج الجلسات</h3>
+  <p class="hub-help-text">هذه الطلبات فقط تبقى على مستوى الطلب لأنها غير مرتبطة بجلسة/طاولة.</p>
+  <div class="hub-grid hub-grid-2">
+    {% for row in standalone_rows %}{% with order=row.order %}
+      <article class="hub-card">
+        <div><strong class="hub-order-number">{{ order.display_number }}</strong></div>
+        <div><span class="hub-badge hub-badge-info">{{ order.get_fulfillment_label }}</span>{% if order.location_detail %}<div class="hub-location-detail">{{ order.location_detail }}</div>{% endif %}</div>
+        <div>المجموع <span class="hub-money">{{ row.total|format_syp }}</span> | المدفوع <span class="hub-money">{{ row.paid|format_syp }}</span> | المتبقي <span class="hub-money">{{ row.remaining|format_syp }}</span></div>
+        <a class="hub-button hub-button-primary" href="{% url 'staff_cashier_order' order.public_code %}">فتح</a>
+      </article>
+    {% endwith %}{% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}
