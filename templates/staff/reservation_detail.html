@@ -1,8 +1,105 @@
 {% extends "base.html" %}
-{% block content %}<h2 class="hub-page-header__title">تفاصيل الحجز</h2><p>{{ reservation.name }} - {{ reservation.phone }}</p>
-<p>{{ reservation.effective_date }} {{ reservation.effective_starts_at }} / {{ reservation.effective_ends_at|default:'-' }}</p>
-<p>نوع الحجز: {{ reservation.get_reservation_type_display }} | المساحة: {{ reservation.effective_room|default:'-' }}</p>
-<p>الحالة: {{ reservation.get_status_display }}</p><p>الملاحظات: {{ reservation.notes|default:'-' }}</p>
-<form class="hub-form-section" method="post" action="{% url 'staff_reservation_status' reservation.id %}">{% csrf_token %}<select name="status">{% for v,l in statuses %}{% if v in reservation.allowed_status_transitions %}<option value="{{ v }}">{{ l }}</option>{% endif %}{% endfor %}</select><button>تحديث الحالة</button></form>
-{% if request.user.is_superuser or request.user.role == 'admin' %}{% if reservation.status == 'cancelled' or reservation.status == 'completed' or reservation.status == 'no_show' %}<form class="hub-form-section" method="post" action="{% url 'staff_reservation_status' reservation.id %}">{% csrf_token %}<input type="hidden" name="action" value="correct"><select name="status"><option value="pending">Pending</option><option value="confirmed">Confirmed</option></select><input name="reason" required placeholder="سبب التصحيح"><button>إعادة فتح بتصريح مدير</button></form>{% endif %}{% endif %}
+{% block title %}تفاصيل الحجز{% endblock %}
+{% block content %}
+<section class="hub-section" dir="rtl">
+  <header class="hub-page-header">
+    <div>
+      <p class="hub-page-header__meta">الحجوزات / الوصول</p>
+      <h2 class="hub-page-header__title">{{ reservation.name }}</h2>
+      <p>{{ reservation.phone }} · {{ reservation.party_size }} ضيف</p>
+    </div>
+    <span class="hub-badge {% if reservation.visit_id and reservation.visit.status == 'open' %}hub-badge-success{% elif reservation.status == 'confirmed' %}hub-badge-info{% endif %}">{{ reservation.operational_status_label }}</span>
+  </header>
+
+  <section class="hub-card hub-section">
+    <h3>الحجز</h3>
+    <div class="hub-grid hub-grid-2">
+      <div><strong>التاريخ</strong><br>{{ reservation.effective_date|default:'—' }}</div>
+      <div><strong>الوقت</strong><br>{{ reservation.effective_starts_at|default:'—' }} — {{ reservation.effective_ends_at|default:'—' }}</div>
+      <div><strong>النوع</strong><br>{{ reservation.get_reservation_type_display }}</div>
+      <div><strong>المساحة</strong><br>{{ reservation.effective_room|default:'—' }}</div>
+      <div><strong>الطاولة المحجوزة</strong><br>{{ reservation.table_area|default:'—' }}</div>
+      <div><strong>العربون</strong><br>{{ reservation.deposit_syp }} ل.س</div>
+    </div>
+    {% if reservation.notes %}<p><strong>ملاحظة:</strong> {{ reservation.notes }}</p>{% endif %}
+  </section>
+
+  {% if reservation.visit_id %}
+    <section class="hub-card hub-section">
+      <h3>{% if reservation.visit.status == 'open' %}الضيف داخل هَبّ الآن{% else %}الجلسة المرتبطة بالحجز{% endif %}</h3>
+      <p>
+        {{ reservation.visit }}
+        {% if reservation.visit.table %} · {{ reservation.visit.table }}{% endif %}
+        {% if reservation.visit.member %} · {{ reservation.visit.member }}{% endif %}
+      </p>
+      {% if reservation.visit.status == 'open' %}
+        <div class="hub-toolbar">
+          <a class="hub-button hub-button-primary" href="{% url 'staff_home' %}?visit={{ reservation.visit.public_code }}">فتح في مساحة العمليات</a>
+          <a class="hub-button" href="{% url 'staff_pos' %}?visit={{ reservation.visit.public_code }}">+ طلب لهذه الجلسة</a>
+          <a class="hub-button" href="{% url 'staff_visit_detail' reservation.visit.public_code %}">إدارة الجلسة كاملة</a>
+        </div>
+        <p class="hub-help-text">إغلاق الجلسة من مساحة العمليات سيُكمل الحجز تلقائياً.</p>
+      {% else %}
+        <a class="hub-button" href="{% url 'staff_visit_detail' reservation.visit.public_code %}">عرض الجلسة المنتهية</a>
+      {% endif %}
+    </section>
+  {% elif reservation.status == 'confirmed' %}
+    <section class="hub-card hub-section">
+      <h3>وصول الضيف</h3>
+      <p>أكد مكان الجلوس ثم افتح جلسة التشغيل. لن تحتاج إلى إعادة إدخال بيانات الحجز.</p>
+      <form method="post" class="hub-form hub-form-section">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="checkin">
+        <label for="checkin-table"><strong>الطاولة</strong></label>
+        <select class="hub-input" id="checkin-table" name="table">
+          <option value="">بدون طاولة / تحديدها لاحقاً</option>
+          {% for table in checkin_tables %}
+            <option value="{{ table.pk }}" {% if reservation.table_area_id == table.pk %}selected{% endif %}>{{ table }}</option>
+          {% endfor %}
+        </select>
+        {% if matching_member %}
+          <p class="hub-help-text">سيتم ربط العضو المطابق للهاتف تلقائياً: <strong>{{ matching_member }}</strong>.</p>
+        {% else %}
+          <p class="hub-help-text">لا يوجد عضو مطابق لهذا الهاتف. يمكن ربط عضو بالجلسة لاحقاً.</p>
+        {% endif %}
+        <button class="hub-button hub-button-primary" type="submit">تسجيل الوصول وفتح الجلسة</button>
+      </form>
+    </section>
+  {% elif reservation.status == 'pending' %}
+    <section class="hub-card hub-section">
+      <h3>الوصول غير متاح بعد</h3>
+      <p>أكد الحجز أولاً، ثم سيظهر إجراء تسجيل الوصول وفتح الجلسة.</p>
+    </section>
+  {% endif %}
+
+  {% if not reservation.visit_id and reservation.allowed_status_transitions %}
+    <section class="hub-card hub-section">
+      <h3>حالة الحجز</h3>
+      <form class="hub-form hub-form-section" method="post" action="{% url 'staff_reservation_status' reservation.id %}">
+        {% csrf_token %}
+        <label>الحالة الجديدة
+          <select class="hub-input" name="status">
+            {% for v,l in statuses %}{% if v in reservation.allowed_status_transitions %}<option value="{{ v }}">{{ l }}</option>{% endif %}{% endfor %}
+          </select>
+        </label>
+        <button class="hub-button" type="submit">تحديث الحالة</button>
+      </form>
+    </section>
+  {% endif %}
+
+  {% if request.user.is_superuser or request.user.role == 'admin' %}
+    {% if reservation.status == 'cancelled' or reservation.status == 'completed' or reservation.status == 'no_show' %}
+      <section class="hub-card hub-section">
+        <h3>تصحيح إداري</h3>
+        <form class="hub-form hub-form-section" method="post" action="{% url 'staff_reservation_status' reservation.id %}">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="correct">
+          <select class="hub-input" name="status"><option value="pending">Pending</option><option value="confirmed">Confirmed</option></select>
+          <input class="hub-input" name="reason" required placeholder="سبب التصحيح">
+          <button class="hub-button" type="submit">إعادة فتح بتصريح مدير</button>
+        </form>
+      </section>
+    {% endif %}
+  {% endif %}
+</section>
 {% endblock %}
