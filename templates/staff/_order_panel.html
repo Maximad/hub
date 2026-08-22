@@ -1,0 +1,64 @@
+{% load hub_numbers %}
+<section class="staff-order-panel" dir="rtl">
+  <header class="staff-order-panel__header">
+    <div>
+      <p class="staff-workspace__eyebrow">الطلب</p>
+      <h3 class="hub-order-number">{{ order.display_number }}</h3>
+      <p class="staff-order-panel__meta">
+        <span class="hub-badge {% if order.status == 'ready' %}hub-badge-success{% else %}hub-badge-info{% endif %}">{{ order.get_status_display }}</span>
+        · {% if order.table %}{{ order.table }}{% else %}{{ order.get_fulfillment_label }}{% endif %}
+      </p>
+    </div>
+    {% if order.visit %}
+      <a class="staff-order-panel__visit-link" href="{% url 'staff_visit_detail' order.visit.public_code %}" data-staff-context-url="{% url 'staff_visit_detail' order.visit.public_code %}?panel=1" data-context-title="تفاصيل الجلسة" aria-haspopup="dialog">
+        <span>الجلسة</span><strong>{{ order.visit.display_number }}</strong>
+      </a>
+    {% endif %}
+  </header>
+
+  <section class="staff-order-panel__totals" aria-label="حساب الطلب">
+    <div><span>الإجمالي</span><strong>{{ total|format_syp }}</strong></div>
+    <div><span>المدفوع</span><strong>{{ paid|format_syp }}</strong></div>
+    <div><span>المتبقي</span><strong>{{ remaining|format_syp }}</strong></div>
+  </section>
+
+  <nav class="staff-order-panel__actions" aria-label="إجراءات الطلب">
+    {% if order_caps.cashier and remaining > 0 %}
+      <a class="hub-button hub-button-primary" href="{% url 'staff_cashier_order' order.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' order.public_code %}?panel=payment" data-context-title="قبض الطلب" aria-haspopup="dialog">دفع</a>
+    {% endif %}
+    {% if order_caps.edit %}<a class="hub-button" href="{% url 'staff_order_edit' order.public_code %}">تعديل الطلب</a>{% endif %}
+    {% if order_caps.cashier %}<a class="hub-button" href="{% url 'staff_cashier_order' order.public_code %}">تفاصيل الكاشير</a>{% endif %}
+    {% if order.visit %}<a class="hub-button" href="{% url 'staff_pos' %}?visit={{ order.visit.public_code }}">+ طلب لنفس الجلسة</a>{% endif %}
+  </nav>
+
+  <section class="staff-order-panel__section">
+    <div class="staff-order-panel__section-head"><h4>العناصر</h4><span>{{ order.items.all|length }}</span></div>
+    <div class="staff-order-panel__items">
+      {% for item in order.items.all %}
+        <article class="staff-order-panel__item">
+          <div>
+            <strong>{{ item.product_name_ar_snapshot }}</strong>
+            <span class="hub-number">× {{ item.quantity }}</span>
+          </div>
+          <div>
+            <span>{{ item.prep_station_label }}</span>
+            <span class="hub-badge">{{ item.get_prep_status_display }}</span>
+          </div>
+          {% if item.selected_options_snapshot %}
+            <small>
+              {% for group in item.selected_options_snapshot %}{% for option in group.options %}{{ option.name_ar }}{% if not forloop.last %}، {% endif %}{% endfor %}{% endfor %}
+            </small>
+          {% endif %}
+          {% if item.item_note %}<small>ملاحظة: {{ item.item_note }}</small>{% endif %}
+        </article>
+      {% empty %}<div class="hub-empty-state">لا توجد عناصر في هذا الطلب.</div>{% endfor %}
+    </div>
+  </section>
+
+  <section class="staff-order-panel__section staff-order-panel__summary">
+    <div><span>طريقة الطلب</span><strong>{{ order.get_fulfillment_label }}</strong></div>
+    {% if order.location_detail %}<div><span>المكان</span><strong>{{ order.location_detail }}</strong></div>{% endif %}
+    <div><span>حالة الدفع</span><strong>{{ payment_label }}</strong></div>
+    {% if order.general_note %}<div><span>ملاحظة</span><strong>{{ order.general_note }}</strong></div>{% endif %}
+  </section>
+</section>

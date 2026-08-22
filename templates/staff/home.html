@@ -35,7 +35,7 @@
       <div class="staff-workspace__visit-grid">
         {% for row in visit_rows %}{% with visit=row.visit %}
           <article class="staff-workspace__visit">
-            <a class="staff-workspace__visit-main" href="{% url 'staff_visit_detail' visit.public_code %}" data-visit-context-url="{% url 'staff_visit_detail' visit.public_code %}?panel=1" aria-haspopup="dialog">
+            <a class="staff-workspace__visit-main" href="{% url 'staff_visit_detail' visit.public_code %}" data-visit-context-url="{% url 'staff_visit_detail' visit.public_code %}?panel=1" data-context-title="تفاصيل الجلسة" aria-haspopup="dialog">
               <div class="staff-workspace__visit-title">
                 <strong>{% if visit.table %}{{ visit.table }}{% else %}جلسة {{ visit.display_number }}{% endif %}</strong>
                 {% if visit.member %}<span>{{ visit.member }}</span>{% endif %}
@@ -45,7 +45,7 @@
             </a>
             <div class="staff-workspace__visit-actions">
               {% if workspace_caps.pos %}<a class="hub-button hub-button-primary" href="{% url 'staff_pos' %}?visit={{ visit.public_code }}">+ طلب</a>{% endif %}
-              {% if workspace_caps.cashier and row.latest_order %}<a class="hub-button" href="{% url 'staff_cashier_order' row.latest_order.public_code %}">دفع</a>{% endif %}
+              {% if workspace_caps.cashier and row.latest_order %}<a class="hub-button" href="{% url 'staff_cashier_order' row.latest_order.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' row.latest_order.public_code %}?panel=payment" data-context-title="قبض الطلب" aria-haspopup="dialog">دفع</a>{% endif %}
             </div>
           </article>
         {% endwith %}{% empty %}
@@ -73,8 +73,8 @@
               {% if order.remaining_syp > 0 %}<strong>متبقي {{ order.remaining_syp|format_syp }}</strong>{% else %}<span class="hub-badge hub-badge-success">مدفوع</span>{% endif %}
             </div>
             <div class="staff-workspace__order-actions">
-              {% if staff_caps.order_edit %}<a href="{% url 'staff_order_edit' order.public_code %}">تعديل</a>{% endif %}
-              {% if workspace_caps.cashier %}<a href="{% url 'staff_cashier_order' order.public_code %}">دفع</a>{% endif %}
+              {% if staff_caps.order_edit %}<a href="{% url 'staff_order_edit' order.public_code %}" data-staff-context-url="{% url 'staff_order_edit' order.public_code %}?panel=context" data-context-title="تفاصيل الطلب" aria-haspopup="dialog">عرض</a><a href="{% url 'staff_order_edit' order.public_code %}">تعديل</a>{% endif %}
+              {% if workspace_caps.cashier and order.remaining_syp > 0 %}<a href="{% url 'staff_cashier_order' order.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' order.public_code %}?panel=payment" data-context-title="قبض الطلب" aria-haspopup="dialog">دفع</a>{% endif %}
             </div>
           </article>
         {% empty %}
@@ -104,14 +104,15 @@
 <dialog id="staff-context-drawer" class="staff-context-drawer" aria-labelledby="staff-context-drawer-title">
   <section class="staff-context-drawer__surface" dir="rtl">
     <header class="staff-context-drawer__header">
-      <div><p class="staff-workspace__eyebrow">سياق سريع</p><h2 id="staff-context-drawer-title">تفاصيل الجلسة</h2></div>
+      <div><p class="staff-workspace__eyebrow">سياق سريع</p><h2 id="staff-context-drawer-title">تفاصيل</h2></div>
       <button type="button" class="staff-context-drawer__close" data-close-staff-context aria-label="إغلاق">×</button>
     </header>
     <div id="staff-context-drawer-body" class="staff-context-drawer__body" aria-live="polite">
-      <div class="staff-context-drawer__loading">اختر جلسة لعرض تفاصيلها.</div>
+      <div class="staff-context-drawer__loading">اختر جلسة أو طلباً لعرض التفاصيل.</div>
     </div>
   </section>
 </dialog>
+<script src="{% static 'js/currency-entry.js' %}" defer></script>
 <script src="{% static 'js/staff_workspace.js' %}" defer></script>
 {% endif %}
 {% endblock %}
