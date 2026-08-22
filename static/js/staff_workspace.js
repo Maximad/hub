@@ -54,26 +54,10 @@
     var title = document.getElementById('staff-context-drawer-title');
     if (!supportsDialog(dialog) || !body) return;
 
-    var closeButton = dialog.querySelector('[data-close-staff-context]');
-    if (closeButton) {
-      closeButton.addEventListener('click', function () {
-        dialog.close();
-      });
-    }
-
-    dialog.addEventListener('click', function (event) {
-      if (event.target === dialog) dialog.close();
-    });
-
-    document.addEventListener('click', function (event) {
-      var link = event.target.closest('[data-staff-context-url], [data-visit-context-url]');
-      if (!link) return;
-      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-
+    function openContext(link) {
       var panelUrl = link.getAttribute('data-staff-context-url') || link.getAttribute('data-visit-context-url');
       if (!panelUrl) return;
 
-      event.preventDefault();
       if (title) title.textContent = link.getAttribute('data-context-title') || 'تفاصيل';
       body.innerHTML = loadingMarkup();
       if (!dialog.open) dialog.showModal();
@@ -93,6 +77,27 @@
         .catch(function () {
           body.replaceChildren(errorMarkup(link.href));
         });
+    }
+
+    var closeButton = dialog.querySelector('[data-close-staff-context]');
+    if (closeButton) {
+      closeButton.addEventListener('click', function () {
+        dialog.close();
+      });
+    }
+
+    dialog.addEventListener('click', function (event) {
+      if (event.target === dialog) dialog.close();
+    });
+
+    document.addEventListener('click', function (event) {
+      var link = event.target.closest('[data-staff-context-url], [data-visit-context-url]');
+      if (!link) return;
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      if (!(link.getAttribute('data-staff-context-url') || link.getAttribute('data-visit-context-url'))) return;
+
+      event.preventDefault();
+      openContext(link);
     });
 
     document.addEventListener('input', function (event) {
@@ -108,5 +113,27 @@
     document.body.addEventListener('htmx:afterSwap', function (event) {
       if (event.target === body || body.contains(event.target)) initializeDynamicPanel(body);
     });
+
+    // Reservation check-in redirects back to the workspace with ?visit=<uuid>.
+    // Open that exact visit in context, then remove the one-shot parameter.
+    var params = new URLSearchParams(window.location.search);
+    var requestedVisit = params.get('visit');
+    if (requestedVisit) {
+      var visitLinks = document.querySelectorAll('[data-visit-context-url]');
+      var requestedLink = null;
+      for (var i = 0; i < visitLinks.length; i += 1) {
+        var candidateUrl = visitLinks[i].getAttribute('data-visit-context-url') || '';
+        if (candidateUrl.indexOf('/staff/visits/' + requestedVisit + '/') !== -1) {
+          requestedLink = visitLinks[i];
+          break;
+        }
+      }
+      if (requestedLink) openContext(requestedLink);
+
+      params.delete('visit');
+      var remainingQuery = params.toString();
+      var cleanUrl = window.location.pathname + (remainingQuery ? '?' + remainingQuery : '') + window.location.hash;
+      window.history.replaceState({}, '', cleanUrl);
+    }
   });
 })();
