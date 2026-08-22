@@ -7,6 +7,8 @@ from django.views.decorators.http import require_http_methods
 from accounts.permissions import require_staff_capability, user_has_capability
 from core.models import ActivityLog, HubVisit, InternetSession, Member, Order, TableArea
 from core.services.internet_access import end_usage_session
+from reservations.models import Reservation
+from reservations.services import complete_reservation_for_visit
 
 
 def _log(request, action, visit, **details):
@@ -43,10 +45,42 @@ def _visit_context(request, visit):
 @require_http_methods(['GET', 'POST'])
 def staff_visits(request):
     if request.method == 'POST':
-        table = TableArea.objects.filter(pk=request.POST.get('table')).first() if request.POST.get('table') else None
-        member = Member.objects.filter(pk=request.POST.get('member')).first() if request.POST.get('member') else None
-        visit = HubVisit.objects.create(table=table, member=member, notes=request.POST.get('notes', '').strip(), created_by=request.user)
-        _log(request, 'visit.created', visit, source='staff')
+        with transaction.atomic():
+            table = None
+            if request.POST.get('table'):
+                table = TableArea.objects.select_for_update().filter(pk=request.POST.get('table')).first()
+                if table is None:
+                    messages.error(request, 'الطاولة المختارة غير صالحة.')
+                    return redirect('staff_visits')
+                occupied = HubVisit.objects.select_for_update().filter(
+                    table=table,
+                    status=HubVisit.Status.OPEN,
+                ).first()
+                if occupied:
+                    messages.info(request, f'الطاولة لديها جلسة مفتوحة بالفعل: {occupied}.')
+                    return redirect('staff_visit_detail', public_code=occupied.public_code)
+
+            member = None
+            if request.POST.get('member'):
+                member = Member.objects.select_for_update().filter(pk=request.POST.get('member')).first()
+                if member is None:
+                    messages.error(request, 'العضو المختار غير صالح.')
+                    return redirect('staff_visits')
+                existing_member_visit = HubVisit.objects.select_for_update().filter(
+                    member=member,
+                    status=HubVisit.Status.OPEN,
+                ).first()
+                if existing_member_visit:
+                    messages.info(request, f'لدى العضو جلسة مفتوحة بالفعل: {existing_member_visit}.')
+                    return redirect('staff_visit_detail', public_code=existing_member_visit.public_code)
+
+            visit = HubVisit.objects.create(
+                table=table,
+                member=member,
+                notes=request.POST.get('notes', '').strip(),
+                created_by=request.user,
+            )
+            _log(request, 'visit.created', visit, source='staff')
         messages.success(request, f'تم إنشاء جلسة {visit.display_number}.')
         return redirect('staff_visit_detail', public_code=visit.public_code)
     visits = HubVisit.objects.select_related('table', 'table__room', 'member').prefetch_related('orders__items', 'orders__discounts', 'orders__payments')
@@ -67,6 +101,10 @@ def staff_visit_detail(request, public_code):
     if request.method == 'POST':
         action = request.POST.get('action')
         with transaction.atomic():
+            # Reservation check-in locks Reservation -> HubVisit. Keep that same
+            # order for closure so a repeated check-in cannot deadlock closure.
+            if action == 'close':
+                Reservation.objects.select_for_update().filter(visit_id=visit.pk).first()
             visit = HubVisit.objects.select_for_update().get(pk=visit.pk)
             if action == 'attach_order':
                 order = get_object_or_404(Order, public_code=request.POST.get('order_code'))
@@ -103,6 +141,7 @@ def staff_visit_detail(request, public_code):
                 visit.status = HubVisit.Status.CLOSED; visit.closed_at = now; visit.last_activity_at = now
                 visit.save(update_fields=['status', 'closed_at', 'last_activity_at', 'updated_at'])
                 visit.browser_credentials.filter(revoked_at__isnull=True).update(revoked_at=now)
+                complete_reservation_for_visit(visit.pk, actor=request.user)
                 _log(request, 'visit.closed', visit)
             else:
                 messages.error(request, 'الإجراء غير صالح.')

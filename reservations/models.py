@@ -24,6 +24,13 @@ class Reservation(models.Model):
     table_area = models.ForeignKey('core.TableArea', on_delete=models.SET_NULL, null=True, blank=True)
     room = models.ForeignKey('core.Room', on_delete=models.SET_NULL, null=True, blank=True, related_name='reservations')
     event = models.ForeignKey('events.Event', on_delete=models.SET_NULL, null=True, blank=True)
+    visit = models.OneToOneField(
+        'core.HubVisit',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reservation',
+    )
     reservation_date = models.DateField(null=True, blank=True)
     start_time = models.TimeField(null=True, blank=True)
     end_time = models.TimeField(null=True, blank=True)
@@ -82,8 +89,10 @@ class Reservation(models.Model):
     def _change_status(cls, reservation_id, *, actor, new_status, reason, correction):
         """Validate and persist a status change while holding the reservation row lock."""
         with transaction.atomic():
-            reservation = cls.objects.select_for_update().get(pk=reservation_id)
+            reservation = cls.objects.select_for_update().select_related('visit').get(pk=reservation_id)
             old_status = reservation.status
+            if reservation.visit_id and reservation.visit.status == 'open':
+                raise ValidationError({'status': 'لا يمكن تغيير حالة الحجز أثناء جلسة مفتوحة. أغلق الجلسة المرتبطة أولاً.'})
             allowed = cls.CORRECTIONS.get(old_status, ()) if correction else cls.TRANSITIONS.get(old_status, ())
             if new_status not in allowed:
                 raise ValidationError({'status': f'Transition from {old_status} to {new_status} is not permitted.'})
@@ -110,6 +119,21 @@ class Reservation(models.Model):
     @property
     def allowed_status_transitions(self):
         return self.TRANSITIONS.get(self.status, frozenset())
+
+    @property
+    def operational_status_label(self):
+        if self.visit_id:
+            if self.visit.status == 'open':
+                return 'داخل الجلسة'
+            return 'انتهت الجلسة'
+        labels = {
+            self.Status.PENDING: 'بانتظار التأكيد',
+            self.Status.CONFIRMED: 'مؤكد — بانتظار الوصول',
+            self.Status.CANCELLED: 'ملغى',
+            self.Status.COMPLETED: 'منتهٍ',
+            self.Status.NO_SHOW: 'لم يحضر',
+        }
+        return labels.get(self.status, self.get_status_display())
 
     def __str__(self):
         return f'{self.name} — {self.effective_date or "—"} {self.effective_starts_at or "—"} — {self.phone}'

@@ -1,5 +1,62 @@
 {% extends "base.html" %}
-{% block content %}<h2 class="hub-page-header__title">الحجوزات</h2><a href="{% url 'staff_reservation_new' %}">حجز جديد</a>
-<h3>اليوم</h3><ul>{% for r in today_rows %}<li><a href="{% url 'staff_reservation_detail' r.id %}">{{ r.name }} - {{ r.effective_date }} {{ r.effective_starts_at }} - {{ r.effective_room|default:'-' }} - {{ r.get_status_display }}</a></li>{% empty %}<li>لا يوجد</li>{% endfor %}</ul>
-<h3>القادمة</h3><ul>{% for r in upcoming_rows %}<li><a href="{% url 'staff_reservation_detail' r.id %}">{{ r.name }} - {{ r.effective_date }} {{ r.effective_starts_at }} - {{ r.effective_room|default:'-' }}</a></li>{% empty %}<li>لا يوجد</li>{% endfor %}</ul>
-<h3>السابقة/الملغاة</h3><ul>{% for r in past_cancelled_rows %}<li><a href="{% url 'staff_reservation_detail' r.id %}">{{ r.name }} - {{ r.effective_date }} - {{ r.get_status_display }}</a></li>{% empty %}<li>لا يوجد</li>{% endfor %}</ul>{% endblock %}
+{% block title %}الحجوزات{% endblock %}
+{% block content %}
+<section class="hub-section" dir="rtl">
+  <header class="hub-page-header">
+    <div><h2 class="hub-page-header__title">الحجوزات</h2><p class="hub-page-header__meta">الوصول والحجوزات القادمة من مكان واحد.</p></div>
+    <a class="hub-button hub-button-primary" href="{% url 'staff_reservation_new' %}">+ حجز جديد</a>
+  </header>
+
+  <section class="hub-card hub-section">
+    <h3>اليوم</h3>
+    <div class="hub-list">
+      {% for r in today_rows %}
+        <article class="hub-list-card">
+          <div>
+            <a href="{% url 'staff_reservation_detail' r.id %}"><strong>{{ r.name }}</strong></a>
+            <span class="hub-badge {% if r.visit_id and r.visit.status == 'open' %}hub-badge-success{% elif r.status == 'confirmed' %}hub-badge-info{% endif %}">{{ r.operational_status_label }}</span>
+          </div>
+          <p>{{ r.effective_starts_at }} · {{ r.party_size }} ضيف · {{ r.effective_room|default:'—' }}{% if r.table_area %} · {{ r.table_area }}{% endif %}</p>
+          <div class="hub-toolbar">
+            {% if r.visit_id and r.visit.status == 'open' %}
+              <a class="hub-button hub-button-primary" href="{% url 'staff_home' %}?visit={{ r.visit.public_code }}">فتح الجلسة</a>
+              <a class="hub-button" href="{% url 'staff_pos' %}?visit={{ r.visit.public_code }}">+ طلب</a>
+            {% elif r.status == 'confirmed' and r.table_area_id %}
+              <form method="post" action="{% url 'staff_reservation_detail' r.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="checkin">
+                <input type="hidden" name="table" value="{{ r.table_area_id }}">
+                <button class="hub-button hub-button-primary" type="submit">وصول سريع</button>
+              </form>
+            {% elif r.status == 'confirmed' %}
+              <a class="hub-button hub-button-primary" href="{% url 'staff_reservation_detail' r.id %}">تسجيل الوصول</a>
+            {% endif %}
+            <a class="hub-button" href="{% url 'staff_reservation_detail' r.id %}">التفاصيل</a>
+          </div>
+        </article>
+      {% empty %}<div class="hub-empty-state">لا توجد حجوزات اليوم.</div>{% endfor %}
+    </div>
+  </section>
+
+  <section class="hub-card hub-section">
+    <h3>القادمة</h3>
+    <div class="hub-list">
+      {% for r in upcoming_rows %}
+        <article class="hub-list-card">
+          <div><a href="{% url 'staff_reservation_detail' r.id %}"><strong>{{ r.name }}</strong></a> <span class="hub-badge">{{ r.operational_status_label }}</span></div>
+          <p>{{ r.effective_date }} · {{ r.effective_starts_at }} · {{ r.party_size }} ضيف · {{ r.effective_room|default:'—' }}</p>
+        </article>
+      {% empty %}<div class="hub-empty-state">لا توجد حجوزات قادمة.</div>{% endfor %}
+    </div>
+  </section>
+
+  <section class="hub-card hub-section">
+    <h3>السابقة / الملغاة</h3>
+    <div class="hub-list">
+      {% for r in past_cancelled_rows %}
+        <article class="hub-list-card"><a href="{% url 'staff_reservation_detail' r.id %}"><strong>{{ r.name }}</strong></a> · {{ r.effective_date }} · {{ r.operational_status_label }}</article>
+      {% empty %}<div class="hub-empty-state">لا يوجد.</div>{% endfor %}
+    </div>
+  </section>
+</section>
+{% endblock %}
