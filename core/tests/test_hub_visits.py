@@ -9,8 +9,13 @@ from core.models import ActivityLog, Category, HubVisit, HubVisitBrowserCredenti
 from core.settings_helpers import get_system_settings
 
 
+TEST_STATIC_STORAGE = {
+    'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+}
+
+
 @override_settings(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False,
-                   STORAGES={'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
+                   STORAGES=TEST_STATIC_STORAGE)
 class HubVisitPublicTests(TestCase):
     def setUp(self):
         self.room = Room.objects.create(name_ar='الصالة')
@@ -46,7 +51,7 @@ class HubVisitPublicTests(TestCase):
         self.assertContains(confirmation, reverse('order_qr', kwargs={
             'public_code': Order.objects.get().public_code,
         }))
-        self.assertNotContains(confirmation, 'تمت إضافة طلبك إلى جلستك')
+        self.assertNotContains(confirmation, 'أُضيف طلبك إلى جلستك')
 
     def test_scan_does_not_create_visit_and_first_valid_order_does(self):
         self.enable()
@@ -83,9 +88,10 @@ class HubVisitPublicTests(TestCase):
         first = self.client.post(self.url, self.payload())
         first_order = Order.objects.get()
         confirmation = self.client.get(first['Location'])
-        self.assertContains(confirmation, 'تمت إضافة طلبك إلى جلستك')
-        self.assertContains(confirmation, 'عرض جلستك')
+        self.assertContains(confirmation, 'أُضيف طلبك إلى جلستك')
+        self.assertContains(confirmation, 'متابعة جلستك')
         self.assertContains(confirmation, 'طلب المزيد')
+        self.assertContains(confirmation, f'href="{self.url}?view=menu"')
         self.assertContains(confirmation, 'إجمالي جلستك')
         self.assertContains(confirmation, '1,000 ل.س')
         self.assertNotContains(confirmation, reverse('order_qr', kwargs={
@@ -149,7 +155,8 @@ class HubVisitPublicTests(TestCase):
         self.assertRedirects(self.client.get(reverse('current_visit')), reverse('menu_public'))
 
 
-@override_settings(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False)
+@override_settings(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False,
+                   STORAGES=TEST_STATIC_STORAGE)
 class HubVisitStaffTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_superuser(username='visit-admin', password='pass', email='v@example.com', phone='+963900001111')
@@ -169,7 +176,7 @@ class HubVisitStaffTests(TestCase):
         self.client.post(reverse('staff_visit_detail', kwargs={'public_code': visit.public_code}), {'action': 'attach_order', 'order_code': order.public_code})
         order.refresh_from_db(); self.assertEqual(order.visit, visit)
         self.assertEqual(visit.remaining_syp, 500)
-        blocked = self.client.post(reverse('staff_visit_detail', kwargs={'public_code': visit.public_code}), {'action': 'close'})
+        self.client.post(reverse('staff_visit_detail', kwargs={'public_code': visit.public_code}), {'action': 'close'})
         visit.refresh_from_db(); self.assertEqual(visit.status, 'open')
         Payment.objects.create(order=order, amount_syp=500, method=Payment.Method.CASH, created_by=self.user)
         self.assertEqual(visit.paid_syp, 500); self.assertEqual(visit.remaining_syp, 0)

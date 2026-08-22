@@ -6,13 +6,22 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
 from catalog.models import MenuSection, ProductOption, ProductOptionGroup, ProductOptionGroupAssignment
-from core.models import Category, Order, OrderItem, Product, Room, TableArea
+from core.models import Category, Order, OrderItem, Product, Room, SystemSetting, TableArea
 from core.settings_helpers import get_system_settings
 
 
-@override_settings(DEBUG_PROPAGATE_EXCEPTIONS=False, ALLOWED_HOSTS=['testserver'], STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage', STORAGES={'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
+@override_settings(
+    DEBUG_PROPAGATE_EXCEPTIONS=False,
+    ALLOWED_HOSTS=['testserver'],
+    SECURE_SSL_REDIRECT=False,
+    STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage',
+    STORAGES={'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}},
+)
 class TableMenuOrderContextTests(TestCase):
     def setUp(self):
+        get_system_settings.cache_clear()
+        self.system_settings = SystemSetting.objects.create()
+        get_system_settings.cache_clear()
         self.user = get_user_model().objects.create_superuser(
             username='table-menu-admin', password='pass', email='table-menu@example.com', phone='+963900000777'
         )
@@ -47,6 +56,9 @@ class TableMenuOrderContextTests(TestCase):
             price_delta_syp=3000,
         )
         ProductOptionGroupAssignment.objects.create(product=self.product, group=self.option_group)
+
+    def tearDown(self):
+        get_system_settings.cache_clear()
 
     def _post_payload(self, **extra):
         payload = {
@@ -95,6 +107,7 @@ class TableMenuOrderContextTests(TestCase):
         settings = get_system_settings()
         settings.show_public_header = show_public_header
         settings.save(update_fields=['show_public_header'])
+        get_system_settings.cache_clear()
         response = self.client.post(reverse('menu_public'), {
             'fulfillment_mode': Order.FulfillmentMode.INSIDE_SPACE,
             'customer_name': 'اسم محفوظ',
