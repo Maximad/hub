@@ -3,6 +3,7 @@
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db.models import Q
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -11,10 +12,9 @@ from django.views.decorators.http import require_http_methods
 from accounts.permissions import require_staff_capability
 from core.models import Member, TableArea
 from reservations.models import Reservation
-from reservations.services import check_in_reservation
+from reservations.services import change_reservation_status, check_in_reservation
 from core.views_legacy import (
     staff_reservation_new,
-    staff_reservation_status,
     staff_reservation_tables,
 )
 
@@ -118,3 +118,27 @@ def staff_reservation_detail(request, reservation_id):
             'matching_member': matching_member,
         },
     )
+
+
+@require_staff_capability('reservations')
+def staff_reservation_status(request, reservation_id):
+    """Preserve the reservation state machine and surface validation to staff."""
+    if request.method != 'POST':
+        raise Http404()
+    reservation = get_object_or_404(Reservation, pk=reservation_id)
+    new_status = request.POST.get('status', '').strip()
+    correction = request.POST.get('action') == 'correct'
+    reason = request.POST.get('reason', '').strip()
+    try:
+        change_reservation_status(
+            reservation.pk,
+            new_status,
+            actor=request.user,
+            correction=correction,
+            reason=reason,
+        )
+    except ValidationError as error:
+        messages.error(request, _validation_message(error))
+        return redirect('staff_reservation_detail', reservation_id=reservation.pk)
+    messages.success(request, 'تم تحديث حالة الحجز.')
+    return redirect('staff_reservation_detail', reservation_id=reservation.pk)
