@@ -12,6 +12,7 @@
   const stickyTotalNodes = Array.from(form.querySelectorAll('[data-sticky-total]'));
   const posSearch = form.querySelector('[data-pos-search]');
   const submitBtn = form.querySelector('[data-submit-btn]');
+  const submitWrap = form.querySelector('.menu-submit-wrap');
   const showModifierSummary = form.dataset.showModifierSummary !== 'false';
   const deliveryFields = form.querySelector('[data-delivery-fields]');
   const deliveryFeeRow = form.querySelector('[data-delivery-fee-row]');
@@ -37,8 +38,21 @@
   const mobileCartQuery = window.matchMedia('(max-width: 1023px)');
   let activeModalSource = null;
   let activeReturnFocus = null;
+  let activeModalInitialQuantity = null;
+  let activeModalCommitted = false;
   let isSubmitting = false;
   let previousTotalQty = 0;
+
+  function stabilizeCartLayout() {
+    if (!cartSheet || !submitWrap) return;
+    let footer = cartSheet.querySelector('.public-menu-cart-submit-footer');
+    if (!footer) {
+      footer = document.createElement('div');
+      footer.className = 'public-menu-cart-submit-footer';
+      cartSheet.appendChild(footer);
+    }
+    if (submitWrap.parentElement !== footer) footer.appendChild(submitWrap);
+  }
 
   function openCartSheet() {
     if (!cartSheet || !mobileCartQuery.matches) return;
@@ -63,6 +77,16 @@
     if (restoreFocus) cartSheetTrigger?.focus();
   }
 
+  function isUncommittedNewModalControl(element) {
+    return Boolean(
+      activeModalSource
+      && activeModalInitialQuantity === 0
+      && !activeModalCommitted
+      && element
+      && activeModalSource.contains(element)
+    );
+  }
+
   function openItemModal(card) {
     if (!modal || !modalBody) return;
     const source = card.querySelector('[data-modal-source]');
@@ -70,6 +94,12 @@
     closeItemModal(false);
     activeModalSource = source;
     activeReturnFocus = document.activeElement;
+    const qtyInput = form.querySelector('#qty_' + source.dataset.modalProductId);
+    activeModalInitialQuantity = qtyInput ? parseQuantity(qtyInput.value) : null;
+    activeModalCommitted = false;
+    // Opening a product means "one of this". Keep that one as a draft until the
+    // customer explicitly presses Add, so closing the modal does not alter cart state.
+    if (qtyInput && activeModalInitialQuantity < 1) qtyInput.value = 1;
     source.hidden = false;
     modalBody.appendChild(source);
     const title = source.querySelector('[id^="menu-item-modal-title-"]');
@@ -82,6 +112,10 @@
   function closeItemModal(restoreFocus = true) {
     if (!modal || !modalBody || modal.hidden) return;
     if (activeModalSource) {
+      if (activeModalInitialQuantity === 0 && !activeModalCommitted) {
+        const qtyInput = form.querySelector('#qty_' + activeModalSource.dataset.modalProductId);
+        if (qtyInput) qtyInput.value = 0;
+      }
       const card = cards.find((item) => item.dataset.productId === activeModalSource.dataset.modalProductId);
       activeModalSource.hidden = true;
       (card || form).appendChild(activeModalSource);
@@ -90,6 +124,8 @@
     modal.removeAttribute('aria-labelledby');
     document.body.classList.remove('menu-modal-open');
     activeModalSource = null;
+    activeModalInitialQuantity = null;
+    activeModalCommitted = false;
     update();
     if (restoreFocus && activeReturnFocus?.focus) activeReturnFocus.focus();
   }
@@ -183,7 +219,6 @@
     }
     if (totalQty !== previousTotalQty && previousTotalQty !== 0) {
       stickyCart?.classList.remove('is-updated');
-      // Restart the restrained confirmation animation without maintaining another cart state.
       window.requestAnimationFrame(() => stickyCart?.classList.add('is-updated'));
     }
     previousTotalQty = totalQty;
@@ -192,7 +227,12 @@
     cartSheet?.classList.toggle('has-items', hasItems);
     cartHelper.hidden = hasItems;
     if (stickyCart) stickyCart.hidden = !hasItems;
-    if (submitBtn) { submitBtn.disabled = !hasItems; if (submitBtn.textContent.trim() === 'إرسال الطلب') submitBtn.textContent = form.classList.contains('staff-pos__form') ? 'إتمام الطلب' : 'إرسال الطلب'; }
+    if (submitBtn) {
+      submitBtn.disabled = !hasItems;
+      if (submitBtn.textContent.trim() === 'إرسال الطلب') {
+        submitBtn.textContent = form.classList.contains('staff-pos__form') ? 'إتمام الطلب' : 'إرسال الطلب';
+      }
+    }
     dispatchCartUpdated(form, { totalQty, totalPrice });
   }
 
@@ -211,9 +251,8 @@
     if (addButton) {
       event.preventDefault();
       const input = form.querySelector('#' + addButton.dataset.target);
+      activeModalCommitted = true;
       if (input) {
-        // The quantity controls already update the cart. "Add" only ensures the
-        // item is present; it must not count the selected quantity a second time.
         input.value = ensureQuantity(input.value);
         update();
       }
@@ -241,9 +280,15 @@
       if (card) openItemModal(card);
       return;
     }
-    const next = button.dataset.action === 'plus' ? stepQuantity(current, 1) : button.dataset.action === 'remove' ? 0 : stepQuantity(current, -1);
+    const draftNewItem = isUncommittedNewModalControl(button);
+    let next = button.dataset.action === 'plus'
+      ? stepQuantity(current, 1)
+      : button.dataset.action === 'remove'
+        ? 0
+        : stepQuantity(current, -1);
+    if (draftNewItem && button.dataset.action === 'minus') next = Math.max(1, next);
     input.value = next;
-    update();
+    if (!draftNewItem) update();
   });
 
   function filterProducts() {
@@ -284,13 +329,14 @@
   form.addEventListener('input', (event) => {
     if (event.target === posSearch) filterProducts();
     if (event.target.matches('.menu-qty-input')) event.target.value = parseQuantity(event.target.value);
-    if (event.target.matches('input, textarea')) update();
+    if (event.target.matches('input, textarea') && !isUncommittedNewModalControl(event.target)) update();
   });
   form.addEventListener('change', (event) => {
     if (event.target.matches('.menu-qty-input')) event.target.value = parseQuantity(event.target.value);
-    if (event.target.matches('input, textarea, select')) update();
+    if (event.target.matches('input, textarea, select') && !isUncommittedNewModalControl(event.target)) update();
   });
 
+  stabilizeCartLayout();
   filterProducts();
   mobileCartQuery.addEventListener?.('change', (event) => { if (!event.matches) closeCartSheet(false); });
   const sectionLinks = Array.from(form.querySelectorAll('.menu-section-chip'));
