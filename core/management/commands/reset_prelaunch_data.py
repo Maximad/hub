@@ -22,17 +22,21 @@ MAX_BACKUP_AGE_HOURS = 24
 DELETE_MODELS = (
     'core.NotificationRecipient', 'core.NotificationLog', 'core.NotificationEvent',
     'core.InternetRevenueShareAdjustment', 'core.InternetRevenueShare',
-    'core.InternetAccessDevice', 'core.InternetSession', 'core.InternetEntitlement',
+    'core.InternetUsageLedger', 'core.InternetNetworkOperation',
+    'core.InternetAccessDevice', 'core.InternetSession',
+    'members.CommercialAllocation', 'core.InternetEntitlement',
+    'members.ProgramEnrollment',
     'members.MemberCreditLedger', 'members.MemberActivationToken',
     'members.MemberDeviceToken', 'members.MembershipSubscription',
     'reservations.Reservation', 'vendors.VendorParticipation', 'events.EventMedia',
     'events.EventTicketType', 'events.Event',
+    'core.HubVisitBrowserCredential', 'core.HubVisit',
     'core.CurrencyEntrySnapshot', 'core.AuditEvent', 'core.ActivityLog',
     'core.PostingReconciliationFailure', 'core.FinanceReviewItem',
     'core.FinanceReconciliationState', 'core.PostingEntry', 'core.PostingCommand',
     'core.PurchasePayment', 'core.PurchaseReturnLine', 'core.StockMovement',
     'core.PurchaseReturn', 'core.PurchaseReceiptLine', 'core.PurchaseReceipt',
-    'core.PurchaseItem', 'core.Purchase',
+    'core.PurchaseItem', 'core.OperationsImportReceipt', 'core.Purchase',
     'core.ProductionBatchIngredient', 'core.ProductionBatch',
     'core.CashMovement', 'core.Transfer', 'core.DailyCloseRevision',
     'core.DailyClose', 'core.Expense', 'core.OrderDiscount', 'core.Payment',
@@ -44,7 +48,7 @@ PRESERVED_GROUPS = (
     'members/customer profiles and notification preferences',
     'rooms, tables/areas and their public QR codes',
     'catalog/menu sections, categories, products, options, tags and recipes',
-    'inventory items (master data)',
+    'InventoryItem master records (current_quantity may optionally be reset to zero)',
     'expense categories, financial accounts and membership/internet configuration',
     'system/page settings, Wi-Fi configuration and ExchangeRate records',
     'vendors and every MediaAsset and media file',
@@ -59,6 +63,10 @@ class Command(BaseCommand):
         parser.add_argument('--confirmation', default='')
         parser.add_argument('--production-approved', action='store_true')
         parser.add_argument(
+            '--zero-inventory', action='store_true',
+            help='Preserve InventoryItem rows but establish a zero-quantity launch baseline.',
+        )
+        parser.add_argument(
             '--backup-manifest', type=Path,
             help='Path to manifest.txt in a recent backup (or its backup directory).',
         )
@@ -66,10 +74,20 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         model_list = [apps.get_model(label) for label in DELETE_MODELS]
         before = {model._meta.label: model.objects.count() for model in model_list}
+        inventory_model = apps.get_model('core.InventoryItem')
+        inventory_total = inventory_model.objects.count()
+        inventory_nonzero = inventory_model.objects.exclude(current_quantity=0).count()
         self._report('BEFORE / DELETION PLAN (dependency order)', before)
         self.stdout.write('\nPRESERVED (never selected for deletion):')
         for item in PRESERVED_GROUPS:
             self.stdout.write(f'  - {item}')
+        if options['zero_inventory']:
+            self.stdout.write('\nInventory baseline requested:')
+            self.stdout.write(f'  items preserved: {inventory_total}')
+            self.stdout.write(f'  non-zero quantities: {inventory_nonzero}')
+            self.stdout.write(
+                f'  quantities that WILL be reset to zero during execution: {inventory_nonzero}'
+            )
 
         if not options['execute']:
             self.stdout.write(self.style.WARNING('\nDRY RUN: no records were changed.'))
@@ -97,8 +115,17 @@ class Command(BaseCommand):
                 for model in model_list:
                     count, _ = model.objects.all().delete()
                     deleted[model._meta.label] = count
+                quantities_zeroed = 0
+                if options['zero_inventory']:
+                    quantities_zeroed = inventory_model.objects.exclude(
+                        current_quantity=0,
+                    ).update(current_quantity=0)
                 self._reset_sequences(model_list)
                 self._run_checks(model_list, preserved_before)
+                if options['zero_inventory'] and inventory_model.objects.exclude(
+                    current_quantity=0,
+                ).exists():
+                    raise RuntimeError('non-zero InventoryItem quantities remain')
         except Exception as exc:
             raise CommandError(f'Reset failed; the transaction was rolled back: {exc}') from exc
 
@@ -107,6 +134,14 @@ class Command(BaseCommand):
         self.stdout.write('\nDeleted top-level/cascaded rows reported per step:')
         for label in DELETE_MODELS:
             self.stdout.write(f'  {label}: {deleted[label]}')
+        if options['zero_inventory']:
+            self.stdout.write('\nInventory baseline:')
+            self.stdout.write(f'  items preserved: {inventory_model.objects.count()}')
+            self.stdout.write(f'  quantities zeroed: {quantities_zeroed}')
+            self.stdout.write(
+                '  non-zero remaining: '
+                f'{inventory_model.objects.exclude(current_quantity=0).count()}'
+            )
         self.stdout.write(self.style.SUCCESS('\nReset complete; orphan and reconciliation checks passed.'))
 
     def _report(self, heading, counts):
