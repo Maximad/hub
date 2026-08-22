@@ -1,3 +1,4 @@
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -8,6 +9,7 @@ from django.test import TestCase
 from core.management.commands.launch_readiness import Command
 from core.models import AuditEvent, FinancialAccount
 from core.services.finance_reconciliation import FinanceReconciler
+from core.services.posting.closing import _snapshot_number
 from reservations.models import Reservation
 
 
@@ -48,6 +50,14 @@ class FinanceAuditScopeTests(TestCase):
         reconciler._audits()
 
         self.assertEqual([row['code'] for row in reconciler.findings], ['audit_missing_operation'])
+
+
+class CloseSnapshotFormattingTests(TestCase):
+    def test_snapshot_numbers_are_backend_independent(self):
+        self.assertEqual(_snapshot_number(Decimal('125.00')), '125')
+        self.assertEqual(_snapshot_number(Decimal('125.50')), '125.5')
+        self.assertEqual(_snapshot_number(Decimal('0.00')), '0')
+        self.assertEqual(_snapshot_number(125), '125')
 
 
 class ReadinessIntegrityRolloutTests(TestCase):
