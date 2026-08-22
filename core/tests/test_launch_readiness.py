@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase
+from django.utils import translation
 
 from core.models import HubVisit
 
@@ -79,3 +80,26 @@ class LaunchReadinessOperationalDataTests(TestCase):
 
         self.assertEqual(command.results[0]['code'], 'prelaunch_operational_data')
         self.assertEqual(command.results[0]['status'], 'FAIL')
+
+
+class LaunchReadinessMigrationTests(TestCase):
+    def test_arabic_translation_does_not_create_model_migration_drift(self):
+        from core.management.commands.launch_readiness import Command
+
+        previous_language = translation.get_language()
+        translation.activate('ar')
+        try:
+            command = Command()
+            command.results = []
+
+            command._migrations()
+
+            statuses = {result['code']: result['status'] for result in command.results}
+            self.assertEqual(statuses['migrations_applied'], 'PASS')
+            self.assertEqual(statuses['model_migrations'], 'PASS')
+            self.assertEqual(translation.get_language(), 'ar')
+        finally:
+            if previous_language is None:
+                translation.deactivate_all()
+            else:
+                translation.activate(previous_language)
