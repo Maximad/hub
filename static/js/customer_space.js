@@ -33,6 +33,7 @@
     hasVisit ? navItem('طلباتك', ordersUrl, false) : '',
     navItem('الخدمات', servicesUrl, false),
   ].filter(Boolean).join('');
+  nav.style.setProperty('--customer-nav-items', String(nav.children.length || 1));
   body.appendChild(nav);
 
   if (isMenu) {
