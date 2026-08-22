@@ -7,6 +7,7 @@ from django.views.decorators.http import require_http_methods
 from accounts.permissions import require_staff_capability, user_has_capability
 from core.models import ActivityLog, HubVisit, InternetSession, Member, Order, TableArea
 from core.services.internet_access import end_usage_session
+from core.services.visit_internet import finalize_visit_metered_session
 from reservations.models import Reservation
 from reservations.services import complete_reservation_for_visit
 
@@ -128,16 +129,24 @@ def staff_visit_detail(request, public_code):
                 visit.last_activity_at = timezone.now(); visit.save(update_fields=['member', 'last_activity_at', 'updated_at'])
                 _log(request, 'visit.member_attached' if visit.member_id else 'visit.member_detached', visit, old_member_id=old_id, new_member_id=visit.member_id)
             elif action == 'close':
-                if visit.remaining_syp:
-                    messages.error(request, 'لا يمكن إغلاق الجلسة قبل تسديد الرصيد المتبقي.')
-                    return redirect('staff_visit_detail', public_code=visit.public_code)
                 now = timezone.now()
                 active_sessions = list(InternetSession.objects.select_for_update().filter(
                     visit=visit, status=InternetSession.Status.ACTIVE))
                 for session in active_sessions:
-                    ended = end_usage_session(session, actor=request.user, at=now)
+                    if session.entitlement_id:
+                        ended = end_usage_session(session, actor=request.user, at=now)
+                    else:
+                        ended = finalize_visit_metered_session(session, actor=request.user, at=now)
                     _log(request, 'visit.internet_session_ended', visit,
                          session_id=ended.pk, entitlement_id=ended.entitlement_id)
+
+                # A metered session can create a new billed order while being
+                # stopped above. Re-check the visit balance only after all active
+                # Internet sessions have been finalized.
+                if visit.remaining_syp:
+                    messages.error(request, 'تم إيقاف الإنترنت إن كان فعالاً. لا يمكن إغلاق الجلسة قبل تسديد الرصيد المتبقي.')
+                    return redirect('staff_visit_detail', public_code=visit.public_code)
+
                 visit.status = HubVisit.Status.CLOSED; visit.closed_at = now; visit.last_activity_at = now
                 visit.save(update_fields=['status', 'closed_at', 'last_activity_at', 'updated_at'])
                 visit.browser_credentials.filter(revoked_at__isnull=True).update(revoked_at=now)

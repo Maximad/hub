@@ -13,8 +13,15 @@ from django.views.decorators.http import require_POST
 from core.models import ActivityLog, HubVisit, InternetEntitlement, InternetPackage, InternetSession, TableArea
 from core.services.hotspot_connect import build_hotspot_login_payload, one_tap_connect_configured
 from core.services.internet_access import end_usage_session
-from core.services.visit_internet import (create_visit_internet_sale_and_start, customer_packages,
-    self_service_enabled, start_existing_visit_entitlement, usable_member_entitlements)
+from core.services.visit_internet import (
+    create_visit_internet_sale_and_start,
+    customer_packages,
+    finalize_visit_metered_session,
+    self_service_enabled,
+    start_existing_visit_entitlement,
+    start_visit_metered_session,
+    usable_member_entitlements,
+)
 from core.services.visits import issue_visit_credential, resolve_visit_credential, set_visit_cookie
 from core.settings_helpers import get_system_settings
 from members.benefits import resolve_internet_price
@@ -37,7 +44,9 @@ def _internet_context(visit=None, member=None):
     sessions = list(visit.internet_sessions.select_related('entitlement', 'package')
                     .order_by('-start_time')) if visit else []
     for session in sessions:
-        session.one_tap_connect_available = one_tap_connect_configured(session.entitlement)
+        session.one_tap_connect_available = bool(
+            session.entitlement_id and one_tap_connect_configured(session.entitlement)
+        )
     return {'internet_packages': packages, 'internet_entitlements': entitlements,
             'internet_sessions': sessions, 'internet_request_key': uuid.uuid4()}
 
@@ -60,8 +69,10 @@ def current_visit(request):
     active_internet_session = visit.internet_sessions.select_related('package', 'entitlement').filter(
         status=InternetSession.Status.ACTIVE).order_by('-start_time').first()
     if active_internet_session:
-        active_internet_session.one_tap_connect_available = one_tap_connect_configured(
-            active_internet_session.entitlement)
+        active_internet_session.one_tap_connect_available = bool(
+            active_internet_session.entitlement_id and
+            one_tap_connect_configured(active_internet_session.entitlement)
+        )
     context = {'visit': visit, 'orders': orders, 'menu_url': menu_url,
                'table_entry_url': table_entry_url,
                'active_internet_session': active_internet_session,
@@ -87,11 +98,15 @@ def visit_internet_purchase_start(request):
         return redirect('menu_public')
     raw_cookie = None
     try:
-        package = get_object_or_404(InternetPackage, public_code=request.POST.get('package'))
+        mode = request.POST.get('mode', 'package').strip()
         table = (TableArea.objects.filter(qr_token=request.POST.get('table')).first()
                  if request.POST.get('table') else None)
         credential = resolve_visit_credential(request)
         member_context = resolve_member_from_request(request)
+        package = None
+        if mode != 'metered':
+            package = get_object_or_404(InternetPackage, public_code=request.POST.get('package'))
+
         with transaction.atomic():
             if credential:
                 visit = credential.visit
@@ -114,9 +129,27 @@ def visit_internet_purchase_start(request):
                     'visit_id': visit.pk, 'member_id': member.pk})
             elif member_context and visit.member_id != member_context.member.pk:
                 raise ValidationError('تعذر مطابقة العضوية. يرجى طلب المساعدة من الفريق.')
-            create_visit_internet_sale_and_start(visit=visit, credential=credential,
-                package=package, request_key=request.POST.get('request_key', ''), member=member)
-        messages.success(request, 'بدأت جلسة الإنترنت.')
+
+            if mode == 'metered':
+                session, _created = start_visit_metered_session(
+                    visit=visit,
+                    credential=credential,
+                    member=member,
+                    guest_phone=request.POST.get('guest_phone', ''),
+                )
+            else:
+                create_visit_internet_sale_and_start(
+                    visit=visit,
+                    credential=credential,
+                    package=package,
+                    request_key=request.POST.get('request_key', ''),
+                    member=member,
+                )
+
+        messages.success(
+            request,
+            'بدأ الإنترنت حسب الوقت.' if mode == 'metered' else 'بدأت جلسة الإنترنت.',
+        )
         if request.POST.get('next') == 'menu' and table:
             target = reverse('menu_table', kwargs={'qr_token': table.qr_token}) + '?view=menu&internet_started=1'
             response = redirect(target)
@@ -168,7 +201,7 @@ def visit_internet_session_connect(request, public_code):
         status=InternetSession.Status.ACTIVE,
     )
     if not session.entitlement_id:
-        messages.error(request, 'لا توجد باقة شبكة قابلة للاتصال لهذه الجلسة.')
+        messages.error(request, 'الاتصال التلقائي للشبكة غير متاح لهذه الجلسة حالياً.')
         return redirect('current_visit')
     try:
         payload = build_hotspot_login_payload(
@@ -210,10 +243,19 @@ def visit_internet_session_stop(request, public_code):
     session = get_object_or_404(InternetSession, public_code=public_code,
                                 visit=credential.visit,
                                 status=InternetSession.Status.ACTIVE)
-    ended = end_usage_session(session)
+    try:
+        if session.entitlement_id:
+            ended = end_usage_session(session)
+            message = 'تم إيقاف استخدام الإنترنت. وقت الباقة المحددة غير المستخدم لا يُستعاد.'
+        else:
+            ended = finalize_visit_metered_session(session)
+            message = f'تم إنهاء الإنترنت. أضيف {int(ended.payable_total_syp or 0)} ل.س إلى حساب جلستك.'
+    except ValidationError as exc:
+        messages.error(request, _error_text(exc))
+        return redirect('current_visit')
     ActivityLog.objects.create(action='visit.internet_session_ended', details={
         'visit_id': credential.visit_id, 'session_id': ended.pk,
         'entitlement_id': ended.entitlement_id,
     })
-    messages.success(request, 'تم إيقاف استخدام الإنترنت. وقت الباقة المحددة غير المستخدم لا يُستعاد.')
+    messages.success(request, message)
     return redirect('current_visit')
