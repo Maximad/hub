@@ -28,7 +28,8 @@ def finance_summary_for_date(day, base_sums=None):
         from core.services.posting.closing import close_totals
         ledger = close_totals(latest_close.account, day)
         expected = (latest_close.opening_cash_syp + ledger['cash_receipts'] + ledger['transfers_in']
-                    - ledger['cash_payments'] - ledger['transfers_out'] - ledger['refunds_or_reversals'])
+                    + ledger['reversal_inflows'] - ledger['cash_payments']
+                    - ledger['transfers_out'] - ledger['refunds_or_reversals'])
     return {
         'opening_cash_syp': opening_cash,
         'non_sales_cash_in_syp': cash_in,
@@ -97,11 +98,13 @@ def build_close_values(day, actual_cash_counted_syp=0, notes='', opening_cash_sy
     from core.services.posting.closing import close_totals
     account = FinancialAccount.objects.filter(scope='cashbox', is_active=True).order_by('pk').first()
     totals = close_totals(account, day) if account else {key: Decimal('0') for key in
-        ('cash_receipts', 'transfers_in', 'cash_payments', 'transfers_out', 'refunds_or_reversals')}
+        ('cash_receipts', 'transfers_in', 'reversal_inflows', 'cash_payments',
+         'transfers_out', 'refunds_or_reversals')}
     if opening_cash_syp is None:
         opening_cash_syp = 0
     expected = (Decimal(opening_cash_syp) + totals['cash_receipts'] + totals['transfers_in']
-                - totals['cash_payments'] - totals['transfers_out'] - totals['refunds_or_reversals'])
+                + totals['reversal_inflows'] - totals['cash_payments']
+                - totals['transfers_out'] - totals['refunds_or_reversals'])
     actual = int(actual_cash_counted_syp or 0)
     return {
         'opening_cash_syp': int(opening_cash_syp or 0),
@@ -122,14 +125,27 @@ def finalize_daily_close(day, user, actual_cash_counted_syp, notes='', opening_c
     from core.services.posting import closing
     from core.services.posting.context import PostingContext
     with transaction.atomic():
-        account = FinancialAccount.objects.filter(scope='cashbox', is_active=True).order_by('pk').first()
+        account = FinancialAccount.objects.select_for_update().filter(
+            scope='cashbox', is_active=True,
+        ).order_by('pk').first()
         if account is None:
             account, _ = FinancialAccount.objects.get_or_create(code='cash:default', defaults={
                 'name_ar': 'الصندوق', 'name_en': 'Default cashbox', 'account_type': FinancialAccount.AccountType.ASSET,
                 'scope': 'cashbox', 'is_active': True, 'negative_balance_policy': FinancialAccount.NegativeBalancePolicy.ALLOW})
-        close, created = DailyClose.objects.select_for_update().get_or_create(
-            account=account, business_date=day, is_finalized=True,
-            defaults={'status': DailyClose.Status.OPEN})
+            account = FinancialAccount.objects.select_for_update().get(pk=account.pk)
+        closes = DailyClose.objects.select_for_update().filter(account=account, business_date=day)
+        close = closes.filter(
+            status__in=[DailyClose.Status.OPEN, DailyClose.Status.REOPENED],
+        ).order_by('pk').first()
+        if close is None:
+            close = closes.filter(
+                status=DailyClose.Status.CLOSED, is_finalized=True,
+            ).order_by('pk').first()
+        if close is None:
+            close = DailyClose.objects.create(
+                account=account, business_date=day, status=DailyClose.Status.OPEN,
+                is_finalized=False,
+            )
         if close.status == DailyClose.Status.CLOSED and close.closed_at:
             return close, False
         context = PostingContext(actor=user, approver=user, business_date=day,

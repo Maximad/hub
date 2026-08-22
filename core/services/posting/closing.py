@@ -19,7 +19,7 @@ def close_totals(account, business_date):
     """Return cash changes from posted ledger entries only.
 
     Debit entries increase the cash account and credit entries decrease it. Reversal
-    batches therefore naturally appear in the refunds/reversals bucket.
+    inflows and outflows stay separate so legacy refund fields remain non-negative.
     """
     entries = PostingEntry.objects.filter(
         account=account, batch__business_date=business_date,
@@ -35,12 +35,15 @@ def close_totals(account, business_date):
     transfer_entries = entries.filter(batch__operation_type__icontains='transfer').exclude(reversal_filter)
     transfers_in = signed(transfer_entries.filter(debit__isnull=False))
     transfers_out = -signed(transfer_entries.filter(credit__isnull=False))
-    reversals = -signed(entries.filter(reversal_filter))
+    reversal_entries = entries.filter(reversal_filter)
+    reversal_inflows = signed(reversal_entries.filter(debit__isnull=False))
+    reversal_outflows = -signed(reversal_entries.filter(credit__isnull=False))
     ordinary = entries.exclude(batch__operation_type__icontains='transfer').exclude(reversal_filter)
     receipts = signed(ordinary.filter(debit__isnull=False))
     payments = -signed(ordinary.filter(credit__isnull=False))
     return {'cash_receipts': receipts, 'transfers_in': transfers_in, 'cash_payments': payments,
-            'transfers_out': transfers_out, 'refunds_or_reversals': reversals}
+            'transfers_out': transfers_out, 'reversal_inflows': reversal_inflows,
+            'refunds_or_reversals': reversal_outflows}
 
 
 def snapshot_for(close, totals=None):
@@ -71,7 +74,9 @@ def close(daily_close, context, actual_cash_counted_syp, notes='', opening_cash_
         return source
     totals = close_totals(source.account, source.business_date)
     opening = int(source.opening_cash_syp if opening_cash_syp is None else opening_cash_syp)
-    expected = Decimal(opening) + totals['cash_receipts'] + totals['transfers_in'] - totals['cash_payments'] - totals['transfers_out'] - totals['refunds_or_reversals']
+    expected = (Decimal(opening) + totals['cash_receipts'] + totals['transfers_in']
+                + totals['reversal_inflows'] - totals['cash_payments']
+                - totals['transfers_out'] - totals['refunds_or_reversals'])
     counted = int(actual_cash_counted_syp)
     if source.pk:
         DailyCloseRevision.objects.create(daily_close=source, revision_type='before_close', snapshot=source.close_snapshot, created_by=context.actor)
