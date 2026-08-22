@@ -1,7 +1,7 @@
 {% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %}
 <nav class="staff-shell-nav" aria-label="التنقل التشغيلي">
   <div class="hub-container staff-shell-nav__inner">
-    <a class="staff-shell-nav__primary" href="{% url 'staff_home' %}">اليوم</a>
+    <a{% if request.path == '/staff/' %} class="staff-shell-nav__primary"{% endif %} href="{% url 'staff_home' %}">اليوم</a>
     {% if staff_caps.orders %}<a href="{% url 'staff_orders' %}">الطلبات</a><a href="{% url 'staff_visits' %}">الجلسات</a>{% endif %}
     {% if staff_caps.reservations %}<a href="{% url 'staff_reservations' %}">الحجوزات</a>{% endif %}
     {% if staff_caps.internet_billing %}<a href="{% url 'staff_members' %}">الأعضاء</a>{% endif %}
@@ -9,7 +9,7 @@
     {% if staff_caps.inventory %}<a href="{% url 'staff_inventory_home' %}">المخزون</a>{% endif %}
     {% if staff_caps.finance %}<a href="{% url 'staff_finance_home' %}">المالية</a>{% endif %}
     {% if staff_caps.reports %}<a href="{% url 'staff_reports_home' %}">التقارير</a>{% endif %}
-    <a href="{% url 'staff_menu_tools' %}">المزيد</a>
+    {% if staff_caps.orders %}<a href="{% url 'staff_menu_tools' %}">المزيد</a>{% endif %}
   </div>
 </nav>
 <nav class="staff-mobile-nav" aria-label="التنقل السريع">
