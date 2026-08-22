@@ -15,43 +15,73 @@
 
   {% if active_internet_session %}
   <a class="table-entry__active-session" href="{% url 'current_visit' %}">
-    <span><strong>الإنترنت فعال الآن</strong><small>{{ active_internet_session.package.name_ar }}</small></span>
+    <span>
+      <strong>الإنترنت فعال الآن</strong>
+      <small>{% if active_internet_session.package_id %}{{ active_internet_session.package.name_ar }}{% else %}جلسة حسب الوقت{% endif %}</small>
+    </span>
     <span aria-hidden="true">←</span>
   </a>
   {% endif %}
 
   <div class="table-entry__choices">
     {% if internet_self_service_enabled %}
-    <details class="table-entry__choice table-entry__choice--internet">
-      <summary>
+    <section class="table-entry__choice table-entry__choice--internet" aria-labelledby="table-internet-title">
+      <div class="table-entry__choice-header">
         <span class="table-entry__choice-icon" aria-hidden="true">⌁</span>
-        <span><strong>الإنترنت</strong><small>{% if active_internet_session %}إدارة جلستك الحالية{% else %}اختر باقة وابدأ مباشرة{% endif %}</small></span>
-        <span class="table-entry__chevron" aria-hidden="true">⌄</span>
-      </summary>
+        <span class="table-entry__choice-copy">
+          <strong id="table-internet-title">الإنترنت</strong>
+          <small>{% if active_internet_session %}إدارة جلستك الحالية{% else %}ابدأ الآن، أو اختر باقة{% endif %}</small>
+        </span>
+      </div>
+
       <div class="table-entry__internet-body">
         {% if active_internet_session %}
           <p class="table-entry__internet-note">لديك جلسة إنترنت فعالة. يمكنك إنهاؤها أو متابعة تفاصيلها من صفحة جلستك.</p>
           <a class="hub-button hub-button-primary table-entry__session-link" href="{% url 'current_visit' %}">عرض جلسة الإنترنت</a>
-        {% elif internet_packages %}
-        <form method="post" action="{% url 'visit_internet_start' %}" class="table-entry__internet-form">
-          {% csrf_token %}
-          <input type="hidden" name="table" value="{{ table.qr_token }}">
-          <input type="hidden" name="request_key" value="{{ internet_request_key }}">
-          <input type="hidden" name="next" value="menu">
-          <label for="internet-package">الباقة</label>
-          <select class="hub-input" id="internet-package" name="package" required>
-            {% for package in internet_packages %}
-            <option value="{{ package.public_code }}">{{ package.name_ar }} — {{ package.customer_price_syp|format_syp }}</option>
-            {% endfor %}
-          </select>
-          <p class="table-entry__internet-note">تبدأ الجلسة فور التأكيد، ثم تنتقل مباشرة إلى المنيو.</p>
-          <button class="hub-button hub-button-primary table-entry__primary-action" type="submit">ابدأ الإنترنت</button>
-        </form>
         {% else %}
-          <p class="hub-empty-state">لا توجد باقات متاحة حالياً.</p>
+          {% if internet_metered_available %}
+          <form method="post" action="{% url 'visit_internet_start' %}" class="table-entry__metered-form">
+            {% csrf_token %}
+            <input type="hidden" name="mode" value="metered">
+            <input type="hidden" name="table" value="{{ table.qr_token }}">
+            <input type="hidden" name="next" value="menu">
+            {% if internet_metered_requires_phone %}
+            <label for="internet-guest-phone">رقم الهاتف</label>
+            <input class="hub-input" id="internet-guest-phone" name="guest_phone" type="tel" inputmode="tel" autocomplete="tel" required>
+            {% endif %}
+            <button class="hub-button hub-button-primary table-entry__primary-action" type="submit">ابدأ الإنترنت الآن</button>
+            <p class="table-entry__internet-note">
+              يُحسب حسب الوقت · {{ internet_metered_rate_syp|format_syp }} / ساعة
+              {% if internet_metered_minimum_minutes %} · حد أدنى {{ internet_metered_minimum_minutes }} دقيقة{% endif %}
+            </p>
+          </form>
+          {% endif %}
+
+          {% if internet_packages %}
+          <details class="table-entry__package-picker">
+            <summary>اختر باقة</summary>
+            <form method="post" action="{% url 'visit_internet_start' %}" class="table-entry__internet-form">
+              {% csrf_token %}
+              <input type="hidden" name="mode" value="package">
+              <input type="hidden" name="table" value="{{ table.qr_token }}">
+              <input type="hidden" name="request_key" value="{{ internet_request_key }}">
+              <input type="hidden" name="next" value="menu">
+              <label for="internet-package">الباقة</label>
+              <select class="hub-input" id="internet-package" name="package" required>
+                {% for package in internet_packages %}
+                <option value="{{ package.public_code }}">{{ package.name_ar }} — {{ package.customer_price_syp|format_syp }}</option>
+                {% endfor %}
+              </select>
+              <p class="table-entry__internet-note">تبدأ الباقة فور التأكيد، ثم تنتقل مباشرة إلى المنيو.</p>
+              <button class="hub-button hub-button-secondary table-entry__package-action" type="submit">ابدأ بهذه الباقة</button>
+            </form>
+          </details>
+          {% elif not internet_metered_available %}
+            <p class="hub-empty-state">الإنترنت غير متاح للبدء الذاتي حالياً.</p>
+          {% endif %}
         {% endif %}
       </div>
-    </details>
+    </section>
     {% endif %}
 
     <a class="table-entry__choice table-entry__choice--menu" href="{{ full_menu_url }}">
