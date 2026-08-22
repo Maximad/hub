@@ -29,6 +29,7 @@ class CustomerSpaceTests(TestCase):
         self.settings = SystemSetting.objects.create(customer_visits_enabled=True)
         get_system_settings.cache_clear()
         self.menu_url = reverse('menu_table', kwargs={'qr_token': self.table.qr_token})
+        self.catalog_url = self.menu_url + '?view=menu'
 
     def tearDown(self):
         get_system_settings.cache_clear()
@@ -46,7 +47,7 @@ class CustomerSpaceTests(TestCase):
         return response
 
     def test_public_menu_loads_customer_space_assets(self):
-        response = self.client.get(self.menu_url)
+        response = self.client.get(self.catalog_url)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'public-menu-page')
         self.assertContains(response, 'css/customer_space.css')
@@ -64,6 +65,7 @@ class CustomerSpaceTests(TestCase):
         self.assertContains(response, 'طلبات جلستك')
         self.assertContains(response, self.table.display_name)
         self.assertContains(response, 'طلب جديد')
+        self.assertContains(response, self.catalog_url)
 
     def test_visit_order_confirmation_stays_inside_customer_space(self):
         order_response = self._start_visit_with_order()

@@ -66,6 +66,18 @@ def _sale_key(request_key):
     return 'visit:' + hashlib.sha256(request_key.encode('utf-8')).hexdigest()
 
 
+def _other_active_visit_session_exists(visit, *, entitlement_id=None, idempotency_key=None):
+    sessions = InternetSession.objects.filter(
+        visit=visit,
+        status=InternetSession.Status.ACTIVE,
+    )
+    if entitlement_id is not None:
+        sessions = sessions.exclude(entitlement_id=entitlement_id)
+    if idempotency_key is not None:
+        sessions = sessions.exclude(entitlement__idempotency_key=idempotency_key)
+    return sessions.exists()
+
+
 @transaction.atomic
 def create_visit_internet_sale_and_start(*, visit, credential, package, request_key,
                                          member=None, actor=None, at=None):
@@ -77,9 +89,14 @@ def create_visit_internet_sale_and_start(*, visit, credential, package, request_
     error = package_customer_error(package, member, at)
     if error:
         raise ValidationError(error)
+    sale_key = _sale_key(request_key)
+    # A customer visit has one live network session at a time. Preserve retries of
+    # the same sale key, but reject a second package before creating another charge.
+    if _other_active_visit_session_exists(visit, idempotency_key=sale_key):
+        raise ValidationError('لديك جلسة إنترنت فعالة بالفعل. أنهِها قبل بدء باقة أخرى.')
     entitlement = create_commercial_sale(
         package, payment_method=Payment.Method.UNPAID, member=member,
-        actor=actor, idempotency_key=_sale_key(request_key), visit=visit,
+        actor=actor, idempotency_key=sale_key, visit=visit,
     )
     if entitlement.visit_id != visit.pk or (entitlement.order_id and entitlement.order.visit_id != visit.pk):
         raise ValidationError('استُخدم رمز المحاولة لجلسة مختلفة.')
@@ -113,6 +130,8 @@ def start_existing_visit_entitlement(*, visit, credential, entitlement, actor=No
         if active.visit_id == visit.pk:
             return active, False
         raise ValidationError('لديك جلسة إنترنت فعالة بالفعل.')
+    if _other_active_visit_session_exists(visit, entitlement_id=entitlement.pk):
+        raise ValidationError('لديك جلسة إنترنت فعالة بالفعل. أنهِها قبل بدء باقة أخرى.')
     session = start_usage_session(entitlement, actor=actor, at=at, visit=visit)
     ActivityLog.objects.create(action='visit.internet_session_started', details={
         'visit_id': visit.pk, 'session_id': session.pk, 'entitlement_id': entitlement.pk,

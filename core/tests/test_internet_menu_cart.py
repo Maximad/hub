@@ -59,6 +59,7 @@ class InternetMenuCartTests(TestCase):
         self.binding = InternetCatalogBinding.objects.select_related('product').get(package=self.package)
         self.internet_product = self.binding.product
         self.table_url = reverse('menu_table', kwargs={'qr_token': self.table.qr_token})
+        self.catalog_url = self.table_url + '?view=menu'
 
     def tearDown(self):
         get_system_settings.cache_clear()
@@ -77,15 +78,25 @@ class InternetMenuCartTests(TestCase):
         public_code = response['Location'].rstrip('/').split('/')[-1]
         return Order.objects.get(public_code=public_code)
 
-    def test_table_menu_renders_package_as_an_ordinary_cart_product(self):
+    def test_table_entry_uses_dedicated_internet_selector_not_product_modal(self):
         response = self.client.get(self.table_url)
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'الإنترنت')
         self.assertContains(response, self.package.name_ar)
-        self.assertContains(response, f'name="qty_{self.internet_product.pk}"')
-        self.assertContains(response, 'إضافة إلى الطلب')
-        self.assertContains(response, 'اتصال إنترنت')
-        self.assertNotContains(response, 'ابدأ الآن')
+        self.assertContains(response, 'name="package"')
+        self.assertContains(response, 'ابدأ الإنترنت')
+        self.assertNotContains(response, f'name="qty_{self.internet_product.pk}"')
+        self.assertNotContains(response, 'اتصال إنترنت')
+        self.assertNotContains(response, self.food.name_ar)
+
+    def test_full_table_catalog_shows_food_but_suppresses_internet_product(self):
+        response = self.client.get(self.catalog_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.food.name_ar)
+        self.assertNotContains(response, self.package.name_ar)
+        self.assertNotContains(response, f'name="qty_{self.internet_product.pk}"')
 
     def test_general_menu_does_not_offer_on_premise_internet_product(self):
         response = self.client.get(reverse('menu_public'))
@@ -93,7 +104,7 @@ class InternetMenuCartTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, self.package.name_ar)
 
-    def test_food_and_internet_submit_as_one_order_and_one_visit(self):
+    def test_legacy_food_and_internet_cart_post_remains_atomic_and_compatible(self):
         response = self.client.post(self.table_url, self._payload())
         order = self._order_from_response(response)
 
