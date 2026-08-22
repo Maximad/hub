@@ -89,8 +89,10 @@ class Reservation(models.Model):
     def _change_status(cls, reservation_id, *, actor, new_status, reason, correction):
         """Validate and persist a status change while holding the reservation row lock."""
         with transaction.atomic():
-            reservation = cls.objects.select_for_update().get(pk=reservation_id)
+            reservation = cls.objects.select_for_update().select_related('visit').get(pk=reservation_id)
             old_status = reservation.status
+            if reservation.visit_id and reservation.visit.status == 'open':
+                raise ValidationError({'status': 'لا يمكن تغيير حالة الحجز أثناء جلسة مفتوحة. أغلق الجلسة المرتبطة أولاً.'})
             allowed = cls.CORRECTIONS.get(old_status, ()) if correction else cls.TRANSITIONS.get(old_status, ())
             if new_status not in allowed:
                 raise ValidationError({'status': f'Transition from {old_status} to {new_status} is not permitted.'})
