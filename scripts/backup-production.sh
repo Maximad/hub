@@ -52,7 +52,10 @@ cleanup() {
     if [[ "$web_paused" == true ]]; then
         dc unpause web >/dev/null 2>&1 || true
     fi
-    [[ -n "${staging:-}" && -d "$staging" ]] && rm -rf -- "$staging"
+    if [[ -n "${staging:-}" && -d "$staging" ]]; then
+        rm -rf -- "$staging"
+    fi
+    return 0
 }
 trap cleanup EXIT
 
