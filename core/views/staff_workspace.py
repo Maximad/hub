@@ -13,7 +13,7 @@ from core.models import HubVisit, Order, Payment
 
 ACTIVE_ORDER_STATUSES = (
     Order.Status.NEW,
-    Order.Status.CONFIRMED,
+    Order.Status.ACCEPTED,
     Order.Status.PREPARING,
     Order.Status.READY,
 )
