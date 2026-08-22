@@ -18,6 +18,7 @@ def _decimal(value):
 class FinanceReconciler:
     """Read-only integrity scan. Writes occur only in :meth:`apply_backfill`."""
     SCOPES = ('all', 'expenses')
+    AUDIT_SOURCE_MODELS = (DailyClose, PurchaseReceipt, PurchasePayment, PurchaseReturn)
 
     def __init__(self, start=None, end=None, account=None, scope='all'):
         if scope not in self.SCOPES:
@@ -170,10 +171,11 @@ class FinanceReconciler:
         if source_model is not None:
             events = events.filter(source_content_type=ContentType.objects.get_for_model(source_model))
         else:
-            # AuditEvent is shared across domains (for example reservations). Finance
-            # reconciliation must not impose posting-request provenance on unrelated
-            # operational audit events.
-            events = events.filter(source_content_type__app_label='core')
+            # AuditEvent is shared by operational domains such as orders and
+            # reservations. Only finance/posting sources carry the durable request
+            # provenance that this reconciliation check is designed to enforce.
+            content_types = ContentType.objects.get_for_models(*self.AUDIT_SOURCE_MODELS)
+            events = events.filter(source_content_type_id__in=[ct.pk for ct in content_types.values()])
         for event in events:
             if not event.actor_id: self.add('audit_missing_actor', event, 'Audit event has no actor.')
             if not event.request_key or not event.source_content_type_id or not event.source_object_id or event.source is None:
