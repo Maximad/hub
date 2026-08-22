@@ -24,7 +24,7 @@
   {% if visit.member or active_internet_session %}
   <section class="customer-space-service-grid" aria-label="حالة الجلسة">
     {% if visit.member %}<aside class="hub-card customer-space-service-card"><span class="hub-badge hub-badge-success">عضوية مفعّلة</span><strong>{{ visit.member.name_ar }}</strong>{% if visit.member.phone %}<small>{{ visit.member.phone }}</small>{% endif %}</aside>{% endif %}
-    {% if active_internet_session %}<aside class="hub-card customer-space-service-card"><span class="hub-badge hub-badge-info">الإنترنت فعال الآن</span><strong>{{ active_internet_session.package.name_ar|default:'جلسة إنترنت' }}</strong><small>بدأ {{ active_internet_session.start_time|date:"H:i" }}</small></aside>{% endif %}
+    {% if active_internet_session %}<aside class="hub-card customer-space-service-card"><span class="hub-badge hub-badge-info">الإنترنت فعال الآن</span><strong>{{ active_internet_session.package.name_ar|default:'جلسة إنترنت' }}</strong><small>بدأ {{ active_internet_session.start_time|date:"H:i" }}</small>{% if active_internet_session.one_tap_connect_available %}<small>جاهز للاتصال بالشبكة</small>{% endif %}</aside>{% endif %}
   </section>
   {% endif %}
 
@@ -51,6 +51,7 @@
         <span class="hub-badge hub-badge-info">فعال الآن</span>
         <strong>{{ session.package.name_ar|default:'الإنترنت' }}</strong>
         <p>بدأت: {{ session.start_time|date:"H:i" }}{% if session.authorized_until %} — حتى {{ session.authorized_until|date:"H:i" }}{% endif %}</p>
+        {% if session.one_tap_connect_available %}<form method="post" action="{% url 'visit_internet_session_connect' session.public_code %}">{% csrf_token %}<button class="hub-button hub-button-primary" type="submit">اتصل بالشبكة</button></form>{% endif %}
         <form method="post" action="{% url 'visit_internet_session_stop' session.public_code %}">{% csrf_token %}<button class="hub-button" type="submit">إيقاف الاستخدام</button></form>
       </article>
     {% endif %}{% endfor %}
