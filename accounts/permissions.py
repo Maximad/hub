@@ -52,11 +52,21 @@ def can_access_cashier(user):
 def can_access_reports(user):
     return is_owner_or_admin(user)
 
+
 def can_access_finance(user):
     return is_owner_or_admin(user) or is_cashier(user)
 
+
 def can_access_inventory(user):
     return is_owner_or_admin(user) or is_cashier(user) or is_kitchen(user)
+
+
+def can_access_reservations(user):
+    return is_owner_or_admin(user) or is_waiter(user)
+
+
+def can_access_events(user):
+    return is_owner_or_admin(user) or is_waiter(user)
 
 
 def can_access_settings(user):
@@ -103,6 +113,8 @@ CAPABILITY_CHECKS = {
     'reports': can_access_reports,
     'finance': can_access_finance,
     'inventory': can_access_inventory,
+    'reservations': can_access_reservations,
+    'events': can_access_events,
     'settings': can_access_settings,
     'imports': can_access_imports,
     'users': can_access_users,
