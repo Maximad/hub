@@ -6,7 +6,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from core.finance import finalize_daily_close, reopen_daily_close
-from core.models import ActivityLog, DailyClose, DailyCloseRevision, InventoryItem, Purchase, PurchaseItem, StockMovement
+from core.models import AuditEvent, DailyClose, DailyCloseRevision, InventoryItem, Purchase, PurchaseItem, StockMovement
 
 
 class StaffFinanceWorkflowTests(TestCase):
@@ -23,13 +23,17 @@ class StaffFinanceWorkflowTests(TestCase):
         reopened = reopen_daily_close(close, self.user, 'تصحيح فاتورة')
         self.assertEqual(reopened.status, DailyClose.Status.REOPENED)
         self.assertEqual(DailyCloseRevision.objects.filter(daily_close=close, revision_type='before_reopen').count(), 1)
-        self.assertTrue(ActivityLog.objects.filter(action='daily_close_reopened').exists())
+        self.assertTrue(AuditEvent.objects.filter(
+            action='account_period_reopened', source_object_id=str(close.pk),
+        ).exists())
 
     def test_reopened_close_can_be_closed_again_idempotently(self):
         close, _ = finalize_daily_close(date(2026, 7, 16), self.user, 1000)
+        original_pk = close.pk
         reopen_daily_close(close, self.user, 'تصحيح')
         close, changed = finalize_daily_close(date(2026, 7, 16), self.user, 1200)
         self.assertTrue(changed)
+        self.assertEqual(close.pk, original_pk)
         self.assertEqual(close.status, DailyClose.Status.CLOSED)
         again, changed_again = finalize_daily_close(date(2026, 7, 16), self.user, 1200)
         self.assertFalse(changed_again)

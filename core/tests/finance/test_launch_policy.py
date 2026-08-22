@@ -123,7 +123,7 @@ class LaunchPolicyAcceptanceTests(TestCase):
         self.assertEqual(reopened.status, DailyClose.Status.REOPENED)
 
     def test_close_snapshot_report_refresh_reopen_and_posting(self):
-        posted = transfers.post(self.transfer('125.50'), self.context(self.admin, 'close-flow:transfer'))
+        posted = transfers.post(self.transfer('125'), self.context(self.admin, 'close-flow:transfer'))
         transfers.reverse(posted, self.context(self.admin, 'close-flow:reverse'), 'تصحيح التحويل')
         close = DailyClose.objects.create(
             account=self.source, business_date=self.day,
@@ -138,6 +138,9 @@ class LaunchPolicyAcceptanceTests(TestCase):
         self.assertEqual(original_snapshot['expected_amount'], '1000')
         self.assertEqual(original_snapshot['counted_amount'], '1000')
         self.assertEqual(original_snapshot['difference'], '0')
+        self.assertEqual(original_snapshot['reversal_inflows'], '125')
+        self.assertEqual(original_snapshot['refunds_or_reversals'], '0')
+        closed.full_clean()
         first_expected = finance_summary_for_date(self.day)['expected_cash_syp']
         closed.refresh_from_db()
         refreshed_expected = finance_summary_for_date(self.day)['expected_cash_syp']
@@ -162,3 +165,22 @@ class LaunchPolicyAcceptanceTests(TestCase):
         with self.assertRaises(InvalidTransition) as raised:
             closing.reopen(reopened, self.context(self.admin, 'close-flow:reopen-twice'), 'مرة ثانية')
         self.assertIn('يمكن إعادة فتح إغلاق نهائي مغلق فقط.', raised.exception.messages)
+
+    def test_destination_transfer_reversal_returns_close_to_opening(self):
+        posted = transfers.post(self.transfer('125'), self.context(self.admin, 'destination-close:transfer'))
+        transfers.reverse(posted, self.context(self.admin, 'destination-close:reverse'), 'تصحيح التحويل')
+        close = DailyClose.objects.create(
+            account=self.destination, business_date=self.day,
+            status=DailyClose.Status.OPEN, is_finalized=False,
+        )
+
+        closed = closing.close(
+            close, self.context(self.admin, 'destination-close:close'),
+            actual_cash_counted_syp=1000, opening_cash_syp=1000,
+        )
+
+        self.assertEqual(closed.expected_cash_syp, 1000)
+        self.assertEqual(closed.refunds_or_reversals_syp, 125)
+        self.assertEqual(closed.close_snapshot['transfers_in'], '125')
+        self.assertEqual(closed.close_snapshot['refunds_or_reversals'], '125')
+        closed.full_clean()
