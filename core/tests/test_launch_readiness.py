@@ -3,7 +3,9 @@ from io import StringIO
 from unittest.mock import patch
 
 from django.core.management import call_command
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
+
+from core.models import HubVisit
 
 
 class LaunchReadinessCommandContractTests(SimpleTestCase):
@@ -64,3 +66,16 @@ class LaunchReadinessCommandContractTests(SimpleTestCase):
         for forbidden in ('SECRET_KEY=', 'password=', 'connection_string=', 'cookie='):
             self.assertNotIn(forbidden, rendered)
         self.assertTrue(all(row['resolution'] for row in payload['checks']))
+
+
+class LaunchReadinessOperationalDataTests(TestCase):
+    def test_new_operational_model_fails_prelaunch_gate(self):
+        from core.management.commands.launch_readiness import Command
+
+        HubVisit.objects.create()
+        command = Command()
+        command.results = []
+        command._operational(allowed=False)
+
+        self.assertEqual(command.results[0]['code'], 'prelaunch_operational_data')
+        self.assertEqual(command.results[0]['status'], 'FAIL')
