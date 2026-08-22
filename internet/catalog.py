@@ -1,4 +1,4 @@
-"""Bridge InternetPackage policy into the normal Hub catalog/cart flow."""
+"""Bridge InternetPackage policy into Hub commercial/order infrastructure."""
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -17,7 +17,7 @@ from core.models import (
 )
 from core.services.internet_access import create_entitlement, start_usage_session
 from core.services.network_operations import enqueue_network_operation
-from core.services.visit_internet import customer_packages, package_customer_error, self_service_enabled
+from core.services.visit_internet import package_customer_error, self_service_enabled
 from core.settings_helpers import get_system_settings
 from members.benefits import resolve_internet_price
 from .models import InternetCatalogBinding
@@ -59,7 +59,12 @@ def _internet_section():
 
 @transaction.atomic
 def ensure_package_catalog_product(package):
-    """Return and synchronize the stable Product identity for one package."""
+    """Return and synchronize the stable Product identity for one package.
+
+    The Product remains useful for accounting, OrderItem history, receipts and
+    reporting. Customer presentation is intentionally handled by the dedicated
+    table Internet quick-start flow rather than a generic product card.
+    """
     package = InternetPackage.objects.select_for_update().get(pk=package.pk)
     binding = InternetCatalogBinding.objects.select_for_update().filter(package=package).first()
     category = _internet_category()
@@ -67,8 +72,6 @@ def ensure_package_catalog_product(package):
     if binding:
         product = Product.objects.select_for_update().get(pk=binding.product_id)
     else:
-        # Reuse the hidden identity produced by historical direct Internet sales
-        # when possible; never use a Product already bound to another package.
         product = (
             Product.objects.select_for_update()
             .filter(category=category, name_ar=package.name_ar, product_type=Product.ProductType.INTERNET)
@@ -102,6 +105,8 @@ def ensure_package_catalog_product(package):
     product.requires_preparation = False
     product.visible_on_pos = False
     product.orderable_on_pos = False
+    # Keep the historical catalog flags synchronized for compatibility. The
+    # public menu decorator below deliberately suppresses bound Internet products.
     product.visible_on_qr = customer_orderable
     product.orderable_on_qr = customer_orderable
     product.available_for_events = False
@@ -120,51 +125,28 @@ def ensure_package_catalog_product(package):
 
 
 def decorate_menu_context(context, *, table):
-    """Expose eligible Internet Products inside the ordinary menu sections.
+    """Remove bound Internet identities from the ordinary food/drink catalog.
 
-    The old standalone package storefront is intentionally suppressed. Internet
-    is sold from a table QR through the same product cards/cart as food/drinks.
+    Internet still has a stable Product/OrderItem identity internally, but the
+    customer starts it from the dedicated table quick-start UI instead of seeing
+    modifiers, notes or quantity controls intended for normal products.
     """
-    settings_obj = context.get('settings') or get_system_settings()
-    visit = context.get('current_visit')
-    member_context = context.get('member_context')
-    member = visit.member if visit and visit.member_id else (
-        member_context.member if member_context else None
+    internet_product_ids = set(
+        InternetCatalogBinding.objects.values_list('product_id', flat=True)
     )
-
-    allowed_package_ids = set()
-    if table is not None and self_service_enabled(settings_obj):
-        allowed_package_ids = {package.pk for package in customer_packages(member)}
-
-    bindings = {
-        binding.product_id: binding
-        for binding in InternetCatalogBinding.objects.select_related('package').all()
-    }
     filtered_sections = []
     for section, products in context.get('section_products', []):
-        visible_products = []
-        for product in products:
-            binding = bindings.get(product.pk)
-            if binding is None:
-                visible_products.append(product)
-                continue
-            package = binding.package
-            if package.pk not in allowed_package_ids:
-                continue
-            charged_price, _benefit = resolve_internet_price(member, package)
-            product.price_syp = int(charged_price)
-            product.internet_package = package
-            product.is_internet_catalog_product = True
-            visible_products.append(product)
+        visible_products = [
+            product for product in products
+            if product.pk not in internet_product_ids
+        ]
         if visible_products:
             filtered_sections.append((section, visible_products))
 
     context['section_products'] = filtered_sections
-    # Keep active-session/entitlement controls on the visit page, but remove the
-    # second purchase storefront from the menu itself.
     context['internet_self_service_enabled'] = False
     context['internet_packages'] = []
-    context['internet_catalog_ordering_enabled'] = bool(table and allowed_package_ids)
+    context['internet_catalog_ordering_enabled'] = False
     return context
 
 
@@ -183,14 +165,11 @@ def _internet_items(order):
 
 @transaction.atomic
 def fulfill_internet_items_for_order(order):
-    """Fulfill Internet cart lines on the already-created customer Order.
+    """Fulfill any legacy Internet cart line on the already-created customer Order.
 
-    No second Order or OrderItem is created. Package policy remains authoritative,
-    while the normal cart OrderItem keeps the customer's commercial snapshot.
+    This compatibility path remains atomic for existing clients/bookmarks even
+    though the current table UI no longer presents Internet as a generic product.
     """
-    # visit/member/table are nullable relations, so PostgreSQL cannot lock every
-    # row produced by their LEFT OUTER JOINs. Keep the convenient related-object
-    # fetch, but scope FOR UPDATE to the authoritative Order row only.
     order = (
         Order.objects.select_related('visit', 'member', 'table')
         .select_for_update(of=('self',))
