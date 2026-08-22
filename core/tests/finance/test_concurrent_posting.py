@@ -20,8 +20,6 @@ from core.services.posting.exceptions import ClosedPeriodError, InvalidTransitio
 class PostgreSQLConcurrentPostingTests(TransactionTestCase):
     """Real row-lock tests; SQLite cannot provide the required worker semantics."""
 
-    reset_sequences = True
-
     @classmethod
     def setUpClass(cls):
         super().setUpClass()

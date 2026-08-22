@@ -74,7 +74,17 @@ def staff_home(request):
     )
 
     ready_count = sum(order.status == Order.Status.READY for order in active_orders)
-    unpaid_count = sum(order.remaining_syp > 0 for order in active_orders)
+
+    # One open visit is one payable account even if it contains several orders.
+    # Standalone orders remain their own accounts because no visit umbrella exists.
+    unpaid_visit_accounts = sum(row["remaining_syp"] > 0 for row in visit_rows)
+    standalone_orders = list(
+        _workspace_order_queryset()
+        .filter(visit__isnull=True)
+        .exclude(status=Order.Status.CANCELLED)
+    )
+    unpaid_standalone_accounts = sum(order.remaining_syp > 0 for order in standalone_orders)
+    unpaid_count = unpaid_visit_accounts + unpaid_standalone_accounts
 
     capabilities = {
         name: user_has_capability(request.user, name)

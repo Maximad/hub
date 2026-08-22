@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% load hub_numbers %}{% block title %}إيصال حراري جلسة {{ visit.display_number }}{% endblock %}{% block content %}
+<section class="print-sheet receipt-print thermal-print" style="--thermal-width:{{ thermal_width }}mm" dir="rtl">
+  <div class="print-actions"><button class="hub-button hub-button-primary" onclick="window.print()">طباعة إيصال حراري</button><a class="hub-button" href="{% url 'staff_cashier_order' visit.public_code %}">رجوع</a></div>
+  <header class="print-header"><h1>{{ business_name }}</h1><h2>حساب مجمع</h2></header>
+  <div class="print-meta"><span><strong>الجلسة:</strong> {{ visit.display_number }}</span>{% if visit.table_id %}<span><strong>الطاولة:</strong> {{ visit.table.name_ar }}{% if visit.table.room_id %} — {{ visit.table.room.name_ar }}{% endif %}</span>{% endif %}<span><strong>الطلبات:</strong> {{ orders|length }}</span></div>
+  <table class="print-table"><thead><tr><th>الصنف</th><th>ك</th><th>المجموع</th></tr></thead><tbody>
+    {% for order in orders %}
+      <tr><td colspan="3"><strong>طلب {{ order.display_number }}</strong></td></tr>
+      {% for item in order.items.all %}<tr><td>{{ item.product_name_ar_snapshot }}</td><td>{{ item.quantity }}</td><td>{% widthratio item.quantity 1 item.unit_price_syp_snapshot %}</td></tr>{% endfor %}
+    {% endfor %}
+  </tbody></table>
+  <dl class="print-totals"><div><dt>الإجمالي</dt><dd>{{ total|format_syp }}</dd></div><div><dt>المدفوع</dt><dd>{{ paid|format_syp }}</dd></div><div><dt>المتبقي</dt><dd>{{ remaining|format_syp }}</dd></div><div><dt>الحالة</dt><dd>{{ payment_label }}</dd></div></dl>
+  <footer class="print-footer">{{ receipt_footer_text|default:'شكراً لزيارتكم' }}</footer>
+</section>{% endblock %}

@@ -21,12 +21,8 @@
   </section>
 
   <nav class="staff-visit-panel__actions" aria-label="إجراءات الجلسة">
-    {% if visit_caps.pos and visit.status == 'open' %}
-      <a class="hub-button hub-button-primary" href="{% url 'staff_pos' %}?visit={{ visit.public_code }}">+ طلب لهذه الجلسة</a>
-    {% endif %}
-    {% if visit_caps.cashier and unpaid_order %}
-      <a class="hub-button" href="{% url 'staff_cashier_order' unpaid_order.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' unpaid_order.public_code %}?panel=payment" data-context-title="قبض الطلب" aria-haspopup="dialog">دفع {{ unpaid_order.display_number }}</a>
-    {% endif %}
+    {% if visit_caps.pos and visit.status == 'open' %}<a class="hub-button hub-button-primary" href="{% url 'staff_pos' %}?visit={{ visit.public_code }}">+ طلب لهذه الجلسة</a>{% endif %}
+    {% if visit_caps.cashier %}<a class="hub-button" href="{% url 'staff_cashier_order' visit.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' visit.public_code %}?panel=payment" data-context-title="قبض حساب الجلسة" aria-haspopup="dialog">الحساب / الدفع</a>{% endif %}
     {% if visit_caps.internet_billing %}
       {% if visit.member %}<a class="hub-button" href="{% url 'staff_member_detail' visit.member.pk %}">العضو</a>{% else %}<a class="hub-button" href="{% url 'staff_members' %}">ربط/بحث عضو</a>{% endif %}
       <a class="hub-button" href="{% url 'staff_internet' %}">الإنترنت والعمل</a>
@@ -49,12 +45,10 @@
           </div>
           <div class="staff-visit-panel__order-links">
             {% if visit_caps.order_edit %}<a href="{% url 'staff_order_edit' order.public_code %}" data-staff-context-url="{% url 'staff_order_edit' order.public_code %}?panel=context" data-context-title="تفاصيل الطلب" aria-haspopup="dialog">عرض</a><a href="{% url 'staff_order_edit' order.public_code %}">تعديل</a>{% endif %}
-            {% if visit_caps.cashier and order.remaining_syp > 0 %}<a href="{% url 'staff_cashier_order' order.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' order.public_code %}?panel=payment" data-context-title="قبض الطلب" aria-haspopup="dialog">دفع</a>{% endif %}
+            {% if visit_caps.cashier and order.remaining_syp > 0 %}<a href="{% url 'staff_cashier_order' visit.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' visit.public_code %}?panel=payment" data-context-title="قبض حساب الجلسة" aria-haspopup="dialog">دفع الحساب</a>{% endif %}
           </div>
         </article>
-      {% empty %}
-        <div class="hub-empty-state">لا توجد طلبات في هذه الجلسة بعد.</div>
-      {% endfor %}
+      {% empty %}<div class="hub-empty-state">لا توجد طلبات في هذه الجلسة بعد.</div>{% endfor %}
     </div>
   </section>
 
@@ -66,7 +60,5 @@
     </div>
   </section>
 
-  {% if visit.notes %}
-    <section class="staff-visit-panel__section"><h4>ملاحظة</h4><p>{{ visit.notes }}</p></section>
-  {% endif %}
+  {% if visit.notes %}<section class="staff-visit-panel__section"><h4>ملاحظة</h4><p>{{ visit.notes }}</p></section>{% endif %}
 </section>

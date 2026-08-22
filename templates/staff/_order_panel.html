@@ -24,10 +24,10 @@
 
   <nav class="staff-order-panel__actions" aria-label="إجراءات الطلب">
     {% if order_caps.cashier and remaining > 0 %}
-      <a class="hub-button hub-button-primary" href="{% url 'staff_cashier_order' order.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' order.public_code %}?panel=payment" data-context-title="قبض الطلب" aria-haspopup="dialog">دفع</a>
+      {% if order.visit %}<a class="hub-button hub-button-primary" href="{% url 'staff_cashier_order' order.visit.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' order.visit.public_code %}?panel=payment" data-context-title="قبض حساب الجلسة" aria-haspopup="dialog">دفع حساب الجلسة</a>{% else %}<a class="hub-button hub-button-primary" href="{% url 'staff_cashier_order' order.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' order.public_code %}?panel=payment" data-context-title="قبض الطلب" aria-haspopup="dialog">دفع</a>{% endif %}
     {% endif %}
     {% if order_caps.edit %}<a class="hub-button" href="{% url 'staff_order_edit' order.public_code %}">تعديل الطلب</a>{% endif %}
-    {% if order_caps.cashier %}<a class="hub-button" href="{% url 'staff_cashier_order' order.public_code %}">تفاصيل الكاشير</a>{% endif %}
+    {% if order_caps.cashier %}{% if order.visit %}<a class="hub-button" href="{% url 'staff_cashier_order' order.visit.public_code %}">الحساب المجمع</a>{% else %}<a class="hub-button" href="{% url 'staff_cashier_order' order.public_code %}">تفاصيل الكاشير</a>{% endif %}{% endif %}
     {% if order.visit %}<a class="hub-button" href="{% url 'staff_pos' %}?visit={{ order.visit.public_code }}">+ طلب لنفس الجلسة</a>{% endif %}
   </nav>
 
@@ -45,9 +45,7 @@
             <span class="hub-badge">{{ item.get_prep_status_display }}</span>
           </div>
           {% if item.selected_options_snapshot %}
-            <small>
-              {% for group in item.selected_options_snapshot %}{% for option in group.options %}{{ option.name_ar }}{% if not forloop.last %}، {% endif %}{% endfor %}{% endfor %}
-            </small>
+            <small>{% for group in item.selected_options_snapshot %}{% for option in group.options %}{{ option.name_ar }}{% if not forloop.last %}، {% endif %}{% endfor %}{% endfor %}</small>
           {% endif %}
           {% if item.item_note %}<small>ملاحظة: {{ item.item_note }}</small>{% endif %}
         </article>
@@ -58,7 +56,8 @@
   <section class="staff-order-panel__section staff-order-panel__summary">
     <div><span>طريقة الطلب</span><strong>{{ order.get_fulfillment_label }}</strong></div>
     {% if order.location_detail %}<div><span>المكان</span><strong>{{ order.location_detail }}</strong></div>{% endif %}
-    <div><span>حالة الدفع</span><strong>{{ payment_label }}</strong></div>
+    <div><span>حالة دفع الطلب</span><strong>{{ payment_label }}</strong></div>
+    {% if order.visit %}<div><span>التسديد</span><strong>ضمن حساب الجلسة {{ order.visit.display_number }}</strong></div>{% endif %}
     {% if order.general_note %}<div><span>ملاحظة</span><strong>{{ order.general_note }}</strong></div>{% endif %}
   </section>
 </section>

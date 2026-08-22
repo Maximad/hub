@@ -9,8 +9,16 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import resolve, reverse
 
 from accounts.permissions import user_has_capability
-from core.models import InternetSession, Order, TableArea
+from core.models import HubVisit, InternetSession, Order, TableArea
 from core.services.visit_internet import customer_packages, metered_customer_error, self_service_enabled
+from core.views.staff_cashier_visits import (
+    staff_cashier as _visit_staff_cashier,
+    staff_cashier_visit,
+    staff_cashier_visit_pay,
+    staff_cashier_visit_receipt,
+    staff_cashier_visit_receipt_thermal,
+    staff_cashier_visit_settle,
+)
 from core.views.staff_context import render_order_context_panel, render_payment_panel
 from core.views.staff_workspace import staff_home
 from internet.catalog import decorate_menu_context, fulfill_internet_items_for_order
@@ -34,7 +42,6 @@ from core.views_legacy import (
     staff_order_edit_add_item,
     staff_order_edit_update_item,
     staff_order_edit_remove_item,
-    staff_cashier,
     staff_cashier_order as _legacy_staff_cashier_order,
     staff_cashier_pay as _legacy_staff_cashier_pay,
     staff_cashier_discount,
@@ -164,9 +171,30 @@ def staff_order_edit(request, public_code):
     return _legacy_staff_order_edit(request, public_code)
 
 
-def staff_cashier_order(request, public_code):
-    """Keep the cashier page canonical while exposing its payment form as a panel."""
+def staff_cashier(request):
+    """Cashier landing groups table/visit orders into one payable account."""
+    return _visit_staff_cashier(request)
 
+
+def _cashier_target(public_code):
+    order = Order.objects.select_related('visit').filter(public_code=public_code).first()
+    if order:
+        return order, order.visit
+    visit = HubVisit.objects.filter(public_code=public_code).first()
+    return None, visit
+
+
+def staff_cashier_order(request, public_code):
+    """Resolve an order cashier link to its visit account when one exists."""
+    order, visit = _cashier_target(public_code)
+    if visit:
+        if request.GET.get('receipt') == 'thermal':
+            return staff_cashier_visit_receipt_thermal(request, visit.public_code)
+        if request.GET.get('receipt') == '1':
+            return staff_cashier_visit_receipt(request, visit.public_code)
+        return staff_cashier_visit(request, visit.public_code)
+    if order is None:
+        return _legacy_staff_cashier_order(request, public_code)
     if (
         request.method == "GET"
         and request.GET.get("panel") == "payment"
@@ -177,7 +205,12 @@ def staff_cashier_order(request, public_code):
 
 
 def staff_cashier_pay(request, public_code):
-    """Delegate payment posting, then refresh the compact panel for HTMX callers."""
+    """Post against the visit account when the target belongs to a visit."""
+    order, visit = _cashier_target(public_code)
+    if visit:
+        if request.POST.get('action') == 'settle_close':
+            return staff_cashier_visit_settle(request, visit.public_code)
+        return staff_cashier_visit_pay(request, visit.public_code)
 
     panel_request = (
         request.method == "POST"
