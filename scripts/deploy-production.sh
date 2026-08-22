@@ -184,10 +184,14 @@ dc run --rm -T web python manage.py migrate --noinput
 log "Evaluating launch readiness gate"
 
 # Run the read-only audit from the target image before traffic is cut over.
+# Mount only the production-backup evidence path, read-only, for this one-off
+# check. The long-running web container does not need access to database dumps.
 # Machine-readable mode still exits nonzero for FAIL, while WARN remains an
-# approved, visible, non-blocking result.  Do not suppress this exit status:
+# approved, visible, non-blocking result. Do not suppress this exit status:
 # errexit prevents both cutover and the deployed-revision write on failure.
-dc run --rm -T web python manage.py launch_readiness --json
+dc run --rm -T \
+    --volume "$PROJECT_DIR/backups/production:/opt/hub/backups/production:ro" \
+    web python manage.py launch_readiness --json
 
 log "Replacing web container"
 
