@@ -155,7 +155,7 @@ class StaffOrderContextDrawerTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "staff/cashier_visit.html")
         self.assertTemplateNotUsed(response, "staff/cashier_order.html")
-        self.assertContains(response, "حساب مجمع")
+        self.assertContains(response, "الحساب المجمع")
         self.assertContains(response, self.order.display_number)
 
     def test_standalone_order_keeps_legacy_payment_panel_and_full_page(self):
