@@ -3,7 +3,7 @@
 {% block title %}تأكيد الطلب{% endblock %}
 {% block body_class %}customer-order-confirm-page{% endblock %}
 {% block content %}
-<div data-customer-space data-has-visit="{% if order.visit_id %}true{% else %}false{% endif %}" data-menu-url="{{ menu_url }}" data-visit-url="{% url 'current_visit' %}" data-orders-url="{% if order.visit_id %}{% url 'current_visit' %}#customer-orders{% endif %}" data-services-url=""></div>
+<div data-customer-space data-has-visit="{% if order.visit_id %}true{% else %}false{% endif %}" data-menu-url="{{ menu_url }}{% if order.visit_id and order.visit.table_id %}?view=menu{% endif %}" data-visit-url="{% url 'current_visit' %}" data-orders-url="{% if order.visit_id %}{% url 'current_visit' %}#customer-orders{% endif %}" data-services-url=""></div>
 {% if order.member %}<p class="hub-card"><strong>تم تطبيق خصم العضوية</strong><br>{{ order.member.name_ar }} — خصم العضوية: {{ order.discount_syp }} ل.س</p>{% endif %}
 {% if order.visit_id %}
 <section class="hub-card order-confirm visit-order-confirm" dir="rtl">
@@ -26,7 +26,7 @@
   </section>
   {% if needs_confirmation %}<p class="hub-badge hub-badge-warning">بعض العناصر تحتاج تأكيد من الفريق</p>{% endif %}
   <nav class="visit-order-confirm__actions" aria-label="إجراءات الطلب والجلسة">
-    <a class="hub-button hub-button-primary" href="{{ menu_url }}">طلب المزيد</a>
+    <a class="hub-button hub-button-primary" href="{{ menu_url }}{% if order.visit.table_id %}?view=menu{% endif %}">طلب المزيد</a>
     <a class="hub-button hub-button-secondary" href="{% url 'current_visit' %}">متابعة جلستك</a>
   </nav>
 </section>
