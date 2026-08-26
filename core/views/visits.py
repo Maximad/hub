@@ -11,12 +11,19 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from core.models import ActivityLog, HubVisit, InternetEntitlement, InternetPackage, InternetSession, TableArea
-from core.services.hotspot_connect import build_hotspot_login_payload, one_tap_connect_configured
+from core.services.hotspot_connect import (
+    build_hotspot_login_payload,
+    build_session_hotspot_login_payload,
+    one_tap_connect_configured,
+    one_tap_session_connect_configured,
+)
 from core.services.internet_access import end_usage_session
 from core.services.visit_internet import (
     create_visit_internet_sale_and_start,
     customer_packages,
     finalize_visit_metered_session,
+    metered_network_activated_at,
+    prepare_visit_metered_session_network,
     self_service_enabled,
     start_existing_visit_entitlement,
     start_visit_metered_session,
@@ -36,6 +43,20 @@ def _error_text(error):
     return 'تعذر بدء الإنترنت. يمكنك طلب المساعدة من الفريق.'
 
 
+def _decorate_session_network_state(session):
+    session.network_ready = bool(
+        session.entitlement_id
+        or session.network_provider != InternetSession.NetworkProvider.MIKROTIK
+        or metered_network_activated_at(session) is not None
+    )
+    session.one_tap_connect_available = bool(
+        one_tap_connect_configured(session.entitlement)
+        if session.entitlement_id
+        else one_tap_session_connect_configured(session)
+    )
+    return session
+
+
 def _internet_context(visit=None, member=None):
     packages = customer_packages(member)
     for package in packages:
@@ -44,9 +65,7 @@ def _internet_context(visit=None, member=None):
     sessions = list(visit.internet_sessions.select_related('entitlement', 'package')
                     .order_by('-start_time')) if visit else []
     for session in sessions:
-        session.one_tap_connect_available = bool(
-            session.entitlement_id and one_tap_connect_configured(session.entitlement)
-        )
+        _decorate_session_network_state(session)
     return {'internet_packages': packages, 'internet_entitlements': entitlements,
             'internet_sessions': sessions, 'internet_request_key': uuid.uuid4()}
 
@@ -69,10 +88,7 @@ def current_visit(request):
     active_internet_session = visit.internet_sessions.select_related('package', 'entitlement').filter(
         status=InternetSession.Status.ACTIVE).order_by('-start_time').first()
     if active_internet_session:
-        active_internet_session.one_tap_connect_available = bool(
-            active_internet_session.entitlement_id and
-            one_tap_connect_configured(active_internet_session.entitlement)
-        )
+        _decorate_session_network_state(active_internet_session)
     context = {'visit': visit, 'orders': orders, 'menu_url': menu_url,
                'table_entry_url': table_entry_url,
                'active_internet_session': active_internet_session,
@@ -104,6 +120,8 @@ def visit_internet_purchase_start(request):
         credential = resolve_visit_credential(request)
         member_context = resolve_member_from_request(request)
         package = None
+        session = None
+        metered_created = False
         if mode != 'metered':
             package = get_object_or_404(InternetPackage, public_code=request.POST.get('package'))
 
@@ -131,7 +149,7 @@ def visit_internet_purchase_start(request):
                 raise ValidationError('تعذر مطابقة العضوية. يرجى طلب المساعدة من الفريق.')
 
             if mode == 'metered':
-                session, _created = start_visit_metered_session(
+                session, metered_created = start_visit_metered_session(
                     visit=visit,
                     credential=credential,
                     member=member,
@@ -146,10 +164,24 @@ def visit_internet_purchase_start(request):
                     member=member,
                 )
 
-        messages.success(
-            request,
-            'بدأ الإنترنت حسب الوقت.' if mode == 'metered' else 'بدأت جلسة الإنترنت.',
-        )
+        if mode == 'metered':
+            # Never contact the router from inside the commercial transaction.
+            # New manual sessions are processed too so they use the same durable
+            # activation semantics without changing production behavior while the
+            # MikroTik integration flag remains disabled.
+            network_ready = True
+            if metered_created or session.network_provider == InternetSession.NetworkProvider.MIKROTIK:
+                network_ready = prepare_visit_metered_session_network(session)
+            if network_ready:
+                messages.success(request, 'بدأ الإنترنت حسب الوقت. يبدأ الاحتساب من لحظة جاهزية الشبكة.')
+            else:
+                messages.warning(
+                    request,
+                    'يجري تجهيز اتصال الإنترنت. لن يبدأ احتساب الوقت قبل أن تصبح الشبكة جاهزة.',
+                )
+        else:
+            messages.success(request, 'بدأت جلسة الإنترنت.')
+
         if request.POST.get('next') == 'menu' and table:
             target = reverse('menu_table', kwargs={'qr_token': table.qr_token}) + '?view=menu&internet_started=1'
             response = redirect(target)
@@ -200,17 +232,23 @@ def visit_internet_session_connect(request, public_code):
         visit=credential.visit,
         status=InternetSession.Status.ACTIVE,
     )
-    if not session.entitlement_id:
-        messages.error(request, 'الاتصال التلقائي للشبكة غير متاح لهذه الجلسة حالياً.')
-        return redirect('current_visit')
     try:
-        payload = build_hotspot_login_payload(
-            session.entitlement,
-            destination_url=_current_visit_destination(request),
-        )
+        if session.entitlement_id:
+            payload = build_hotspot_login_payload(
+                session.entitlement,
+                destination_url=_current_visit_destination(request),
+            )
+        else:
+            payload = build_session_hotspot_login_payload(
+                session,
+                destination_url=_current_visit_destination(request),
+            )
     except Exception as exc:
-        logger.warning('Customer HotSpot relay unavailable for entitlement_id=%s',
-                       session.entitlement_id)
+        logger.warning(
+            'Customer HotSpot relay unavailable for session_id=%s entitlement_id=%s',
+            session.pk,
+            session.entitlement_id,
+        )
         messages.error(request, _error_text(exc))
         return redirect('current_visit')
 
@@ -218,6 +256,7 @@ def visit_internet_session_connect(request, public_code):
         'visit_id': credential.visit_id,
         'session_id': session.pk,
         'entitlement_id': session.entitlement_id,
+        'network_provider': session.network_provider,
     })
     response = render(request, 'menu/hotspot_connect.html', payload)
     response['Cache-Control'] = 'no-store, private, max-age=0'
@@ -249,7 +288,11 @@ def visit_internet_session_stop(request, public_code):
             message = 'تم إيقاف استخدام الإنترنت. وقت الباقة المحددة غير المستخدم لا يُستعاد.'
         else:
             ended = finalize_visit_metered_session(session)
-            message = f'تم إنهاء الإنترنت. أضيف {int(ended.payable_total_syp or 0)} ل.س إلى حساب جلستك.'
+            if (ended.status == InternetSession.Status.CANCELLED
+                    and ended.lifecycle_end_reason == 'network_not_activated'):
+                message = 'أُلغيت جلسة الإنترنت دون أي احتساب لأن تجهيز الشبكة لم يكتمل.'
+            else:
+                message = f'تم إنهاء الإنترنت. أضيف {int(ended.payable_total_syp or 0)} ل.س إلى حساب جلستك.'
     except ValidationError as exc:
         messages.error(request, _error_text(exc))
         return redirect('current_visit')
