@@ -106,8 +106,7 @@ class MikroTikNetworkBackend:
         safe_minutes = get_effective_network_allowance(
             entitlement, include_session_limit=False, include_reservations=True)
         values = {'name': self.username(entitlement), 'server': settings.MIKROTIK_HOTSPOT_SERVER,
-                  'profile': profile, 'shared-users': str(entitlement.max_concurrent_devices),
-                  'comment': self.ownership(entitlement), 'disabled': 'false'}
+                  'profile': profile, 'comment': self.ownership(entitlement), 'disabled': 'false'}
         if safe_minutes is not None: values['limit-uptime'] = str(timedelta(minutes=safe_minutes))
         devices = list(entitlement.devices.filter(is_active=True).values_list('device_mac', flat=True)[:2])
         if len(devices) == 1: values['mac-address'] = devices[0]
