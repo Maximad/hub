@@ -52,7 +52,9 @@ class InternetSessionNetworkState(models.Model):
 
     InternetSession keeps the public operational fields (provider, RouterOS identity,
     network status). This companion row keeps encrypted credentials and retry
-    diagnostics out of the commercial session model.
+    diagnostics out of the commercial session model. ``network_activated_at`` is
+    the billing gate for network-managed metered sessions: time is never charged
+    before the first successful provision.
     """
 
     session = models.OneToOneField(
@@ -61,6 +63,7 @@ class InternetSessionNetworkState(models.Model):
         related_name='network_state',
     )
     network_credential_encrypted = models.TextField(blank=True, editable=False)
+    network_activated_at = models.DateTimeField(null=True, blank=True, editable=False)
     last_network_sync_at = models.DateTimeField(null=True, blank=True)
     last_network_error = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -1,6 +1,7 @@
 """Customer Internet orchestration layered on the existing commercial engine."""
 import hashlib
 
+from django.conf import settings as django_settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -11,6 +12,10 @@ from core.models import (ActivityLog, HubVisit, InternetEntitlement, InternetPac
 from core.services.internet_access import (create_commercial_sale, effectively_active_entitlements,
                                            start_usage_session)
 from core.settings_helpers import get_system_settings
+from internet.models import InternetSessionNetworkOperation, InternetSessionNetworkState
+from internet.session_network_backends import NOT_PROVISIONED
+from internet.session_network_operations import (enqueue_session_network_operation,
+                                                  process_session_network_operation)
 from members.benefits import is_member_eligible_for_internet_package
 
 
@@ -99,6 +104,46 @@ def _other_active_visit_session_exists(visit, *, entitlement_id=None, idempotenc
     return sessions.exists()
 
 
+def _metered_network_provider():
+    return (InternetSession.NetworkProvider.MIKROTIK
+            if getattr(django_settings, 'MIKROTIK_ENABLED', False)
+            else InternetSession.NetworkProvider.MANUAL)
+
+
+def metered_network_activated_at(session):
+    state = InternetSessionNetworkState.objects.filter(session_id=session.pk).first()
+    return state.network_activated_at if state else None
+
+
+def prepare_visit_metered_session_network(session):
+    """Give a customer metered session one immediate, durable provision attempt.
+
+    The caller must invoke this outside the transaction that created the session.
+    Failed provisioning leaves the commercial session unbilled; the durable job is
+    retained for the normal retry worker.
+    """
+    if metered_network_activated_at(session) is not None:
+        return True
+    job = (
+        InternetSessionNetworkOperation.objects.filter(
+            session=session,
+            operation=InternetSessionNetworkOperation.Operation.PROVISION,
+        )
+        .order_by('created_at')
+        .first()
+    )
+    if job is None:
+        job = enqueue_session_network_operation(
+            session,
+            InternetSessionNetworkOperation.Operation.PROVISION,
+            reason='customer metered Internet start',
+            process_after_commit=False,
+        )
+    process_session_network_operation(job)
+    session.refresh_from_db()
+    return metered_network_activated_at(session) is not None
+
+
 @transaction.atomic
 def create_visit_internet_sale_and_start(*, visit, credential, package, request_key,
                                          member=None, actor=None, at=None):
@@ -141,7 +186,12 @@ def create_visit_internet_sale_and_start(*, visit, credential, package, request_
 
 @transaction.atomic
 def start_visit_metered_session(*, visit, credential, member=None, guest_phone='', actor=None, at=None):
-    """Start the default package-less, time-metered Internet session for a visit."""
+    """Request the default package-less, time-metered Internet session for a visit.
+
+    The billing timestamp written here is provisional. The session network worker
+    replaces it exactly once after successful network provisioning and records the
+    durable ``network_activated_at`` billing gate.
+    """
     visit = HubVisit.objects.select_for_update().get(pk=visit.pk)
     if not credential or credential.visit_id != visit.pk or visit.status != HubVisit.Status.OPEN:
         raise ValidationError('الجلسة مغلقة.')
@@ -158,13 +208,13 @@ def start_visit_metered_session(*, visit, credential, member=None, guest_phone='
     ).order_by('-start_time', '-pk').first()
     if active:
         # A repeated tap/retry of the direct-start action is safe and reuses the
-        # already-running package-less metered session.
+        # already-running or still-provisioning package-less metered session.
         if (active.entitlement_id is None and active.package_id is None and
                 active.billing_mode == InternetSession.BillingMode.OPEN_METERED):
             return active, False
         raise ValidationError('لديك جلسة إنترنت فعالة بالفعل. أنهِها قبل بدء جلسة أخرى.')
 
-    started = at or timezone.now()
+    requested = at or timezone.now()
     session = InternetSession.objects.create(
         session_type=InternetSession.SessionType.INTERNET,
         member=member,
@@ -174,8 +224,8 @@ def start_visit_metered_session(*, visit, credential, member=None, guest_phone='
         guest_phone=(guest_phone or '').strip(),
         customer_phone=(guest_phone or '').strip(),
         billing_mode=InternetSession.BillingMode.OPEN_METERED,
-        started_at=started,
-        start_time=started,
+        started_at=requested,
+        start_time=requested,
         rate_per_hour_syp=int(settings_obj.default_rate_per_hour_syp or 0),
         minimum_minutes=int(settings_obj.default_minimum_minutes or 0),
         free_grace_minutes=int(settings_obj.default_free_grace_minutes or 0),
@@ -185,12 +235,21 @@ def start_visit_metered_session(*, visit, credential, member=None, guest_phone='
         notes='بدء ذاتي من QR الطاولة — جلسة إنترنت حسب الوقت',
         status=InternetSession.Status.ACTIVE,
         started_by=actor,
+        network_provider=_metered_network_provider(),
+        network_status=NOT_PROVISIONED,
     )
-    HubVisit.objects.filter(pk=visit.pk).update(last_activity_at=started)
-    ActivityLog.objects.create(actor=actor, action='visit.internet_metered_started', details={
+    enqueue_session_network_operation(
+        session,
+        InternetSessionNetworkOperation.Operation.PROVISION,
+        reason='customer metered Internet start',
+        process_after_commit=False,
+    )
+    HubVisit.objects.filter(pk=visit.pk).update(last_activity_at=requested)
+    ActivityLog.objects.create(actor=actor, action='visit.internet_metered_requested', details={
         'visit_id': visit.pk,
         'session_id': session.pk,
         'rate_per_hour_syp': session.rate_per_hour_syp,
+        'network_provider': session.network_provider,
     })
     return session, True
 
@@ -202,6 +261,15 @@ def _metered_order_note(session):
         f'الوقت الفعلي: {session.effective_duration_minutes or 0} دقيقة\n'
         f'الوقت المحسوب: {session.billable_minutes or 0} دقيقة\n'
         f'العميل: {customer}'
+    )
+
+
+def _enqueue_metered_disconnect(session, reason):
+    return enqueue_session_network_operation(
+        session,
+        InternetSessionNetworkOperation.Operation.DISCONNECT,
+        reason=reason,
+        process_after_commit=True,
     )
 
 
@@ -223,8 +291,38 @@ def finalize_visit_metered_session(session, *, actor=None, at=None):
     if session.status != InternetSession.Status.ACTIVE:
         return session
 
+    ended_at = at or timezone.now()
+    # For network-managed customer sessions the durable activation marker is the
+    # authority that billing ever began. A failed provisioning attempt can always
+    # be stopped/cancelled with a zero charge.
+    if (session.network_provider == InternetSession.NetworkProvider.MIKROTIK
+            and metered_network_activated_at(session) is None):
+        session.ended_at = ended_at
+        session.end_time = ended_at
+        session.duration_minutes = 0
+        session.actual_duration_minutes = 0
+        session.billable_minutes = 0
+        session.calculated_total_syp = 0
+        session.status = InternetSession.Status.CANCELLED
+        session.lifecycle_end_reason = 'network_not_activated'
+        session.cancellation_reason = 'لم يكتمل تجهيز الشبكة؛ أُلغيت الجلسة دون احتساب وقت.'
+        session.ended_by = actor if getattr(actor, 'is_authenticated', False) else None
+        session.save(update_fields=[
+            'ended_at', 'end_time', 'duration_minutes', 'actual_duration_minutes',
+            'billable_minutes', 'calculated_total_syp', 'status', 'lifecycle_end_reason',
+            'cancellation_reason', 'ended_by', 'updated_at',
+        ])
+        _enqueue_metered_disconnect(session, 'cancel unactivated metered session')
+        ActivityLog.objects.create(actor=actor, action='visit.internet_metered_cancelled_unprovisioned', details={
+            'visit_id': session.visit_id,
+            'session_id': session.pk,
+        })
+        if session.visit_id:
+            HubVisit.objects.filter(pk=session.visit_id).update(last_activity_at=ended_at)
+        return session
+
     settings_obj = get_system_settings()
-    session = finalize_internet_session(session, actor, ended_at=at)
+    session = finalize_internet_session(session, actor, ended_at=ended_at)
     total = int(session.payable_total_syp or 0)
 
     if total > 0:
@@ -272,8 +370,9 @@ def finalize_visit_metered_session(session, *, actor=None, at=None):
                 'amount_syp': total,
             })
 
+    _enqueue_metered_disconnect(session, 'metered session ended')
     if session.visit_id:
-        HubVisit.objects.filter(pk=session.visit_id).update(last_activity_at=at or timezone.now())
+        HubVisit.objects.filter(pk=session.visit_id).update(last_activity_at=ended_at)
     return session
 
 
