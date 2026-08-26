@@ -59,7 +59,7 @@ class ProxySecurityTests(SimpleTestCase):
         )
 
     def test_menu_and_admin_login_work_behind_https_proxy(self):
-        with mock.patch('core.views_legacy._menu_context', return_value={}):
+        with mock.patch('core.views.menu._menu_context', return_value={}):
             self.assertEqual(self.https_client.get('/menu/').status_code, 200)
         with mock.patch.object(admin.site, 'each_context', return_value={}):
             self.assertEqual(self.https_client.get('/admin/login/').status_code, 200)
@@ -68,7 +68,7 @@ class ProxySecurityTests(SimpleTestCase):
         'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
     }})
     def test_rendered_menu_uses_pinned_local_htmx_asset(self):
-        with mock.patch('core.views_legacy._menu_context', return_value={}):
+        with mock.patch('core.views.menu._menu_context', return_value={}):
             response = self.https_client.get('/menu/')
 
         self.assertContains(response, '<script src="/static/js/htmx.min.js"></script>', html=True)
