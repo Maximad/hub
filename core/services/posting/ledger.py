@@ -23,4 +23,12 @@ def post_balanced_batch(batch):
     locked.posted_at = timezone.now()
     locked.full_clean()
     locked.save(update_fields=['status', 'posted_at', 'updated_at'])
+
+    # Callers often keep the original batch instance cached on a related object
+    # (for example PurchasePayment.posting_batch). Keep that in-memory instance
+    # aligned with the locked row we just posted so the returned domain object
+    # does not appear to remain in DRAFT until a refresh_from_db().
+    batch.status = locked.status
+    batch.posted_at = locked.posted_at
+    batch.updated_at = locked.updated_at
     return locked
