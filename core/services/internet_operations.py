@@ -77,7 +77,7 @@ def run_readonly_mikrotik_healthcheck(*, actor=None):
             raise ValidationError('استجابة MikroTik غير صالحة.')
         ok = True
         message = 'اتصال MikroTik للقراءة فقط ناجح.'
-    except (MikroTikError, ValidationError) as exc:
+    except Exception as exc:  # UI/health boundary: fail closed and persist only sanitized text
         ok = False
         message = _safe_error(exc)
 
