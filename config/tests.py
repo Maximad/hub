@@ -15,17 +15,34 @@ from config import settings as hub_settings
 
 class ProductionSettingsTests(SimpleTestCase):
     def test_production_security_settings(self):
-        self.assertFalse(settings.DEBUG)
-        self.assertTrue(settings.SECURE_SSL_REDIRECT)
-        self.assertTrue(settings.SESSION_COOKIE_SECURE)
-        self.assertTrue(settings.CSRF_COOKIE_SECURE)
-        self.assertFalse(settings.CSRF_COOKIE_HTTPONLY)
-        self.assertEqual(settings.SECURE_HSTS_SECONDS, 3600)
-        self.assertFalse(settings.SECURE_HSTS_INCLUDE_SUBDOMAINS)
-        self.assertFalse(settings.SECURE_HSTS_PRELOAD)
-        self.assertTrue(settings.SECURE_CONTENT_TYPE_NOSNIFF)
-        self.assertEqual(settings.SECURE_REFERRER_POLICY, 'strict-origin-when-cross-origin')
-        self.assertEqual(settings.X_FRAME_OPTIONS, 'DENY')
+        project_root = Path(__file__).resolve().parent.parent
+        environment = os.environ.copy()
+        environment.update(
+            DJANGO_DEBUG='False',
+            DJANGO_SECRET_KEY='ci-valid-production-settings-test-secret',
+            DJANGO_SECURE_SSL_REDIRECT='true',
+            DJANGO_SESSION_COOKIE_SECURE='true',
+            DJANGO_CSRF_COOKIE_SECURE='true',
+        )
+        code = (
+            'from config import settings as s; '
+            'assert s.DEBUG is False; '
+            'assert s.SECURE_SSL_REDIRECT is True; '
+            'assert s.SESSION_COOKIE_SECURE is True; '
+            'assert s.CSRF_COOKIE_SECURE is True; '
+            'assert s.CSRF_COOKIE_HTTPONLY is False; '
+            'assert s.SECURE_HSTS_SECONDS == 3600; '
+            'assert s.SECURE_HSTS_INCLUDE_SUBDOMAINS is False; '
+            'assert s.SECURE_HSTS_PRELOAD is False; '
+            'assert s.SECURE_CONTENT_TYPE_NOSNIFF is True; '
+            'assert s.SECURE_REFERRER_POLICY == "strict-origin-when-cross-origin"; '
+            'assert s.X_FRAME_OPTIONS == "DENY"'
+        )
+        result = subprocess.run(
+            [sys.executable, '-c', code], cwd=project_root,
+            env=environment, text=True, capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_boolean_parser_is_strict(self):
         with mock.patch.dict(os.environ, {'TEST_BOOLEAN': 'perhaps'}):
@@ -58,8 +75,15 @@ class ProxySecurityTests(SimpleTestCase):
             HTTP_X_FORWARDED_PROTO='https',
         )
 
+    def _menu_patches(self):
+        return (
+            mock.patch('core.views.menu._menu_context', return_value={}),
+            mock.patch('core.views.menu.decorate_menu_context', side_effect=lambda context, table=None: context),
+        )
+
     def test_menu_and_admin_login_work_behind_https_proxy(self):
-        with mock.patch('core.views.menu._menu_context', return_value={}):
+        menu_context, decorate = self._menu_patches()
+        with menu_context, decorate:
             self.assertEqual(self.https_client.get('/menu/').status_code, 200)
         with mock.patch.object(admin.site, 'each_context', return_value={}):
             self.assertEqual(self.https_client.get('/admin/login/').status_code, 200)
@@ -68,7 +92,8 @@ class ProxySecurityTests(SimpleTestCase):
         'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
     }})
     def test_rendered_menu_uses_pinned_local_htmx_asset(self):
-        with mock.patch('core.views.menu._menu_context', return_value={}):
+        menu_context, decorate = self._menu_patches()
+        with menu_context, decorate:
             response = self.https_client.get('/menu/')
 
         self.assertContains(response, '<script src="/static/js/htmx.min.js"></script>', html=True)
