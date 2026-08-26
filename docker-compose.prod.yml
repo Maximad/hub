@@ -38,6 +38,24 @@ services:
       - "traefik.http.routers.hub-secure.tls=true"
       - "traefik.http.routers.hub-secure.tls.certresolver=letsencrypt"
 
+  internet-worker:
+    build: .
+    container_name: hub-internet-worker
+    restart: unless-stopped
+    command: >-
+      python manage.py run_internet_worker
+      --network-interval 5
+      --lifecycle-interval 60
+      --network-limit 100
+      --lifecycle-limit 200
+    env_file:
+      - .env
+    depends_on:
+      - db
+    stop_grace_period: 20s
+    networks:
+      - default
+
 volumes:
   hub_db_data:
 
