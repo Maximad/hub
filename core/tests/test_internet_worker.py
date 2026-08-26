@@ -42,10 +42,10 @@ class InternetWorkerCycleTests(SimpleTestCase):
     @patch('core.services.internet_worker.process_ready_session_network_operations')
     @patch('core.services.internet_worker.process_ready_network_operations')
     @patch('core.services.internet_worker.call_command')
-    def test_component_failure_does_not_block_other_queues(
+    def test_component_failure_does_not_block_other_queues_or_leak_secrets(
         self, lifecycle, entitlement_jobs, session_jobs, close_connections,
     ):
-        lifecycle.side_effect = RuntimeError('temporary lifecycle failure')
+        lifecycle.side_effect = RuntimeError('password=supersecret')
         entitlement_jobs.side_effect = RuntimeError('temporary entitlement queue failure')
         session_jobs.return_value = (2, 2)
 
@@ -57,6 +57,8 @@ class InternetWorkerCycleTests(SimpleTestCase):
         self.assertEqual([component for component, _ in errors], [
             'lifecycle', 'entitlement_network',
         ])
+        self.assertNotIn('supersecret', str(errors))
+        self.assertIn('sensitive details were removed', errors[0][1])
 
     @patch('core.services.internet_worker.close_old_connections')
     @patch('core.services.internet_worker.process_ready_session_network_operations', return_value=(0, 0))
@@ -133,6 +135,8 @@ class ProductionComposeWorkerTests(SimpleTestCase):
         self.assertIn('python manage.py run_internet_worker', worker)
         self.assertIn('--network-interval 5', worker)
         self.assertIn('--lifecycle-interval 60', worker)
+        self.assertIn('--network-limit 25', worker)
+        self.assertIn('--lifecycle-limit 200', worker)
         self.assertIn('env_file:', worker)
         self.assertIn('- db', worker)
         self.assertNotIn('ports:', worker)
