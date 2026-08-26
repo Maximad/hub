@@ -74,6 +74,24 @@ def models_ends_filter(now):
     return Q(ends_at__isnull=True) | Q(ends_at__gte=now)
 
 
+def _managed_metered_network_activated(session):
+    """Fail closed only for MikroTik-managed package-less metered sessions.
+
+    Legacy/manual sessions intentionally keep their historical billing behavior.
+    """
+    from core.models import InternetSession
+    if (session.entitlement_id is not None
+            or session.package_id is not None
+            or session.billing_mode != InternetSession.BillingMode.OPEN_METERED
+            or session.network_provider != InternetSession.NetworkProvider.MIKROTIK):
+        return True
+    from internet.models import InternetSessionNetworkState
+    return InternetSessionNetworkState.objects.filter(
+        session_id=session.pk,
+        network_activated_at__isnull=False,
+    ).exists()
+
+
 @transaction.atomic
 def finalize_internet_session(session, ended_by, manual_total=None, override_reason=None, ended_at=None):
     """Finalize a manual internet/workspace billing session and safely deduct prepaid minutes."""
@@ -81,6 +99,8 @@ def finalize_internet_session(session, ended_by, manual_total=None, override_rea
 
     if session.status != InternetSession.Status.ACTIVE:
         return session
+    if not _managed_metered_network_activated(session):
+        raise ValidationError('لم يبدأ احتساب جلسة الإنترنت لأن تجهيز الشبكة لم يكتمل.')
 
     ended_at = ended_at or timezone.now()
     started_at = session.effective_started_at
