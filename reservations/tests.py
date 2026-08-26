@@ -16,7 +16,7 @@ from .services import change_reservation_status, create_reservation
 class ReservationWorkflowTests(TestCase):
     def setUp(self):
         self.admin = get_user_model().objects.create_user(
-            username='reservation-admin', password='secret', is_superuser=True,
+            username='reservation-admin', password='secret', phone='+990810', is_superuser=True,
         )
         self.room = Room.objects.create(name_ar='الاستوديو', name_en='Studio')
         self.other_room = Room.objects.create(name_ar='سفرة')
@@ -48,7 +48,9 @@ class ReservationWorkflowTests(TestCase):
         self.assertIn('start_time', error.exception.message_dict)
 
     def test_table_endpoint_is_authorized_limited_and_room_filtered(self):
-        user = get_user_model().objects.create_user(username='staff', password='secret', is_staff=True, is_superuser=True)
+        user = get_user_model().objects.create_user(
+            username='staff', password='secret', phone='+990811', is_staff=True, is_superuser=True,
+        )
         self.client.force_login(user)
         response = self.client.get(reverse('staff_reservation_tables'), {'room': self.room.pk})
         self.assertEqual(response.status_code, 200)
@@ -123,7 +125,7 @@ class ConcurrentEventConfirmationTests(TransactionTestCase):
             for i in range(2)
         ]
         admin = get_user_model().objects.create_user(
-            username='capacity-admin', password='secret', is_superuser=True,
+            username='capacity-admin', password='secret', phone='+990812', is_superuser=True,
         )
         barrier = Barrier(2)
 
