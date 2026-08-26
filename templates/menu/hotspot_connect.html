@@ -16,7 +16,7 @@
 <main>
   <h1>جارٍ توصيلك بالشبكة…</h1>
   <p>سيتم تحويل جهازك إلى شبكة الإنترنت تلقائياً.</p>
-  <form id="hotspot-login" method="post" action="{{ login_url }}" autocomplete="off">
+  <form id="hotspot-login" method="post" action="{{ login_url }}" autocomplete="off" data-csrf-audit="external-post">
     <input type="hidden" name="username" value="{{ username }}">
     <input type="hidden" name="password" value="{{ password }}">
     <input type="hidden" name="dst" value="{{ destination_url }}">
