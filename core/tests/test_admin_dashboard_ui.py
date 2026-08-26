@@ -24,7 +24,7 @@ class HubAdminDashboardTests(TestCase):
         self.asset = MediaAsset.objects.create(title_ar='صورة القهوة', media_type=MediaAsset.MediaType.EXTERNAL_URL, external_url='https://example.com/coffee.jpg')
         ProductMedia.objects.create(product=self.product, media_asset=self.asset, is_primary=True)
         self.order = Order.objects.create()
-        self.payment = Payment.objects.create(order=self.order, amount_syp=0, method=Payment.Method.UNPAID)
+        self.payment = Payment.objects.create(order=self.order, amount_syp=1, method=Payment.Method.UNPAID)
 
     def test_admin_index_loads_for_superuser_with_arabic_sections_and_quick_links(self):
         self.client.force_login(self.superuser)
@@ -96,7 +96,7 @@ class HubAdminDashboardTests(TestCase):
         ]
         for changelist_name, change_name, pk, label in checks:
             with self.subTest(changelist_name=changelist_name):
-                response = self.client.get(reverse(changelist_name))
+                response = self.client.get(reverse(changelelist_name))
                 self.assertEqual(response.status_code, 200)
                 if change_name:
                     self.assertContains(response, f'href="{reverse(change_name, args=[pk])}"', html=False)
