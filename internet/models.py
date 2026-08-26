@@ -51,13 +51,13 @@ class InternetSessionNetworkState(models.Model):
     """Sensitive/durable network state for a package-less InternetSession.
 
     InternetSession keeps the public operational fields (provider, RouterOS identity,
-    network status).  This companion row keeps encrypted credentials and retry
+    network status). This companion row keeps encrypted credentials and retry
     diagnostics out of the commercial session model.
     """
 
     session = models.OneToOneField(
         'core.InternetSession',
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name='network_state',
     )
     network_credential_encrypted = models.TextField(blank=True, editable=False)
