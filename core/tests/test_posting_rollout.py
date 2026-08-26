@@ -107,16 +107,19 @@ class PostingRolloutEnvironmentParsingTests(TestCase):
 class PostingRolloutMigrationTests(TransactionTestCase):
     migrate_from = ('core', '0030_alter_cashmovement_amount_syp')
     migrate_to = ('core', '0031_systemsetting_posting_rollout_flags')
-    migrate_latest = ('core', '0034_currency_safety')
 
     def setUp(self):
         super().setUp()
         self.executor = MigrationExecutor(connection)
+        # Migration tests mutate the shared schema. Capture every current app leaf
+        # before migrating backwards so teardown restores the real project schema,
+        # not a historical core-only milestone.
+        self.latest_targets = self.executor.loader.graph.leaf_nodes()
         self.executor.migrate([self.migrate_from])
 
     def tearDown(self):
         self.executor.loader.build_graph()
-        self.executor.migrate([self.migrate_latest])
+        self.executor.migrate(self.latest_targets)
         super().tearDown()
 
     def test_migration_adds_all_flags_off(self):
