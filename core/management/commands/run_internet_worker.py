@@ -14,7 +14,7 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('--network-interval', type=float, default=5.0)
         parser.add_argument('--lifecycle-interval', type=float, default=60.0)
-        parser.add_argument('--network-limit', type=int, default=100)
+        parser.add_argument('--network-limit', type=int, default=25)
         parser.add_argument('--lifecycle-limit', type=int, default=200)
         parser.add_argument('--once', action='store_true')
 
@@ -49,7 +49,7 @@ class Command(BaseCommand):
         def request_stop(signum, frame):  # pragma: no cover - signal delivery is integration behavior
             stop_event.set()
 
-        if threading.current_thread() is threading.main_thread():
+        if not options['once'] and threading.current_thread() is threading.main_thread():
             for signum in (signal.SIGTERM, signal.SIGINT):
                 signal.signal(signum, request_stop)
 
