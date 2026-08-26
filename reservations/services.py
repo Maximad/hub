@@ -111,7 +111,7 @@ def check_in_reservation(reservation_id, *, actor, table_id=None):
     already-open visit; a previously completed/closed visit is never recreated.
     """
     reservation = (
-        Reservation.objects.select_for_update()
+        Reservation.objects.select_for_update(of=('self',))
         .select_related('visit', 'table_area__room', 'room', 'event__room')
         .get(pk=reservation_id)
     )

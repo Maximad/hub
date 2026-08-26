@@ -136,7 +136,6 @@ class CompactMenuRenderingTests(TestCase):
         self.assertIn(self.product.name_ar, rendered_text)
         self.assertIn('25,000 ل.س', rendered_text)
 
-
     def test_global_numeric_assets_are_loaded_from_base_template(self):
         response = self.client.get('/menu/')
         self.assertEqual(response.status_code, 200)
@@ -255,7 +254,6 @@ class CompactMenuRenderingTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'public-menu-layout-comfortable')
 
-
     @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
     def test_public_menu_hides_delivery_rows_when_delivery_disabled(self):
         self._settings(delivery_enabled=False, enable_delivery=False)
@@ -277,7 +275,11 @@ class CompactMenuRenderingTests(TestCase):
 
     @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
     def test_order_confirmation_delivery_fee_is_delivery_only_and_latin_digits(self):
-        order = Order.objects.create(fulfillment_mode=Order.FulfillmentMode.INSIDE_SPACE, service_mode=Order.ServiceMode.DINE_IN, subtotal_syp=25000, delivery_fee_syp=3000)
+        order = Order.objects.create(
+            fulfillment_mode=Order.FulfillmentMode.INSIDE_SPACE,
+            service_mode=Order.ServiceMode.DINE_IN,
+            delivery_fee_syp=3000,
+        )
         OrderItem.objects.create(order=order, product=self.product, product_name_ar_snapshot=self.product.name_ar, quantity=1, unit_price_syp_snapshot=25000)
         response = self.client.get(f'/order/{order.public_code}/')
         self.assertEqual(response.status_code, 200)
@@ -285,7 +287,11 @@ class CompactMenuRenderingTests(TestCase):
         self.assertNotContains(response, 'رسوم التوصيل')
         self.assertNotContains(response, '٢٥')
 
-        delivery_order = Order.objects.create(fulfillment_mode=Order.FulfillmentMode.DELIVERY, service_mode=Order.ServiceMode.DINE_IN, subtotal_syp=25000, delivery_fee_syp=3000)
+        delivery_order = Order.objects.create(
+            fulfillment_mode=Order.FulfillmentMode.DELIVERY,
+            service_mode=Order.ServiceMode.DINE_IN,
+            delivery_fee_syp=3000,
+        )
         OrderItem.objects.create(order=delivery_order, product=self.product, product_name_ar_snapshot=self.product.name_ar, quantity=1, unit_price_syp_snapshot=25000)
         delivery_response = self.client.get(f'/order/{delivery_order.public_code}/')
         self.assertEqual(delivery_response.status_code, 200)
@@ -296,7 +302,11 @@ class CompactMenuRenderingTests(TestCase):
 
     @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
     def test_staff_pos_contains_latin_digit_prices_and_core_staff_pages_load(self):
-        Order.objects.create(fulfillment_mode=Order.FulfillmentMode.INSIDE_SPACE, service_mode=Order.ServiceMode.DINE_IN, subtotal_syp=25000)
+        order = Order.objects.create(
+            fulfillment_mode=Order.FulfillmentMode.INSIDE_SPACE,
+            service_mode=Order.ServiceMode.DINE_IN,
+        )
+        OrderItem.objects.create(order=order, product=self.product, product_name_ar_snapshot=self.product.name_ar, quantity=1, unit_price_syp_snapshot=25000)
         self.client.force_login(self.user)
         for path in ['/staff/pos/', '/staff/orders/', '/staff/cashier/']:
             with self.subTest(path=path):
@@ -308,7 +318,10 @@ class CompactMenuRenderingTests(TestCase):
 
     @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
     def test_staff_raw_order_board_values_are_covered_by_global_layer(self):
-        order = Order.objects.create(fulfillment_mode=Order.FulfillmentMode.INSIDE_SPACE, service_mode=Order.ServiceMode.DINE_IN, subtotal_syp=25000)
+        order = Order.objects.create(
+            fulfillment_mode=Order.FulfillmentMode.INSIDE_SPACE,
+            service_mode=Order.ServiceMode.DINE_IN,
+        )
         OrderItem.objects.create(order=order, product=self.product, product_name_ar_snapshot=self.product.name_ar, quantity=2, unit_price_syp_snapshot=25000)
         self.client.force_login(self.user)
         response = self.client.get('/staff/orders/')

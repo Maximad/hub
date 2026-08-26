@@ -27,12 +27,21 @@ class FinanceBoundaryTestCase(TestCase):
         self.actor = users.objects.create_user(username='boundary-staff', password='x', phone='+990020', role='admin')
         self.approver = users.objects.create_superuser(username='boundary-owner', password='x', phone='+990021')
         self.day = date(2026, 8, 7)
-        self.cash = FinancialAccount.objects.create(
-            code='cash:main', name_ar='صندوق', account_type='asset', scope='cashbox', is_active=True,
-            negative_balance_policy='allow',
+        self.cash, _ = FinancialAccount.objects.update_or_create(
+            code='cash:main',
+            defaults={
+                'name_ar': 'صندوق', 'account_type': 'asset', 'scope': 'cashbox',
+                'is_active': True, 'negative_balance_policy': 'allow',
+            },
         )
-        self.inventory_account = FinancialAccount.objects.create(code='inventory:purchases',name_ar='مخزون',account_type='asset',is_active=True)
-        self.supplier_payable = FinancialAccount.objects.create(code='payable:suppliers',name_ar='موردون',account_type='liability',is_active=True)
+        self.inventory_account, _ = FinancialAccount.objects.update_or_create(
+            code='inventory:purchases',
+            defaults={'name_ar': 'مخزون', 'account_type': 'asset', 'is_active': True},
+        )
+        self.supplier_payable, _ = FinancialAccount.objects.update_or_create(
+            code='payable:suppliers',
+            defaults={'name_ar': 'موردون', 'account_type': 'liability', 'is_active': True},
+        )
 
     def context(self, key, channel='service-test'):
         return PostingContext(

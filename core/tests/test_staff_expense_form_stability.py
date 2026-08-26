@@ -129,6 +129,9 @@ class StaffExpensePostTests(TestCase):
             'title': 'مصروف اختبار POST',
             'description': 'اختبار مسار الحفظ الحقيقي',
             'amount_syp': '12500',
+            'currency_amount': '12500',
+            'currency_currency': 'SYP_NEW',
+            'currency_acknowledged': 'on',
             'payment_method': '',
             'paid_from': Expense.PaidFrom.UNPAID,
             'status': status,
@@ -136,6 +139,8 @@ class StaffExpensePostTests(TestCase):
             'liability_account': '',
         }
         payload.update(overrides)
+        if 'amount_syp' in overrides and 'currency_amount' not in overrides:
+            payload['currency_amount'] = overrides['amount_syp']
         return payload
 
     def test_draft_post_redirects_and_uses_deterministic_draft_key(self):

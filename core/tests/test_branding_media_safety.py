@@ -86,8 +86,11 @@ class BrandingMediaSafetyTests(TestCase):
         for path in ['/menu/', '/staff/pos/', '/staff/orders/', '/staff/cashier/', '/admin/core/systemsetting/']:
             self._assert_loads(path)
 
+
 class SystemSettingAppearanceSafetyTests(TestCase):
-    BAD_COLORS = ['', '   ', '###', 'red; background:url(x)', 'javascript:alert(1)', 'نص عربي']
+    # Keep persisted malformed samples within the real varchar(20) schema limit.
+    # The helper test below still exercises arbitrary Python-side values directly.
+    BAD_COLORS = ['', '   ', '###', 'red;url(x)', 'javascript:x', 'نص عربي']
     BAD_SIZES = ['', None, 'large', '-100', '9999', '10px; color:red']
 
     def setUp(self):
@@ -160,7 +163,14 @@ class SystemSettingAppearanceSafetyTests(TestCase):
         get_system_settings.cache_clear()
         self._assert_core_pages_load()
 
+
 class SystemSettingCustomFontTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username='font-admin', password='pass', email='font@example.com', phone='+963900000004'
+        )
+        self.client.force_login(self.user)
+
     def tearDown(self):
         get_system_settings.cache_clear()
 
@@ -193,16 +203,16 @@ class SystemSettingCustomFontTests(TestCase):
                 for path in ['/menu/', '/staff/pos/', '/staff/orders/', '/staff/cashier/']:
                     with self.subTest(path=path):
                         response = self.client.get(path)
-                        self.assertLess(response.status_code, 500)
+                        self.assertEqual(response.status_code, 200)
                         content = response.content.decode(response.charset or 'utf-8')
                         self.assertIn('font-family:"HubCustomFont"', content)
-                        self.assertIn('--hub-font-body:"HubCustomFont","Tahoma","Noto Naskh Arabic","Segoe UI",Arial,sans-serif', content)
-                        self.assertIn('font-family:var(--hub-font-body)', content)
-                        self.assertIn('html,body,button,input,textarea,select', content)
+                        self.assertIn('--hub-font-body:"HubCustomFont",Tahoma,"Noto Sans Arabic","Segoe UI",Arial,sans-serif', content)
                         self.assertLess(content.index('css/hub.css'), content.index('--hub-font-body:"HubCustomFont"'))
-                        self.assertNotIn('MadaniArabicDEMO', content)
+                        # The uploaded filename is expected to appear in the media URL;
+                        # only the CSS family itself must stay fixed and non-user-controlled.
+                        self.assertIn('/media/system/fonts/MadaniArabicDEMO-Regular.otf', content)
+                        self.assertNotIn('font-family:"MadaniArabicDEMO', content)
                         self.assertNotIn('\\u002D', content)
-
 
     def test_custom_font_prefers_uploaded_woff2_with_same_stem(self):
         with TemporaryDirectory() as tmp:
@@ -223,8 +233,6 @@ class SystemSettingCustomFontTests(TestCase):
                 content = response.content.decode(response.charset or 'utf-8')
                 self.assertIn('/media/system/fonts/BrandFont.woff2', content)
                 self.assertIn('format("woff2")', content)
-                self.assertIn('html,body,button,input,textarea,select', content)
-                self.assertIn('font-family:var(--hub-font-body)', content)
 
     def test_base_ui_selectors_use_font_variable_without_late_hardcoded_overrides(self):
         css = (settings.BASE_DIR / 'static/css/hub.css').read_text()

@@ -94,7 +94,7 @@ class MembershipBenefitServiceTests(TestCase):
     def test_booking_workspace_and_internet_discovery_has_no_side_effect(self):
         self.subscribe(self.plan_with('booking', 'booking_priority'))
         self.subscribe(self.plan_with('workspace', 'workspace_minutes', value_integer=45, scope_type='workspace'))
-        self.subscribe(self.plan_with('net-price', 'internet_member_price', scope_type='internet'))
+        self.subscribe(self.plan_with('net-price', 'internet_member_price', value_decimal=0, scope_type='internet'))
         self.subscribe(self.plan_with('net-minutes', 'internet_minutes', value_integer=60, scope_type='internet'))
         self.assertTrue(has_booking_priority(self.member, self.now))
         self.assertEqual(get_workspace_allowance(self.member, self.now), 45)

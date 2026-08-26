@@ -14,8 +14,14 @@ class StaffFinanceWorkflowTests(TestCase):
         self.user = get_user_model().objects.create_user(username='finance-admin', password='pass', phone='+9901', role='admin')
         self.client.force_login(self.user)
         self.item = InventoryItem.objects.create(name_ar='قهوة', unit=InventoryItem.Unit.KG, current_quantity=Decimal('0'))
-        FinancialAccount.objects.create(code='inventory:purchases',name_ar='مخزون',account_type='asset',is_active=True)
-        FinancialAccount.objects.create(code='payable:suppliers',name_ar='موردون',account_type='liability',is_active=True)
+        FinancialAccount.objects.update_or_create(
+            code='inventory:purchases',
+            defaults={'name_ar': 'مخزون', 'account_type': 'asset', 'is_active': True},
+        )
+        FinancialAccount.objects.update_or_create(
+            code='payable:suppliers',
+            defaults={'name_ar': 'موردون', 'account_type': 'liability', 'is_active': True},
+        )
 
     def test_reopen_requires_reason_and_preserves_revision(self):
         close, created = finalize_daily_close(date(2026, 7, 17), self.user, 1000)

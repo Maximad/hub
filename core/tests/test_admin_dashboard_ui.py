@@ -24,7 +24,7 @@ class HubAdminDashboardTests(TestCase):
         self.asset = MediaAsset.objects.create(title_ar='صورة القهوة', media_type=MediaAsset.MediaType.EXTERNAL_URL, external_url='https://example.com/coffee.jpg')
         ProductMedia.objects.create(product=self.product, media_asset=self.asset, is_primary=True)
         self.order = Order.objects.create()
-        self.payment = Payment.objects.create(order=self.order, amount_syp=0, method=Payment.Method.UNPAID)
+        self.payment = Payment.objects.create(order=self.order, amount_syp=1, method=Payment.Method.UNPAID)
 
     def test_admin_index_loads_for_superuser_with_arabic_sections_and_quick_links(self):
         self.client.force_login(self.superuser)
@@ -108,7 +108,7 @@ class HubAdminDashboardTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'قهوة عربية')
 
-    def test_risky_models_are_readonly_for_non_superuser_and_superuser_can_change(self):
+    def test_payment_workflow_admin_is_readonly_even_for_superuser(self):
         factory = RequestFactory()
         request = factory.get('/admin/core/payment/')
         request.user = self.manager
@@ -116,9 +116,10 @@ class HubAdminDashboardTests(TestCase):
         readonly = payment_admin.get_readonly_fields(request, self.payment)
         self.assertIn('amount_syp', readonly)
         self.assertFalse(payment_admin.has_delete_permission(request, self.payment))
+
         super_request = factory.get('/admin/core/payment/')
         super_request.user = self.superuser
-        self.assertNotIn('amount_syp', payment_admin.get_readonly_fields(super_request, self.payment))
+        self.assertIn('amount_syp', payment_admin.get_readonly_fields(super_request, self.payment))
         self.assertTrue(payment_admin.has_delete_permission(super_request, self.payment))
 
     def test_staff_and_public_routes_still_resolve(self):

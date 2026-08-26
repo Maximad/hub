@@ -13,7 +13,7 @@ class ApprovedPurchaseFinanceDecisionTests(TestCase):
         )
 
     def test_missing_account_is_blocked_and_not_created(self):
-        with self.assertRaises(KeyError):
+        with self.assertRaisesRegex(InvalidTransition, 'مفقود أو غير فعّال'):
             _account('inventory:unmapped')
         self.assertFalse(FinancialAccount.objects.filter(code='inventory:unmapped').exists())
 

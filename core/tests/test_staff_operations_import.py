@@ -12,7 +12,7 @@ from django.utils.formats import localize
 
 from core.management.commands.generate_hub_operations_template import workbook_bytes
 from core.management.commands.import_hub_operations_batch import ORDER, SHEETS
-from core.models import InventoryItem, Payment, Purchase, StockMovement
+from core.models import FinancialAccount, InventoryItem, Payment, Purchase, StockMovement
 from core.services.operations_import import Plan
 from vendors.models import Vendor
 
@@ -58,6 +58,20 @@ class StaffOperationsImportTests(TestCase):
         self.client.force_login(self.admin)
         item = InventoryItem.objects.create(code='ING-HOTFIX', name_ar='بن الاختبار', unit=InventoryItem.Unit.KG)
         vendor = Vendor.objects.create(name_ar='مورد الاختبار')
+        FinancialAccount.objects.update_or_create(
+            code='inventory:purchases',
+            defaults={
+                'name_ar': 'مخزون', 'account_type': FinancialAccount.AccountType.ASSET,
+                'business_unit': '', 'is_active': True,
+            },
+        )
+        FinancialAccount.objects.update_or_create(
+            code='payable:suppliers',
+            defaults={
+                'name_ar': 'موردون', 'account_type': FinancialAccount.AccountType.LIABILITY,
+                'business_unit': '', 'is_active': True,
+            },
+        )
         rows = {
             'purchases': ['CREATE_AND_RECEIVE', 'مراجع', 'PUR-HOTFIX-001', '2026-01-15', '', vendor.name_ar, 'INV-001', '0', ''],
             'purchase_items': ['CREATE', 'LINE-HOTFIX-001', 'PUR-HOTFIX-001', item.code, item.name_ar, '2.5', 'kg', '10000', ''],
