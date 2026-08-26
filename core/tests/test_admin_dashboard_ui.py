@@ -96,7 +96,7 @@ class HubAdminDashboardTests(TestCase):
         ]
         for changelist_name, change_name, pk, label in checks:
             with self.subTest(changelist_name=changelist_name):
-                response = self.client.get(reverse(changelelist_name))
+                response = self.client.get(reverse(changelist_name))
                 self.assertEqual(response.status_code, 200)
                 if change_name:
                     self.assertContains(response, f'href="{reverse(change_name, args=[pk])}"', html=False)
