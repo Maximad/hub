@@ -44,7 +44,8 @@ class MikroTikBackendTests(TestCase):
         self.entitlement.minutes_used = 10; self.entitlement.save(update_fields=['minutes_used'])
         self.backend.provision_access(self.entitlement)
         user = self.client.users[self.backend.username(self.entitlement)]
-        self.assertEqual((user['profile'], user['limit-uptime'], user['shared-users']), ('hub-fast', '1:20:00', '2'))
+        self.assertEqual((user['profile'], user['limit-uptime']), ('hub-fast', '1:20:00'))
+        self.assertNotIn('shared-users', user)
         self.assertEqual(user['comment'], f'hub-entitlement:{self.entitlement.pk}')
         self.assertNotIn(self.entitlement.access_code, user['name'])
         self.backend.provision_access(self.entitlement)
