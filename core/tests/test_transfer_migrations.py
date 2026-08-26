@@ -8,7 +8,7 @@ from django.test import TransactionTestCase
 
 
 class TransferBigintMigrationTests(TransactionTestCase):
-    """Exercise the production 0028 -> latest path on PostgreSQL."""
+    """Exercise the production 0028 -> 0034 path on PostgreSQL without leaking schema state."""
 
     migrate_from = ('core', '0028_purchase_lifecycle')
     migrate_to = ('core', '0034_currency_safety')
@@ -16,12 +16,14 @@ class TransferBigintMigrationTests(TransactionTestCase):
     def setUp(self):
         super().setUp()
         self.executor = MigrationExecutor(connection)
+        self.latest_targets = self.executor.loader.graph.leaf_nodes()
         self.executor.migrate([self.migrate_from])
 
     def tearDown(self):
-        # Leave the database at the current project state for Django's test cleanup.
+        # Migration tests mutate the shared test schema. Always restore every app
+        # to the current project leaf nodes before Django continues with later tests.
         self.executor.loader.build_graph()
-        self.executor.migrate([self.migrate_to])
+        self.executor.migrate(self.latest_targets)
         super().tearDown()
 
     def column_type(self):
@@ -74,9 +76,13 @@ class TransferBigintMigrationTests(TransactionTestCase):
             id=uuid.uuid4(), operation_type='transfer.reverse', business_date=date(2026, 8, 7),
             idempotency_key='migration-reverse', status='draft',
         )
+        # The current constraint requires a transfer with a posting batch to be
+        # in a posted/reversed state. Use a valid historical state while testing
+        # only the bigint PK and relation compatibility of this migration path.
+        migrated.state = 'reversed'
         migrated.posting_batch = posting_batch
         migrated.reversal_batch = reversal_batch
-        migrated.save(update_fields=['posting_batch', 'reversal_batch'])
+        migrated.save(update_fields=['state', 'posting_batch', 'reversal_batch'])
         movement = CashMovement.objects.create(
             business_date=date(2026, 8, 7), movement_type='cash_deposit', direction='in',
             amount_syp=Decimal('25.00'), title='migration projection', is_generated=True,
