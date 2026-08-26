@@ -57,6 +57,7 @@ class TransferBigintMigrationTests(TransactionTestCase):
             amount=Decimal('25.00'), business_date=date(2026, 8, 7),
         )
         transfer_id = transfer.pk
+        destination_id = destination.pk
         self.assertIsInstance(transfer_id, int)
         self.assertEqual(self.column_type(), 'bigint')
 
@@ -83,10 +84,12 @@ class TransferBigintMigrationTests(TransactionTestCase):
         migrated.posting_batch = posting_batch
         migrated.reversal_batch = reversal_batch
         migrated.save(update_fields=['state', 'posting_batch', 'reversal_batch'])
+        # Never mix model instances from different historical app registries.
+        # The row identity is stable across the migration, so assign the FK id.
         movement = CashMovement.objects.create(
             business_date=date(2026, 8, 7), movement_type='cash_deposit', direction='in',
             amount_syp=Decimal('25.00'), title='migration projection', is_generated=True,
-            financial_account=destination, transfer=migrated, transfer_leg='incoming',
+            financial_account_id=destination_id, transfer=migrated, transfer_leg='incoming',
         )
 
         self.assertEqual(self.column_type(), 'bigint')
