@@ -5,9 +5,10 @@ from unittest.mock import patch
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
 
 from core.services.internet_worker import run_internet_worker_cycle
+from internet.models import InternetOperationsState
 
 
 class InternetWorkerCycleTests(SimpleTestCase):
@@ -21,17 +22,19 @@ class InternetWorkerCycleTests(SimpleTestCase):
         entitlement_jobs.return_value = (3, 2)
         session_jobs.return_value = (4, 4)
 
-        summary, errors = run_internet_worker_cycle(
-            lifecycle_limit=25,
-            network_limit=10,
-            run_lifecycle=True,
-        )
+        with patch('core.services.internet_worker._record_heartbeat') as heartbeat:
+            summary, errors = run_internet_worker_cycle(
+                lifecycle_limit=25,
+                network_limit=10,
+                run_lifecycle=True,
+            )
 
         lifecycle.assert_called_once()
         self.assertEqual(lifecycle.call_args.args[0], 'reconcile_internet_lifecycle')
         self.assertEqual(lifecycle.call_args.kwargs['limit'], 25)
         entitlement_jobs.assert_called_once_with(limit=10)
         session_jobs.assert_called_once_with(limit=10)
+        heartbeat.assert_called_once()
         self.assertEqual(summary['lifecycle'], 'ok')
         self.assertEqual(summary['entitlement_network']['failed'], 1)
         self.assertEqual(summary['session_network']['failed'], 0)
@@ -49,7 +52,8 @@ class InternetWorkerCycleTests(SimpleTestCase):
         entitlement_jobs.side_effect = RuntimeError('temporary entitlement queue failure')
         session_jobs.return_value = (2, 2)
 
-        summary, errors = run_internet_worker_cycle(run_lifecycle=True)
+        with patch('core.services.internet_worker._record_heartbeat'):
+            summary, errors = run_internet_worker_cycle(run_lifecycle=True)
 
         self.assertEqual(summary['lifecycle'], 'error')
         session_jobs.assert_called_once_with(limit=100)
@@ -67,11 +71,30 @@ class InternetWorkerCycleTests(SimpleTestCase):
     def test_network_only_cycle_skips_lifecycle(
         self, lifecycle, entitlement_jobs, session_jobs, close_connections,
     ):
-        summary, errors = run_internet_worker_cycle(run_lifecycle=False)
+        with patch('core.services.internet_worker._record_heartbeat'):
+            summary, errors = run_internet_worker_cycle(run_lifecycle=False)
 
         lifecycle.assert_not_called()
         self.assertEqual(summary['lifecycle'], 'skipped')
         self.assertEqual(errors, [])
+
+
+class InternetWorkerHeartbeatTests(TestCase):
+    @patch('core.services.internet_worker.close_old_connections')
+    @patch('core.services.internet_worker.process_ready_session_network_operations', return_value=(0, 0))
+    @patch('core.services.internet_worker.process_ready_network_operations', return_value=(0, 0))
+    @patch('core.services.internet_worker.call_command')
+    def test_cycle_persists_secret_free_heartbeat(
+        self, lifecycle, entitlement_jobs, session_jobs, close_connections,
+    ):
+        summary, errors = run_internet_worker_cycle(run_lifecycle=True)
+
+        self.assertEqual(errors, [])
+        state = InternetOperationsState.objects.get(key='default')
+        self.assertIsNotNone(state.last_worker_seen_at)
+        self.assertIsNotNone(state.last_lifecycle_at)
+        self.assertEqual(state.last_worker_summary, summary)
+        self.assertEqual(state.last_worker_error, '')
 
 
 class InternetWorkerCommandTests(SimpleTestCase):

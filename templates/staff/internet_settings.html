@@ -1,18 +1,130 @@
 {% extends "base.html" %}
-{% block title %}إعدادات الإنترنت{% endblock %}
+{% block title %}تشغيل وإعدادات الإنترنت{% endblock %}
 {% block content %}
-<h1>إعدادات الإنترنت</h1>
-<p class="hub-alert hub-alert-warning">تغيير النسبة يؤثر على المبيعات والاستحقاقات الجديدة فقط، ولا يغيّر السجلات السابقة.</p>
-<section><h2>حالة عمليات الشبكة</h2><ul><li>عمليات الشبكة المعلقة: {{ pending_network_operations }}</li><li>عمليات الشبكة الفاشلة: {{ failed_network_operations }}</li><li>آخر مزامنة: {% if last_network_operation %}{{ last_network_operation.updated_at }}{% else %}—{% endif %}</li></ul></section>
-<section><h2>شركاء الإنترنت</h2><p>الشريك الافتراضي: {{ default_partner|default:'لا يوجد' }} — النسبة: {{ default_partner.revenue_share_percent|default:'-' }}%</p>
-{% if not default_partner %}<p class="hub-alert hub-alert-warning">لا يوجد شريك إنترنت افتراضي — المبيعات الجديدة لن تسجل حصة شريك.</p>{% endif %}
-<table><tr><th>الاسم</th><th>فعال</th><th>افتراضي</th><th>النسبة</th><th>آخر تحديث</th><th>تعديل</th></tr>
-{% for p in partners %}<tr><form method="post" action="{% url 'staff_internet_partner_edit' p.pk %}">{% csrf_token %}<td><input name="name" value="{{ p.name }}"></td><td><input type="checkbox" name="active" {% if p.active %}checked{% endif %}></td><td><input type="checkbox" name="is_default" {% if p.is_default %}checked{% endif %}></td><td><input type="number" step=".01" min="0" max="100" name="revenue_share_percent" value="{{ p.revenue_share_percent }}"></td><td>{{ p.updated_at }}</td><td><button type="submit">حفظ</button></td></form></tr>{% endfor %}</table>
-<h3>شريك جديد</h3><form method="post" action="{% url 'staff_internet_partner_new' %}">{% csrf_token %}{{ partner_form.as_p }}<button type="submit">إنشاء</button></form></section>
-<section><h2>الإعدادات التجارية الحالية</h2><ul><li>باقات ترث الافتراضي: {{ inherited_packages }}</li><li>تجاوز شريك صريح: {{ partner_overrides }}</li><li>تجاوز نسبة صريح: {{ percent_overrides }}</li></ul></section>
-<section><h2>ملفات السرعة</h2><p>اسم ملف الراوتر ربط شبكي اختياري ويمكن تركه فارغاً في الوضع اليدوي.</p>
-{% for p in profiles %}<form method="post" action="{% url 'staff_internet_profile_edit' p.pk %}">{% csrf_token %}<input name="code" value="{{ p.code }}"><input name="name" value="{{ p.name }}"><input name="download_limit_kbps" value="{{ p.download_limit_kbps|default:'' }}" placeholder="تنزيل"><input name="upload_limit_kbps" value="{{ p.upload_limit_kbps|default:'' }}" placeholder="رفع"><input name="router_profile_name" value="{{ p.router_profile_name }}" placeholder="Router profile"><label>فعال <input type="checkbox" name="is_active" {% if p.is_active %}checked{% endif %}></label><button>حفظ</button></form>{% endfor %}
-<form method="post" action="{% url 'staff_internet_profile_new' %}">{% csrf_token %}{{ profile_form.as_p }}<button>إنشاء ملف</button></form></section>
-<section><h2>شبكات Wi-Fi</h2><table><tr><th>الاسم</th><th>SSID</th><th>النوع</th><th>فعال</th><th>الخلفية</th><th>السرعة</th><th>QR</th></tr>{% for n in networks %}<tr><td>{{ n.name_ar }}</td><td>{{ n.ssid }}</td><td>{{ n.get_network_type_display }}</td><td>{{ n.is_active|yesno:'نعم,لا' }}</td><td>{{ n.get_network_backend_display }}</td><td>{{ n.bandwidth_profile|default:'-' }}</td><td>{{ n.visible_on_qr|yesno:'نعم,لا' }}</td></tr>{% endfor %}</table><p>كلمات مرور Wi-Fi لا تعرض هنا.</p></section>
-<section><h2>حالة MikroTik</h2><p>التكامل: {{ mikrotik_enabled|yesno:'مفعّل,معطّل' }} — الإعداد: {{ mikrotik_configured|yesno:'مكتمل,غير مكتمل' }}</p><p>الخلفيات الحالية: {{ network_backends|join:', ' }}</p><p>بيانات الدخول محفوظة في البيئة ولا تعرض في هذه الصفحة.</p></section>
+<section class="hub-section">
+  <p><a class="hub-button" href="{% url 'staff_internet' %}">← الإنترنت والعمل</a></p>
+  <h1 class="hub-section-title">تشغيل وإعدادات الإنترنت</h1>
+  <p class="hub-text-muted">مكان واحد لمراقبة تشغيل الإنترنت، جاهزية MikroTik، عمليات الشبكة، ملفات السرعة والشركاء. لا تعرض الصفحة كلمات مرور أو مفاتيح.</p>
+</section>
+
+<section class="hub-section hub-summary-cards">
+  <div class="hub-summary-card"><span>جاهزية النظام</span><strong class="metric">{{ readiness.status }}</strong></div>
+  <div class="hub-summary-card"><span>عامل الإنترنت</span><strong class="metric">{% if worker_fresh %}يعمل{% else %}متوقف / متأخر{% endif %}</strong></div>
+  <div class="hub-summary-card"><span>MikroTik</span><strong class="metric">{% if preflight.enabled %}مفعّل{% else %}معطّل{% endif %}</strong></div>
+  <div class="hub-summary-card"><span>جاهز للتفعيل</span><strong class="metric">{% if preflight.ready %}نعم{% else %}لا{% endif %}</strong></div>
+</section>
+
+{% if not preflight.enabled %}
+<p class="hub-alert hub-alert-warning">MikroTik ما يزال معطّلاً. هذا هو الوضع الآمن حتى تصبح جميع فحوص الجاهزية ناجحة.</p>
+{% elif not preflight.ready %}
+<p class="hub-alert hub-alert-danger">MikroTik مفعّل لكن الجاهزية التشغيلية ليست مكتملة. راجع البنود أدناه.</p>
+{% endif %}
+
+<section class="hub-section hub-card">
+  <h2 class="hub-section-title">جاهزية MikroTik</h2>
+  <div class="hub-table-wrap"><table class="hub-table">
+    <tr><th>الفحص</th><th>الحالة</th><th>تفصيل</th></tr>
+    {% for check in preflight.checks %}<tr>
+      <td>{{ check.label }}</td>
+      <td>{% if check.ok %}<span class="hub-badge hub-badge-success">جاهز</span>{% else %}<span class="hub-badge hub-badge-danger">غير جاهز</span>{% endif %}</td>
+      <td>{{ check.detail|default:'—' }}</td>
+    </tr>{% endfor %}
+  </table></div>
+  <form method="post" action="{% url 'staff_internet_settings' %}">{% csrf_token %}
+    <input type="hidden" name="operation_action" value="mikrotik_healthcheck">
+    <button class="hub-button hub-button-primary" type="submit">فحص اتصال MikroTik — قراءة فقط</button>
+  </form>
+  <p class="hub-text-muted">يمكن إجراء الفحص بينما التكامل معطّل. يقرأ معلومات النظام فقط ولا ينشئ أو يعدّل مستخدمي HotSpot.</p>
+  {% if operations_state.last_mikrotik_check_at %}
+    <p>آخر فحص: {{ operations_state.last_mikrotik_check_at }} — {% if operations_state.last_mikrotik_check_ok %}<strong>ناجح</strong>{% else %}<strong>فشل</strong>{% endif %}{% if operations_state.last_mikrotik_check_message %} — {{ operations_state.last_mikrotik_check_message }}{% endif %}</p>
+  {% else %}<p>لم يجر فحص اتصال محفوظ بعد.</p>{% endif %}
+</section>
+
+<section class="hub-section hub-card">
+  <h2 class="hub-section-title">عامل الإنترنت</h2>
+  <p>آخر نبضة: {{ operations_state.last_worker_seen_at|default:'—' }}</p>
+  <p>آخر دورة lifecycle: {{ operations_state.last_lifecycle_at|default:'—' }}</p>
+  {% if operations_state.last_worker_error %}<p class="hub-alert hub-alert-warning">آخر خطأ عامل: {{ operations_state.last_worker_error }}</p>{% endif %}
+  {% if operations_state.last_worker_summary %}
+  <div class="hub-summary-cards">
+    <div class="hub-summary-card"><span>Lifecycle</span><strong>{{ operations_state.last_worker_summary.lifecycle|default:'—' }}</strong></div>
+    <div class="hub-summary-card"><span>عمليات الباقات في آخر دورة</span><strong>{{ operations_state.last_worker_summary.entitlement_network.processed|default:0 }}</strong></div>
+    <div class="hub-summary-card"><span>عمليات الجلسات في آخر دورة</span><strong>{{ operations_state.last_worker_summary.session_network.processed|default:0 }}</strong></div>
+  </div>
+  {% endif %}
+</section>
+
+<section class="hub-section hub-card">
+  <h2 class="hub-section-title">فحص الجاهزية</h2>
+  {% if readiness.findings %}
+  <div class="hub-table-wrap"><table class="hub-table"><tr><th>الأهمية</th><th>الكود</th><th>الوصف</th></tr>
+    {% for finding in readiness.findings %}<tr>
+      <td>{% if finding.severity == 'FAIL' %}<span class="hub-badge hub-badge-danger">FAIL</span>{% else %}<span class="hub-badge hub-badge-info">{{ finding.severity }}</span>{% endif %}</td>
+      <td><code>{{ finding.code }}</code></td><td>{{ finding.message }}</td>
+    </tr>{% endfor %}
+  </table></div>
+  {% else %}<p class="hub-alert hub-alert-success">لا توجد ملاحظات جاهزية.</p>{% endif %}
+</section>
+
+<section class="hub-section hub-card">
+  <h2 class="hub-section-title">طوابير عمليات الشبكة</h2>
+  <div class="hub-summary-cards">
+    <div class="hub-summary-card"><span>باقات — معلقة</span><strong>{{ entitlement_counts.pending|default:0 }}</strong></div>
+    <div class="hub-summary-card"><span>باقات — قيد التنفيذ</span><strong>{{ entitlement_counts.processing|default:0 }}</strong></div>
+    <div class="hub-summary-card"><span>باقات — فاشلة</span><strong>{{ entitlement_counts.failed|default:0 }}</strong></div>
+    <div class="hub-summary-card"><span>جلسات — معلقة</span><strong>{{ session_counts.pending|default:0 }}</strong></div>
+    <div class="hub-summary-card"><span>جلسات — قيد التنفيذ</span><strong>{{ session_counts.processing|default:0 }}</strong></div>
+    <div class="hub-summary-card"><span>جلسات — فاشلة</span><strong>{{ session_counts.failed|default:0 }}</strong></div>
+  </div>
+
+  <h3>عمليات الباقات الأخيرة</h3>
+  <div class="hub-table-wrap"><table class="hub-table">
+    <tr><th>#</th><th>الصلاحية</th><th>العملية</th><th>الحالة</th><th>المحاولات</th><th>المحاولة التالية</th><th>الخطأ</th><th></th></tr>
+    {% for op in entitlement_operations %}<tr>
+      <td>{{ op.id }}</td><td><code>{{ op.entitlement.access_code }}</code></td><td>{{ op.get_operation_display }}</td><td>{{ op.get_status_display }}</td><td>{{ op.attempt_count }}</td><td>{{ op.next_attempt_at|default:'—' }}</td><td>{{ op.last_error|default:'—' }}</td>
+      <td>{% if op.status == 'failed' %}<form method="post" action="{% url 'staff_internet_settings' %}">{% csrf_token %}<input type="hidden" name="operation_action" value="retry_network_operation"><input type="hidden" name="operation_kind" value="entitlement"><input type="hidden" name="operation_id" value="{{ op.id }}"><button class="hub-button" type="submit">إعادة للمحاولة</button></form>{% endif %}</td>
+    </tr>{% empty %}<tr><td colspan="8">لا توجد عمليات.</td></tr>{% endfor %}
+  </table></div>
+
+  <h3>عمليات الجلسات الأخيرة</h3>
+  <div class="hub-table-wrap"><table class="hub-table">
+    <tr><th>#</th><th>الجلسة</th><th>العملية</th><th>الحالة</th><th>المحاولات</th><th>المحاولة التالية</th><th>الخطأ</th><th></th></tr>
+    {% for op in session_operations %}<tr>
+      <td>{{ op.id }}</td><td><a href="{% url 'staff_internet_session' op.session_id %}">جلسة {{ op.session_id }}</a></td><td>{{ op.get_operation_display }}</td><td>{{ op.get_status_display }}</td><td>{{ op.attempt_count }}</td><td>{{ op.next_attempt_at|default:'—' }}</td><td>{{ op.last_error|default:'—' }}</td>
+      <td>{% if op.status == 'failed' %}<form method="post" action="{% url 'staff_internet_settings' %}">{% csrf_token %}<input type="hidden" name="operation_action" value="retry_network_operation"><input type="hidden" name="operation_kind" value="session"><input type="hidden" name="operation_id" value="{{ op.id }}"><button class="hub-button" type="submit">إعادة للمحاولة</button></form>{% endif %}</td>
+    </tr>{% empty %}<tr><td colspan="8">لا توجد عمليات.</td></tr>{% endfor %}
+  </table></div>
+</section>
+
+<section class="hub-section hub-card">
+  <h2 class="hub-section-title">الجلسات الفعالة وحالة الشبكة</h2>
+  <div class="hub-table-wrap"><table class="hub-table">
+    <tr><th>الجلسة</th><th>العميل</th><th>مزود الشبكة</th><th>حالة الشبكة</th><th>بدء الفوترة بعد الشبكة</th><th>آخر مزامنة</th><th>آخر خطأ</th></tr>
+    {% for row in active_session_rows %}{% with s=row.session n=row.network_state %}<tr>
+      <td><a href="{% url 'staff_internet_session' s.id %}">#{{ s.id }}</a></td>
+      <td>{% if s.member %}{{ s.member.name_ar }}{% else %}{{ s.display_guest_name|default:'زائر' }}{% endif %}</td>
+      <td>{{ s.get_network_provider_display }}</td><td>{{ s.get_network_status_display }}</td><td>{{ n.network_activated_at|default:'—' }}</td><td>{{ n.last_network_sync_at|default:'—' }}</td><td>{{ n.last_network_error|default:'—' }}</td>
+    </tr>{% endwith %}{% empty %}<tr><td colspan="7">لا توجد جلسات فعالة.</td></tr>{% endfor %}
+  </table></div>
+</section>
+
+<section class="hub-section hub-card">
+  <h2 class="hub-section-title">شركاء الإنترنت</h2>
+  <p class="hub-alert hub-alert-warning">تغيير النسبة يؤثر على المبيعات والاستحقاقات الجديدة فقط، ولا يغيّر السجلات السابقة.</p>
+  <p>الشريك الافتراضي: {{ default_partner|default:'لا يوجد' }} — النسبة: {{ default_partner.revenue_share_percent|default:'-' }}%</p>
+  {% if not default_partner %}<p class="hub-alert hub-alert-warning">لا يوجد شريك إنترنت افتراضي — المبيعات الجديدة لن تسجل حصة شريك.</p>{% endif %}
+  <div class="hub-table-wrap"><table class="hub-table"><tr><th>الاسم</th><th>فعال</th><th>افتراضي</th><th>النسبة</th><th>آخر تحديث</th><th>تعديل</th></tr>
+  {% for p in partners %}<tr><form method="post" action="{% url 'staff_internet_partner_edit' p.pk %}">{% csrf_token %}<td><input name="name" value="{{ p.name }}"></td><td><input type="checkbox" name="active" {% if p.active %}checked{% endif %}></td><td><input type="checkbox" name="is_default" {% if p.is_default %}checked{% endif %}></td><td><input type="number" step=".01" min="0" max="100" name="revenue_share_percent" value="{{ p.revenue_share_percent }}"></td><td>{{ p.updated_at }}</td><td><button class="hub-button" type="submit">حفظ</button></td></form></tr>{% endfor %}</table></div>
+  <h3>شريك جديد</h3><form method="post" action="{% url 'staff_internet_partner_new' %}">{% csrf_token %}{{ partner_form.as_p }}<button class="hub-button" type="submit">إنشاء</button></form>
+</section>
+
+<section class="hub-section hub-card"><h2 class="hub-section-title">الإعدادات التجارية الحالية</h2><ul><li>باقات ترث الافتراضي: {{ inherited_packages }}</li><li>تجاوز شريك صريح: {{ partner_overrides }}</li><li>تجاوز نسبة صريح: {{ percent_overrides }}</li></ul></section>
+
+<section class="hub-section hub-card"><h2 class="hub-section-title">ملفات السرعة</h2><p>اسم ملف الراوتر ربط شبكي اختياري ويمكن تركه فارغاً في الوضع اليدوي.</p>
+{% for p in profiles %}<form class="hub-form-section" method="post" action="{% url 'staff_internet_profile_edit' p.pk %}">{% csrf_token %}<input name="code" value="{{ p.code }}"><input name="name" value="{{ p.name }}"><input name="download_limit_kbps" value="{{ p.download_limit_kbps|default:'' }}" placeholder="تنزيل"><input name="upload_limit_kbps" value="{{ p.upload_limit_kbps|default:'' }}" placeholder="رفع"><input name="router_profile_name" value="{{ p.router_profile_name }}" placeholder="Router profile"><label>فعال <input type="checkbox" name="is_active" {% if p.is_active %}checked{% endif %}></label><button class="hub-button" type="submit">حفظ</button></form>{% endfor %}
+<form method="post" action="{% url 'staff_internet_profile_new' %}">{% csrf_token %}{{ profile_form.as_p }}<button class="hub-button" type="submit">إنشاء ملف</button></form></section>
+
+<section class="hub-section hub-card"><h2 class="hub-section-title">شبكات Wi‑Fi</h2><div class="hub-table-wrap"><table class="hub-table"><tr><th>الاسم</th><th>SSID</th><th>النوع</th><th>فعال</th><th>الخلفية</th><th>السرعة</th><th>QR</th></tr>{% for n in networks %}<tr><td>{{ n.name_ar }}</td><td>{{ n.ssid }}</td><td>{{ n.get_network_type_display }}</td><td>{{ n.is_active|yesno:'نعم,لا' }}</td><td>{{ n.get_network_backend_display }}</td><td>{{ n.bandwidth_profile|default:'-' }}</td><td>{{ n.visible_on_qr|yesno:'نعم,لا' }}</td></tr>{% endfor %}</table></div><p>كلمات مرور Wi‑Fi لا تعرض هنا.</p></section>
+
+<section class="hub-section hub-card"><h2 class="hub-section-title">بيئة MikroTik</h2><p>التكامل: {{ mikrotik_enabled|yesno:'مفعّل,معطّل' }} — الحد الأدنى من الإعداد: {{ mikrotik_configured|yesno:'موجود,غير مكتمل' }}</p><p>الخلفيات الحالية: {{ network_backends|join:', ' }}</p><p>بيانات الدخول والمفاتيح محفوظة في البيئة ولا تعرض في هذه الصفحة.</p></section>
 {% endblock %}

@@ -114,3 +114,26 @@ class InternetSessionNetworkOperation(models.Model):
 
     def __str__(self):
         return f'{self.session_id} — {self.operation} — {self.status}'
+
+
+class InternetOperationsState(models.Model):
+    """Singleton-style operational heartbeat for the Internet subsystem.
+
+    This row contains only non-secret health metadata. It lets the staff console
+    distinguish an idle worker from a dead worker and persist the latest read-only
+    MikroTik connectivity check without exposing credentials.
+    """
+
+    key = models.CharField(max_length=40, unique=True, default='default')
+    last_worker_seen_at = models.DateTimeField(null=True, blank=True)
+    last_lifecycle_at = models.DateTimeField(null=True, blank=True)
+    last_worker_summary = models.JSONField(default=dict, blank=True)
+    last_worker_error = models.CharField(max_length=500, blank=True)
+    last_mikrotik_check_at = models.DateTimeField(null=True, blank=True)
+    last_mikrotik_check_ok = models.BooleanField(null=True, blank=True)
+    last_mikrotik_check_message = models.CharField(max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'Internet operations state ({self.key})'

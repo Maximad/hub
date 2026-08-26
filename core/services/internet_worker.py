@@ -3,7 +3,9 @@ from io import StringIO
 
 from django.core.management import call_command
 from django.db import close_old_connections
+from django.utils import timezone
 
+from core.services.internet_readiness import get_operations_state
 from core.services.network_operations import process_ready_network_operations
 from internet.session_network_operations import process_ready_session_network_operations
 
@@ -16,6 +18,21 @@ def _safe_exception(exc):
     )):
         text = 'Infrastructure operation failed; sensitive details were removed.'
     return f'{type(exc).__name__}: {text[:300]}'
+
+
+def _record_heartbeat(summary, errors, *, lifecycle_ran):
+    """Persist only secret-free operational metadata for staff visibility."""
+    state = get_operations_state(create=True)
+    now = timezone.now()
+    state.last_worker_seen_at = now
+    if lifecycle_ran:
+        state.last_lifecycle_at = now
+    state.last_worker_summary = summary
+    state.last_worker_error = '; '.join(error for _, error in errors)[:500]
+    state.save(update_fields=(
+        'last_worker_seen_at', 'last_lifecycle_at', 'last_worker_summary',
+        'last_worker_error', 'updated_at',
+    ))
 
 
 def run_internet_worker_cycle(*, lifecycle_limit=200, network_limit=100,
@@ -69,6 +86,11 @@ def run_internet_worker_cycle(*, lifecycle_limit=200, network_limit=100,
         }
     except Exception as exc:  # worker boundary: retry next cycle
         errors.append(('session_network', _safe_exception(exc)))
+
+    try:
+        _record_heartbeat(summary, errors, lifecycle_ran=run_lifecycle)
+    except Exception as exc:  # heartbeat observability must never stop queue progress
+        errors.append(('heartbeat', _safe_exception(exc)))
 
     close_old_connections()
     return summary, errors
