@@ -208,7 +208,10 @@ class SystemSettingCustomFontTests(TestCase):
                         self.assertIn('font-family:"HubCustomFont"', content)
                         self.assertIn('--hub-font-body:"HubCustomFont",Tahoma,"Noto Sans Arabic","Segoe UI",Arial,sans-serif', content)
                         self.assertLess(content.index('css/hub.css'), content.index('--hub-font-body:"HubCustomFont"'))
-                        self.assertNotIn('MadaniArabicDEMO', content)
+                        # The uploaded filename is expected to appear in the media URL;
+                        # only the CSS family itself must stay fixed and non-user-controlled.
+                        self.assertIn('/media/system/fonts/MadaniArabicDEMO-Regular.otf', content)
+                        self.assertNotIn('font-family:"MadaniArabicDEMO', content)
                         self.assertNotIn('\\u002D', content)
 
     def test_custom_font_prefers_uploaded_woff2_with_same_stem(self):
