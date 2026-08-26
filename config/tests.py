@@ -18,6 +18,7 @@ class ProductionSettingsTests(SimpleTestCase):
         project_root = Path(__file__).resolve().parent.parent
         environment = os.environ.copy()
         environment.update(
+            DJANGO_SETTINGS_MODULE='config.settings',
             DJANGO_DEBUG='False',
             DJANGO_SECRET_KEY='ci-valid-production-settings-test-secret',
             DJANGO_SECURE_SSL_REDIRECT='true',
@@ -25,7 +26,8 @@ class ProductionSettingsTests(SimpleTestCase):
             DJANGO_CSRF_COOKIE_SECURE='true',
         )
         code = (
-            'from config import settings as s; '
+            'import django; django.setup(); '
+            'from django.conf import settings as s; '
             'assert s.DEBUG is False; '
             'assert s.SECURE_SSL_REDIRECT is True; '
             'assert s.SESSION_COOKIE_SECURE is True; '
