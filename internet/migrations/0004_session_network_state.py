@@ -18,7 +18,7 @@ class Migration(migrations.Migration):
                 ('last_network_error', models.TextField(blank=True)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
-                ('session', models.OneToOneField(on_delete=django.db.models.deletion.PROTECT, related_name='network_state', to='core.internetsession')),
+                ('session', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='network_state', to='core.internetsession')),
             ],
         ),
         migrations.CreateModel(
