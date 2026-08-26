@@ -45,3 +45,69 @@ class InternetCatalogBinding(models.Model):
 
     def __str__(self):
         return f'{self.package} → {self.product}'
+
+
+class InternetSessionNetworkState(models.Model):
+    """Sensitive/durable network state for a package-less InternetSession.
+
+    InternetSession keeps the public operational fields (provider, RouterOS identity,
+    network status).  This companion row keeps encrypted credentials and retry
+    diagnostics out of the commercial session model.
+    """
+
+    session = models.OneToOneField(
+        'core.InternetSession',
+        on_delete=models.PROTECT,
+        related_name='network_state',
+    )
+    network_credential_encrypted = models.TextField(blank=True, editable=False)
+    last_network_sync_at = models.DateTimeField(null=True, blank=True)
+    last_network_error = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'Network state for session {self.session_id}'
+
+
+class InternetSessionNetworkOperation(models.Model):
+    """Durable, idempotent network side effect owned by an InternetSession."""
+
+    class Operation(models.TextChoices):
+        PROVISION = 'provision', 'Provision'
+        REFRESH = 'refresh', 'Refresh'
+        DISCONNECT = 'disconnect', 'Disconnect'
+
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        PROCESSING = 'processing', 'Processing'
+        SUCCEEDED = 'succeeded', 'Succeeded'
+        FAILED = 'failed', 'Failed'
+
+    session = models.ForeignKey(
+        'core.InternetSession',
+        on_delete=models.PROTECT,
+        related_name='session_network_operations',
+    )
+    operation = models.CharField(max_length=20, choices=Operation.choices)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    idempotency_key = models.CharField(max_length=180, unique=True)
+    reason = models.CharField(max_length=200, blank=True)
+    attempt_count = models.PositiveIntegerField(default=0)
+    last_attempt_at = models.DateTimeField(null=True, blank=True)
+    next_attempt_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.CharField(max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=('status', 'next_attempt_at'),
+                name='internet_sess_netop_ready_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.session_id} — {self.operation} — {self.status}'
