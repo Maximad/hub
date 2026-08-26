@@ -46,7 +46,7 @@ services:
       python manage.py run_internet_worker
       --network-interval 5
       --lifecycle-interval 60
-      --network-limit 100
+      --network-limit 25
       --lifecycle-limit 200
     env_file:
       - .env
