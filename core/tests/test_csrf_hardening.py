@@ -10,6 +10,9 @@ from core.models import Category, Order, Product
 
 PRODUCTION_HOST = 'hubsweida.jwtalenthouse.com'
 PROXY = {'HTTP_HOST': PRODUCTION_HOST, 'HTTP_X_FORWARDED_PROTO': 'https'}
+EXTERNAL_POST_EXEMPTIONS = {
+    'menu/hotspot_connect.html': 'data-csrf-audit="external-post"',
+}
 
 
 @override_settings(
@@ -132,7 +135,24 @@ class CsrfTemplateAuditTests(SimpleTestCase):
         offenders = []
         for template in root.rglob('*.html'):
             source = template.read_text()
-            if re.search(r'<form\b[^>]*\bmethod\s*=\s*["\']?post', source, re.I):
-                if '{% csrf_token %}' not in source:
-                    offenders.append(str(template.relative_to(root)))
+            if not re.search(r'<form\b[^>]*\bmethod\s*=\s*["\']?post', source, re.I):
+                continue
+            relative_path = str(template.relative_to(root))
+            if '{% csrf_token %}' in source:
+                continue
+            marker = EXTERNAL_POST_EXEMPTIONS.get(relative_path)
+            if marker and marker in source:
+                continue
+            offenders.append(relative_path)
         self.assertEqual(offenders, [])
+
+    def test_external_post_exemption_is_narrow_and_explicit(self):
+        self.assertEqual(
+            EXTERNAL_POST_EXEMPTIONS,
+            {'menu/hotspot_connect.html': 'data-csrf-audit="external-post"'},
+        )
+        root = Path(__file__).resolve().parents[2] / 'templates'
+        source = (root / 'menu/hotspot_connect.html').read_text()
+        self.assertIn('data-csrf-audit="external-post"', source)
+        self.assertIn('action="{{ login_url }}"', source)
+        self.assertNotIn('{% csrf_token %}', source)
