@@ -10,6 +10,11 @@ from internet.session_network_operations import process_ready_session_network_op
 
 def _safe_exception(exc):
     text = str(exc).replace('\r', ' ').replace('\n', ' ')
+    lowered = text.lower()
+    if any(marker in lowered for marker in (
+        'password', 'authorization', 'credential', 'mikrotik_password', 'secret',
+    )):
+        text = 'Infrastructure operation failed; sensitive details were removed.'
     return f'{type(exc).__name__}: {text[:300]}'
 
 
