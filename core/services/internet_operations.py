@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from core.models import ActivityLog, InternetNetworkOperation
 from core.services.internet_readiness import get_operations_state
-from core.services.mikrotik import MikroTikError, RouterOSClient
+from core.services.mikrotik import RouterOSClient
 from internet.models import InternetSessionNetworkOperation
 
 
