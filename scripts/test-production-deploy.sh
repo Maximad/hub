@@ -33,6 +33,7 @@ run_phase() (
     events="$1"
     fail_migration="${2:-false}"
     fail_readiness="${3:-false}"
+    PROJECT_DIR="/opt/hub"
 
     log() { printf 'LOG %s\n' "$*" >>"$events"; }
     check_route() { printf 'ROUTE %s %s\n' "$1" "$2" >>"$events"; }
