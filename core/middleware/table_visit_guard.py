@@ -3,7 +3,9 @@ from django.shortcuts import redirect
 from django.urls import reverse
 
 from core.models import TableArea
+from core.services.visit_internet import self_service_enabled
 from core.services.visits import resolve_visit_credential
+from core.settings_helpers import get_system_settings
 
 
 class TableVisitGuardMiddleware:
@@ -11,14 +13,19 @@ class TableVisitGuardMiddleware:
 
     The customer must first create a separate visit or join an existing visit with
     its PIN. Normal requests already carrying the correct visit credential pass
-    through unchanged.
+    through unchanged. When Internet self-service is disabled, the underlying view
+    retains its established feature-disabled behavior.
     """
 
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
-        if request.method == 'POST' and request.path == reverse('visit_internet_start'):
+        if (
+            request.method == 'POST'
+            and request.path == reverse('visit_internet_start')
+            and self_service_enabled(get_system_settings())
+        ):
             raw_table = request.POST.get('table')
             if raw_table:
                 table = TableArea.objects.filter(qr_token=raw_table).first()
