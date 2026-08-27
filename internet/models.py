@@ -47,6 +47,40 @@ class InternetCatalogBinding(models.Model):
         return f'{self.package} → {self.product}'
 
 
+class InternetSessionBrowserBinding(models.Model):
+    """Identify the visit browser/device that owns one customer Internet session.
+
+    The raw visit cookie is never stored here.  The binding points to the already
+    hashed/revocable HubVisitBrowserCredential created when the browser selected or
+    joined its table bill.  Historical staff/manual InternetSession rows may remain
+    unbound; only customer self-service sessions created after this model is deployed
+    are required to have a binding.
+    """
+
+    session = models.OneToOneField(
+        'core.InternetSession',
+        on_delete=models.CASCADE,
+        related_name='browser_binding',
+    )
+    credential = models.ForeignKey(
+        'core.HubVisitBrowserCredential',
+        on_delete=models.CASCADE,
+        related_name='internet_session_bindings',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=('credential', 'created_at'),
+                name='internet_browser_cred_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return f'Session {self.session_id} → browser credential {self.credential_id}'
+
+
 class InternetSessionNetworkState(models.Model):
     """Sensitive/durable network state for a package-less InternetSession.
 
