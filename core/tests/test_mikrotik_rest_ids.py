@@ -6,13 +6,13 @@ from core.services.mikrotik import RouterOSClient
 
 
 class RouterOSResourceIdPathTests(SimpleTestCase):
-    def client(self):
+    def make_router_client(self):
         client = object.__new__(RouterOSClient)
         client._call = Mock(return_value={})
         return client
 
     def test_update_hotspot_user_preserves_routeros_id_marker(self):
-        client = self.client()
+        client = self.make_router_client()
 
         client.update_hotspot_user('*3', {'disabled': 'true'})
 
@@ -23,7 +23,7 @@ class RouterOSResourceIdPathTests(SimpleTestCase):
         )
 
     def test_remove_active_preserves_routeros_id_marker(self):
-        client = self.client()
+        client = self.make_router_client()
 
         client.remove_active('*A')
 
