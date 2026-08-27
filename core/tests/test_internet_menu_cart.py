@@ -89,6 +89,11 @@ class InternetMenuCartTests(TestCase):
     def tearDown(self):
         get_system_settings.cache_clear()
 
+    def _bind_visit(self):
+        response = self.client.post(self.table_url, {'visit_action': 'create'})
+        self.assertEqual(response.status_code, 302)
+        return HubVisit.objects.order_by('-pk').first()
+
     def _payload(self, internet_qty='1', include_food=True):
         payload = {
             f'qty_{self.internet_product.pk}': internet_qty,
@@ -103,10 +108,14 @@ class InternetMenuCartTests(TestCase):
         public_code = response['Location'].rstrip('/').split('/')[-1]
         return Order.objects.get(public_code=public_code)
 
-    def test_table_entry_uses_dedicated_internet_selector_not_product_modal(self):
+    def test_table_entry_requires_account_then_uses_dedicated_internet_selector(self):
         response = self.client.get(self.table_url)
-
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'بدء جلسة جديدة')
+        self.assertNotContains(response, 'اتصل بالإنترنت السريع')
+
+        self._bind_visit()
+        response = self.client.get(self.table_url)
         self.assertContains(response, 'الإنترنت السريع')
         self.assertContains(response, self.package.name_ar)
         self.assertContains(response, 'name="package"')
@@ -117,6 +126,7 @@ class InternetMenuCartTests(TestCase):
         self.assertNotContains(response, self.food.name_ar)
 
     def test_full_table_catalog_shows_food_but_suppresses_internet_product(self):
+        self._bind_visit()
         response = self.client.get(self.catalog_url)
 
         self.assertEqual(response.status_code, 200)
@@ -131,13 +141,14 @@ class InternetMenuCartTests(TestCase):
         self.assertNotContains(response, self.package.name_ar)
 
     def test_legacy_food_and_internet_cart_post_remains_atomic_and_compatible(self):
+        visit = self._bind_visit()
         response = self.client.post(self.table_url, self._payload())
         order = self._order_from_response(response)
 
         self.assertEqual(Order.objects.count(), 1)
         self.assertEqual(order.items.count(), 2)
         self.assertEqual(order.table_id, self.table.pk)
-        self.assertIsNotNone(order.visit_id)
+        self.assertEqual(order.visit_id, visit.pk)
         self.assertEqual(HubVisit.objects.count(), 1)
 
         internet_item = order.items.get(product=self.internet_product)
@@ -155,12 +166,14 @@ class InternetMenuCartTests(TestCase):
         self.assertEqual(InternetNetworkOperation.objects.filter(entitlement=entitlement).count(), 1)
 
     def test_more_than_one_internet_package_quantity_rolls_back_whole_order(self):
+        visit = self._bind_visit()
         response = self.client.post(self.table_url, self._payload(internet_qty='2'))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'اختر باقة إنترنت واحدة فقط في كل طلب.')
         self.assertFalse(Order.objects.exists())
-        self.assertFalse(HubVisit.objects.exists())
+        self.assertEqual(HubVisit.objects.count(), 1)
+        self.assertTrue(HubVisit.objects.filter(pk=visit.pk, status=HubVisit.Status.OPEN).exists())
         self.assertFalse(InternetEntitlement.objects.exists())
         self.assertFalse(InternetSession.objects.exists())
 
