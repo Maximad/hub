@@ -34,7 +34,15 @@ class CustomerSpaceTests(TestCase):
     def tearDown(self):
         get_system_settings.cache_clear()
 
+    def _bind_visit(self):
+        if 'hub_visit' not in self.client.cookies:
+            response = self.client.post(self.menu_url, {'visit_action': 'create'})
+            self.assertEqual(response.status_code, 302)
+            self.assertIn('hub_visit', self.client.cookies)
+        return HubVisit.objects.order_by('-pk').first()
+
     def _start_visit_with_order(self):
+        self._bind_visit()
         response = self.client.post(
             self.menu_url,
             {
@@ -43,10 +51,10 @@ class CustomerSpaceTests(TestCase):
             },
         )
         self.assertEqual(response.status_code, 302)
-        self.client.cookies['hub_visit'] = response.cookies['hub_visit'].value
         return response
 
     def test_public_menu_loads_customer_space_assets(self):
+        self._bind_visit()
         response = self.client.get(self.catalog_url)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'public-menu-page')
