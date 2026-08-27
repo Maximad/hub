@@ -7,9 +7,11 @@ EXPECTED_USER="deploy"
 PROJECT_DIR="/opt/hub"
 BRANCH="main"
 COMPOSE_FILE="docker-compose.prod.yml"
+MIKROTIK_COMPOSE_FILE="docker-compose.mikrotik.yml"
 ENV_FILE=".env"
 BASE_URL="https://hubsweida.jwtalenthouse.com"
 LOCK_FILE="/tmp/hub-production-operation.lock"
+COMPOSE_ARGS=(-f "$COMPOSE_FILE")
 
 BACKUP_FILE=""
 BOOTSTRAP_RESUME=false
@@ -33,9 +35,15 @@ die() {
     exit 1
 }
 
+mikrotik_enabled() {
+    grep -Eiq \
+        '^[[:space:]]*MIKROTIK_ENABLED[[:space:]]*=[[:space:]]*(true|1|yes|on)[[:space:]]*$' \
+        "$ENV_FILE"
+}
+
 dc() {
     docker compose \
-        -f "$COMPOSE_FILE" \
+        "${COMPOSE_ARGS[@]}" \
         --env-file "$ENV_FILE" \
         "$@"
 }
@@ -50,7 +58,7 @@ on_error() {
     fi
 
     dc ps >&2 || true
-    dc logs --tail=150 web >&2 || true
+    dc logs --tail=150 web internet-worker >&2 || true
 
     exit "$code"
 }
@@ -103,6 +111,12 @@ cd "$PROJECT_DIR"
 [[ -f "$COMPOSE_FILE" ]] ||
     die "Missing $PROJECT_DIR/$COMPOSE_FILE."
 
+if [[ -f "$MIKROTIK_COMPOSE_FILE" ]]; then
+    COMPOSE_ARGS+=(-f "$MIKROTIK_COMPOSE_FILE")
+elif mikrotik_enabled; then
+    die "MIKROTIK_ENABLED=true requires $PROJECT_DIR/$MIKROTIK_COMPOSE_FILE."
+fi
+
 [[ -d .git ]] ||
     die "$PROJECT_DIR is not a Git repository."
 
@@ -113,6 +127,9 @@ command -v flock >/dev/null || die "flock is missing."
 
 docker info >/dev/null 2>&1 ||
     die "Docker is unavailable to the deploy user."
+
+dc config --quiet ||
+    die "Combined production Docker Compose configuration is invalid."
 
 exec 9>"$LOCK_FILE"
 flock -n 9 ||
@@ -164,9 +181,9 @@ else
     git merge --ff-only "origin/$BRANCH"
 fi
 
-log "Building web image"
+log "Building application images"
 
-dc build web
+dc build web internet-worker
 
 log "Running pre-deployment checks"
 
@@ -176,7 +193,7 @@ dc run --rm -T web python manage.py makemigrations --check --dry-run
 log "Applying migrations"
 
 # Migrations run from the target image while the previous release continues to
-# serve traffic.  Every production migration must therefore be compatible with
+# serve traffic. Every production migration must therefore be compatible with
 # the currently running release; destructive changes require an
 # expand/migrate/contract rollout across releases.
 dc run --rm -T web python manage.py migrate --noinput
@@ -193,9 +210,9 @@ dc run --rm -T \
     --volume "$PROJECT_DIR/backups/production:/opt/hub/backups/production:ro" \
     web python manage.py launch_readiness --json
 
-log "Replacing web container"
+log "Replacing web + Internet worker containers"
 
-dc up -d --no-deps --force-recreate web
+dc up -d --no-deps --force-recreate web internet-worker
 
 log "Collecting static files"
 
@@ -216,6 +233,13 @@ dc exec -T web python manage.py check
 dc exec -T web python manage.py smoke_check
 dc exec -T web python manage.py system_audit
 
+if mikrotik_enabled; then
+    log "Checking MikroTik connectivity"
+    dc exec -T web python manage.py mikrotik_healthcheck --json
+fi
+
+dc exec -T web python manage.py internet_readiness --json
+
 log "Checking routes"
 
 check_route "/menu/" "200"
@@ -228,7 +252,7 @@ check_route "/staff/pos/" "302"
 log "Checking recent logs"
 
 ERRORS="$(
-    dc logs --since=5m web 2>&1 |
+    dc logs --since=5m web internet-worker 2>&1 |
         grep -Ei \
         "traceback|server error|invalidstorageerror|noreversematch|templatedoesnotexist|programmingerror|operationalerror|modulenotfounderror" \
         || true
