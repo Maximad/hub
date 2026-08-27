@@ -39,6 +39,12 @@ class VisitInternetSelfServiceTests(TestCase):
         return {'package': str((package or self.package).public_code),
                 'table': str(self.table.qr_token), 'request_key': key}
 
+    def bind_visit(self):
+        response = self.client.post(self.menu_url, {'visit_action': 'create'})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('hub_visit', self.client.cookies)
+        return response
+
     def test_both_flags_are_required_and_hidden_package_is_rejected(self):
         self.settings.customer_internet_self_service_enabled = False
         self.settings.save(update_fields=['customer_internet_self_service_enabled', 'updated_at'])
@@ -46,6 +52,7 @@ class VisitInternetSelfServiceTests(TestCase):
         self.assertNotContains(self.client.get(self.menu_url), 'ابدأ الآن')
         self.assertFalse(HubVisit.objects.exists())
         self.assertRedirects(self.client.post(reverse('visit_internet_start'), self.payload()), reverse('menu_public'))
+
         self.settings.customer_internet_self_service_enabled = True
         self.settings.save(update_fields=['customer_internet_self_service_enabled', 'updated_at'])
         self.package.visible_to_customer = False
@@ -55,10 +62,12 @@ class VisitInternetSelfServiceTests(TestCase):
         self.assertFalse(HubVisit.objects.exists())
         self.assertFalse(InternetEntitlement.objects.exists())
 
-    def test_internet_first_action_creates_atomic_unpaid_visit_sale_and_session(self):
+    def test_selected_visit_gets_atomic_unpaid_sale_and_session(self):
+        binding = self.bind_visit()
+        visit = HubVisit.objects.get()
         response = self.client.post(reverse('visit_internet_start'), self.payload())
         self.assertRedirects(response, reverse('current_visit'))
-        visit = HubVisit.objects.get()
+
         credential = HubVisitBrowserCredential.objects.get()
         entitlement = InternetEntitlement.objects.get()
         order = Order.objects.get()
@@ -70,12 +79,14 @@ class VisitInternetSelfServiceTests(TestCase):
         self.assertEqual(entitlement.order, order)
         self.assertFalse(Payment.objects.exists())
         self.assertEqual(visit.remaining_syp, 4000)
-        self.assertEqual(credential.token_hash,
-                         hashlib.sha256(response.cookies['hub_visit'].value.encode()).hexdigest())
+        self.assertEqual(
+            credential.token_hash,
+            hashlib.sha256(binding.cookies['hub_visit'].value.encode()).hexdigest(),
+        )
 
     def test_retry_reuses_sale_and_active_session(self):
-        first = self.client.post(reverse('visit_internet_start'), self.payload())
-        self.client.cookies['hub_visit'] = first.cookies['hub_visit'].value
+        self.bind_visit()
+        self.client.post(reverse('visit_internet_start'), self.payload())
         self.client.post(reverse('visit_internet_start'), self.payload())
         self.assertEqual(HubVisit.objects.count(), 1)
         self.assertEqual(Order.objects.count(), 1)
@@ -84,7 +95,8 @@ class VisitInternetSelfServiceTests(TestCase):
         self.assertLessEqual(InternetRevenueShare.objects.count(), 1)
 
     def test_other_browser_cannot_control_visit_entitlement(self):
-        first = self.client.post(reverse('visit_internet_start'), self.payload())
+        self.bind_visit()
+        self.client.post(reverse('visit_internet_start'), self.payload())
         entitlement = InternetEntitlement.objects.get()
         other = self.client_class()
         response = other.post(reverse('visit_internet_entitlement_start',
