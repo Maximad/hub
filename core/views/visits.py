@@ -98,12 +98,56 @@ def current_visit(request):
     return render(request, 'menu/current_visit.html', context)
 
 
-def _current_visit_destination(request):
-    path = reverse('current_visit')
+def _absolute_destination(request, path):
     base = (getattr(settings, 'PUBLIC_BASE_URL', '') or '').strip()
     if base:
         return urljoin(base.rstrip('/') + '/', path.lstrip('/'))
     return request.build_absolute_uri(path)
+
+
+def _current_visit_destination(request):
+    return _absolute_destination(request, reverse('current_visit'))
+
+
+def _start_destination(request, table):
+    if request.POST.get('next') == 'menu' and table:
+        return _absolute_destination(
+            request,
+            reverse('menu_table', kwargs={'qr_token': table.qr_token})
+            + '?view=menu&internet_started=1',
+        )
+    return _current_visit_destination(request)
+
+
+def _hotspot_relay_response(request, session, *, destination_url, raw_cookie=None):
+    """Render the no-store RouterOS POST relay for an authorized visit session."""
+    if session.entitlement_id:
+        payload = build_hotspot_login_payload(
+            session.entitlement,
+            destination_url=destination_url,
+        )
+    else:
+        payload = build_session_hotspot_login_payload(
+            session,
+            destination_url=destination_url,
+        )
+
+    ActivityLog.objects.create(action='visit.internet_connect_relay_issued', details={
+        'visit_id': session.visit_id,
+        'session_id': session.pk,
+        'entitlement_id': session.entitlement_id,
+        'network_provider': session.network_provider,
+    })
+    response = render(request, 'menu/hotspot_connect.html', payload)
+    response['Cache-Control'] = 'no-store, private, max-age=0'
+    response['Pragma'] = 'no-cache'
+    response['Referrer-Policy'] = 'no-referrer'
+    response['X-Robots-Tag'] = 'noindex, nofollow, noarchive'
+    response['Content-Security-Policy'] = (
+        "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
+        f"form-action {payload['login_origin']}; base-uri 'none'; frame-ancestors 'none'"
+    )
+    return set_visit_cookie(response, raw_cookie) if raw_cookie else response
 
 
 @require_POST
@@ -133,12 +177,29 @@ def visit_internet_purchase_start(request):
             else:
                 if not table:
                     raise ValidationError('الجلسة مغلقة.')
-                visit = HubVisit.objects.create(table=table,
-                    member=member_context.member if member_context else None)
+                # The physical table, not a browser cookie, owns the open visit.
+                # Locking the table serializes simultaneous first scans so two
+                # browsers cannot create two independent bills for one table.
+                table = TableArea.objects.select_for_update().get(pk=table.pk)
+                visit = (
+                    HubVisit.objects.select_for_update()
+                    .filter(table=table, status=HubVisit.Status.OPEN)
+                    .order_by('pk')
+                    .first()
+                )
+                created_visit = visit is None
+                if created_visit:
+                    visit = HubVisit.objects.create(
+                        table=table,
+                        member=member_context.member if member_context else None,
+                    )
+                    ActivityLog.objects.create(action='visit.created', details={
+                        'visit_id': visit.pk, 'source': 'public_internet'})
                 credential, raw_cookie = issue_visit_credential(visit)
-                ActivityLog.objects.create(action='visit.created', details={
-                    'visit_id': visit.pk, 'source': 'public_internet'})
-                ActivityLog.objects.create(action='visit.browser_bound', details={'visit_id': visit.pk})
+                ActivityLog.objects.create(action='visit.browser_bound', details={
+                    'visit_id': visit.pk,
+                    'joined_existing_table_visit': not created_visit,
+                })
             member = visit.member
             if member_context and visit.member_id is None:
                 visit.member = member = member_context.member
@@ -156,7 +217,7 @@ def visit_internet_purchase_start(request):
                     guest_phone=request.POST.get('guest_phone', ''),
                 )
             else:
-                create_visit_internet_sale_and_start(
+                _entitlement, session, _created = create_visit_internet_sale_and_start(
                     visit=visit,
                     credential=credential,
                     package=package,
@@ -164,12 +225,9 @@ def visit_internet_purchase_start(request):
                     member=member,
                 )
 
+        network_ready = True
         if mode == 'metered':
             # Never contact the router from inside the commercial transaction.
-            # New manual sessions are processed too so they use the same durable
-            # activation semantics without changing production behavior while the
-            # MikroTik integration flag remains disabled.
-            network_ready = True
             if metered_created or session.network_provider == InternetSession.NetworkProvider.MIKROTIK:
                 network_ready = prepare_visit_metered_session_network(session)
             if network_ready:
@@ -181,6 +239,36 @@ def visit_internet_purchase_start(request):
                 )
         else:
             messages.success(request, 'بدأت جلسة الإنترنت.')
+
+        # The normal successful path is now one customer action: provision, then
+        # immediately relay the browser into RouterOS. The old connect endpoint is
+        # retained only as a reconnect/recovery action.
+        can_relay = bool(
+            session
+            and network_ready
+            and (
+                one_tap_connect_configured(session.entitlement)
+                if session.entitlement_id
+                else one_tap_session_connect_configured(session)
+            )
+        )
+        if can_relay:
+            try:
+                return _hotspot_relay_response(
+                    request,
+                    session,
+                    destination_url=_start_destination(request, table),
+                    raw_cookie=raw_cookie,
+                )
+            except Exception:
+                logger.exception(
+                    'Automatic customer HotSpot relay failed for session_id=%s',
+                    session.pk,
+                )
+                messages.warning(
+                    request,
+                    'بدأت جلسة الإنترنت، لكن تعذر الاتصال التلقائي. يمكنك إعادة الاتصال من صفحة جلستك.',
+                )
 
         if request.POST.get('next') == 'menu' and table:
             target = reverse('menu_table', kwargs={'qr_token': table.qr_token}) + '?view=menu&internet_started=1'
@@ -208,11 +296,23 @@ def visit_internet_entitlement_start(request, public_code):
         return redirect('menu_public')
     try:
         entitlement = get_object_or_404(InternetEntitlement, public_code=public_code)
-        start_existing_visit_entitlement(visit=credential.visit, credential=credential,
-                                         entitlement=entitlement)
+        session, _created = start_existing_visit_entitlement(
+            visit=credential.visit,
+            credential=credential,
+            entitlement=entitlement,
+        )
         messages.success(request, 'بدأت جلسة الإنترنت.')
+        if one_tap_connect_configured(entitlement):
+            return _hotspot_relay_response(
+                request,
+                session,
+                destination_url=_current_visit_destination(request),
+            )
     except ValidationError as exc:
         messages.error(request, _error_text(exc))
+    except Exception:
+        logger.exception('Customer entitlement HotSpot relay failed')
+        messages.warning(request, 'بدأت جلسة الإنترنت، لكن تعذر الاتصال التلقائي.')
     return redirect('current_visit')
 
 
@@ -233,16 +333,11 @@ def visit_internet_session_connect(request, public_code):
         status=InternetSession.Status.ACTIVE,
     )
     try:
-        if session.entitlement_id:
-            payload = build_hotspot_login_payload(
-                session.entitlement,
-                destination_url=_current_visit_destination(request),
-            )
-        else:
-            payload = build_session_hotspot_login_payload(
-                session,
-                destination_url=_current_visit_destination(request),
-            )
+        return _hotspot_relay_response(
+            request,
+            session,
+            destination_url=_current_visit_destination(request),
+        )
     except Exception as exc:
         logger.warning(
             'Customer HotSpot relay unavailable for session_id=%s entitlement_id=%s',
@@ -251,23 +346,6 @@ def visit_internet_session_connect(request, public_code):
         )
         messages.error(request, _error_text(exc))
         return redirect('current_visit')
-
-    ActivityLog.objects.create(action='visit.internet_connect_relay_issued', details={
-        'visit_id': credential.visit_id,
-        'session_id': session.pk,
-        'entitlement_id': session.entitlement_id,
-        'network_provider': session.network_provider,
-    })
-    response = render(request, 'menu/hotspot_connect.html', payload)
-    response['Cache-Control'] = 'no-store, private, max-age=0'
-    response['Pragma'] = 'no-cache'
-    response['Referrer-Policy'] = 'no-referrer'
-    response['X-Robots-Tag'] = 'noindex, nofollow, noarchive'
-    response['Content-Security-Policy'] = (
-        "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
-        f"form-action {payload['login_origin']}; base-uri 'none'; frame-ancestors 'none'"
-    )
-    return response
 
 
 @require_POST

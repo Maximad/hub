@@ -253,6 +253,7 @@ MIKROTIK_HOTSPOT_SERVER = os.getenv('MIKROTIK_HOTSPOT_SERVER', '')
 MIKROTIK_HOTSPOT_LOGIN_URL = os.getenv('MIKROTIK_HOTSPOT_LOGIN_URL', '').strip()
 MIKROTIK_USER_PREFIX = os.getenv('MIKROTIK_USER_PREFIX', 'hub-')
 MIKROTIK_DEFAULT_PROFILE = os.getenv('MIKROTIK_DEFAULT_PROFILE', '')
+MIKROTIK_CUSTOMER_PROFILE_CODE = os.getenv('MIKROTIK_CUSTOMER_PROFILE_CODE', 'fast').strip() or 'fast'
 MIKROTIK_CREDENTIAL_KEY = os.getenv('MIKROTIK_CREDENTIAL_KEY', '')
 
 # Currency safety values are reporting values in the new Syrian pound.  They are

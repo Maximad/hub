@@ -110,6 +110,27 @@ def _metered_network_provider():
             else InternetSession.NetworkProvider.MANUAL)
 
 
+def _customer_bandwidth_profile_code():
+    return (
+        getattr(django_settings, 'MIKROTIK_CUSTOMER_PROFILE_CODE', 'fast')
+        or 'fast'
+    ).strip()
+
+
+def _apply_customer_bandwidth_profile(session):
+    """Use the explicit customer profile when a MikroTik session has none.
+
+    Package/session-specific profiles remain authoritative. This only prevents a
+    customer-started Internet session from silently falling back to the safe slow
+    RouterOS default.
+    """
+    if (session.network_provider == InternetSession.NetworkProvider.MIKROTIK
+            and not session.bandwidth_profile):
+        session.bandwidth_profile = _customer_bandwidth_profile_code()
+        session.save(update_fields=['bandwidth_profile', 'updated_at'])
+    return session
+
+
 def metered_network_activated_at(session):
     state = InternetSessionNetworkState.objects.filter(session_id=session.pk).first()
     return state.network_activated_at if state else None
@@ -169,9 +190,11 @@ def create_visit_internet_sale_and_start(*, visit, credential, package, request_
     active = entitlement.sessions.filter(status=InternetSession.Status.ACTIVE).first()
     if active:
         if active.visit_id == visit.pk:
-            return entitlement, active, False
+            return entitlement, _apply_customer_bandwidth_profile(active), False
         raise ValidationError('لديك جلسة إنترنت فعالة بالفعل.')
-    session = start_usage_session(entitlement, actor=actor, at=at, visit=visit)
+    session = _apply_customer_bandwidth_profile(
+        start_usage_session(entitlement, actor=actor, at=at, visit=visit)
+    )
     now = at or timezone.now()
     HubVisit.objects.filter(pk=visit.pk).update(last_activity_at=now)
     ActivityLog.objects.create(action='visit.internet_sale_created', details={
@@ -207,14 +230,15 @@ def start_visit_metered_session(*, visit, credential, member=None, guest_phone='
         visit=visit, status=InternetSession.Status.ACTIVE,
     ).order_by('-start_time', '-pk').first()
     if active:
-        # A repeated tap/retry of the direct-start action is safe and reuses the
-        # already-running or still-provisioning package-less metered session.
+        # A repeated tap/retry, including another browser at the same table, reuses
+        # the already-running or still-provisioning package-less metered session.
         if (active.entitlement_id is None and active.package_id is None and
                 active.billing_mode == InternetSession.BillingMode.OPEN_METERED):
-            return active, False
+            return _apply_customer_bandwidth_profile(active), False
         raise ValidationError('لديك جلسة إنترنت فعالة بالفعل. أنهِها قبل بدء جلسة أخرى.')
 
     requested = at or timezone.now()
+    network_provider = _metered_network_provider()
     session = InternetSession.objects.create(
         session_type=InternetSession.SessionType.INTERNET,
         member=member,
@@ -235,7 +259,12 @@ def start_visit_metered_session(*, visit, credential, member=None, guest_phone='
         notes='بدء ذاتي من QR الطاولة — جلسة إنترنت حسب الوقت',
         status=InternetSession.Status.ACTIVE,
         started_by=actor,
-        network_provider=_metered_network_provider(),
+        bandwidth_profile=(
+            _customer_bandwidth_profile_code()
+            if network_provider == InternetSession.NetworkProvider.MIKROTIK
+            else ''
+        ),
+        network_provider=network_provider,
         network_status=NOT_PROVISIONED,
     )
     enqueue_session_network_operation(
@@ -250,6 +279,7 @@ def start_visit_metered_session(*, visit, credential, member=None, guest_phone='
         'session_id': session.pk,
         'rate_per_hour_syp': session.rate_per_hour_syp,
         'network_provider': session.network_provider,
+        'bandwidth_profile': session.bandwidth_profile,
     })
     return session, True
 
@@ -386,11 +416,13 @@ def start_existing_visit_entitlement(*, visit, credential, entitlement, actor=No
     active = entitlement.sessions.filter(status=InternetSession.Status.ACTIVE).first()
     if active:
         if active.visit_id == visit.pk:
-            return active, False
+            return _apply_customer_bandwidth_profile(active), False
         raise ValidationError('لديك جلسة إنترنت فعالة بالفعل.')
     if _other_active_visit_session_exists(visit, entitlement_id=entitlement.pk):
         raise ValidationError('لديك جلسة إنترنت فعالة بالفعل. أنهِها قبل بدء باقة أخرى.')
-    session = start_usage_session(entitlement, actor=actor, at=at, visit=visit)
+    session = _apply_customer_bandwidth_profile(
+        start_usage_session(entitlement, actor=actor, at=at, visit=visit)
+    )
     ActivityLog.objects.create(action='visit.internet_session_started', details={
         'visit_id': visit.pk, 'session_id': session.pk, 'entitlement_id': entitlement.pk,
     })
