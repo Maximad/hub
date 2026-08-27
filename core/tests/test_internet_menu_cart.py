@@ -107,10 +107,10 @@ class InternetMenuCartTests(TestCase):
         response = self.client.get(self.table_url)
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'الإنترنت')
+        self.assertContains(response, 'الإنترنت السريع')
         self.assertContains(response, self.package.name_ar)
         self.assertContains(response, 'name="package"')
-        self.assertContains(response, 'ابدأ الإنترنت الآن')
+        self.assertContains(response, 'اتصل بالإنترنت السريع')
         self.assertContains(response, 'اختر باقة')
         self.assertNotContains(response, f'name="qty_{self.internet_product.pk}"')
         self.assertNotContains(response, 'اتصال إنترنت')
