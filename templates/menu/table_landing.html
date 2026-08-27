@@ -16,7 +16,7 @@
   {% if active_internet_session %}
   <a class="table-entry__active-session" href="{% url 'current_visit' %}">
     <span>
-      <strong>الإنترنت فعال الآن</strong>
+      <strong>الإنترنت السريع فعال الآن</strong>
       <small>{% if active_internet_session.package_id %}{{ active_internet_session.package.name_ar }}{% else %}جلسة حسب الوقت{% endif %}</small>
     </span>
     <span aria-hidden="true">←</span>
@@ -29,14 +29,14 @@
       <div class="table-entry__choice-header">
         <span class="table-entry__choice-icon" aria-hidden="true">⌁</span>
         <span class="table-entry__choice-copy">
-          <strong id="table-internet-title">الإنترنت</strong>
-          <small>{% if active_internet_session %}إدارة جلستك الحالية{% else %}ابدأ الآن، أو اختر باقة{% endif %}</small>
+          <strong id="table-internet-title">الإنترنت السريع</strong>
+          <small>{% if active_internet_session %}إدارة جلستك الحالية{% else %}اتصل مباشرة بضغطة واحدة{% endif %}</small>
         </span>
       </div>
 
       <div class="table-entry__internet-body">
         {% if active_internet_session %}
-          <p class="table-entry__internet-note">لديك جلسة إنترنت فعالة. يمكنك إنهاؤها أو متابعة تفاصيلها من صفحة جلستك.</p>
+          <p class="table-entry__internet-note">هذه الطاولة لديها جلسة إنترنت فعالة. يمكنك إدارة الجلسة أو إعادة توصيل هذا الجهاز من صفحة جلستك.</p>
           <a class="hub-button hub-button-primary table-entry__session-link" href="{% url 'current_visit' %}">عرض جلسة الإنترنت</a>
         {% else %}
           {% if internet_metered_available %}
@@ -49,9 +49,9 @@
             <label for="internet-guest-phone">رقم الهاتف</label>
             <input class="hub-input" id="internet-guest-phone" name="guest_phone" type="tel" inputmode="tel" autocomplete="tel" required>
             {% endif %}
-            <button class="hub-button hub-button-primary table-entry__primary-action" type="submit">ابدأ الإنترنت الآن</button>
+            <button class="hub-button hub-button-primary table-entry__primary-action" type="submit">اتصل بالإنترنت السريع</button>
             <p class="table-entry__internet-note">
-              يُحسب حسب الوقت · {{ internet_metered_rate_syp|format_syp }} / ساعة
+              سيتم تجهيز الاتصال وتوصيل هذا الجهاز تلقائياً · {{ internet_metered_rate_syp|format_syp }} / ساعة
               {% if internet_metered_minimum_minutes %} · حد أدنى {{ internet_metered_minimum_minutes }} دقيقة{% endif %}
             </p>
           </form>
@@ -59,7 +59,7 @@
 
           {% if internet_packages %}
           <details class="table-entry__package-picker">
-            <summary>اختر باقة</summary>
+            <summary>أو اختر باقة</summary>
             <form method="post" action="{% url 'visit_internet_start' %}" class="table-entry__internet-form">
               {% csrf_token %}
               <input type="hidden" name="mode" value="package">
@@ -72,7 +72,7 @@
                 <option value="{{ package.public_code }}">{{ package.name_ar }} — {{ package.customer_price_syp|format_syp }}</option>
                 {% endfor %}
               </select>
-              <p class="table-entry__internet-note">تبدأ الباقة فور التأكيد، ثم تنتقل مباشرة إلى المنيو.</p>
+              <p class="table-entry__internet-note">تبدأ الباقة فور التأكيد ويتم توصيل جهازك تلقائياً عندما تصبح الشبكة جاهزة.</p>
               <button class="hub-button hub-button-secondary table-entry__package-action" type="submit">ابدأ بهذه الباقة</button>
             </form>
           </details>
