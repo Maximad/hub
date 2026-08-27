@@ -90,7 +90,15 @@ class TableEntryFlowTests(TestCase):
     def tearDown(self):
         get_system_settings.cache_clear()
 
+    def _bind_new_visit(self):
+        response = self.client.post(self.entry_url, {'visit_action': 'create'})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('hub_visit', self.client.cookies)
+        return response
+
     def _start_metered(self):
+        if 'hub_visit' not in self.client.cookies:
+            self._bind_new_visit()
         return self.client.post(
             reverse('visit_internet_start'),
             {
@@ -100,11 +108,18 @@ class TableEntryFlowTests(TestCase):
             },
         )
 
-    def test_table_qr_opens_simple_entry_screen_with_metered_default(self):
+    def test_table_qr_requires_account_choice_then_exposes_internet(self):
         response = self.client.get(self.entry_url)
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'menu/table_landing.html')
+        self.assertContains(response, 'ابدأ جلستك على هذه الطاولة')
+        self.assertContains(response, 'بدء جلسة جديدة')
+        self.assertNotContains(response, 'اتصل بالإنترنت السريع')
+        self.assertNotContains(response, self.food.name_ar)
+
+        self._bind_new_visit()
+        response = self.client.get(self.entry_url)
         self.assertContains(response, 'الإنترنت السريع')
         self.assertContains(response, 'اتصل بالإنترنت السريع')
         self.assertContains(response, 'اختر باقة')
@@ -113,15 +128,10 @@ class TableEntryFlowTests(TestCase):
         self.assertContains(response, 'name="mode" value="metered"')
         self.assertContains(response, 'name="mode" value="package"')
         self.assertContains(response, 'name="next" value="menu"')
-        self.assertNotContains(response, self.food.name_ar)
-        self.assertNotContains(
-            response,
-            '<details class="table-entry__choice table-entry__choice--internet"',
-            html=False,
-        )
         self.assertContains(response, 'class="table-entry__package-picker"')
 
     def test_menu_choice_opens_catalog_without_generic_internet_product(self):
+        self._bind_new_visit()
         response = self.client.get(self.menu_url)
 
         self.assertEqual(response.status_code, 200)
@@ -130,12 +140,12 @@ class TableEntryFlowTests(TestCase):
         self.assertNotContains(response, self.package.name_ar)
         self.assertNotContains(response, self.internet_service_product.name_ar)
 
-    def test_metered_quick_start_creates_visit_session_without_package_charge_yet(self):
+    def test_metered_quick_start_uses_selected_visit_without_package_charge_yet(self):
         response = self._start_metered()
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response['Location'], self.entry_url + '?view=menu&internet_started=1')
-        self.assertIn('hub_visit', response.cookies)
+        self.assertIn('hub_visit', self.client.cookies)
         visit = HubVisit.objects.get()
         session = InternetSession.objects.get()
         self.assertEqual(visit.table_id, self.table.pk)
@@ -151,9 +161,7 @@ class TableEntryFlowTests(TestCase):
         self.assertEqual(HubVisitBrowserCredential.objects.get().visit_id, visit.pk)
 
     def test_repeated_metered_start_reuses_current_direct_session(self):
-        first = self._start_metered()
-        self.client.cookies['hub_visit'] = first.cookies['hub_visit'].value
-
+        self._start_metered()
         second = self._start_metered()
 
         self.assertEqual(second.status_code, 302)
@@ -161,7 +169,8 @@ class TableEntryFlowTests(TestCase):
         self.assertEqual(HubVisit.objects.count(), 1)
         self.assertEqual(Order.objects.count(), 0)
 
-    def test_package_quick_start_still_creates_visit_sale_session_then_redirects_to_menu(self):
+    def test_package_quick_start_uses_selected_visit_sale_session_then_redirects_to_menu(self):
+        self._bind_new_visit()
         response = self.client.post(
             reverse('visit_internet_start'),
             {
@@ -175,7 +184,7 @@ class TableEntryFlowTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response['Location'], self.entry_url + '?view=menu&internet_started=1')
-        self.assertIn('hub_visit', response.cookies)
+        self.assertIn('hub_visit', self.client.cookies)
         visit = HubVisit.objects.get()
         entitlement = InternetEntitlement.objects.get()
         session = InternetSession.objects.get()
@@ -190,21 +199,18 @@ class TableEntryFlowTests(TestCase):
         self.assertEqual(HubVisitBrowserCredential.objects.get().visit_id, visit.pk)
 
     def test_entry_screen_exposes_metered_session_link_after_visit_is_bound(self):
-        first = self._start_metered()
-        self.client.cookies['hub_visit'] = first.cookies['hub_visit'].value
-
+        self._start_metered()
         response = self.client.get(self.entry_url)
 
         self.assertContains(response, 'جلستك')
         self.assertContains(response, 'الإنترنت السريع فعال الآن')
         self.assertContains(response, 'جلسة حسب الوقت')
         self.assertContains(response, 'إدارة جلستك الحالية')
-        self.assertNotContains(response, 'اتصل بالإنترنت السريع')
+        self.assertNotContains(response, '>اتصل بالإنترنت السريع</button>', html=False)
         self.assertContains(response, reverse('current_visit'))
 
     def test_package_is_rejected_while_metered_visit_session_is_active(self):
-        first = self._start_metered()
-        self.client.cookies['hub_visit'] = first.cookies['hub_visit'].value
+        self._start_metered()
         second_package = InternetPackage.objects.create(
             name_ar='ثلاث ساعات',
             code='entry-three-hours',
@@ -234,8 +240,7 @@ class TableEntryFlowTests(TestCase):
         self.assertEqual(InternetSession.objects.filter(status=InternetSession.Status.ACTIVE).count(), 1)
 
     def test_customer_stop_bills_metered_session_into_same_visit(self):
-        first = self._start_metered()
-        self.client.cookies['hub_visit'] = first.cookies['hub_visit'].value
+        self._start_metered()
         session = InternetSession.objects.get()
         started = timezone.now() - timedelta(minutes=61)
         InternetSession.objects.filter(pk=session.pk).update(start_time=started, started_at=started)
@@ -260,8 +265,7 @@ class TableEntryFlowTests(TestCase):
         self.assertEqual(item.line_total_syp_snapshot, 750)
 
     def test_staff_close_stops_and_bills_metered_session_before_balance_check(self):
-        first = self._start_metered()
-        self.client.cookies['hub_visit'] = first.cookies['hub_visit'].value
+        self._start_metered()
         visit = HubVisit.objects.get()
         session = InternetSession.objects.get()
         started = timezone.now() - timedelta(minutes=31)
@@ -298,12 +302,11 @@ class TableEntryFlowTests(TestCase):
         self.assertEqual(visit.status, HubVisit.Status.CLOSED)
 
     def test_current_visit_returns_directly_to_catalog_and_describes_metered_session(self):
-        first = self._start_metered()
-        self.client.cookies['hub_visit'] = first.cookies['hub_visit'].value
-
+        self._start_metered()
         response = self.client.get(reverse('current_visit'))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.menu_url)
         self.assertContains(response, 'جلسة إنترنت حسب الوقت')
         self.assertContains(response, '600 ل.س')
+        self.assertContains(response, 'رمز إضافة جهاز آخر إلى نفس الحساب')

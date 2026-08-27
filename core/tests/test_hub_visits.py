@@ -39,6 +39,15 @@ class HubVisitPublicTests(TestCase):
         self.setting.save(update_fields=['customer_visits_enabled', 'updated_at'])
         get_system_settings.cache_clear()
 
+    def bind_new_visit(self, client=None, table=None):
+        client = client or self.client
+        table = table or self.table
+        url = reverse('menu_table', kwargs={'qr_token': table.qr_token})
+        response = client.post(url, {'visit_action': 'create'})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('hub_visit', client.cookies)
+        return response
+
     def test_disabled_preserves_standalone_public_order(self):
         self.assertEqual(self.client.get(self.url).status_code, 200)
         response = self.client.post(self.url, self.payload())
@@ -53,27 +62,36 @@ class HubVisitPublicTests(TestCase):
         }))
         self.assertNotContains(confirmation, 'أُضيف طلبك إلى جلستك')
 
-    def test_scan_does_not_create_visit_and_first_valid_order_does(self):
+    def test_scan_does_not_create_visit_and_account_selection_does(self):
         self.enable()
         self.assertEqual(self.client.get(self.url).status_code, 200)
         self.assertFalse(HubVisit.objects.exists())
-        response = self.client.post(self.url, self.payload())
+
+        selection = self.bind_new_visit()
         visit = HubVisit.objects.get()
-        self.assertEqual(Order.objects.get().visit, visit)
-        raw = response.cookies['hub_visit'].value
+        raw = selection.cookies['hub_visit'].value
         credential = HubVisitBrowserCredential.objects.get()
         self.assertNotEqual(credential.token_hash, raw)
         self.assertEqual(credential.token_hash, hashlib.sha256(raw.encode()).hexdigest())
-        self.assertTrue(response.cookies['hub_visit']['httponly'])
-        self.assertEqual(response.cookies['hub_visit']['samesite'], 'Lax')
+        self.assertTrue(selection.cookies['hub_visit']['httponly'])
+        self.assertEqual(selection.cookies['hub_visit']['samesite'], 'Lax')
 
-    def test_failed_order_creates_no_orphan_and_same_browser_reuses_visit(self):
+        response = self.client.post(self.url, self.payload())
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Order.objects.get().visit, visit)
+
+    def test_failed_order_keeps_selected_visit_and_same_browser_reuses_it(self):
         self.enable()
+        self.bind_new_visit()
+        selected = HubVisit.objects.get()
+
         failed = self.client.post(self.url, {'fulfillment_mode': 'table'})
         self.assertEqual(failed.status_code, 200)
-        self.assertFalse(HubVisit.objects.exists())
-        first = self.client.post(self.url, self.payload())
-        self.client.cookies['hub_visit'] = first.cookies['hub_visit'].value
+        self.assertEqual(HubVisit.objects.count(), 1)
+        self.assertTrue(HubVisit.objects.filter(pk=selected.pk, status=HubVisit.Status.OPEN).exists())
+        self.assertFalse(Order.objects.exists())
+
+        self.client.post(self.url, self.payload())
         self.client.post(self.url, self.payload())
         self.assertEqual(HubVisit.objects.count(), 1)
         self.assertEqual(Order.objects.count(), 2)
@@ -85,6 +103,7 @@ class HubVisitPublicTests(TestCase):
 
     def test_visit_order_confirmation_and_current_visit_are_one_flow(self):
         self.enable()
+        self.bind_new_visit()
         first = self.client.post(self.url, self.payload())
         first_order = Order.objects.get()
         confirmation = self.client.get(first['Location'])
@@ -99,7 +118,7 @@ class HubVisitPublicTests(TestCase):
         }))
         self.assertNotContains(confirmation, 'احتفظ برمز QR')
 
-        second = self.client.post(self.url, self.payload())
+        self.client.post(self.url, self.payload())
         second_order = Order.objects.exclude(pk=first_order.pk).get()
         Payment.objects.create(order=first_order, amount_syp=500,
                                method=Payment.Method.CASH)
@@ -116,41 +135,50 @@ class HubVisitPublicTests(TestCase):
         self.assertContains(page, self.room.name_ar)
         self.assertContains(page, f'href="{self.url}?view=menu"')
 
-    def test_same_browser_different_table_gets_separate_visit(self):
+    def test_same_browser_different_table_selects_separate_visit(self):
         self.enable()
-        first = self.client.post(self.url, self.payload())
+        first_selection = self.bind_new_visit()
+        self.client.post(self.url, self.payload())
         first_visit = Order.objects.get().visit
+
         other_table = TableArea.objects.create(room=self.room, name_ar='طاولة 2')
         other_url = reverse('menu_table', kwargs={'qr_token': other_table.qr_token})
-        second = self.client.post(other_url, self.payload())
+        second_selection = self.bind_new_visit(table=other_table)
+        self.client.post(other_url, self.payload())
         second_visit = Order.objects.exclude(visit=first_visit).get().visit
+
         self.assertNotEqual(first_visit, second_visit)
-        self.assertNotEqual(first.cookies['hub_visit'].value,
-                            second.cookies['hub_visit'].value)
+        self.assertNotEqual(first_selection.cookies['hub_visit'].value,
+                            second_selection.cookies['hub_visit'].value)
         current = self.client.get(reverse('current_visit'))
         self.assertContains(current, other_table.name_ar)
         self.assertNotContains(current, self.table.name_ar)
 
-    def test_table_qr_never_shares_visit_between_browsers(self):
+    def test_two_browsers_can_open_separate_visits_on_same_table(self):
         self.enable()
-        first = self.client.post(self.url, self.payload())
+        self.bind_new_visit()
+        self.client.post(self.url, self.payload())
         visit_a = Order.objects.get().visit
+
         other = Client()
         page = other.get(self.url)
-        self.assertNotContains(page, 'جلستك')
+        self.assertContains(page, 'فتح حساب منفصل')
+        self.bind_new_visit(client=other)
         other.post(self.url, self.payload())
+
         self.assertEqual(HubVisit.objects.count(), 2)
         self.assertNotEqual(Order.objects.exclude(visit=visit_a).get().visit, visit_a)
-        self.client.cookies['hub_visit'] = first.cookies['hub_visit'].value
 
     def test_invalid_and_closed_credentials_cannot_access_dashboard(self):
         self.enable()
         self.client.cookies['hub_visit'] = 'invalid-token'
         self.assertRedirects(self.client.get(reverse('current_visit')), reverse('menu_public'))
-        response = self.client.post(self.url, self.payload())
-        raw = response.cookies['hub_visit'].value
+
+        selection = self.bind_new_visit()
+        raw = selection.cookies['hub_visit'].value
         visit = HubVisit.objects.get()
-        visit.status = HubVisit.Status.CLOSED; visit.save(update_fields=['status'])
+        visit.status = HubVisit.Status.CLOSED
+        visit.save(update_fields=['status'])
         self.client.cookies['hub_visit'] = raw
         self.assertRedirects(self.client.get(reverse('current_visit')), reverse('menu_public'))
 

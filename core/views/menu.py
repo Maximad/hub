@@ -3,14 +3,26 @@
 import uuid
 from urllib.parse import urlsplit
 
+from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import resolve, reverse
 
 from accounts.permissions import user_has_capability
-from core.models import HubVisit, InternetSession, Order, TableArea
+from core.models import ActivityLog, HubVisit, InternetSession, Order, TableArea
+from core.services.table_visit_access import (
+    assert_pin_attempt_allowed,
+    clear_pin_failures,
+    create_table_visit,
+    find_open_visit_by_pin,
+    record_pin_failure,
+    resolve_table_number,
+    visit_join_pin,
+)
 from core.services.visit_internet import customer_packages, metered_customer_error, self_service_enabled
+from core.services.visits import issue_visit_credential, resolve_visit_credential, set_visit_cookie
+from core.settings_helpers import get_system_settings
 from core.views.staff_cashier_visits import (
     staff_cashier as _visit_staff_cashier,
     staff_cashier_visit,
@@ -23,6 +35,7 @@ from core.views.staff_context import render_order_context_panel, render_payment_
 from core.views.staff_workspace import staff_home
 from internet.catalog import decorate_menu_context, fulfill_internet_items_for_order
 from members.benefits import resolve_internet_price
+from members.services import resolve_member_from_request
 from core.views_legacy import (
     _create_order_from_menu,
     _menu_context,
@@ -73,11 +86,19 @@ def _render_customer_menu(request, *, table=None, error=''):
     return render(request, 'menu/menu.html', context)
 
 
-def _render_table_landing(request, table):
-    """Render the intentionally small first screen reached from a table QR."""
+def _bound_visit_for_table(request, table):
+    credential = resolve_visit_credential(request)
+    if credential and credential.visit.table_id == table.pk:
+        return credential.visit
+    return None
+
+
+def _render_table_landing(request, table, *, access_error=''):
+    """Render table account selection or the normal table customer landing."""
     context = _menu_context(table=table, request=request)
     settings_obj = context.get('settings') or context.get('system_settings')
-    visit = context.get('current_visit')
+    visit_access_enabled = bool(settings_obj and settings_obj.customer_visits_enabled)
+    visit = context.get('current_visit') if visit_access_enabled else None
     member_context = context.get('member_context')
     member = visit.member if visit and visit.member_id else (
         member_context.member if member_context else None
@@ -99,6 +120,13 @@ def _render_table_landing(request, table):
         )
 
     metered_error = metered_customer_error(settings_obj, member) if settings_obj else 'غير متاح'
+    open_visit_count = (
+        HubVisit.objects.filter(table=table, status=HubVisit.Status.OPEN).count()
+        if visit_access_enabled else 0
+    )
+    show_visit_access = bool(
+        visit_access_enabled and (visit is None or request.GET.get('choose') == '1')
+    )
     context.update({
         'table': table,
         'internet_packages': packages,
@@ -111,6 +139,11 @@ def _render_table_landing(request, table):
         'internet_request_key': uuid.uuid4(),
         'active_internet_session': active_session,
         'full_menu_url': reverse('menu_table', kwargs={'qr_token': table.qr_token}) + '?view=menu',
+        'open_visit_count': open_visit_count,
+        'show_visit_access': show_visit_access,
+        'visit_join_pin': visit_join_pin(visit) if visit else '',
+        'visit_access_error': access_error if visit_access_enabled else '',
+        'table_number_entry_url': reverse('menu_public') + '?table_entry=1',
     })
     return render(request, 'menu/table_landing.html', context)
 
@@ -144,18 +177,99 @@ def _customer_order_from_menu(request, *, table=None):
         return _render_customer_menu(request, table=table, error=_validation_message(error))
 
 
+def _render_table_number_entry(request, *, error=''):
+    return render(request, 'menu/table_number_entry.html', {
+        'table_number_error': error,
+        'table_number_value': request.GET.get('table_number', ''),
+    })
+
+
 def menu_public(request):
     if request.method == 'POST':
         return _customer_order_from_menu(request, table=None)
+
+    if request.GET.get('table_entry') == '1' or 'table_number' in request.GET:
+        raw_number = request.GET.get('table_number', '').strip()
+        if raw_number:
+            try:
+                table = resolve_table_number(raw_number)
+            except ValidationError as exc:
+                return _render_table_number_entry(request, error=_validation_message(exc))
+            return redirect('menu_table', qr_token=table.qr_token)
+        return _render_table_number_entry(request)
+
     return _render_customer_menu(request, table=None)
+
+
+def _handle_table_visit_action(request, table, action):
+    member_context = resolve_member_from_request(request)
+    member = member_context.member if member_context else None
+
+    if action == 'create':
+        visit = create_table_visit(table, member=member)
+        _credential, raw_token = issue_visit_credential(visit)
+        ActivityLog.objects.create(action='visit.created', details={
+            'visit_id': visit.pk,
+            'table_id': table.pk,
+            'source': 'table_account_selection',
+        })
+        ActivityLog.objects.create(action='visit.browser_bound', details={
+            'visit_id': visit.pk,
+            'table_id': table.pk,
+            'binding': 'new_separate_account',
+        })
+        messages.success(request, f'تم فتح حساب مستقل. رمز جلستك هو {visit_join_pin(visit)}.')
+    elif action == 'join':
+        try:
+            assert_pin_attempt_allowed(request, table)
+            visit = find_open_visit_by_pin(table, request.POST.get('pin', ''))
+        except ValidationError as exc:
+            if 'مؤقتاً' not in _validation_message(exc):
+                record_pin_failure(request, table)
+            return _render_table_landing(request, table, access_error=_validation_message(exc))
+        clear_pin_failures(request, table)
+        _credential, raw_token = issue_visit_credential(visit)
+        ActivityLog.objects.create(action='visit.browser_bound', details={
+            'visit_id': visit.pk,
+            'table_id': table.pk,
+            'binding': 'pin_join',
+        })
+        messages.success(request, 'تم الانضمام إلى الحساب المشترك على هذه الطاولة.')
+    else:
+        return _render_table_landing(request, table, access_error='اختر طريقة الدخول إلى الطاولة.')
+
+    response = redirect('menu_table', qr_token=table.qr_token)
+    return set_visit_cookie(response, raw_token)
 
 
 def menu_table(request, qr_token):
     table = get_object_or_404(TableArea.objects.select_related('room'), qr_token=qr_token)
+    settings_obj = get_system_settings()
+    visit_access_enabled = bool(settings_obj.customer_visits_enabled)
+    visit = _bound_visit_for_table(request, table) if visit_access_enabled else None
+
     if request.method == 'POST':
+        action = request.POST.get('visit_action', '').strip()
+        if action and visit_access_enabled:
+            return _handle_table_visit_action(request, table, action)
+        # A customer may order only after explicitly choosing which bill this
+        # browser belongs to. Feature-disabled deployments retain the legacy flow.
+        if visit_access_enabled and visit is None:
+            return _render_table_landing(
+                request,
+                table,
+                access_error='اختر أولاً الانضمام إلى حساب موجود أو فتح حساب منفصل.',
+            )
         return _customer_order_from_menu(request, table=table)
+
     if request.GET.get('view') != 'menu':
         return _render_table_landing(request, table)
+    if visit_access_enabled and visit is None:
+        return _render_table_landing(
+            request,
+            table,
+            access_error='اختر حسابك على الطاولة قبل فتح المنيو.',
+        )
     return _render_customer_menu(request, table=table)
 
 

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}الدخول إلى الطاولة{% endblock %}
+{% block body_class %}table-entry-page{% endblock %}
+{% block content %}
+<section class="table-entry" dir="rtl">
+  <header class="table-entry__hero">
+    <div>
+      <p class="table-entry__eyebrow">هَبّ</p>
+      <h2>أدخل رقم طاولتك</h2>
+      <p>يمكنك استخدام هذه الطريقة من اللابتوب أو عندما لا تستطيع مسح QR.</p>
+    </div>
+  </header>
+
+  {% if table_number_error %}<div class="hub-alert hub-alert-danger" role="alert">{{ table_number_error }}</div>{% endif %}
+
+  <form method="get" action="{% url 'menu_public' %}" class="hub-card">
+    <input type="hidden" name="table_entry" value="1">
+    <label for="table-number">رقم الطاولة</label>
+    <input class="hub-input" id="table-number" name="table_number" value="{{ table_number_value }}" inputmode="numeric" autocomplete="off" pattern="[0-9٠-٩]{1,6}" placeholder="12" autofocus required>
+    <button class="hub-button hub-button-primary" type="submit">دخول إلى الطاولة</button>
+  </form>
+
+  <p class="table-entry__internet-note">بعد اختيار الطاولة يمكنك الانضمام إلى حساب موجود باستخدام رمز الجلسة، أو فتح حساب منفصل.</p>
+</section>
+{% endblock %}
