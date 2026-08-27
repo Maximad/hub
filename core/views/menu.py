@@ -22,6 +22,7 @@ from core.services.table_visit_access import (
 )
 from core.services.visit_internet import customer_packages, metered_customer_error, self_service_enabled
 from core.services.visits import issue_visit_credential, resolve_visit_credential, set_visit_cookie
+from core.settings_helpers import get_system_settings
 from core.views.staff_cashier_visits import (
     staff_cashier as _visit_staff_cashier,
     staff_cashier_visit,
@@ -96,7 +97,8 @@ def _render_table_landing(request, table, *, access_error=''):
     """Render table account selection or the normal table customer landing."""
     context = _menu_context(table=table, request=request)
     settings_obj = context.get('settings') or context.get('system_settings')
-    visit = context.get('current_visit')
+    visit_access_enabled = bool(settings_obj and settings_obj.customer_visits_enabled)
+    visit = context.get('current_visit') if visit_access_enabled else None
     member_context = context.get('member_context')
     member = visit.member if visit and visit.member_id else (
         member_context.member if member_context else None
@@ -118,8 +120,13 @@ def _render_table_landing(request, table, *, access_error=''):
         )
 
     metered_error = metered_customer_error(settings_obj, member) if settings_obj else 'غير متاح'
-    open_visit_count = HubVisit.objects.filter(table=table, status=HubVisit.Status.OPEN).count()
-    show_visit_access = visit is None or request.GET.get('choose') == '1'
+    open_visit_count = (
+        HubVisit.objects.filter(table=table, status=HubVisit.Status.OPEN).count()
+        if visit_access_enabled else 0
+    )
+    show_visit_access = bool(
+        visit_access_enabled and (visit is None or request.GET.get('choose') == '1')
+    )
     context.update({
         'table': table,
         'internet_packages': packages,
@@ -135,7 +142,7 @@ def _render_table_landing(request, table, *, access_error=''):
         'open_visit_count': open_visit_count,
         'show_visit_access': show_visit_access,
         'visit_join_pin': visit_join_pin(visit) if visit else '',
-        'visit_access_error': access_error,
+        'visit_access_error': access_error if visit_access_enabled else '',
         'table_number_entry_url': reverse('menu_public') + '?table_entry=1',
     })
     return render(request, 'menu/table_landing.html', context)
@@ -200,7 +207,7 @@ def _handle_table_visit_action(request, table, action):
 
     if action == 'create':
         visit = create_table_visit(table, member=member)
-        credential, raw_token = issue_visit_credential(visit)
+        _credential, raw_token = issue_visit_credential(visit)
         ActivityLog.objects.create(action='visit.created', details={
             'visit_id': visit.pk,
             'table_id': table.pk,
@@ -221,7 +228,7 @@ def _handle_table_visit_action(request, table, action):
                 record_pin_failure(request, table)
             return _render_table_landing(request, table, access_error=_validation_message(exc))
         clear_pin_failures(request, table)
-        credential, raw_token = issue_visit_credential(visit)
+        _credential, raw_token = issue_visit_credential(visit)
         ActivityLog.objects.create(action='visit.browser_bound', details={
             'visit_id': visit.pk,
             'table_id': table.pk,
@@ -237,16 +244,17 @@ def _handle_table_visit_action(request, table, action):
 
 def menu_table(request, qr_token):
     table = get_object_or_404(TableArea.objects.select_related('room'), qr_token=qr_token)
-    visit = _bound_visit_for_table(request, table)
+    settings_obj = get_system_settings()
+    visit_access_enabled = bool(settings_obj.customer_visits_enabled)
+    visit = _bound_visit_for_table(request, table) if visit_access_enabled else None
 
     if request.method == 'POST':
         action = request.POST.get('visit_action', '').strip()
-        if action:
+        if action and visit_access_enabled:
             return _handle_table_visit_action(request, table, action)
         # A customer may order only after explicitly choosing which bill this
-        # browser belongs to. This prevents a crafted order from silently creating
-        # or joining a different table account.
-        if visit is None:
+        # browser belongs to. Feature-disabled deployments retain the legacy flow.
+        if visit_access_enabled and visit is None:
             return _render_table_landing(
                 request,
                 table,
@@ -256,7 +264,7 @@ def menu_table(request, qr_token):
 
     if request.GET.get('view') != 'menu':
         return _render_table_landing(request, table)
-    if visit is None:
+    if visit_access_enabled and visit is None:
         return _render_table_landing(
             request,
             table,
