@@ -59,10 +59,12 @@ class RouterOSClient:
         return rows[0] if rows else None
 
     def create_hotspot_user(self, values): return self._call('PUT', 'ip/hotspot/user', values)
-    def update_hotspot_user(self, remote_id, values): return self._call('PATCH', f'ip/hotspot/user/{parse.quote(remote_id)}', values)
+    def update_hotspot_user(self, remote_id, values):
+        return self._call('PATCH', f'ip/hotspot/user/{parse.quote(remote_id, safe="*")}', values)
     def find_profile(self, name):
         rows = self._call('GET', 'ip/hotspot/user/profile?' + parse.urlencode({'.proplist': '.id,name', 'name': name}))
         return rows[0] if rows else None
     def active_sessions(self, name):
         return self._call('GET', 'ip/hotspot/active?' + parse.urlencode({'.proplist': '.id,user', 'user': name}))
-    def remove_active(self, remote_id): return self._call('DELETE', f'ip/hotspot/active/{parse.quote(remote_id)}')
+    def remove_active(self, remote_id):
+        return self._call('DELETE', f'ip/hotspot/active/{parse.quote(remote_id, safe="*")}')
