@@ -14,6 +14,7 @@ from core.models import (
     SystemSetting,
     TableArea,
 )
+from core.services.table_visit_access import visit_join_pin
 from core.services.visit_internet import start_visit_metered_session
 from core.settings_helpers import get_system_settings
 
@@ -83,38 +84,75 @@ class CustomerInternetFlowMixin:
 
 
 @override_settings(**BASE_WEB_SETTINGS)
-class SharedTableVisitTests(CustomerInternetFlowMixin, TestCase):
+class MultiVisitTableTests(CustomerInternetFlowMixin, TestCase):
     def tearDown(self):
         get_system_settings.cache_clear()
 
-    def test_second_browser_reuses_same_open_table_visit_and_session(self):
+    def test_second_browser_can_join_existing_visit_with_pin(self):
         _settings, table = self.make_customer_setup()
-        url = reverse('visit_internet_start')
-        payload = {
-            'mode': 'metered',
-            'table': str(table.qr_token),
-            'next': 'menu',
-        }
+        table_url = reverse('menu_table', kwargs={'qr_token': table.qr_token})
 
-        first = self.client.post(url, payload)
+        first = self.client.post(table_url, {'visit_action': 'create'})
         self.assertEqual(first.status_code, 302)
-        self.assertIn('hub_visit', first.cookies)
+        visit = HubVisit.objects.get()
+        pin = visit_join_pin(visit)
 
         second_browser = Client()
-        second = second_browser.post(url, payload)
-        self.assertEqual(second.status_code, 302)
-        self.assertIn('hub_visit', second.cookies)
+        chooser = second_browser.get(table_url)
+        self.assertContains(chooser, 'الانضمام إلى حساب موجود')
+        self.assertContains(chooser, 'فتح حساب منفصل')
 
+        joined = second_browser.post(table_url, {'visit_action': 'join', 'pin': pin})
+        self.assertEqual(joined.status_code, 302)
+        self.assertIn('hub_visit', second_browser.cookies)
         self.assertEqual(HubVisit.objects.count(), 1)
-        visit = HubVisit.objects.get()
-        self.assertEqual(visit.table_id, table.pk)
-        self.assertEqual(InternetSession.objects.count(), 1)
-        self.assertEqual(InternetSession.objects.get().visit_id, visit.pk)
         self.assertEqual(HubVisitBrowserCredential.objects.count(), 2)
         self.assertEqual(
             set(HubVisitBrowserCredential.objects.values_list('visit_id', flat=True)),
             {visit.pk},
         )
+
+    def test_second_browser_can_open_independent_bill_on_same_table(self):
+        _settings, table = self.make_customer_setup()
+        table_url = reverse('menu_table', kwargs={'qr_token': table.qr_token})
+
+        self.client.post(table_url, {'visit_action': 'create'})
+        first_visit = HubVisit.objects.get()
+
+        second_browser = Client()
+        second = second_browser.post(table_url, {'visit_action': 'create'})
+        self.assertEqual(second.status_code, 302)
+
+        self.assertEqual(HubVisit.objects.count(), 2)
+        visits = list(HubVisit.objects.order_by('pk'))
+        self.assertEqual({visit.table_id for visit in visits}, {table.pk})
+        self.assertNotEqual(visits[0].pk, visits[1].pk)
+        self.assertNotEqual(visit_join_pin(visits[0]), visit_join_pin(visits[1]))
+        self.assertEqual(HubVisitBrowserCredential.objects.count(), 2)
+        self.assertNotEqual(first_visit.pk, visits[1].pk)
+
+    def test_direct_internet_start_without_selected_visit_is_blocked(self):
+        _settings, table = self.make_customer_setup()
+        response = self.client.post(
+            reverse('visit_internet_start'),
+            {'mode': 'metered', 'table': str(table.qr_token), 'next': 'menu'},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response['Location'],
+            reverse('menu_table', kwargs={'qr_token': table.qr_token}) + '?choose=1',
+        )
+        self.assertFalse(HubVisit.objects.exists())
+        self.assertFalse(InternetSession.objects.exists())
+
+    def test_table_number_entry_accepts_arabic_digits(self):
+        _settings, table = self.make_customer_setup()
+        response = self.client.get(reverse('menu_public'), {
+            'table_entry': '1',
+            'table_number': '١',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], reverse('menu_table', kwargs={'qr_token': table.qr_token}))
 
 
 @override_settings(**MIKROTIK_WEB_SETTINGS)
@@ -144,6 +182,9 @@ class FastCustomerProfileTests(CustomerInternetFlowMixin, TestCase):
         build_payload,
     ):
         _settings, table = self.make_customer_setup()
+        table_url = reverse('menu_table', kwargs={'qr_token': table.qr_token})
+        self.client.post(table_url, {'visit_action': 'create'})
+
         build_payload.return_value = {
             'login_url': 'https://wifi.example.test/login',
             'login_origin': 'https://wifi.example.test',
@@ -166,7 +207,7 @@ class FastCustomerProfileTests(CustomerInternetFlowMixin, TestCase):
         self.assertContains(response, 'جارٍ توصيلك بالشبكة')
         self.assertContains(response, 'action="https://wifi.example.test/login"')
         self.assertContains(response, 'name="username" value="hub-s-customer"')
-        self.assertIn('hub_visit', response.cookies)
+        self.assertIn('hub_visit', self.client.cookies)
         self.assertEqual(response['Cache-Control'], 'no-store, private, max-age=0')
         session = InternetSession.objects.get()
         self.assertEqual(session.bandwidth_profile, 'fast')
