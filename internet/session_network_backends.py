@@ -120,8 +120,11 @@ class MikroTikSessionNetworkBackend:
         profile = settings.MIKROTIK_DEFAULT_PROFILE
         if session.bandwidth_profile:
             mapping = InternetBandwidthProfile.objects.filter(code=session.bandwidth_profile).first()
-            if mapping and mapping.router_profile_name:
-                profile = mapping.router_profile_name
+            if not mapping or not mapping.router_profile_name:
+                raise MikroTikConfigurationError(
+                    'ملف السرعة المحدد للجلسة غير مربوط بملف RouterOS.'
+                )
+            profile = mapping.router_profile_name
         if not profile:
             raise MikroTikConfigurationError('لا يوجد ملف RouterOS مطابق لملف السرعة.')
         return profile
