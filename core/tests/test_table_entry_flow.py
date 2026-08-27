@@ -105,8 +105,8 @@ class TableEntryFlowTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'menu/table_landing.html')
-        self.assertContains(response, 'الإنترنت')
-        self.assertContains(response, 'ابدأ الإنترنت الآن')
+        self.assertContains(response, 'الإنترنت السريع')
+        self.assertContains(response, 'اتصل بالإنترنت السريع')
         self.assertContains(response, 'اختر باقة')
         self.assertContains(response, '600 ل.س')
         self.assertContains(response, self.package.name_ar)
@@ -196,10 +196,10 @@ class TableEntryFlowTests(TestCase):
         response = self.client.get(self.entry_url)
 
         self.assertContains(response, 'جلستك')
-        self.assertContains(response, 'الإنترنت فعال الآن')
+        self.assertContains(response, 'الإنترنت السريع فعال الآن')
         self.assertContains(response, 'جلسة حسب الوقت')
         self.assertContains(response, 'إدارة جلستك الحالية')
-        self.assertNotContains(response, 'ابدأ الإنترنت الآن')
+        self.assertNotContains(response, 'اتصل بالإنترنت السريع')
         self.assertContains(response, reverse('current_visit'))
 
     def test_package_is_rejected_while_metered_visit_session_is_active(self):
