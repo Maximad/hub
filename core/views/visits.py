@@ -19,15 +19,19 @@ from core.services.hotspot_connect import (
 )
 from core.services.internet_access import end_usage_session
 from core.services.visit_internet import (
-    create_visit_internet_sale_and_start,
     customer_packages,
     finalize_visit_metered_session,
     metered_network_activated_at,
     prepare_visit_metered_session_network,
     self_service_enabled,
+    usable_member_entitlements,
+)
+from core.services.visit_internet_devices import (
+    active_browser_session,
+    browser_session_queryset,
+    create_visit_internet_sale_and_start,
     start_existing_visit_entitlement,
     start_visit_metered_session,
-    usable_member_entitlements,
 )
 from core.services.visits import issue_visit_credential, resolve_visit_credential, set_visit_cookie
 from core.settings_helpers import get_system_settings
@@ -57,17 +61,24 @@ def _decorate_session_network_state(session):
     return session
 
 
-def _internet_context(visit=None, member=None):
+def _internet_context(visit=None, member=None, credential=None):
     packages = customer_packages(member)
     for package in packages:
         package.customer_price_syp = int(resolve_internet_price(member, package)[0])
     entitlements = usable_member_entitlements(visit) if visit else InternetEntitlement.objects.none()
-    sessions = list(visit.internet_sessions.select_related('entitlement', 'package')
-                    .order_by('-start_time')) if visit else []
+    sessions = list(
+        browser_session_queryset(credential)
+        .select_related('entitlement', 'package')
+        .order_by('-start_time')
+    ) if visit and credential else []
     for session in sessions:
         _decorate_session_network_state(session)
-    return {'internet_packages': packages, 'internet_entitlements': entitlements,
-            'internet_sessions': sessions, 'internet_request_key': uuid.uuid4()}
+    return {
+        'internet_packages': packages,
+        'internet_entitlements': entitlements,
+        'internet_sessions': sessions,
+        'internet_request_key': uuid.uuid4(),
+    }
 
 
 def current_visit(request):
@@ -85,16 +96,19 @@ def current_visit(request):
         if visit.table_id else reverse('menu_public')
     )
     menu_url = table_entry_url + '?view=menu' if visit.table_id else table_entry_url
-    active_internet_session = visit.internet_sessions.select_related('package', 'entitlement').filter(
-        status=InternetSession.Status.ACTIVE).order_by('-start_time').first()
+    active_internet_session = active_browser_session(credential)
     if active_internet_session:
         _decorate_session_network_state(active_internet_session)
-    context = {'visit': visit, 'orders': orders, 'menu_url': menu_url,
-               'table_entry_url': table_entry_url,
-               'active_internet_session': active_internet_session,
-               'internet_self_service_enabled': self_service_enabled(system_settings)}
+    context = {
+        'visit': visit,
+        'orders': orders,
+        'menu_url': menu_url,
+        'table_entry_url': table_entry_url,
+        'active_internet_session': active_internet_session,
+        'internet_self_service_enabled': self_service_enabled(system_settings),
+    }
     if context['internet_self_service_enabled']:
-        context.update(_internet_context(visit, visit.member))
+        context.update(_internet_context(visit, visit.member, credential))
     return render(request, 'menu/current_visit.html', context)
 
 
@@ -159,15 +173,20 @@ def visit_internet_purchase_start(request):
     raw_cookie = None
     try:
         mode = request.POST.get('mode', 'package').strip()
-        table = (TableArea.objects.filter(qr_token=request.POST.get('table')).first()
-                 if request.POST.get('table') else None)
+        table = (
+            TableArea.objects.filter(qr_token=request.POST.get('table')).first()
+            if request.POST.get('table') else None
+        )
         credential = resolve_visit_credential(request)
         member_context = resolve_member_from_request(request)
         package = None
         session = None
         metered_created = False
         if mode != 'metered':
-            package = get_object_or_404(InternetPackage, public_code=request.POST.get('package'))
+            package = get_object_or_404(
+                InternetPackage,
+                public_code=request.POST.get('package'),
+            )
 
         with transaction.atomic():
             if credential:
@@ -177,9 +196,9 @@ def visit_internet_purchase_start(request):
             else:
                 if not table:
                     raise ValidationError('الجلسة مغلقة.')
-                # The physical table, not a browser cookie, owns the open visit.
-                # Locking the table serializes simultaneous first scans so two
-                # browsers cannot create two independent bills for one table.
+                # Compatibility fallback for callers outside the normal guarded table
+                # flow.  New customer table starts are expected to arrive already
+                # bound to a visit/browser credential by the account-selection step.
                 table = TableArea.objects.select_for_update().get(pk=table.pk)
                 visit = (
                     HubVisit.objects.select_for_update()
@@ -194,18 +213,23 @@ def visit_internet_purchase_start(request):
                         member=member_context.member if member_context else None,
                     )
                     ActivityLog.objects.create(action='visit.created', details={
-                        'visit_id': visit.pk, 'source': 'public_internet'})
+                        'visit_id': visit.pk,
+                        'source': 'public_internet',
+                    })
                 credential, raw_cookie = issue_visit_credential(visit)
                 ActivityLog.objects.create(action='visit.browser_bound', details={
                     'visit_id': visit.pk,
                     'joined_existing_table_visit': not created_visit,
                 })
+
             member = visit.member
             if member_context and visit.member_id is None:
                 visit.member = member = member_context.member
                 visit.save(update_fields=['member', 'updated_at'])
                 ActivityLog.objects.create(action='visit.member_auto_attached', details={
-                    'visit_id': visit.pk, 'member_id': member.pk})
+                    'visit_id': visit.pk,
+                    'member_id': member.pk,
+                })
             elif member_context and visit.member_id != member_context.member.pk:
                 raise ValidationError('تعذر مطابقة العضوية. يرجى طلب المساعدة من الفريق.')
 
@@ -240,9 +264,8 @@ def visit_internet_purchase_start(request):
         else:
             messages.success(request, 'بدأت جلسة الإنترنت.')
 
-        # The normal successful path is now one customer action: provision, then
-        # immediately relay the browser into RouterOS. The old connect endpoint is
-        # retained only as a reconnect/recovery action.
+        # The successful path remains one customer action: provision, then relay the
+        # initiating browser into its own RouterOS identity.
         can_relay = bool(
             session
             and network_ready
@@ -271,7 +294,10 @@ def visit_internet_purchase_start(request):
                 )
 
         if request.POST.get('next') == 'menu' and table:
-            target = reverse('menu_table', kwargs={'qr_token': table.qr_token}) + '?view=menu&internet_started=1'
+            target = (
+                reverse('menu_table', kwargs={'qr_token': table.qr_token})
+                + '?view=menu&internet_started=1'
+            )
             response = redirect(target)
         else:
             response = redirect('current_visit')
@@ -295,7 +321,10 @@ def visit_internet_entitlement_start(request, public_code):
         messages.error(request, 'الجلسة مغلقة.')
         return redirect('menu_public')
     try:
-        entitlement = get_object_or_404(InternetEntitlement, public_code=public_code)
+        entitlement = get_object_or_404(
+            InternetEntitlement,
+            public_code=public_code,
+        )
         session, _created = start_existing_visit_entitlement(
             visit=credential.visit,
             credential=credential,
@@ -318,7 +347,7 @@ def visit_internet_entitlement_start(request, public_code):
 
 @require_POST
 def visit_internet_session_connect(request, public_code):
-    """Relay an authorized current-visit browser into its RouterOS HotSpot login."""
+    """Relay only this browser's authorized RouterOS HotSpot identity."""
     if not self_service_enabled(get_system_settings()):
         messages.error(request, 'خدمة الإنترنت الذاتية غير متاحة حالياً.')
         return redirect('menu_public')
@@ -327,9 +356,8 @@ def visit_internet_session_connect(request, public_code):
         messages.error(request, 'الجلسة مغلقة.')
         return redirect('menu_public')
     session = get_object_or_404(
-        InternetSession.objects.select_related('entitlement'),
+        browser_session_queryset(credential).select_related('entitlement'),
         public_code=public_code,
-        visit=credential.visit,
         status=InternetSession.Status.ACTIVE,
     )
     try:
@@ -357,25 +385,33 @@ def visit_internet_session_stop(request, public_code):
     if not credential:
         messages.error(request, 'الجلسة مغلقة.')
         return redirect('menu_public')
-    session = get_object_or_404(InternetSession, public_code=public_code,
-                                visit=credential.visit,
-                                status=InternetSession.Status.ACTIVE)
+    session = get_object_or_404(
+        browser_session_queryset(credential),
+        public_code=public_code,
+        status=InternetSession.Status.ACTIVE,
+    )
     try:
         if session.entitlement_id:
             ended = end_usage_session(session)
             message = 'تم إيقاف استخدام الإنترنت. وقت الباقة المحددة غير المستخدم لا يُستعاد.'
         else:
             ended = finalize_visit_metered_session(session)
-            if (ended.status == InternetSession.Status.CANCELLED
-                    and ended.lifecycle_end_reason == 'network_not_activated'):
+            if (
+                ended.status == InternetSession.Status.CANCELLED
+                and ended.lifecycle_end_reason == 'network_not_activated'
+            ):
                 message = 'أُلغيت جلسة الإنترنت دون أي احتساب لأن تجهيز الشبكة لم يكتمل.'
             else:
-                message = f'تم إنهاء الإنترنت. أضيف {int(ended.payable_total_syp or 0)} ل.س إلى حساب جلستك.'
+                message = (
+                    f'تم إنهاء الإنترنت. أضيف {int(ended.payable_total_syp or 0)} ل.س '
+                    'إلى حساب جلستك.'
+                )
     except ValidationError as exc:
         messages.error(request, _error_text(exc))
         return redirect('current_visit')
     ActivityLog.objects.create(action='visit.internet_session_ended', details={
-        'visit_id': credential.visit_id, 'session_id': ended.pk,
+        'visit_id': credential.visit_id,
+        'session_id': ended.pk,
         'entitlement_id': ended.entitlement_id,
     })
     messages.success(request, message)

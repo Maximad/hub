@@ -10,7 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import resolve, reverse
 
 from accounts.permissions import user_has_capability
-from core.models import ActivityLog, HubVisit, InternetSession, Order, TableArea
+from core.models import ActivityLog, HubVisit, Order, TableArea
 from core.services.table_visit_access import (
     assert_pin_attempt_allowed,
     clear_pin_failures,
@@ -21,6 +21,7 @@ from core.services.table_visit_access import (
     visit_join_pin,
 )
 from core.services.visit_internet import customer_packages, metered_customer_error, self_service_enabled
+from core.services.visit_internet_devices import active_browser_session
 from core.services.visits import issue_visit_credential, resolve_visit_credential, set_visit_cookie
 from core.settings_helpers import get_system_settings
 from core.views.staff_cashier_visits import (
@@ -112,12 +113,9 @@ def _render_table_landing(request, table, *, access_error=''):
 
     active_session = None
     if visit:
-        active_session = (
-            visit.internet_sessions.select_related('package', 'entitlement')
-            .filter(status=InternetSession.Status.ACTIVE)
-            .order_by('-start_time')
-            .first()
-        )
+        credential = resolve_visit_credential(request, touch=False)
+        if credential and credential.visit_id == visit.pk:
+            active_session = active_browser_session(credential)
 
     metered_error = metered_customer_error(settings_obj, member) if settings_obj else 'غير متاح'
     open_visit_count = (
