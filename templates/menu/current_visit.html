@@ -1,7 +1,8 @@
-{% extends "base.html" %}{% load hub_numbers %}
+{% extends "base.html" %}{% load hub_numbers visit_access %}
 {% block title %}جلستك اليوم{% endblock %}
 {% block body_class %}customer-space-page{% endblock %}
 {% block content %}
+{% visit_pin visit as join_pin %}
 <main class="menu-public customer-space" dir="rtl" data-customer-space data-has-visit="true" data-menu-url="{{ menu_url }}" data-visit-url="{% url 'current_visit' %}" data-orders-url="#customer-orders" data-services-url="{% if internet_self_service_enabled %}#internet{% endif %}">
   <header class="hub-card current-visit__header">
     <div>
@@ -11,6 +12,14 @@
     </div>
     <a class="hub-button hub-button-primary" href="{{ menu_url }}">+ طلب جديد</a>
   </header>
+
+  {% if join_pin and visit.table %}
+  <section class="hub-card" aria-label="رمز مشاركة الجلسة">
+    <small>رمز إضافة جهاز آخر إلى نفس الحساب</small>
+    <strong style="display:block;font-size:1.65rem;letter-spacing:.18em;margin:.4rem 0;">{{ join_pin }}</strong>
+    <p>على الجهاز الآخر اختر {{ visit.table.display_name }} ثم «الانضمام إلى حساب موجود» وأدخل هذا الرمز.</p>
+  </section>
+  {% endif %}
 
   <section class="hub-card current-visit__totals" aria-label="حساب الجلسة">
     <h2>حساب جلستك</h2>
