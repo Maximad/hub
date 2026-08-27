@@ -1,4 +1,3 @@
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.test import Client, TestCase, override_settings
@@ -15,7 +14,7 @@ from core.models import (
     TableArea,
 )
 from core.services.table_visit_access import visit_join_pin
-from core.services.visit_internet import start_visit_metered_session
+from core.services.visit_internet_devices import start_visit_metered_session
 from core.settings_helpers import get_system_settings
 
 
@@ -163,7 +162,10 @@ class FastCustomerProfileTests(CustomerInternetFlowMixin, TestCase):
     def test_customer_metered_session_gets_explicit_fast_profile(self):
         _settings, table = self.make_customer_setup()
         visit = HubVisit.objects.create(table=table)
-        credential = SimpleNamespace(visit_id=visit.pk)
+        credential = HubVisitBrowserCredential.objects.create(
+            visit=visit,
+            token_hash='f' * 64,
+        )
 
         session, created = start_visit_metered_session(
             visit=visit,
@@ -173,6 +175,7 @@ class FastCustomerProfileTests(CustomerInternetFlowMixin, TestCase):
         self.assertTrue(created)
         self.assertEqual(session.network_provider, InternetSession.NetworkProvider.MIKROTIK)
         self.assertEqual(session.bandwidth_profile, 'fast')
+        self.assertEqual(session.browser_binding.credential_id, credential.pk)
 
     @patch('core.views.visits.build_session_hotspot_login_payload')
     @patch('core.views.visits.prepare_visit_metered_session_network', return_value=True)
@@ -211,4 +214,5 @@ class FastCustomerProfileTests(CustomerInternetFlowMixin, TestCase):
         self.assertEqual(response['Cache-Control'], 'no-store, private, max-age=0')
         session = InternetSession.objects.get()
         self.assertEqual(session.bandwidth_profile, 'fast')
+        self.assertIsNotNone(session.browser_binding_id if hasattr(session, 'browser_binding_id') else session.browser_binding.pk)
         build_payload.assert_called_once()
