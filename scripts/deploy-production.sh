@@ -12,6 +12,7 @@ ENV_FILE=".env"
 BASE_URL="https://hubsweida.jwtalenthouse.com"
 LOCK_FILE="/tmp/hub-production-operation.lock"
 COMPOSE_ARGS=(-f "$COMPOSE_FILE")
+ALLOW_PRELAUNCH_OPERATIONAL_DATA="${ALLOW_PRELAUNCH_OPERATIONAL_DATA:-false}"
 
 BACKUP_FILE=""
 BOOTSTRAP_RESUME=false
@@ -39,6 +40,21 @@ mikrotik_enabled() {
     grep -Eiq \
         '^[[:space:]]*MIKROTIK_ENABLED[[:space:]]*=[[:space:]]*(true|1|yes|on)[[:space:]]*$' \
         "$ENV_FILE"
+}
+
+allow_operational_data() {
+    case "${ALLOW_PRELAUNCH_OPERATIONAL_DATA,,}" in
+        true|1|yes|on) return 0 ;;
+        false|0|no|off|'') return 1 ;;
+        *) die "ALLOW_PRELAUNCH_OPERATIONAL_DATA must be true or false." ;;
+    esac
+}
+
+latest_successful_backup() {
+    local root="$PROJECT_DIR/backups/production"
+    [[ -d "$root" ]] || return 1
+    find "$root" -mindepth 1 -maxdepth 1 -type d -name 'hub-*' \
+        -exec test -f '{}/SUCCESS' \; -print | sort | tail -1
 }
 
 dc() {
@@ -124,12 +140,18 @@ command -v git >/dev/null || die "git is missing."
 command -v docker >/dev/null || die "docker is missing."
 command -v curl >/dev/null || die "curl is missing."
 command -v flock >/dev/null || die "flock is missing."
+command -v find >/dev/null || die "find is missing."
 
 docker info >/dev/null 2>&1 ||
     die "Docker is unavailable to the deploy user."
 
 dc config --quiet ||
     die "Combined production Docker Compose configuration is invalid."
+
+# Validate the deploy-policy override before taking the production lock.
+if allow_operational_data; then
+    log "Operational-data retention explicitly approved for this deployment"
+fi
 
 exec 9>"$LOCK_FILE"
 flock -n 9 ||
@@ -170,9 +192,19 @@ else
     printf 'Current commit: %s\n' "$CURRENT_COMMIT"
     printf 'Target commit:  %s\n' "$TARGET_COMMIT"
 
+    PREVIOUS_BACKUP="$(latest_successful_backup || true)"
+
     log "Creating full production backup"
     ./scripts/backup-production.sh --lock-held
-    BACKUP_FILE="backups/production (latest successful backup)"
+
+    LATEST_BACKUP="$(latest_successful_backup || true)"
+    [[ -n "$LATEST_BACKUP" ]] || die "Backup completed but no successful backup directory was found."
+    [[ "$LATEST_BACKUP" != "$PREVIOUS_BACKUP" ]] || die "Backup script did not create a new successful backup."
+
+    log "Verifying fresh production backup restore"
+    ./scripts/verify-production-backup.sh "$LATEST_BACKUP"
+    [[ -f "$LATEST_BACKUP/RESTORE_VERIFIED" ]] || die "Fresh backup restore verification evidence is missing."
+    BACKUP_FILE="${LATEST_BACKUP#$PROJECT_DIR/}"
 
     log "Updating source code"
 
@@ -206,9 +238,15 @@ log "Evaluating launch readiness gate"
 # Machine-readable mode still exits nonzero for FAIL, while WARN remains an
 # approved, visible, non-blocking result. Do not suppress this exit status:
 # errexit prevents both cutover and the deployed-revision write on failure.
-dc run --rm -T \
-    --volume "$PROJECT_DIR/backups/production:/opt/hub/backups/production:ro" \
-    web python manage.py launch_readiness --json
+if allow_operational_data; then
+    dc run --rm -T \
+        --volume "$PROJECT_DIR/backups/production:/opt/hub/backups/production:ro" \
+        web python manage.py launch_readiness --json --allow-operational-data
+else
+    dc run --rm -T \
+        --volume "$PROJECT_DIR/backups/production:/opt/hub/backups/production:ro" \
+        web python manage.py launch_readiness --json
+fi
 
 log "Replacing web + Internet worker containers"
 
