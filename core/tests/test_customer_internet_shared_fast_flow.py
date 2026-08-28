@@ -16,6 +16,7 @@ from core.models import (
 from core.services.table_visit_access import visit_join_pin
 from core.services.visit_internet_devices import start_visit_metered_session
 from core.settings_helpers import get_system_settings
+from locations.models import TableAreaSettings
 
 
 BASE_WEB_SETTINGS = dict(
@@ -79,6 +80,7 @@ class CustomerInternetFlowMixin:
         get_system_settings.cache_clear()
         room = Room.objects.create(name_ar='مشاريب')
         table = TableArea.objects.create(room=room, name_ar='طاولة 1')
+        TableAreaSettings.objects.create(table=table, customer_entry_code='1')
         return settings_obj, table
 
 
