@@ -10,12 +10,17 @@ trap 'rm -rf "$tmp"' EXIT
 bash -n "$repo/scripts/deploy-production.sh"
 
 # Keep the MikroTik production overlay mandatory when the feature is enabled,
-# and ensure both long-running application services use the same Compose stack.
+# ensure both long-running application services use the same Compose stack,
+# and ensure a freshly created backup is restore-verified before readiness.
 grep -Fq 'MIKROTIK_COMPOSE_FILE="docker-compose.mikrotik.yml"' "$repo/scripts/deploy-production.sh"
 grep -Fq 'COMPOSE_ARGS+=(-f "$MIKROTIK_COMPOSE_FILE")' "$repo/scripts/deploy-production.sh"
 grep -Fq 'MIKROTIK_ENABLED=true requires' "$repo/scripts/deploy-production.sh"
 grep -Fq 'dc build web internet-worker' "$repo/scripts/deploy-production.sh"
 grep -Fq 'dc up -d --no-deps --force-recreate web internet-worker' "$repo/scripts/deploy-production.sh"
+grep -Fq 'log "Verifying fresh production backup restore"' "$repo/scripts/deploy-production.sh"
+grep -Fq './scripts/verify-production-backup.sh "$LATEST_BACKUP"' "$repo/scripts/deploy-production.sh"
+grep -Fq 'ALLOW_PRELAUNCH_OPERATIONAL_DATA=' "$repo/scripts/deploy-production.sh"
+grep -Fq 'launch_readiness --json --allow-operational-data' "$repo/scripts/deploy-production.sh"
 
 # Execute the deployment phase directly from the production script with a
 # Compose stub. This keeps the regression test independent of Docker, a deploy
@@ -33,11 +38,13 @@ run_phase() (
     events="$1"
     fail_migration="${2:-false}"
     fail_readiness="${3:-false}"
+    allow_data="${4:-false}"
     PROJECT_DIR="/opt/hub"
 
     log() { printf 'LOG %s\n' "$*" >>"$events"; }
     check_route() { printf 'ROUTE %s %s\n' "$1" "$2" >>"$events"; }
     mikrotik_enabled() { return 0; }
+    allow_operational_data() { [[ "$allow_data" == true ]]; }
     dc() {
         printf 'DC' >>"$events"
         printf ' <%s>' "$@" >>"$events"
@@ -91,6 +98,11 @@ runtime_readiness_line="$(line_of 'DC <exec> <-T> <web> <python> <manage.py> <in
 (( restart_line < route_line ))
 (( route_line < mikrotik_line ))
 (( mikrotik_line < runtime_readiness_line ))
+
+# Explicitly retaining operational data must add only the documented readiness flag.
+allowed_events="$tmp/allowed.events"
+run_phase "$allowed_events" false false true
+grep -Fq 'DC <run> <--rm> <-T> <--volume> </opt/hub/backups/production:/opt/hub/backups/production:ro> <web> <python> <manage.py> <launch_readiness> <--json> <--allow-operational-data>' "$allowed_events"
 
 failed_events="$tmp/failure.events"
 set +e
