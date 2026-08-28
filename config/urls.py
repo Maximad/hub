@@ -28,12 +28,14 @@ from core.views.visits import (current_visit, visit_internet_purchase_start,
     visit_internet_entitlement_start, visit_internet_session_connect,
     visit_internet_session_stop)
 from core.views.staff_visits import staff_visits, staff_visit_detail
+from core.views.wifi import wifi_entry
 
 
 urlpatterns = [
     path('partner/internet/', internet_partner_dashboard, name='internet_partner_dashboard'),
     path('admin/', admin.site.urls),
     path('', menu.dashboard, name='dashboard'),
+    path('wifi/', wifi_entry, name='wifi_entry'),
     path('menu/', menu.menu_public, name='menu_public'),
     path('menu/table/<uuid:qr_token>/', menu.menu_table, name='menu_table'),
     path('visit/current/', current_visit, name='current_visit'),
