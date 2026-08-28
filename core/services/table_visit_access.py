@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from core.models import HubVisit, TableArea
+from locations.models import TableAreaSettings, normalize_table_entry_code
 
 
 PIN_ATTEMPT_LIMIT = 5
@@ -17,34 +18,31 @@ _ARABIC_DIGIT_TRANSLATION = str.maketrans('٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷�
 
 
 def normalize_table_number(value):
-    text = str(value or '').translate(_ARABIC_DIGIT_TRANSLATION).strip()
-    if not text or not text.isdigit() or len(text) > 6:
-        raise ValidationError('أدخل رقم طاولة صالحاً.')
-    return str(int(text))
-
-
-def _numbers_in_text(value):
-    normalized = str(value or '').translate(_ARABIC_DIGIT_TRANSLATION)
-    return {str(int(match)) for match in re.findall(r'\d+', normalized)}
+    """Backward-compatible alias for the canonical customer table code parser."""
+    return normalize_table_entry_code(value)
 
 
 def table_matches_number(table, number):
+    """Match only the explicit customer entry code, never digits in the display name."""
     wanted = normalize_table_number(number)
-    return wanted in (_numbers_in_text(table.name_ar) | _numbers_in_text(table.name_en))
+    try:
+        return table.access_settings.customer_entry_code == wanted
+    except TableAreaSettings.DoesNotExist:
+        return False
 
 
 def resolve_table_number(number):
+    """Resolve a customer-entered table number independently of table names and DB ids."""
     wanted = normalize_table_number(number)
-    matches = [
-        table
-        for table in TableArea.objects.select_related('room').order_by('room__name_ar', 'name_ar', 'pk')
-        if table_matches_number(table, wanted)
-    ]
-    if not matches:
+    settings_obj = (
+        TableAreaSettings.objects
+        .select_related('table__room')
+        .filter(customer_entry_code=wanted)
+        .first()
+    )
+    if settings_obj is None:
         raise ValidationError('رقم الطاولة غير موجود.')
-    if len(matches) > 1:
-        raise ValidationError('رقم الطاولة موجود في أكثر من مكان. استخدم QR الطاولة أو اطلب المساعدة من الفريق.')
-    return matches[0]
+    return settings_obj.table
 
 
 def visit_join_pin(visit):
