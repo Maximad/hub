@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}واي فاي هَبّ{% endblock %}
+{% block body_class %}table-entry-page wifi-entry-page{% endblock %}
+{% block content %}
+<section class="table-entry" dir="rtl">
+  <header class="table-entry__hero">
+    <div>
+      <p class="table-entry__eyebrow">هَبّ</p>
+      <h2>أهلاً بك في هَبّ</h2>
+      <p>اتصل بالإنترنت المجاني، أو أدخل رقم طاولتك للطلبات والحساب والإنترنت السريع.</p>
+    </div>
+  </header>
+
+  {% if came_from_free_access %}
+    <div class="hub-alert hub-alert-success" role="status">
+      تم تحويلك من خيار الإنترنت المجاني. يمكنك متابعة التصفح أو الدخول إلى طاولتك من هنا.
+    </div>
+  {% endif %}
+
+  {% if current_visit and current_table %}
+    <section class="hub-card">
+      <p class="table-entry__eyebrow">حسابك الحالي</p>
+      <h3>{{ current_table.display_name }}</h3>
+      <p>هذا الجهاز مرتبط حالياً بحساب مفتوح على هذه الطاولة.</p>
+      <a class="hub-button hub-button-primary" href="{{ current_table_url }}">العودة إلى طاولتي</a>
+      <a class="hub-button" href="{% url 'current_visit' %}">عرض الحساب الحالي</a>
+    </section>
+  {% endif %}
+
+  {% if table_number_error %}
+    <div class="hub-alert hub-alert-danger" role="alert">{{ table_number_error }}</div>
+  {% endif %}
+
+  <form method="get" action="{% url 'wifi_entry' %}" class="hub-card">
+    <label for="wifi-table-number">رقم الطاولة</label>
+    <input class="hub-input" id="wifi-table-number" name="table_number" value="{{ table_number_value }}" inputmode="numeric" autocomplete="off" pattern="[0-9٠-٩۰-۹]{1,6}" placeholder="11" required>
+    <button class="hub-button hub-button-primary" type="submit">دخول إلى طاولتي</button>
+    <p class="table-entry__internet-note">بعد اختيار الطاولة يمكنك الانضمام إلى حساب موجود بالرمز القصير أو فتح حساب منفصل.</p>
+  </form>
+
+  <section class="hub-card">
+    <h3>الإنترنت المجاني</h3>
+    <p>السرعة المجانية تُفعّل من نافذة تسجيل الدخول الخاصة بشبكة هَبّ. لا تحتاج إلى رقم طاولة أو حساب لاستخدامها.</p>
+    <p class="table-entry__internet-note">عند تفعيل الإنترنت السريع لاحقاً، يكون الاستخدام خاصاً بهذا الجهاز ويُضاف إلى حساب الطاولة الذي اخترته.</p>
+  </section>
+
+  <a class="hub-button" href="{% url 'menu_public' %}">تصفح المنيو بدون طاولة</a>
+</section>
+{% endblock %}
