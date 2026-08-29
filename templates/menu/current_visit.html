@@ -1,28 +1,25 @@
 {% extends "base.html" %}{% load hub_numbers visit_access %}
-{% block title %}جلستك اليوم{% endblock %}
+{% block title %}جلستي{% endblock %}
 {% block body_class %}customer-space-page{% endblock %}
 {% block content %}
 {% visit_pin visit as join_pin %}
-<main class="menu-public customer-space" dir="rtl" data-customer-space data-has-visit="true" data-menu-url="{{ menu_url }}" data-visit-url="{% url 'current_visit' %}" data-orders-url="#customer-orders" data-services-url="{% if internet_self_service_enabled %}#internet{% endif %}">
+<main class="menu-public customer-space" dir="rtl" data-customer-space data-has-visit="true" data-menu-url="{{ menu_url }}" data-visit-url="{% url 'current_visit' %}">
+  <nav class="hub-card" aria-label="تنقل الزبون" style="display:flex;gap:.5rem;position:sticky;top:.5rem;z-index:20;">
+    <a class="hub-button hub-button-secondary" href="{{ menu_url }}" style="flex:1;text-align:center;">المنيو</a>
+    <span class="hub-button hub-button-primary" aria-current="page" style="flex:1;text-align:center;">جلستي</span>
+  </nav>
+
   <header class="hub-card current-visit__header">
     <div>
-      <p class="menu-public__brand">جلستك اليوم</p>
+      <p class="menu-public__brand">جلستي</p>
       <h1 class="hub-section-title">{% if visit.table %}{{ visit.table.display_name }}{% else %}جلسة {{ visit.display_number }}{% endif %}</h1>
-      <p>{% if visit.table %}{% if visit.table.room_display_name %}{{ visit.table.room_display_name }}{% else %}داخل هَبّ{% endif %}{% else %}طلب عام داخل المكان{% endif %}</p>
+      <p>{% if visit.table and visit.table.room_display_name %}{{ visit.table.room_display_name }}{% else %}هَبّ{% endif %}</p>
     </div>
-    <a class="hub-button hub-button-primary" href="{{ menu_url }}">+ طلب جديد</a>
+    <a class="hub-button hub-button-primary" href="{{ menu_url }}">+ أضف طلباً</a>
   </header>
 
-  {% if join_pin and visit.table %}
-  <section class="hub-card" aria-label="رمز مشاركة الجلسة">
-    <small>رمز إضافة جهاز آخر إلى نفس الحساب</small>
-    <strong style="display:block;font-size:1.65rem;letter-spacing:.18em;margin:.4rem 0;">{{ join_pin }}</strong>
-    <p>على الجهاز الآخر اختر {{ visit.table.display_name }} ثم «الانضمام إلى حساب موجود» وأدخل هذا الرمز.</p>
-  </section>
-  {% endif %}
-
-  <section class="hub-card current-visit__totals" aria-label="حساب الجلسة">
-    <h2>حساب جلستك</h2>
+  <section class="hub-card current-visit__totals" aria-label="الحساب">
+    <h2>الحساب</h2>
     <div>
       <p><span>الإجمالي</span><strong>{{ visit.gross_syp|format_syp }}</strong></p>
       <p><span>المدفوع</span><strong>{{ visit.paid_syp|format_syp }}</strong></p>
@@ -30,15 +27,74 @@
     </div>
   </section>
 
-  {% if visit.member or active_internet_session %}
-  <section class="customer-space-service-grid" aria-label="حالة الجلسة">
-    {% if visit.member %}<aside class="hub-card customer-space-service-card"><span class="hub-badge hub-badge-success">عضوية مفعّلة</span><strong>{{ visit.member.name_ar }}</strong>{% if visit.member.phone %}<small>{{ visit.member.phone }}</small>{% endif %}</aside>{% endif %}
-    {% if active_internet_session %}<aside class="hub-card customer-space-service-card">{% if active_internet_session.network_ready %}<span class="hub-badge hub-badge-info">الإنترنت السريع فعال الآن</span>{% else %}<span class="hub-badge hub-badge-warning">جارٍ تجهيز الإنترنت</span>{% endif %}<strong>{% if active_internet_session.package_id %}{{ active_internet_session.package.name_ar }}{% else %}جلسة إنترنت حسب الوقت{% endif %}</strong>{% if active_internet_session.network_ready %}<small>بدأ {{ active_internet_session.start_time|date:"H:i" }}{% if active_internet_session.authorized_until %} · حتى {{ active_internet_session.authorized_until|date:"H:i" }}{% elif not active_internet_session.package_id %} · {{ active_internet_session.rate_per_hour_syp|format_syp }} / ساعة{% endif %}</small>{% else %}<small>لن يبدأ احتساب الوقت قبل جاهزية الشبكة.</small>{% endif %}{% if active_internet_session.one_tap_connect_available and active_internet_session.network_ready %}<small>هذا الخيار لإعادة توصيل جهازك إذا انقطع الاتصال.</small>{% endif %}</aside>{% endif %}
+  {% if internet_self_service_enabled and visit.table %}
+  <section class="hub-card" id="internet" aria-label="إنترنت هذا الجهاز">
+    <div class="menu-section-heading"><span aria-hidden="true"></span><h2>الإنترنت</h2></div>
+
+    {% if active_internet_session %}
+      <article class="customer-space-service-card">
+        {% if active_internet_session.network_ready %}<span class="hub-badge hub-badge-info">سريع · فعال على هذا الجهاز</span>{% else %}<span class="hub-badge hub-badge-warning">جارٍ تجهيز الاتصال</span>{% endif %}
+        <strong>{% if active_internet_session.package_id %}{{ active_internet_session.package.name_ar }}{% else %}حسب الوقت{% endif %}</strong>
+        {% if active_internet_session.network_ready %}
+          <p>بدأ {{ active_internet_session.start_time|date:"H:i" }}{% if active_internet_session.authorized_until %} · حتى {{ active_internet_session.authorized_until|date:"H:i" }}{% elif not active_internet_session.package_id %} · {{ active_internet_session.rate_per_hour_syp|format_syp }} / ساعة{% endif %}</p>
+        {% else %}<p>لن يبدأ احتساب الوقت قبل نجاح تجهيز الشبكة.</p>{% endif %}
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+          {% if active_internet_session.one_tap_connect_available %}
+          <form method="post" action="{% url 'visit_internet_session_connect' active_internet_session.public_code %}">{% csrf_token %}<button class="hub-button hub-button-primary" type="submit">{% if active_internet_session.network_ready %}إعادة توصيل هذا الجهاز{% else %}حاول الاتصال الآن{% endif %}</button></form>
+          {% endif %}
+          <form method="post" action="{% url 'visit_internet_session_stop' active_internet_session.public_code %}">{% csrf_token %}<button class="hub-button" type="submit">{% if active_internet_session.network_ready %}إيقاف الإنترنت السريع{% else %}إلغاء الطلب{% endif %}</button></form>
+        </div>
+      </article>
+    {% else %}
+      <p>أنت على الإنترنت المجاني البطيء. يمكنك ترقية هذا الجهاز إلى الإنترنت السريع من هنا.</p>
+
+      {% if internet_metered_available %}
+      <form method="post" action="{% url 'visit_internet_start' %}" class="hub-card">
+        {% csrf_token %}
+        <input type="hidden" name="mode" value="metered">
+        <input type="hidden" name="table" value="{{ visit.table.qr_token }}">
+        <h3>حسب الوقت</h3>
+        <p><strong>{{ internet_metered_rate_syp|format_syp }} / ساعة</strong>{% if internet_metered_minimum_minutes %} · حد أدنى {{ internet_metered_minimum_minutes }} دقيقة{% endif %}</p>
+        {% if internet_metered_requires_phone %}<label for="session-internet-phone">رقم الهاتف</label><input class="hub-input" id="session-internet-phone" name="guest_phone" type="tel" inputmode="tel" autocomplete="tel" required>{% endif %}
+        <button class="hub-button hub-button-primary" type="submit">تشغيل الإنترنت السريع</button>
+      </form>
+      {% elif internet_metered_unavailable_reason %}<p class="hub-help-text">{{ internet_metered_unavailable_reason }}</p>{% endif %}
+
+      {% if internet_entitlements %}
+      <h3>رصيد متاح</h3>
+      <div class="customer-space-service-grid">
+        {% for entitlement in internet_entitlements %}
+        <article class="customer-space-service-card">
+          <strong>{{ entitlement.package.name_ar }}</strong>
+          {% if entitlement.minutes_remaining != None %}<p>{{ entitlement.minutes_remaining }} دقيقة متبقية</p>{% endif %}
+          <form method="post" action="{% url 'visit_internet_entitlement_start' entitlement.public_code %}">{% csrf_token %}<button class="hub-button hub-button-primary" type="submit">استخدمها على هذا الجهاز</button></form>
+        </article>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if internet_packages %}
+      <details class="hub-card">
+        <summary><strong>أو اختر باقة</strong></summary>
+        <form method="post" action="{% url 'visit_internet_start' %}" style="margin-top:1rem;">
+          {% csrf_token %}
+          <input type="hidden" name="mode" value="package">
+          <input type="hidden" name="table" value="{{ visit.table.qr_token }}">
+          <input type="hidden" name="request_key" value="{{ internet_request_key }}">
+          <label for="session-internet-package">الباقة</label>
+          <select class="hub-input" id="session-internet-package" name="package" required>
+            {% for package in internet_packages %}<option value="{{ package.public_code }}">{{ package.name_ar }} — {{ package.customer_price_syp|format_syp }}</option>{% endfor %}
+          </select>
+          <button class="hub-button hub-button-primary" type="submit">ابدأ الباقة</button>
+        </form>
+      </details>
+      {% endif %}
+    {% endif %}
   </section>
   {% endif %}
 
   <section class="hub-card" id="customer-orders">
-    <div class="menu-section-heading"><span aria-hidden="true"></span><h2>طلبات جلستك</h2></div>
+    <div class="menu-section-heading"><span aria-hidden="true"></span><h2>طلباتي</h2></div>
     <div class="current-visit__orders">
       {% for order in orders %}
       <article class="current-visit__order">
@@ -48,33 +104,21 @@
         </div>
         <div><strong class="hub-money">{{ order.total_syp|format_syp }}</strong>{% if order.remaining_syp > 0 %}<small>متبقي {{ order.remaining_syp|format_syp }}</small>{% else %}<small>مدفوع</small>{% endif %}</div>
       </article>
-      {% empty %}<p>لا توجد طلبات.</p>{% endfor %}
+      {% empty %}<p>لا توجد طلبات بعد.</p>{% endfor %}
     </div>
+    <a class="hub-button hub-button-primary" href="{{ menu_url }}">+ أضف طلباً من المنيو</a>
   </section>
 
-  {% if internet_self_service_enabled %}
-  <section class="hub-card" id="internet">
-    <div class="menu-section-heading"><span aria-hidden="true"></span><h2>الإنترنت</h2></div>
-    {% for session in internet_sessions %}{% if session.status == 'active' %}
-      <article class="customer-space-service-card">
-        {% if session.network_ready %}<span class="hub-badge hub-badge-info">فعال الآن</span>{% else %}<span class="hub-badge hub-badge-warning">جارٍ التجهيز</span>{% endif %}
-        <strong>{% if session.package_id %}{{ session.package.name_ar }}{% else %}حسب الوقت{% endif %}</strong>
-        {% if session.network_ready %}<p>بدأت: {{ session.start_time|date:"H:i" }}{% if session.authorized_until %} — حتى {{ session.authorized_until|date:"H:i" }}{% elif not session.package_id %} — {{ session.rate_per_hour_syp|format_syp }} / ساعة{% endif %}</p>{% else %}<p>لن يبدأ احتساب الوقت قبل نجاح تجهيز الشبكة.</p>{% endif %}
-        {% if session.one_tap_connect_available %}<form method="post" action="{% url 'visit_internet_session_connect' session.public_code %}">{% csrf_token %}<button class="hub-button hub-button-primary" type="submit">{% if session.network_ready %}إعادة توصيل هذا الجهاز{% else %}حاول تجهيز الاتصال الآن{% endif %}</button></form>{% endif %}
-        <form method="post" action="{% url 'visit_internet_session_stop' session.public_code %}">{% csrf_token %}<button class="hub-button" type="submit">{% if session.network_ready %}إنهاء جلسة الإنترنت{% else %}إلغاء طلب الإنترنت{% endif %}</button></form>
-      </article>
-    {% endif %}{% endfor %}
-
-    {% if internet_entitlements %}<h3>رصيدك الحالي</h3><div class="customer-space-service-grid">{% for entitlement in internet_entitlements %}
-      <article class="customer-space-service-card"><strong>{{ entitlement.package.name_ar }}</strong>{% if entitlement.minutes_remaining != None %}<p>{{ entitlement.minutes_remaining }} دقيقة متبقية</p>{% endif %}<form method="post" action="{% url 'visit_internet_entitlement_start' entitlement.public_code %}">{% csrf_token %}<button class="hub-button hub-button-primary">ابدأ الاستخدام واتصل</button></form></article>
-    {% endfor %}</div>{% endif %}
-
-    {% if not active_internet_session and visit.table %}
-      <h3>بدء الإنترنت</h3>
-      <p>ابدأ جلسة حسب الوقت واتصل مباشرة، أو اختر إحدى الباقات.</p>
-      <a class="hub-button hub-button-primary" href="{{ table_entry_url }}">اتصل بالإنترنت السريع</a>
-    {% endif %}
+  {% if join_pin and visit.table %}
+  <section class="hub-card" aria-label="إضافة جهاز إلى الحساب">
+    <small>لإضافة هاتف أو لابتوب آخر إلى نفس الحساب</small>
+    <strong style="display:block;font-size:1.65rem;letter-spacing:.18em;margin:.4rem 0;">{{ join_pin }}</strong>
+    <p>على الجهاز الآخر اختر رقم هذه الطاولة ثم «الانضمام إلى حساب موجود» وأدخل هذا الرمز.</p>
   </section>
+  {% endif %}
+
+  {% if visit.member %}
+  <aside class="hub-card customer-space-service-card"><span class="hub-badge hub-badge-success">عضوية مفعّلة</span><strong>{{ visit.member.name_ar }}</strong>{% if visit.member.phone %}<small>{{ visit.member.phone }}</small>{% endif %}</aside>
   {% endif %}
 </main>
 {% endblock %}
