@@ -1,6 +1,5 @@
 {% extends "base.html" %}
-{% load menu_form %}
-{% block title %}هَبّ{% endblock %}
+{% block title %}أهلاً بك في هَبّ{% endblock %}
 {% block body_class %}table-entry-page{% endblock %}
 {% block content %}
 <section class="table-entry" dir="rtl">
@@ -13,164 +12,62 @@
     </div>
   </header>
 
-  {% if show_visit_access %}
-    {% if visit_access_error %}<div class="hub-alert hub-alert-danger" role="alert">{{ visit_access_error }}</div>{% endif %}
+  {% if visit_access_error %}<div class="hub-alert hub-alert-danger" role="alert">{{ visit_access_error }}</div>{% endif %}
 
-    {% if current_visit %}
-    <aside class="hub-card">
-      <strong>أنت داخل حساب مفتوح على هذه الطاولة.</strong>
-      <p>يمكنك العودة إليه، أو فتح حساب مستقل على نفس الطاولة.</p>
-      <a class="hub-button hub-button-primary" href="{% url 'menu_table' table.qr_token %}">العودة إلى حسابي</a>
-    </aside>
-    {% endif %}
+  <p class="table-entry__internet-note">اختر حسابك مرة واحدة. بعد ذلك ستستخدم فقط «المنيو» و«جلستي».</p>
 
-    <div class="table-entry__choices">
-      {% if open_visit_count %}
-      <section class="table-entry__choice table-entry__choice--session">
-        <div class="table-entry__choice-header">
-          <span class="table-entry__choice-icon" aria-hidden="true">●</span>
-          <span class="table-entry__choice-copy">
-            <strong>الانضمام إلى حساب موجود</strong>
-            <small>الطلبات والحساب ستكون مشتركة مع أصحاب الجلسة</small>
-          </span>
-        </div>
-        <form method="post" action="{% url 'menu_table' table.qr_token %}">
-          {% csrf_token %}
-          <input type="hidden" name="visit_action" value="join">
-          <label for="visit-pin">رمز الجلسة</label>
-          <input class="hub-input" id="visit-pin" name="pin" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9٠-٩]{4}" maxlength="4" placeholder="0000" required>
-          <button class="hub-button hub-button-primary" type="submit">انضمام إلى الحساب</button>
-        </form>
-      </section>
-
-      <section class="table-entry__choice table-entry__choice--menu">
-        <div class="table-entry__choice-header">
-          <span class="table-entry__choice-icon" aria-hidden="true">＋</span>
-          <span class="table-entry__choice-copy">
-            <strong>فتح حساب منفصل</strong>
-            <small>طلبات وإنترنت وحساب مستقل على نفس الطاولة</small>
-          </span>
-        </div>
-        <form method="post" action="{% url 'menu_table' table.qr_token %}">
-          {% csrf_token %}
-          <input type="hidden" name="visit_action" value="create">
-          <button class="hub-button hub-button-secondary" type="submit">فتح حساب جديد</button>
-        </form>
-      </section>
-      {% else %}
-      <section class="table-entry__choice table-entry__choice--menu">
-        <div class="table-entry__choice-header">
-          <span class="table-entry__choice-icon" aria-hidden="true">＋</span>
-          <span class="table-entry__choice-copy">
-            <strong>ابدأ جلستك على هذه الطاولة</strong>
-            <small>المنيو · الطلبات · الحساب · الإنترنت</small>
-          </span>
-        </div>
-        <form method="post" action="{% url 'menu_table' table.qr_token %}">
-          {% csrf_token %}
-          <input type="hidden" name="visit_action" value="create">
-          <button class="hub-button hub-button-primary" type="submit">بدء جلسة جديدة</button>
-        </form>
-      </section>
-      {% endif %}
-    </div>
-
-    <p class="table-entry__internet-note">على اللابتوب أو بدون QR يمكنك الدخول أيضاً عبر رقم الطاولة.</p>
-    <a class="hub-button" href="{{ table_number_entry_url }}">الدخول برقم الطاولة</a>
-
-  {% else %}
-    {% if visit_join_pin %}
-    <aside class="hub-card" aria-label="رمز مشاركة الجلسة">
-      <small>لإضافة هاتف أو لابتوب إلى نفس الحساب</small>
-      <strong style="font-size:1.65rem;letter-spacing:.18em;">{{ visit_join_pin }}</strong>
-      <p>أدخل هذا الرمز على الجهاز الآخر بعد اختيار «الانضمام إلى حساب موجود».</p>
-      <a class="hub-button" href="?choose=1">فتح أو الانضمام إلى حساب آخر</a>
-    </aside>
-    {% endif %}
-
-    {% if active_internet_session %}
-    <a class="table-entry__active-session" href="{% url 'current_visit' %}">
-      <span>
-        <strong>الإنترنت السريع فعال الآن</strong>
-        <small>{% if active_internet_session.package_id %}{{ active_internet_session.package.name_ar }}{% else %}جلسة حسب الوقت{% endif %}</small>
-      </span>
-      <span aria-hidden="true">←</span>
-    </a>
-    {% endif %}
-
-    <div class="table-entry__choices">
-      {% if internet_self_service_enabled %}
-      <section class="table-entry__choice table-entry__choice--internet" aria-labelledby="table-internet-title">
-        <div class="table-entry__choice-header">
-          <span class="table-entry__choice-icon" aria-hidden="true">⌁</span>
-          <span class="table-entry__choice-copy">
-            <strong id="table-internet-title">الإنترنت السريع</strong>
-            <small>{% if active_internet_session %}إدارة جلستك الحالية{% else %}اتصل مباشرة بضغطة واحدة{% endif %}</small>
-          </span>
-        </div>
-
-        <div class="table-entry__internet-body">
-          {% if active_internet_session %}
-            <p class="table-entry__internet-note">لديك جلسة إنترنت فعالة. يمكنك إدارتها أو إعادة توصيل هذا الجهاز من صفحة جلستك.</p>
-            <a class="hub-button hub-button-primary table-entry__session-link" href="{% url 'current_visit' %}">عرض جلسة الإنترنت</a>
-          {% else %}
-            {% if internet_metered_available %}
-            <form method="post" action="{% url 'visit_internet_start' %}" class="table-entry__metered-form">
-              {% csrf_token %}
-              <input type="hidden" name="mode" value="metered">
-              <input type="hidden" name="table" value="{{ table.qr_token }}">
-              <input type="hidden" name="next" value="menu">
-              {% if internet_metered_requires_phone %}
-              <label for="internet-guest-phone">رقم الهاتف</label>
-              <input class="hub-input" id="internet-guest-phone" name="guest_phone" type="tel" inputmode="tel" autocomplete="tel" required>
-              {% endif %}
-              <button class="hub-button hub-button-primary table-entry__primary-action" type="submit">اتصل بالإنترنت السريع</button>
-              <p class="table-entry__internet-note">
-                سيتم تجهيز الاتصال وتوصيل هذا الجهاز تلقائياً · {{ internet_metered_rate_syp|format_syp }} / ساعة
-                {% if internet_metered_minimum_minutes %} · حد أدنى {{ internet_metered_minimum_minutes }} دقيقة{% endif %}
-              </p>
-            </form>
-            {% endif %}
-
-            {% if internet_packages %}
-            <details class="table-entry__package-picker">
-              <summary>أو اختر باقة</summary>
-              <form method="post" action="{% url 'visit_internet_start' %}" class="table-entry__internet-form">
-                {% csrf_token %}
-                <input type="hidden" name="mode" value="package">
-                <input type="hidden" name="table" value="{{ table.qr_token }}">
-                <input type="hidden" name="request_key" value="{{ internet_request_key }}">
-                <input type="hidden" name="next" value="menu">
-                <label for="internet-package">الباقة</label>
-                <select class="hub-input" id="internet-package" name="package" required>
-                  {% for package in internet_packages %}
-                  <option value="{{ package.public_code }}">{{ package.name_ar }} — {{ package.customer_price_syp|format_syp }}</option>
-                  {% endfor %}
-                </select>
-                <p class="table-entry__internet-note">تبدأ الباقة فور التأكيد ويتم توصيل جهازك تلقائياً عندما تصبح الشبكة جاهزة.</p>
-                <button class="hub-button hub-button-secondary table-entry__package-action" type="submit">ابدأ بهذه الباقة</button>
-              </form>
-            </details>
-            {% elif not internet_metered_available %}
-              <p class="hub-empty-state">الإنترنت غير متاح للبدء الذاتي حالياً.</p>
-            {% endif %}
-          {% endif %}
-        </div>
-      </section>
-      {% endif %}
-
-      <a class="table-entry__choice table-entry__choice--menu" href="{{ full_menu_url }}">
-        <span class="table-entry__choice-icon" aria-hidden="true">☕</span>
-        <span><strong>المنيو</strong><small>مشروبات وطعام</small></span>
-        <span class="table-entry__chevron" aria-hidden="true">←</span>
-      </a>
-
-      <a class="table-entry__choice table-entry__choice--session" href="{% url 'current_visit' %}">
+  <div class="table-entry__choices">
+    {% if open_visit_count %}
+    <section class="table-entry__choice table-entry__choice--session">
+      <div class="table-entry__choice-header">
         <span class="table-entry__choice-icon" aria-hidden="true">●</span>
-        <span><strong>جلستك</strong><small>طلباتك · الإنترنت · الرصيد</small></span>
-        <span class="table-entry__chevron" aria-hidden="true">←</span>
-      </a>
-    </div>
-  {% endif %}
+        <span class="table-entry__choice-copy">
+          <strong>الانضمام إلى حساب موجود</strong>
+          <small>إذا أعطاك أحد الجالسين رمز الجلسة</small>
+        </span>
+      </div>
+      <form method="post" action="{% url 'menu_table' table.qr_token %}">
+        {% csrf_token %}
+        <input type="hidden" name="visit_action" value="join">
+        <label for="visit-pin">رمز الجلسة</label>
+        <input class="hub-input" id="visit-pin" name="pin" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9٠-٩]{4}" maxlength="4" placeholder="0000" required>
+        <button class="hub-button hub-button-primary" type="submit">انضمام</button>
+      </form>
+    </section>
+
+    <section class="table-entry__choice table-entry__choice--menu">
+      <div class="table-entry__choice-header">
+        <span class="table-entry__choice-icon" aria-hidden="true">＋</span>
+        <span class="table-entry__choice-copy">
+          <strong>فتح حساب منفصل</strong>
+          <small>طلبات وحساب وإنترنت مستقل</small>
+        </span>
+      </div>
+      <form method="post" action="{% url 'menu_table' table.qr_token %}">
+        {% csrf_token %}
+        <input type="hidden" name="visit_action" value="create">
+        <button class="hub-button hub-button-secondary" type="submit">فتح حساب جديد</button>
+      </form>
+    </section>
+    {% else %}
+    <section class="table-entry__choice table-entry__choice--menu">
+      <div class="table-entry__choice-header">
+        <span class="table-entry__choice-icon" aria-hidden="true">＋</span>
+        <span class="table-entry__choice-copy">
+          <strong>ابدأ جلستك</strong>
+          <small>المنيو · الطلبات · الحساب · الإنترنت</small>
+        </span>
+      </div>
+      <form method="post" action="{% url 'menu_table' table.qr_token %}">
+        {% csrf_token %}
+        <input type="hidden" name="visit_action" value="create">
+        <button class="hub-button hub-button-primary" type="submit">دخول إلى المنيو</button>
+      </form>
+    </section>
+    {% endif %}
+  </div>
+
+  <p class="table-entry__internet-note">على اللابتوب يمكنك الدخول أيضاً باستخدام رقم الطاولة.</p>
+  <a class="hub-button" href="{{ table_number_entry_url }}">استخدام رقم الطاولة</a>
 </section>
 {% endblock %}
