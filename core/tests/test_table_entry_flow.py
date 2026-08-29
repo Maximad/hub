@@ -85,7 +85,7 @@ class TableEntryFlowTests(TestCase):
             visible_to_customer=True,
         )
         self.entry_url = reverse('menu_table', kwargs={'qr_token': self.table.qr_token})
-        self.menu_url = self.entry_url + '?view=menu'
+        self.menu_url = self.entry_url
 
     def tearDown(self):
         get_system_settings.cache_clear()
@@ -93,6 +93,7 @@ class TableEntryFlowTests(TestCase):
     def _bind_new_visit(self):
         response = self.client.post(self.entry_url, {'visit_action': 'create'})
         self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], self.entry_url)
         self.assertIn('hub_visit', self.client.cookies)
         return response
 
@@ -108,27 +109,23 @@ class TableEntryFlowTests(TestCase):
             },
         )
 
-    def test_table_qr_requires_account_choice_then_exposes_internet(self):
+    def test_table_qr_is_welcome_once_then_same_url_becomes_menu(self):
         response = self.client.get(self.entry_url)
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'menu/table_landing.html')
-        self.assertContains(response, 'ابدأ جلستك على هذه الطاولة')
-        self.assertContains(response, 'بدء جلسة جديدة')
-        self.assertNotContains(response, 'اتصل بالإنترنت السريع')
+        self.assertContains(response, 'ابدأ جلستك')
+        self.assertContains(response, 'دخول إلى المنيو')
+        self.assertContains(response, 'بعد ذلك ستستخدم فقط')
         self.assertNotContains(response, self.food.name_ar)
 
         self._bind_new_visit()
         response = self.client.get(self.entry_url)
-        self.assertContains(response, 'الإنترنت السريع')
-        self.assertContains(response, 'اتصل بالإنترنت السريع')
-        self.assertContains(response, 'اختر باقة')
-        self.assertContains(response, '600 ل.س')
-        self.assertContains(response, self.package.name_ar)
-        self.assertContains(response, 'name="mode" value="metered"')
-        self.assertContains(response, 'name="mode" value="package"')
-        self.assertContains(response, 'name="next" value="menu"')
-        self.assertContains(response, 'class="table-entry__package-picker"')
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'menu/menu.html')
+        self.assertContains(response, self.food.name_ar)
+        self.assertContains(response, reverse('current_visit'))
+        self.assertNotContains(response, 'ابدأ جلستك')
 
     def test_menu_choice_opens_catalog_without_generic_internet_product(self):
         self._bind_new_visit()
@@ -137,14 +134,13 @@ class TableEntryFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'menu/menu.html')
         self.assertContains(response, self.food.name_ar)
-        self.assertNotContains(response, self.package.name_ar)
         self.assertNotContains(response, self.internet_service_product.name_ar)
 
     def test_metered_quick_start_uses_selected_visit_without_package_charge_yet(self):
         response = self._start_metered()
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response['Location'], self.entry_url + '?view=menu&internet_started=1')
+        self.assertEqual(response['Location'], self.entry_url + '?internet_started=1')
         self.assertIn('hub_visit', self.client.cookies)
         visit = HubVisit.objects.get()
         session = InternetSession.objects.get()
@@ -183,7 +179,7 @@ class TableEntryFlowTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response['Location'], self.entry_url + '?view=menu&internet_started=1')
+        self.assertEqual(response['Location'], self.entry_url + '?internet_started=1')
         self.assertIn('hub_visit', self.client.cookies)
         visit = HubVisit.objects.get()
         entitlement = InternetEntitlement.objects.get()
@@ -198,16 +194,27 @@ class TableEntryFlowTests(TestCase):
         self.assertEqual(order.remaining_syp, self.package.price_syp)
         self.assertEqual(HubVisitBrowserCredential.objects.get().visit_id, visit.pk)
 
-    def test_entry_screen_exposes_metered_session_link_after_visit_is_bound(self):
+    def test_table_url_stays_menu_while_current_session_is_active(self):
         self._start_metered()
         response = self.client.get(self.entry_url)
 
-        self.assertContains(response, 'جلستك')
-        self.assertContains(response, 'الإنترنت السريع فعال الآن')
-        self.assertContains(response, 'جلسة حسب الوقت')
-        self.assertContains(response, 'إدارة جلستك الحالية')
-        self.assertNotContains(response, '>اتصل بالإنترنت السريع</button>', html=False)
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'menu/menu.html')
+        self.assertContains(response, self.food.name_ar)
         self.assertContains(response, reverse('current_visit'))
+        self.assertNotContains(response, 'table-entry__package-picker')
+
+    def test_session_screen_can_start_internet_without_returning_to_welcome(self):
+        self._bind_new_visit()
+        response = self.client.get(reverse('current_visit'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'menu/current_visit.html')
+        self.assertContains(response, 'تشغيل الإنترنت السريع')
+        self.assertContains(response, 'name="mode" value="metered"')
+        self.assertContains(response, self.package.name_ar)
+        self.assertContains(response, self.menu_url)
+        self.assertNotContains(response, 'ابدأ جلستك')
 
     def test_package_is_rejected_while_metered_visit_session_is_active(self):
         self._start_metered()
@@ -301,12 +308,12 @@ class TableEntryFlowTests(TestCase):
         visit.refresh_from_db()
         self.assertEqual(visit.status, HubVisit.Status.CLOSED)
 
-    def test_current_visit_returns_directly_to_catalog_and_describes_metered_session(self):
+    def test_current_visit_returns_directly_to_menu_and_describes_metered_session(self):
         self._start_metered()
         response = self.client.get(reverse('current_visit'))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.menu_url)
-        self.assertContains(response, 'جلسة إنترنت حسب الوقت')
+        self.assertContains(response, 'حسب الوقت')
         self.assertContains(response, '600 ل.س')
-        self.assertContains(response, 'رمز إضافة جهاز آخر إلى نفس الحساب')
+        self.assertContains(response, 'لإضافة هاتف أو لابتوب آخر')
