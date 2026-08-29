@@ -57,11 +57,12 @@ class HubVisitPublicTests(TestCase):
         self.assertFalse(HubVisit.objects.exists())
         self.assertNotIn('hub_visit', response.cookies)
         confirmation = self.client.get(response['Location'])
+        self.assertContains(confirmation, 'customer-order-confirm-page')
         self.assertContains(confirmation, 'تم استلام طلبك')
+        self.assertContains(confirmation, 'احتفظ برمز QR')
         self.assertContains(confirmation, reverse('order_qr', kwargs={
             'public_code': Order.objects.get().public_code,
         }))
-        self.assertNotContains(confirmation, 'تم إرسال الطلب')
 
     def test_scan_does_not_create_visit_and_account_selection_does(self):
         self.enable()
