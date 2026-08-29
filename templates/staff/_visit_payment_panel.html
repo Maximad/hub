@@ -35,7 +35,7 @@
         <button class="hub-button" type="submit">حفظ الدفعة فقط</button>
       </form>
     </section>
-  {% elif remaining == 0 and visit.status == 'open' %}<div class="hub-message hub-message-success">الحساب الحالي مسدد بالكامل ويمكن إغلاقه مباشرة.</div>{% endif %}
+  {% elif remaining == 0 and visit.status == 'open' and not active_internet_sessions %}<div class="hub-message hub-message-success">الحساب الحالي مسدد بالكامل ويمكن إغلاقه مباشرة.</div>{% endif %}
 
   {% if visit.status == 'open' %}
   <section class="hub-card">
@@ -44,7 +44,7 @@
     <form method="post" action="{% url 'staff_cashier_pay' visit.public_code %}?panel=payment" hx-post="{% url 'staff_cashier_pay' visit.public_code %}?panel=payment" hx-target="#staff-context-drawer-body" hx-swap="innerHTML" class="hub-form hub-form-section">
       {% csrf_token %}
       <input type="hidden" name="action" value="settle_close">
-      {% if remaining > 0 %}<label>طريقة تسديد الرصيد النهائي<select class="hub-input" name="method" required>{% for value,label in methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>{% endif %}
+      {% if remaining > 0 or active_internet_sessions %}<label>طريقة تسديد الرصيد النهائي<select class="hub-input" name="method" required>{% for value,label in methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>{% endif %}
       <label>ملاحظات<textarea class="hub-input" name="notes" rows="2"></textarea></label>
       <button class="hub-button hub-button-primary" type="submit">تسديد المتبقي وإغلاق الحساب</button>
     </form>
