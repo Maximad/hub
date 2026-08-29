@@ -2,11 +2,11 @@
 <section class="staff-payment-panel" dir="rtl" data-payment-panel data-remaining="{{ remaining }}" data-default-amount="{{ payment_amount_default }}">
   <header class="staff-payment-panel__header">
     <div>
-      <p class="staff-workspace__eyebrow">قبض حساب الجلسة</p>
+      <p class="staff-workspace__eyebrow">الدفع وإغلاق الحساب</p>
       <h3>{% if visit.table %}{{ visit.table }}{% else %}جلسة {{ visit.display_number }}{% endif %}</h3>
       <p class="staff-payment-panel__meta">{{ visit.display_number }} — {{ orders|length }} طلبات</p>
     </div>
-    <a href="{% url 'staff_visit_detail' visit.public_code %}">← الجلسة</a>
+    <a href="{% url 'staff_visit_detail' visit.public_code %}" data-visit-context-url="{% url 'staff_visit_detail' visit.public_code %}?panel=1" data-context-title="حساب الجلسة" aria-haspopup="dialog">← الحساب</a>
   </header>
 
   {% if messages %}<div class="staff-payment-panel__messages">{% for message in messages %}<div class="hub-message hub-message-{{ message.tags|default:'info' }}">{{ message }}</div>{% endfor %}</div>{% endif %}
@@ -17,27 +17,46 @@
     <div><span>المتبقي</span><strong>{{ remaining|format_syp }}</strong></div>
   </section>
 
-  {% if active_internet_sessions %}<div class="hub-message hub-message-warning">الإنترنت فعال. الدفع العادي لا يغلق الجلسة؛ استخدم الصفحة الكاملة عند المغادرة ليتم إيقاف الإنترنت واحتساب المبلغ النهائي أولاً.</div>{% endif %}
+  {% if active_internet_sessions %}<div class="hub-message hub-message-warning">هناك {{ active_internet_sessions|length }} جلسة إنترنت فعالة. «تسديد وإغلاق» سيوقفها أولاً ويحسب أي استخدام مستحق، ثم يسدد الرصيد النهائي ويغلق الحساب.</div>{% endif %}
 
   {% if visit.status == 'open' and remaining > 0 %}
-    <form method="post" action="{% url 'staff_cashier_pay' visit.public_code %}" hx-post="{% url 'staff_cashier_pay' visit.public_code %}?panel=payment" hx-target="#staff-context-drawer-body" hx-swap="innerHTML" class="hub-form hub-form-section staff-payment-panel__form">
+    <section class="hub-card">
+      <h4>دفعة على الحساب</h4>
+      <form method="post" action="{% url 'staff_cashier_pay' visit.public_code %}" hx-post="{% url 'staff_cashier_pay' visit.public_code %}?panel=payment" hx-target="#staff-context-drawer-body" hx-swap="innerHTML" class="hub-form hub-form-section staff-payment-panel__form">
+        {% csrf_token %}
+        {% include "components/currency_entry.html" %}
+        <p class="hub-help-text">توزّع الدفعة تلقائياً على طلبات الحساب غير المسددة، الأقدم أولاً.</p>
+        <div class="hub-manager-approval" data-manager-approval hidden>
+          <label>اسم المدير<input class="hub-input" type="text" name="manager_username" autocomplete="username"></label>
+          <label>كلمة المرور<input class="hub-input" type="password" name="manager_password" autocomplete="current-password"></label>
+        </div>
+        <label>طريقة الدفع<select class="hub-input" name="method" required>{% for value,label in methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+        <label>ملاحظات الدفع<textarea class="hub-input" name="notes" rows="2"></textarea></label>
+        <button class="hub-button" type="submit">حفظ الدفعة فقط</button>
+      </form>
+    </section>
+  {% elif remaining == 0 and visit.status == 'open' %}<div class="hub-message hub-message-success">الحساب الحالي مسدد بالكامل ويمكن إغلاقه مباشرة.</div>{% endif %}
+
+  {% if visit.status == 'open' %}
+  <section class="hub-card">
+    <h4>إنهاء الزيارة</h4>
+    <p class="hub-help-text">هذا هو الإجراء المعتاد عند مغادرة الزبون: يوقف الإنترنت، يحسب التكلفة النهائية، يسدد المتبقي، ثم يغلق الحساب.</p>
+    <form method="post" action="{% url 'staff_cashier_pay' visit.public_code %}?panel=payment" hx-post="{% url 'staff_cashier_pay' visit.public_code %}?panel=payment" hx-target="#staff-context-drawer-body" hx-swap="innerHTML" class="hub-form hub-form-section">
       {% csrf_token %}
-      {% include "components/currency_entry.html" %}
-      <p class="hub-help-text">توزّع الدفعة تلقائياً على طلبات الجلسة غير المسددة، الأقدم أولاً.</p>
-      <div class="hub-manager-approval" data-manager-approval hidden>
-        <label>اسم المدير<input class="hub-input" type="text" name="manager_username" autocomplete="username"></label>
-        <label>كلمة المرور<input class="hub-input" type="password" name="manager_password" autocomplete="current-password"></label>
-      </div>
-      <label>طريقة الدفع<select class="hub-input" name="method" required>{% for value,label in methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
-      <label>ملاحظات الدفع<textarea class="hub-input" name="notes" rows="2"></textarea></label>
-      <button class="hub-button hub-button-primary" type="submit">حفظ الدفعة على الحساب</button>
+      <input type="hidden" name="action" value="settle_close">
+      {% if remaining > 0 %}<label>طريقة تسديد الرصيد النهائي<select class="hub-input" name="method" required>{% for value,label in methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>{% endif %}
+      <label>ملاحظات<textarea class="hub-input" name="notes" rows="2"></textarea></label>
+      <button class="hub-button hub-button-primary" type="submit">تسديد المتبقي وإغلاق الحساب</button>
     </form>
-  {% elif remaining == 0 %}<div class="hub-message hub-message-success">الحساب الحالي مسدد بالكامل.</div>{% endif %}
+  </section>
+  {% else %}<div class="hub-message hub-message-success">تم إغلاق هذا الحساب.</div>{% endif %}
 
   <section class="staff-payment-panel__history">
     <div class="staff-order-panel__section-head"><h4>الطلبات</h4><span>{{ orders|length }}</span></div>
     {% for order in orders %}<div><span>{{ order.display_number }}</span><strong>متبقي {{ order.remaining_syp|format_syp }}</strong></div>{% endfor %}
   </section>
 
-  <footer class="staff-payment-panel__footer"><a class="hub-button hub-button-primary" href="{% url 'staff_cashier_order' visit.public_code %}">فتح الحساب المجمع</a></footer>
+  <footer class="staff-payment-panel__footer">
+    <a href="{% url 'staff_cashier_order' visit.public_code %}">تفاصيل الدفع المتقدمة</a>
+  </footer>
 </section>
