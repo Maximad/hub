@@ -1,22 +1,18 @@
 {% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %}
 <nav class="staff-shell-nav" aria-label="التنقل التشغيلي">
   <div class="hub-container staff-shell-nav__inner">
-    <a{% if request.path == '/staff/' %} class="staff-shell-nav__primary"{% endif %} href="{% url 'staff_home' %}">اليوم</a>
-    {% if staff_caps.orders %}<a href="{% url 'staff_orders' %}">الطلبات</a><a href="{% url 'staff_visits' %}">الجلسات</a>{% endif %}
-    {% if staff_caps.reservations %}<a href="{% url 'staff_reservations' %}">الحجوزات</a>{% endif %}
-    {% if staff_caps.internet_billing %}<a href="{% url 'staff_members' %}">الأعضاء</a>{% endif %}
+    <a{% if request.path == '/staff/' %} class="staff-shell-nav__primary"{% endif %} href="{% url 'staff_home' %}">العمليات</a>
     {% if staff_caps.kitchen_board %}<a href="{% url 'staff_kitchen' %}">التحضير</a>{% endif %}
     {% if staff_caps.inventory %}<a href="{% url 'staff_inventory_home' %}">المخزون</a>{% endif %}
     {% if staff_caps.finance %}<a href="{% url 'staff_finance_home' %}">المالية</a>{% endif %}
-    {% if staff_caps.reports %}<a href="{% url 'staff_reports_home' %}">التقارير</a>{% endif %}
-    {% if staff_caps.orders %}<a href="{% url 'staff_menu_tools' %}">المزيد</a>{% endif %}
+    <a href="{% url 'staff_home' %}#staff-more">المزيد</a>
   </div>
 </nav>
 <nav class="staff-mobile-nav" aria-label="التنقل السريع">
-  <a href="{% url 'staff_home' %}">الرئيسية</a>
-  {% if staff_caps.orders %}<a href="{% url 'staff_orders' %}">الطلبات</a>{% else %}<a href="{% url 'staff_kitchen' %}">التحضير</a>{% endif %}
+  <a href="{% url 'staff_home' %}">العمليات</a>
+  {% if staff_caps.kitchen_board %}<a href="{% url 'staff_kitchen' %}">التحضير</a>{% else %}<a href="{% url 'staff_home' %}#active-orders">الطلبات</a>{% endif %}
   {% if staff_caps.pos %}<a class="staff-mobile-nav__create" href="{% url 'staff_pos' %}">+ طلب</a>{% else %}<a class="staff-mobile-nav__create" href="{% url 'staff_home' %}">اليوم</a>{% endif %}
-  {% if staff_caps.orders %}<a href="{% url 'staff_visits' %}">الجلسات</a>{% elif staff_caps.reservations %}<a href="{% url 'staff_reservations' %}">الحجوزات</a>{% else %}<a href="{% url 'staff_home' %}">اليوم</a>{% endif %}
-  {% if staff_caps.cashier %}<a href="{% url 'staff_cashier' %}">الدفع</a>{% elif staff_caps.internet_billing %}<a href="{% url 'staff_members' %}">الأعضاء</a>{% else %}<a href="{% url 'staff_home' %}">المزيد</a>{% endif %}
+  {% if staff_caps.inventory %}<a href="{% url 'staff_inventory_home' %}">المخزون</a>{% elif staff_caps.finance %}<a href="{% url 'staff_finance_home' %}">المالية</a>{% else %}<a href="{% url 'staff_home' %}#open-accounts">الحسابات</a>{% endif %}
+  <a href="{% url 'staff_home' %}#staff-more">المزيد</a>
 </nav>
 {% endif %}
