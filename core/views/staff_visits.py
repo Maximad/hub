@@ -71,15 +71,9 @@ def staff_visits(request):
                 if table is None:
                     messages.error(request, 'الطاولة المختارة غير صالحة.')
                     return redirect('staff_visits')
-                occupied = HubVisit.objects.select_for_update().filter(
-                    table=table,
-                    status=HubVisit.Status.OPEN,
-                ).first()
-                if occupied:
-                    messages.info(request, f'الطاولة لديها جلسة مفتوحة بالفعل: {occupied}.')
-                    if request.POST.get('next') == 'workspace':
-                        return _workspace_redirect(occupied)
-                    return redirect('staff_visit_detail', public_code=occupied.public_code)
+                # A physical table may legitimately have multiple independent
+                # bills. Staff account creation follows the same model as the
+                # customer welcome flow rather than treating a table as occupied.
 
             member = None
             if request.POST.get('member'):
