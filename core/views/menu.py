@@ -95,7 +95,7 @@ def _bound_visit_for_table(request, table):
 
 
 def _render_table_landing(request, table, *, access_error=''):
-    """Render table account selection or the normal table customer landing."""
+    """Render the one-time account choice shown before the two-screen customer UI."""
     context = _menu_context(table=table, request=request)
     settings_obj = context.get('settings') or context.get('system_settings')
     visit_access_enabled = bool(settings_obj and settings_obj.customer_visits_enabled)
@@ -122,9 +122,7 @@ def _render_table_landing(request, table, *, access_error=''):
         HubVisit.objects.filter(table=table, status=HubVisit.Status.OPEN).count()
         if visit_access_enabled else 0
     )
-    show_visit_access = bool(
-        visit_access_enabled and (visit is None or request.GET.get('choose') == '1')
-    )
+    show_visit_access = bool(visit_access_enabled)
     context.update({
         'table': table,
         'internet_packages': packages,
@@ -136,7 +134,7 @@ def _render_table_landing(request, table, *, access_error=''):
         'internet_metered_requires_phone': bool(getattr(settings_obj, 'require_phone_for_guest_session', False) and member is None),
         'internet_request_key': uuid.uuid4(),
         'active_internet_session': active_session,
-        'full_menu_url': reverse('menu_table', kwargs={'qr_token': table.qr_token}) + '?view=menu',
+        'full_menu_url': reverse('menu_table', kwargs={'qr_token': table.qr_token}),
         'open_visit_count': open_visit_count,
         'show_visit_access': show_visit_access,
         'visit_join_pin': visit_join_pin(visit) if visit else '',
@@ -163,13 +161,16 @@ def _created_order_from_response(response):
 
 
 def _customer_order_from_menu(request, *, table=None):
-    """Create the canonical order, then fulfill any legacy Internet cart line atomically."""
+    """Create the canonical order while keeping visit customers on the menu screen."""
     try:
         with transaction.atomic():
             response = _create_order_from_menu(request, table=table)
             order = _created_order_from_response(response)
             if order is not None:
                 fulfill_internet_items_for_order(order)
+                if table is not None and order.visit_id:
+                    messages.success(request, f'تم إرسال الطلب {order.display_number}. يمكنك متابعته من «جلستي».')
+                    return redirect('menu_table', qr_token=table.qr_token)
             return response
     except ValidationError as error:
         return _render_customer_menu(request, table=table, error=_validation_message(error))
@@ -216,7 +217,7 @@ def _handle_table_visit_action(request, table, action):
             'table_id': table.pk,
             'binding': 'new_separate_account',
         })
-        messages.success(request, f'تم فتح حساب مستقل. رمز جلستك هو {visit_join_pin(visit)}.')
+        messages.success(request, f'تم فتح حسابك. رمز مشاركة الجلسة هو {visit_join_pin(visit)}.')
     elif action == 'join':
         try:
             assert_pin_attempt_allowed(request, table)
@@ -232,10 +233,12 @@ def _handle_table_visit_action(request, table, action):
             'table_id': table.pk,
             'binding': 'pin_join',
         })
-        messages.success(request, 'تم الانضمام إلى الحساب المشترك على هذه الطاولة.')
+        messages.success(request, 'تم الانضمام إلى الحساب المشترك.')
     else:
         return _render_table_landing(request, table, access_error='اختر طريقة الدخول إلى الطاولة.')
 
+    # Account choice is part of welcome. Once chosen, customers enter the menu
+    # directly and thereafter move only between Menu and Session.
     response = redirect('menu_table', qr_token=table.qr_token)
     return set_visit_cookie(response, raw_token)
 
@@ -260,14 +263,12 @@ def menu_table(request, qr_token):
             )
         return _customer_order_from_menu(request, table=table)
 
-    if request.GET.get('view') != 'menu':
-        return _render_table_landing(request, table)
     if visit_access_enabled and visit is None:
-        return _render_table_landing(
-            request,
-            table,
-            access_error='اختر حسابك على الطاولة قبل فتح المنيو.',
-        )
+        return _render_table_landing(request, table)
+
+    # The table URL is the canonical Menu screen after welcome. The old
+    # ?view=menu query remains harmless for existing QR/bookmarks but is no
+    # longer required and there is no post-welcome table landing screen.
     return _render_customer_menu(request, table=table)
 
 
