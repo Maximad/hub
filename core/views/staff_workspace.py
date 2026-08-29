@@ -1,14 +1,15 @@
 """Unified, role-aware staff operations workspace.
 
-This view intentionally composes existing operational objects instead of
-reimplementing POS, cashier, visit, or order business logic.
+The operations workspace is the everyday front-of-house surface. It composes
+existing visit, POS, cashier and Internet logic rather than duplicating those
+domain services.
 """
 
 from django.db.models import Prefetch
 from django.shortcuts import render
 
 from accounts.permissions import require_staff_capability, user_has_capability
-from core.models import HubVisit, Order, Payment
+from core.models import HubVisit, Member, Order, Payment, TableArea
 
 
 ACTIVE_ORDER_STATUSES = (
@@ -36,12 +37,7 @@ def _workspace_order_queryset():
 
 @require_staff_capability("staff_home")
 def staff_home(request):
-    """Make /staff/ the single daily-operations landing workspace.
-
-    Existing domain pages remain authoritative. The workspace gives staff a
-    live, contextual surface from which they can enter those flows without
-    first navigating a directory of modules.
-    """
+    """Make /staff/ the single daily front-of-house operations workspace."""
 
     open_visits = list(
         HubVisit.objects.filter(status=HubVisit.Status.OPEN)
@@ -51,26 +47,32 @@ def staff_home(request):
                 "orders",
                 queryset=_workspace_order_queryset().exclude(status=Order.Status.CANCELLED),
                 to_attr="workspace_orders",
-            )
+            ),
+            "internet_sessions",
         )
-        .order_by("-last_activity_at")[:12]
+        .order_by("-last_activity_at")[:20]
     )
     visit_rows = []
     for visit in open_visits:
         orders = visit.workspace_orders
+        active_internet_count = sum(
+            session.status == session.Status.ACTIVE
+            for session in visit.internet_sessions.all()
+        )
         visit_rows.append(
             {
                 "visit": visit,
                 "gross_syp": sum(order.total_syp for order in orders),
                 "remaining_syp": sum(order.remaining_syp for order in orders),
                 "latest_order": orders[0] if orders else None,
+                "active_internet_count": active_internet_count,
             }
         )
 
     active_orders = list(
         _workspace_order_queryset()
         .filter(status__in=ACTIVE_ORDER_STATUSES)
-        .select_related("visit")[:16]
+        .select_related("visit")[:20]
     )
 
     ready_count = sum(order.status == Order.Status.READY for order in active_orders)
@@ -113,5 +115,9 @@ def staff_home(request):
                 "unpaid_orders": unpaid_count,
             },
             "workspace_caps": capabilities,
+            # Used by the inline new-account form. Routine staff should not have
+            # to leave Operations simply to create a customer account.
+            "workspace_tables": TableArea.objects.select_related("room").order_by("room__name_ar", "name_ar"),
+            "workspace_members": Member.objects.order_by("name_ar")[:200],
         },
     )
