@@ -9,7 +9,7 @@ from django.db.models import Prefetch
 from django.shortcuts import render
 
 from accounts.permissions import require_staff_capability, user_has_capability
-from core.models import HubVisit, Member, Order, Payment, TableArea
+from core.models import HubVisit, InternetSession, Member, Order, Payment, TableArea
 
 
 ACTIVE_ORDER_STATUSES = (
@@ -56,7 +56,7 @@ def staff_home(request):
     for visit in open_visits:
         orders = visit.workspace_orders
         active_internet_count = sum(
-            session.status == session.Status.ACTIVE
+            session.status == InternetSession.Status.ACTIVE
             for session in visit.internet_sessions.all()
         )
         visit_rows.append(
