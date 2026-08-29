@@ -21,6 +21,7 @@ from core.services.internet_access import end_usage_session
 from core.services.visit_internet import (
     customer_packages,
     finalize_visit_metered_session,
+    metered_customer_error,
     metered_network_activated_at,
     prepare_visit_metered_session_network,
     self_service_enabled,
@@ -82,6 +83,7 @@ def _internet_context(visit=None, member=None, credential=None):
 
 
 def current_visit(request):
+    """Canonical customer Session screen: bill, orders and this device's Internet."""
     system_settings = get_system_settings()
     if not system_settings.customer_visits_enabled:
         return redirect('menu_public')
@@ -95,20 +97,32 @@ def current_visit(request):
         reverse('menu_table', kwargs={'qr_token': visit.table.qr_token})
         if visit.table_id else reverse('menu_public')
     )
-    menu_url = table_entry_url + '?view=menu' if visit.table_id else table_entry_url
+    # Once welcome/account selection is complete, the table URL itself is Menu.
+    menu_url = table_entry_url
     active_internet_session = active_browser_session(credential)
     if active_internet_session:
         _decorate_session_network_state(active_internet_session)
+    internet_enabled = self_service_enabled(system_settings)
     context = {
         'visit': visit,
         'orders': orders,
         'menu_url': menu_url,
         'table_entry_url': table_entry_url,
         'active_internet_session': active_internet_session,
-        'internet_self_service_enabled': self_service_enabled(system_settings),
+        'internet_self_service_enabled': internet_enabled,
     }
-    if context['internet_self_service_enabled']:
+    if internet_enabled:
         context.update(_internet_context(visit, visit.member, credential))
+        metered_error = metered_customer_error(system_settings, visit.member)
+        context.update({
+            'internet_metered_available': not metered_error,
+            'internet_metered_unavailable_reason': metered_error or '',
+            'internet_metered_rate_syp': int(system_settings.default_rate_per_hour_syp or 0),
+            'internet_metered_minimum_minutes': int(system_settings.default_minimum_minutes or 0),
+            'internet_metered_requires_phone': bool(
+                system_settings.require_phone_for_guest_session and visit.member_id is None
+            ),
+        })
     return render(request, 'menu/current_visit.html', context)
 
 
@@ -128,7 +142,7 @@ def _start_destination(request, table):
         return _absolute_destination(
             request,
             reverse('menu_table', kwargs={'qr_token': table.qr_token})
-            + '?view=menu&internet_started=1',
+            + '?internet_started=1',
         )
     return _current_visit_destination(request)
 
@@ -197,7 +211,7 @@ def visit_internet_purchase_start(request):
                 if not table:
                     raise ValidationError('الجلسة مغلقة.')
                 # Compatibility fallback for callers outside the normal guarded table
-                # flow.  New customer table starts are expected to arrive already
+                # flow. New customer table starts are expected to arrive already
                 # bound to a visit/browser credential by the account-selection step.
                 table = TableArea.objects.select_for_update().get(pk=table.pk)
                 visit = (
@@ -296,7 +310,7 @@ def visit_internet_purchase_start(request):
         if request.POST.get('next') == 'menu' and table:
             target = (
                 reverse('menu_table', kwargs={'qr_token': table.qr_token})
-                + '?view=menu&internet_started=1'
+                + '?internet_started=1'
             )
             response = redirect(target)
         else:

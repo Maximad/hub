@@ -154,8 +154,8 @@ class DeviceSpecificInternetTests(TestCase):
         self.assertEqual(session_b.browser_binding.credential_id, self.credential_b.pk)
         self.assertEqual(Order.objects.filter(visit=self.visit).count(), 2)
 
-    def test_second_joined_browser_sees_its_own_internet_state(self):
-        # Use real browser credentials/cookies to exercise the customer pages.
+    def test_second_joined_browser_sees_only_its_own_session_in_session_screen(self):
+        # Use real browser credentials/cookies to exercise the canonical Session page.
         InternetSessionBrowserBinding.objects.all().delete()
         HubVisitBrowserCredential.objects.all().delete()
         first_credential, first_token = issue_visit_credential(self.visit)
@@ -175,17 +175,20 @@ class DeviceSpecificInternetTests(TestCase):
             credential=first_credential,
         )
 
-        first_page = first.get(table_url)
-        self.assertContains(first_page, 'الإنترنت السريع فعال الآن')
-        second_page = second.get(table_url)
-        self.assertContains(second_page, 'اتصل بالإنترنت السريع')
-        self.assertNotContains(second_page, 'الإنترنت السريع فعال الآن')
+        first_page = first.get(reverse('current_visit'))
+        self.assertContains(first_page, 'سريع · فعال على هذا الجهاز')
+        second_page = second.get(reverse('current_visit'))
+        self.assertContains(second_page, 'تشغيل الإنترنت السريع')
+        self.assertNotContains(second_page, 'سريع · فعال على هذا الجهاز')
 
         second_session, _ = start_visit_metered_session(
             visit=self.visit,
             credential=second_credential,
         )
         self.assertNotEqual(first_session.pk, second_session.pk)
+
+        second_active = second.get(reverse('current_visit'))
+        self.assertContains(second_active, 'سريع · فعال على هذا الجهاز')
 
     def test_browser_cannot_stop_another_browser_session(self):
         session_a, _ = start_visit_metered_session(

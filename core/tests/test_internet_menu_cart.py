@@ -84,7 +84,7 @@ class InternetMenuCartTests(TestCase):
         self.binding = InternetCatalogBinding.objects.select_related('product').get(package=self.package)
         self.internet_product = self.binding.product
         self.table_url = reverse('menu_table', kwargs={'qr_token': self.table.qr_token})
-        self.catalog_url = self.table_url + '?view=menu'
+        self.catalog_url = self.table_url
 
     def tearDown(self):
         get_system_settings.cache_clear()
@@ -92,6 +92,7 @@ class InternetMenuCartTests(TestCase):
     def _bind_visit(self):
         response = self.client.post(self.table_url, {'visit_action': 'create'})
         self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], self.table_url)
         return HubVisit.objects.order_by('-pk').first()
 
     def _payload(self, internet_qty='1', include_food=True):
@@ -103,27 +104,28 @@ class InternetMenuCartTests(TestCase):
             payload[f'qty_{self.food.pk}'] = '1'
         return payload
 
-    def _order_from_response(self, response):
-        self.assertEqual(response.status_code, 302)
-        public_code = response['Location'].rstrip('/').split('/')[-1]
-        return Order.objects.get(public_code=public_code)
-
-    def test_table_entry_requires_account_then_uses_dedicated_internet_selector(self):
+    def test_table_entry_requires_account_then_internet_lives_on_session_screen(self):
         response = self.client.get(self.table_url)
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'بدء جلسة جديدة')
-        self.assertNotContains(response, 'اتصل بالإنترنت السريع')
+        self.assertContains(response, 'ابدأ جلستك')
+        self.assertNotContains(response, self.package.name_ar)
+        self.assertNotContains(response, self.food.name_ar)
 
         self._bind_visit()
-        response = self.client.get(self.table_url)
-        self.assertContains(response, 'الإنترنت السريع')
-        self.assertContains(response, self.package.name_ar)
-        self.assertContains(response, 'name="package"')
-        self.assertContains(response, 'اتصل بالإنترنت السريع')
-        self.assertContains(response, 'اختر باقة')
-        self.assertNotContains(response, f'name="qty_{self.internet_product.pk}"')
-        self.assertNotContains(response, 'اتصال إنترنت')
-        self.assertNotContains(response, self.food.name_ar)
+
+        menu = self.client.get(self.table_url)
+        self.assertEqual(menu.status_code, 200)
+        self.assertContains(menu, self.food.name_ar)
+        self.assertNotContains(menu, self.package.name_ar)
+        self.assertNotContains(menu, f'name="qty_{self.internet_product.pk}"')
+
+        session = self.client.get(reverse('current_visit'))
+        self.assertEqual(session.status_code, 200)
+        self.assertContains(session, 'الإنترنت')
+        self.assertContains(session, self.package.name_ar)
+        self.assertContains(session, 'name="package"')
+        self.assertContains(session, 'تشغيل الإنترنت السريع')
+        self.assertNotContains(session, f'name="qty_{self.internet_product.pk}"')
 
     def test_full_table_catalog_shows_food_but_suppresses_internet_product(self):
         self._bind_visit()
@@ -143,8 +145,10 @@ class InternetMenuCartTests(TestCase):
     def test_legacy_food_and_internet_cart_post_remains_atomic_and_compatible(self):
         visit = self._bind_visit()
         response = self.client.post(self.table_url, self._payload())
-        order = self._order_from_response(response)
 
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], self.table_url)
+        order = Order.objects.get()
         self.assertEqual(Order.objects.count(), 1)
         self.assertEqual(order.items.count(), 2)
         self.assertEqual(order.table_id, self.table.pk)

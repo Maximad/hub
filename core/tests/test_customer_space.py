@@ -29,7 +29,7 @@ class CustomerSpaceTests(TestCase):
         self.settings = SystemSetting.objects.create(customer_visits_enabled=True)
         get_system_settings.cache_clear()
         self.menu_url = reverse('menu_table', kwargs={'qr_token': self.table.qr_token})
-        self.catalog_url = self.menu_url + '?view=menu'
+        self.catalog_url = self.menu_url
 
     def tearDown(self):
         get_system_settings.cache_clear()
@@ -38,6 +38,7 @@ class CustomerSpaceTests(TestCase):
         if 'hub_visit' not in self.client.cookies:
             response = self.client.post(self.menu_url, {'visit_action': 'create'})
             self.assertEqual(response.status_code, 302)
+            self.assertEqual(response['Location'], self.menu_url)
             self.assertIn('hub_visit', self.client.cookies)
         return HubVisit.objects.order_by('-pk').first()
 
@@ -51,6 +52,7 @@ class CustomerSpaceTests(TestCase):
             },
         )
         self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], self.menu_url)
         return response
 
     def test_public_menu_loads_customer_space_assets(self):
@@ -61,7 +63,7 @@ class CustomerSpaceTests(TestCase):
         self.assertContains(response, 'css/customer_space.css')
         self.assertContains(response, 'js/customer_space.js')
 
-    def test_current_visit_is_customer_workspace(self):
+    def test_current_visit_is_customer_session_screen(self):
         self._start_visit_with_order()
         response = self.client.get(reverse('current_visit'))
 
@@ -70,22 +72,24 @@ class CustomerSpaceTests(TestCase):
         self.assertContains(response, 'data-customer-space')
         self.assertContains(response, 'data-has-visit="true"')
         self.assertContains(response, 'id="customer-orders"')
-        self.assertContains(response, 'طلبات جلستك')
+        self.assertContains(response, 'طلباتي')
         self.assertContains(response, self.table.display_name)
-        self.assertContains(response, 'طلب جديد')
-        self.assertContains(response, self.catalog_url)
+        self.assertContains(response, '+ أضف طلباً')
+        self.assertContains(response, self.menu_url)
+        self.assertContains(response, 'المنيو')
+        self.assertContains(response, 'جلستي')
 
-    def test_visit_order_confirmation_stays_inside_customer_space(self):
+    def test_visit_order_submission_returns_to_menu_not_confirmation_screen(self):
         order_response = self._start_visit_with_order()
-        confirmation = self.client.get(order_response['Location'])
+        menu = self.client.get(order_response['Location'])
 
-        self.assertEqual(confirmation.status_code, 200)
-        self.assertContains(confirmation, 'customer-order-confirm-page')
-        self.assertContains(confirmation, 'data-customer-space')
-        self.assertContains(confirmation, 'data-has-visit="true"')
-        self.assertContains(confirmation, 'أُضيف طلبك إلى جلستك')
-        self.assertContains(confirmation, 'طلب المزيد')
-        self.assertContains(confirmation, 'متابعة جلستك')
+        self.assertEqual(menu.status_code, 200)
+        self.assertContains(menu, 'public-menu-page')
+        self.assertContains(menu, 'تم إرسال الطلب')
+        self.assertContains(menu, reverse('current_visit'))
+        self.assertNotContains(menu, 'customer-order-confirm-page')
+        self.assertNotContains(menu, 'احتفظ برمز QR')
+        self.assertEqual(Order.objects.count(), 1)
 
     def test_visit_and_order_still_share_same_operational_record(self):
         self._start_visit_with_order()
