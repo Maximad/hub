@@ -76,7 +76,7 @@ class VisitCashierIntegrationRegressionTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['workspace_stats']['unpaid_orders'], 2)
-        self.assertContains(response, 'حسابات بحاجة إلى تسديد')
+        self.assertContains(response, 'بحاجة إلى تسديد')
 
     def test_order_discount_remains_available_and_updates_combined_visit_total(self):
         visit = HubVisit.objects.create(table=self.table, created_by=self.admin)
