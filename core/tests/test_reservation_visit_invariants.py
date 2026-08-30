@@ -88,19 +88,21 @@ class ReservationVisitInvariantTests(TestCase):
 
         self.assertEqual(HubVisit.objects.count(), 0)
 
-    def test_manual_visit_creation_reuses_existing_open_table_visit(self):
+    def test_manual_visit_creation_can_open_second_account_on_same_table(self):
         existing = HubVisit.objects.create(table=self.table, created_by=self.admin)
         self.client.force_login(self.waiter)
 
         response = self.client.post(
             reverse('staff_visits'),
-            {'table': self.table.pk, 'notes': 'محاولة ثانية'},
+            {'table': self.table.pk, 'notes': 'حساب منفصل'},
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(HubVisit.objects.count(), 1)
+        self.assertEqual(HubVisit.objects.filter(table=self.table).count(), 2)
+        created = HubVisit.objects.exclude(pk=existing.pk).get()
+        self.assertEqual(created.notes, 'حساب منفصل')
         self.assertRedirects(
             response,
-            reverse('staff_visit_detail', args=[existing.public_code]),
+            reverse('staff_visit_detail', args=[created.public_code]),
             fetch_redirect_response=False,
         )
