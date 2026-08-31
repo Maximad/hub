@@ -77,21 +77,23 @@ class StaffOrderContextDrawerTests(TestCase):
     def tearDown(self):
         get_system_settings.cache_clear()
 
-    def test_workspace_routes_visit_orders_to_combined_payment_context(self):
+    def test_workspace_routes_visit_orders_to_account_and_payment_context(self):
         self.client.force_login(self.admin)
         response = self.client.get(reverse("staff_home"))
 
-        order_url = reverse("staff_order_edit", kwargs={"public_code": self.order.public_code})
+        visit_url = reverse(
+            "staff_visit_detail", kwargs={"public_code": self.visit.public_code}
+        )
         visit_cashier_url = reverse(
             "staff_cashier_order", kwargs={"public_code": self.visit.public_code}
         )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, f'data-staff-context-url="{order_url}?panel=context"')
+        self.assertContains(response, f'data-visit-context-url="{visit_url}?panel=1"')
         self.assertContains(
             response,
             f'data-staff-context-url="{visit_cashier_url}?panel=payment"',
         )
-        self.assertContains(response, "قبض حساب الجلسة")
+        self.assertContains(response, "الدفع وإغلاق الحساب")
         self.assertContains(response, "js/currency-entry.js")
         self.assertContains(response, "js/staff_workspace.js")
 
@@ -121,7 +123,7 @@ class StaffOrderContextDrawerTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "staff/_visit_payment_panel.html")
-        self.assertContains(response, "قبض حساب الجلسة")
+        self.assertContains(response, "الدفع وإغلاق الحساب")
         self.assertContains(response, "data-payment-panel")
         self.assertContains(response, f'hx-post="{visit_pay_url}?panel=payment"')
         self.assertContains(response, "data-currency-entry")

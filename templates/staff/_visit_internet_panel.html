@@ -1,0 +1,72 @@
+{% load hub_numbers %}
+<section class="staff-visit-panel" dir="rtl" data-visit-internet-panel>
+  <header class="staff-visit-panel__header">
+    <div>
+      <p class="staff-workspace__eyebrow">إنترنت الحساب</p>
+      <h3>{% if visit.table %}{{ visit.table }}{% else %}جلسة {{ visit.display_number }}{% endif %}</h3>
+      <p class="staff-visit-panel__meta">إدارة جلسات الإنترنت المرتبطة بهذا الحساب فقط.</p>
+    </div>
+    <a href="{% url 'staff_visit_detail' visit.public_code %}" data-visit-context-url="{% url 'staff_visit_detail' visit.public_code %}?panel=1" data-context-title="حساب الجلسة" aria-haspopup="dialog">← الحساب</a>
+  </header>
+
+  {% if messages %}
+  <div class="staff-payment-panel__messages">
+    {% for message in messages %}<div class="hub-message hub-message-{{ message.tags|default:'info' }}">{{ message }}</div>{% endfor %}
+  </div>
+  {% endif %}
+
+  <section class="staff-visit-panel__section">
+    <div class="staff-visit-panel__section-head">
+      <h4>الجلسات الفعالة</h4>
+      <span>{{ active_internet_sessions|length }}</span>
+    </div>
+    <div class="staff-visit-panel__orders">
+      {% for session in active_internet_sessions %}
+      <article class="staff-visit-panel__order">
+        <div>
+          <strong>جلسة إنترنت #{{ session.pk }}</strong>
+          <span class="hub-badge hub-badge-success">فعال</span>
+        </div>
+        <div class="staff-visit-panel__order-money">
+          <span>{% if session.package_id %}{{ session.package.name_ar }}{% elif session.entitlement_id and session.entitlement.package_id %}{{ session.entitlement.package.name_ar }}{% else %}حسب الوقت{% endif %}</span>
+          <small>منذ {{ session.start_time|timesince }}</small>
+          {% if not session.entitlement_id and session.rate_per_hour_syp %}<strong>{{ session.rate_per_hour_syp|format_syp }} / ساعة</strong>{% endif %}
+        </div>
+        {% if visit_caps.internet_billing and visit.status == 'open' %}
+        <form method="post" action="{% url 'staff_visit_detail' visit.public_code %}?panel=internet" hx-post="{% url 'staff_visit_detail' visit.public_code %}?panel=internet" hx-target="#staff-context-drawer-body" hx-swap="innerHTML">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="internet_stop">
+          <input type="hidden" name="session_id" value="{{ session.pk }}">
+          <button class="hub-button" type="submit">إيقاف هذه الجلسة</button>
+        </form>
+        {% endif %}
+      </article>
+      {% empty %}<div class="hub-empty-state">لا توجد جلسة إنترنت سريعة فعالة حالياً على هذا الحساب.</div>{% endfor %}
+    </div>
+  </section>
+
+  <section class="staff-visit-panel__section">
+    <div class="staff-visit-panel__section-head"><h4>الباقات والرصيد</h4><span>{{ internet_entitlements|length }}</span></div>
+    <div class="staff-visit-panel__orders">
+      {% for entitlement in internet_entitlements %}
+      <article class="staff-visit-panel__order">
+        <div><strong>{{ entitlement.package.name_ar }}</strong><span class="hub-badge hub-badge-info">{{ entitlement.get_status_display }}</span></div>
+        <div class="staff-visit-panel__order-money">
+          {% if entitlement.minutes_remaining != None %}<span>{{ entitlement.minutes_remaining }} دقيقة متبقية</span>{% endif %}
+          {% if entitlement.order_id %}<small>مرتبطة بالطلب {{ entitlement.order.display_number }}</small>{% endif %}
+        </div>
+      </article>
+      {% empty %}<div class="hub-empty-state">لا توجد باقات مرتبطة بهذا الحساب.</div>{% endfor %}
+    </div>
+  </section>
+
+  <div class="hub-message hub-message-info">
+    تشغيل الإنترنت السريع على جهاز جديد يبدأ من صفحة «جلستي» على ذلك الجهاز، حتى يبقى كل اتصال مرتبطاً بالجهاز الصحيح. يستطيع الفريق من هنا متابعة الجلسات وإيقافها وتسوية تكلفتها.
+  </div>
+
+  {% if visit_caps.internet_billing %}
+  <footer class="staff-payment-panel__footer">
+    <a class="hub-button" href="{% url 'staff_internet' %}">إدارة الإنترنت المتقدمة</a>
+  </footer>
+  {% endif %}
+</section>

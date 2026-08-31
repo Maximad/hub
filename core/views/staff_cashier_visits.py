@@ -135,6 +135,11 @@ def _visit_detail_context(request, visit):
     }
 
 
+def _payment_panel_response(request, public_code):
+    visit = get_object_or_404(_visit_queryset(), public_code=public_code)
+    return render(request, 'staff/_visit_payment_panel.html', _visit_detail_context(request, visit))
+
+
 @require_staff_capability('cashier')
 def staff_cashier(request):
     query = request.GET.get('q', '').strip()
@@ -185,6 +190,8 @@ def staff_cashier_visit_pay(request, public_code):
     visit = get_object_or_404(HubVisit.objects.select_related('table'), public_code=public_code)
     if visit.status != HubVisit.Status.OPEN:
         messages.error(request, 'هذه الجلسة مغلقة ولا تقبل دفعات جديدة.')
+        if request.GET.get('panel') == 'payment':
+            return _payment_panel_response(request, public_code)
         return redirect('staff_cashier_order', public_code=visit.public_code)
 
     current = visit_financials(visit)
@@ -224,8 +231,6 @@ def staff_cashier_visit_pay(request, public_code):
             method,
             request.POST.get('notes', '').strip(),
         )
-        # One currency decision belongs to the combined cashier transaction, not
-        # to any arbitrary child order allocation.
         currency_service.snapshot(
             settled_visit,
             currency_entry,
@@ -248,8 +253,7 @@ def staff_cashier_visit_pay(request, public_code):
         messages.error(request, ' '.join(getattr(error, 'messages', [str(error)])))
 
     if request.GET.get('panel') == 'payment':
-        visit = get_object_or_404(_visit_queryset(), public_code=public_code)
-        return render(request, 'staff/_visit_payment_panel.html', _visit_detail_context(request, visit))
+        return _payment_panel_response(request, public_code)
     return redirect('staff_cashier_order', public_code=visit.public_code)
 
 
@@ -268,6 +272,8 @@ def staff_cashier_visit_settle(request, public_code):
             visit = HubVisit.objects.select_for_update().get(pk=visit.pk)
             if visit.status != HubVisit.Status.OPEN:
                 messages.info(request, 'الجلسة مغلقة بالفعل.')
+                if request.GET.get('panel') == 'payment':
+                    return _payment_panel_response(request, public_code)
                 return redirect('staff_cashier_order', public_code=visit.public_code)
 
             now = timezone.now()
@@ -300,8 +306,6 @@ def staff_cashier_visit_settle(request, public_code):
                 )
                 allocate_visit_payment(visit, context, remaining, method, notes)
 
-            # Re-query after allocations. Closing a visit with any residual is a
-            # hard error, never an implicit write-off.
             if visit_financials(visit)['remaining']:
                 raise ValidationError('تعذر إغلاق الجلسة لأن رصيداً متبقياً ما زال قائماً.')
 
@@ -325,6 +329,9 @@ def staff_cashier_visit_settle(request, public_code):
         messages.success(request, 'تم تسديد كامل حساب الجلسة وإغلاقها.')
     except (ValidationError, PermissionDenied) as error:
         messages.error(request, ' '.join(getattr(error, 'messages', [str(error)])))
+
+    if request.GET.get('panel') == 'payment':
+        return _payment_panel_response(request, public_code)
     return redirect('staff_cashier_order', public_code=visit.public_code)
 
 
