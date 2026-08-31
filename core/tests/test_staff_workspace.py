@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from core.models import (
     Category,
+    FinancialAccount,
     HubVisit,
     HubVisitBrowserCredential,
     InternetSession,
@@ -36,6 +37,20 @@ class StaffWorkspaceTests(TestCase):
         )
         self.kitchen = User.objects.create_user(
             username='workspace-kitchen', phone='92003', password='x', role='kitchen'
+        )
+        FinancialAccount.objects.create(
+            code='cash:workspace-test',
+            name_ar='صندوق الاختبار',
+            account_type=FinancialAccount.AccountType.ASSET,
+            scope='cashbox',
+            is_active=True,
+            negative_balance_policy=FinancialAccount.NegativeBalancePolicy.ALLOW,
+        )
+        FinancialAccount.objects.create(
+            code='revenue:workspace-test',
+            name_ar='إيراد الاختبار',
+            account_type=FinancialAccount.AccountType.REVENUE,
+            is_active=True,
         )
         self.room = Room.objects.create(name_ar='الصالة')
         self.table = TableArea.objects.create(room=self.room, name_ar='طاولة 7')
