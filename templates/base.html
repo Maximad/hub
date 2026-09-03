@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="{% static 'css/public_menu_flow.css' %}">
   <link rel="stylesheet" href="{% static 'css/staff_foundation.css' %}">
   {% include "includes/hub_theme.html" %}
+  <style>.hub-staff-ui .hub-header{background:var(--hub-header,var(--hub-brand,var(--hub-primary)))}</style>
   {% comment %}Legacy density choices map onto the semantic token layer.{% endcomment %}
   {% if system_settings %}<style>:root{
     --hub-button-font-size:{{ system_settings.safe_button_font_size_px }}px;--hub-image-ratio:{{ system_settings.safe_product_image_ratio_css }};
@@ -30,7 +31,7 @@
   <main class="hub-container" id="hub-main-content">
 
     {% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %}
-      <div id="staff-notifications" class="staff-notifications" data-poll-url="{% url 'staff_notifications_poll' %}" data-mark-read-url="{% url 'staff_notifications_mark_read' %}" data-pref-url="{% url 'staff_notifications_preferences' %}">
+      <div id="staff-notifications" class="staff-notifications" data-poll-url="{% url 'staff_notifications_poll' %}" data-mark-read-url="{% url 'staff_notifications_mark_read_read' %}" data-pref-url="{% url 'staff_notifications_preferences' %}">
         <button type="button" id="staff-notification-toggle" class="hub-btn hub-button-secondary" aria-controls="staff-notification-dropdown" aria-expanded="false">التنبيهات <span id="staff-notification-badge" aria-label="0 تنبيهات غير مقروءة">0</span></button>
         <button type="button" id="staff-sound-toggle" class="hub-btn hub-btn-secondary">تشغيل الصوت</button>
         <button type="button" id="staff-browser-toggle" class="hub-btn hub-btn-secondary">تفعيل تنبيهات المتصفح</button>
