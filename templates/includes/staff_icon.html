@@ -1,0 +1,23 @@
+{% comment %}Reusable inline icons for the staff UI v2 shell. Decorative by default.{% endcomment %}
+{% if name == 'brand' %}<svg class="staff-icon {{ class|default:'' }}" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 5 6v12l7 4 7-4V6l-7-4Z"/><path d="M12 2v20M5 6l7 4 7-4M5 12l7 4 7-4"/></svg>
+{% elif name == 'search' %}<svg class="staff-icon {{ class|default:'' }}" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+{% elif name == 'filter' %}<svg class="staff-icon {{ class|default:'' }}" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+{% elif name == 'plus' %}<svg class="staff-icon {{ class|default:'' }}" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+{% elif name == 'users' %}<svg class="staff-icon {{ class|default:'' }}" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+{% elif name == 'send' %}<svg class="staff-icon {{ class|default:'' }}" viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4 20-7Z"/><path d="M22 2 11 13"/></svg>
+{% elif name == 'wifi' %}<svg class="staff-icon {{ class|default:'' }}" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.55a11 11 0 0 1 14 0M8.5 16a6 6 0 0 1 7 0M12 20h.01M2 9a16 16 0 0 1 20 0"/></svg>
+{% elif name == 'card' %}<svg class="staff-icon {{ class|default:'' }}" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg>
+{% elif name == 'cart' %}<svg class="staff-icon {{ class|default:'' }}" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="20" r="1"/><circle cx="19" cy="20" r="1"/><path d="M3 4h2l2.6 10.4a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.6L21 8H7"/></svg>
+{% elif name == 'clock' %}<svg class="staff-icon {{ class|default:'' }}" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+{% elif name == 'calendar' %}<svg class="staff-icon {{ class|default:'' }}" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>
+{% elif name == 'grid' %}<svg class="staff-icon {{ class|default:'' }}" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+{% elif name == 'list' %}<svg class="staff-icon {{ class|default:'' }}" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+{% elif name == 'bell' %}<svg class="staff-icon {{ class|default:'' }}" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>
+{% elif name == 'help' %}<svg class="staff-icon {{ class|default:'' }}" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.8 2.8 0 1 1 4.4 2.3c-1 .7-1.9 1.2-1.9 2.7M12 18h.01"/></svg>
+{% elif name == 'chevron' %}<svg class="staff-icon {{ class|default:'' }}" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+{% elif name == 'close' %}<svg class="staff-icon {{ class|default:'' }}" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+{% elif name == 'box' %}<svg class="staff-icon {{ class|default:'' }}" viewBox="0 0 24 24" aria-hidden="true"><path d="m21 8-9 5-9-5 9-5 9 5Z"/><path d="M3 8v8l9 5 9-5V8M12 13v8"/></svg>
+{% elif name == 'chart' %}<svg class="staff-icon {{ class|default:'' }}" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+{% elif name == 'briefcase' %}<svg class="staff-icon {{ class|default:'' }}" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18M10 12v2h4v-2"/></svg>
+{% elif name == 'chef' %}<svg class="staff-icon {{ class|default:'' }}" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 10a4 4 0 0 1 1-7.9A5 5 0 0 1 17 3a4 4 0 0 1 1 7H6Z"/><path d="M7 10v9h10v-9M7 15h10"/></svg>
+{% elif name == 'more' %}<svg class="staff-icon {{ class|default:'' }}" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>{% endif %}

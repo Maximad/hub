@@ -1,119 +1,116 @@
 {% extends "base.html" %}{% load static hub_numbers %}
 {% block title %}العمليات{% endblock %}
-{% block body_class %}staff-workspace-page{% endblock %}
+{% block body_class %}staff-workspace-page staff-ui-v2-page{% endblock %}
 {% block content %}
-<section class="staff-workspace" dir="rtl">
-  <header class="staff-workspace__hero">
-    <div>
-      <p class="staff-workspace__eyebrow">تشغيل هَبّ</p>
-      <h2 class="hub-page-header__title">العمليات</h2>
-      <p class="hub-page-header__meta">الطلبات، الحساب، الدفع والإنترنت من مساحة واحدة.</p>
+<section class="staff-v2-page ops-v2" dir="rtl" data-operations-v2>
+  <header class="staff-v2-page-head ops-v2__hero">
+    <div class="staff-v2-page-head__copy">
+      <p class="staff-v2-eyebrow">تشغيل هَبّ</p>
+      <h2 class="staff-v2-title hub-page-header__title">العمليات</h2>
+      <p class="staff-v2-subtitle">الطلبات، الحساب، الدفع والإنترنت من مساحة واحدة.</p>
     </div>
-    <div class="staff-workspace__quick-actions">
-      {% if workspace_caps.pos %}<a class="hub-button hub-button-primary" href="{% url 'staff_pos' %}">+ طلب جديد</a>{% endif %}
-      {% if workspace_caps.internet_billing %}<a class="hub-button" href="{% url 'staff_members' %}">بحث عن عضو</a>{% endif %}
-      {% if not staff_caps.orders and staff_caps.kitchen_board %}<a class="hub-button hub-button-primary" href="{% url 'staff_kitchen' %}">فتح لوحة التحضير</a>{% endif %}
+    <div class="staff-v2-actions">
+      {% if workspace_caps.pos %}<a class="staff-v2-button staff-v2-button--primary" href="{% url 'staff_pos' %}">{% include "includes/staff_icon.html" with name="plus" %}+ طلب جديد</a>{% endif %}
+      {% if staff_caps.orders %}<button class="staff-v2-button" type="button" data-dialog-open="new-account-dialog">{% include "includes/staff_icon.html" with name="users" %}حساب جديد</button>{% endif %}
+      {% if not staff_caps.orders and staff_caps.kitchen_board %}<a class="staff-v2-button staff-v2-button--primary" href="{% url 'staff_kitchen' %}">فتح لوحة التحضير</a>{% endif %}
     </div>
   </header>
 
-  {% if staff_caps.orders %}
-  <details class="hub-card staff-workspace__panel" id="new-account">
-    <summary><strong>+ فتح حساب / جلسة جديدة</strong></summary>
-    <form method="post" action="{% url 'staff_visits' %}" class="hub-form hub-form-section" style="margin-top:1rem;">
-      {% csrf_token %}
-      <input type="hidden" name="next" value="workspace">
-      <label>الطاولة
-        <select class="hub-input" name="table">
-          <option value="">بدون طاولة</option>
-          {% for table in workspace_tables %}<option value="{{ table.pk }}">{{ table }}</option>{% endfor %}
-        </select>
+  <div class="staff-v2-toolbar ops-v2__toolbar" aria-label="البحث والتصفية">
+    <div class="ops-v2__toolbar-main">
+      <label class="staff-v2-search">
+        <span class="hub-visually-hidden">بحث في الحسابات</span>
+        {% include "includes/staff_icon.html" with name="search" %}
+        <input type="search" data-ops-search placeholder="ابحث عن حساب، طاولة، عضو أو رقم..." autocomplete="off">
+        <kbd>Ctrl K</kbd>
       </label>
-      <label>العضو — اختياري
-        <select class="hub-input" name="member">
-          <option value="">ضيف</option>
-          {% for member in workspace_members %}<option value="{{ member.pk }}">{{ member }}</option>{% endfor %}
-        </select>
-      </label>
-      <label>ملاحظة — اختياري<textarea class="hub-input" name="notes" rows="2"></textarea></label>
-      <button class="hub-button hub-button-primary" type="submit">فتح الحساب</button>
-    </form>
-  </details>
-  {% endif %}
+      <details class="ops-v2__filters">
+        <summary class="staff-v2-button">{% include "includes/staff_icon.html" with name="filter" %}تصفية</summary>
+        <div class="ops-v2__filter-menu">
+          <button class="staff-v2-button is-active" type="button" data-ops-filter="all" aria-pressed="true">كل الحسابات</button>
+          <button class="staff-v2-button" type="button" data-ops-filter="unpaid" aria-pressed="false">بحاجة إلى تسديد</button>
+          <button class="staff-v2-button" type="button" data-ops-filter="internet" aria-pressed="false">إنترنت فعّال</button>
+        </div>
+      </details>
+    </div>
+    <div class="ops-v2__toolbar-side">
+      <span class="staff-v2-button staff-v2-button--ghost">{% include "includes/staff_icon.html" with name="calendar" %}اليوم</span>
+      <div class="staff-v2-segmented" aria-label="طريقة العرض">
+        <button class="is-active" type="button" data-ops-view="grid" aria-pressed="true" aria-label="عرض البطاقات">{% include "includes/staff_icon.html" with name="grid" %}</button>
+        <button type="button" data-ops-view="list" aria-pressed="false" aria-label="عرض القائمة">{% include "includes/staff_icon.html" with name="list" %}</button>
+      </div>
+    </div>
+  </div>
 
-  <section class="staff-workspace__stats" aria-label="ملخص الوردية">
-    {% if staff_caps.orders %}<a class="staff-workspace__stat" href="#open-accounts"><span>الحسابات المفتوحة</span><strong>{{ workspace_stats.open_visits }}</strong></a>{% endif %}
-    <a class="staff-workspace__stat" href="#active-orders"><span>الطلبات النشطة</span><strong>{{ workspace_stats.active_orders }}</strong></a>
-    <a class="staff-workspace__stat" href="#active-orders"><span>جاهز للتسليم</span><strong>{{ workspace_stats.ready_orders }}</strong></a>
-    {% if workspace_caps.cashier %}<a class="staff-workspace__stat" href="#open-accounts"><span>بحاجة إلى تسديد</span><strong>{{ workspace_stats.unpaid_orders }}</strong></a>{% endif %}
+  <section class="ops-v2__stats" aria-label="ملخص الوردية">
+    {% if staff_caps.orders %}<a class="ops-v2__stat" href="#open-accounts"><span class="ops-v2__stat-icon">{% include "includes/staff_icon.html" with name="card" class="staff-icon--lg" %}</span><strong>{{ workspace_stats.open_visits }}</strong><span>الحسابات المفتوحة</span></a>{% endif %}
+    <a class="ops-v2__stat" href="#active-orders"><span class="ops-v2__stat-icon">{% include "includes/staff_icon.html" with name="wifi" class="staff-icon--lg" %}</span><strong>{{ workspace_stats.active_orders }}</strong><span>الطلبات النشطة</span></a>
+    <a class="ops-v2__stat" href="#active-orders"><span class="ops-v2__stat-icon">{% include "includes/staff_icon.html" with name="send" class="staff-icon--lg" %}</span><strong>{{ workspace_stats.ready_orders }}</strong><span>جاهز للتسليم</span></a>
+    {% if workspace_caps.cashier %}<a class="ops-v2__stat" href="#open-accounts"><span class="ops-v2__stat-icon">{% include "includes/staff_icon.html" with name="users" class="staff-icon--lg" %}</span><strong>{{ workspace_stats.unpaid_orders }}</strong><span>بحاجة إلى تسديد</span></a>{% endif %}
   </section>
 
-  <div class="staff-workspace__columns">
+  <div class="ops-v2__tabs" role="group" aria-label="نوع البيانات">
+    <button class="is-active" type="button" data-ops-tab="all" aria-pressed="true">الكل</button>
+    {% if staff_caps.orders %}<button type="button" data-ops-tab="accounts" aria-pressed="false">الحسابات <b>{{ workspace_stats.open_visits }}</b></button>{% endif %}
+    <button type="button" data-ops-tab="orders" aria-pressed="false">الطلبات <b>{{ workspace_stats.active_orders }}</b></button>
+  </div>
+
+  <div class="ops-v2__layout">
     {% if staff_caps.orders %}
-    <section class="hub-card staff-workspace__panel" id="open-accounts">
-      <div class="staff-workspace__panel-head">
-        <div><p class="staff-workspace__eyebrow">من هنا الآن؟</p><h3>الحسابات والطاولات المفتوحة</h3></div>
+    <section class="ops-v2__accounts" id="open-accounts" data-ops-section="accounts">
+      <div class="staff-v2-panel-head">
+        <div><h3>الحسابات والطاولات المفتوحة</h3><p>إدارة الحسابات والطلبات والإنترنت من نفس السياق.</p></div>
       </div>
-      <div class="staff-workspace__visit-grid">
+      <div class="ops-v2__account-grid" data-ops-cards>
         {% for row in visit_rows %}{% with visit=row.visit %}
-          <article class="staff-workspace__visit">
-            <a class="staff-workspace__visit-main" href="{% url 'staff_visit_detail' visit.public_code %}" data-visit-context-url="{% url 'staff_visit_detail' visit.public_code %}?panel=1" data-context-title="حساب الزبون" aria-haspopup="dialog">
-              <div class="staff-workspace__visit-title">
-                <strong>{% if visit.table %}{{ visit.table }}{% else %}جلسة {{ visit.display_number }}{% endif %}</strong>
-                {% if visit.member %}<span>{{ visit.member }}</span>{% endif %}
-                {% if row.active_internet_count %}<span class="hub-badge hub-badge-success">إنترنت {{ row.active_internet_count }}</span>{% endif %}
-              </div>
-              <div class="staff-workspace__money"><strong>{{ row.gross_syp|format_syp }}</strong><small>المتبقي {{ row.remaining_syp|format_syp }}</small></div>
-              <small>آخر نشاط {{ visit.last_activity_at|timesince }} مضت</small>
-            </a>
-            <div class="staff-workspace__visit-actions">
-              {% if workspace_caps.pos %}<a class="hub-button hub-button-primary" href="{% url 'staff_pos' %}?visit={{ visit.public_code }}">+ طلب</a>{% endif %}
-              {% if workspace_caps.cashier %}<a class="hub-button" href="{% url 'staff_cashier_order' visit.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' visit.public_code %}?panel=payment" data-context-title="الدفع وإغلاق الحساب" aria-haspopup="dialog">الدفع</a>{% endif %}
-              {% if workspace_caps.internet_billing %}<a class="hub-button" href="{% url 'staff_visit_detail' visit.public_code %}?panel=internet" data-staff-context-url="{% url 'staff_visit_detail' visit.public_code %}?panel=internet" data-context-title="إنترنت الحساب" aria-haspopup="dialog">الإنترنت</a>{% endif %}
+        <article class="ops-v2__account" data-ops-card data-search="{{ visit.display_number }} {{ visit.table }} {{ visit.member|default:'' }} {% if row.latest_order %}{{ row.latest_order.display_number }}{% endif %}" data-unpaid="{% if row.has_unpaid %}1{% else %}0{% endif %}" data-internet="{% if row.active_internet_count %}1{% else %}0{% endif %}">
+          <a class="ops-v2__account-main" href="{% url 'staff_visit_detail' visit.public_code %}" data-visit-context-url="{% url 'staff_visit_detail' visit.public_code %}?panel=1" data-context-title="حساب الزبون" aria-haspopup="dialog">
+            <div class="ops-v2__account-chips">
+              {% if row.active_internet_count %}<span class="staff-v2-badge staff-v2-badge--success">{% include "includes/staff_icon.html" with name="wifi" %}إنترنت {{ row.active_internet_count }}</span>{% endif %}
+              {% if row.order_count %}<span class="staff-v2-badge">{% include "includes/staff_icon.html" with name="cart" %}{{ row.order_count }}</span>{% endif %}
+              <span class="staff-v2-badge {% if row.has_unpaid %}staff-v2-badge--warning{% else %}staff-v2-badge--success{% endif %} ops-v2__status">{% if row.has_unpaid %}مفتوح{% else %}نشط{% endif %}</span>
             </div>
-          </article>
-        {% endwith %}{% empty %}
-          <div class="hub-empty-state">لا توجد حسابات مفتوحة حالياً.</div>
-        {% endfor %}
+            <div class="ops-v2__account-title">
+              <strong>{% if visit.table %}{{ visit.table }}{% else %}جلسة {{ visit.display_number }}{% endif %}</strong>
+              <span>{{ visit.display_number }}{% if visit.member %} · {{ visit.member }}{% endif %}</span>
+            </div>
+            <div class="ops-v2__account-money">
+              <span class="ops-v2__money-cell"><span>الإجمالي</span><strong>{{ row.gross_syp|format_syp }}</strong></span>
+              <span class="ops-v2__money-cell {% if row.has_unpaid %}ops-v2__money-cell--danger{% endif %}"><span>المتبقي</span><strong>{{ row.remaining_syp|format_syp }}</strong></span>
+            </div>
+            <div class="ops-v2__account-foot"><span>{% include "includes/staff_icon.html" with name="clock" %}آخر نشاط {{ visit.last_activity_at|timesince }} مضت</span><span>عرض التفاصيل {% include "includes/staff_icon.html" with name="chevron" %}</span></div>
+          </a>
+          <div class="ops-v2__account-actions">
+            {% if workspace_caps.pos %}<a class="staff-v2-button staff-v2-button--primary" href="{% url 'staff_pos' %}?visit={{ visit.public_code }}">+ طلب</a>{% endif %}
+            {% if workspace_caps.cashier %}<a class="staff-v2-button" href="{% url 'staff_cashier_order' visit.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' visit.public_code %}?panel=payment" data-context-title="الدفع وإغلاق الحساب" aria-haspopup="dialog">الدفع</a>{% endif %}
+            {% if workspace_caps.internet_billing %}<a class="staff-v2-button" href="{% url 'staff_visit_detail' visit.public_code %}?panel=internet" data-staff-context-url="{% url 'staff_visit_detail' visit.public_code %}?panel=internet" data-context-title="إنترنت الحساب" aria-haspopup="dialog">الإنترنت</a>{% endif %}
+          </div>
+        </article>
+        {% endwith %}{% empty %}<div class="staff-v2-empty">لا توجد حسابات مفتوحة حالياً.</div>{% endfor %}
       </div>
     </section>
     {% endif %}
 
-    <section class="hub-card staff-workspace__panel" id="active-orders">
-      <div class="staff-workspace__panel-head">
-        <div><p class="staff-workspace__eyebrow">ما الذي يحتاج انتباهاً؟</p><h3>الطلبات النشطة</h3></div>
-        {% if not staff_caps.orders and staff_caps.kitchen_board %}<a href="{% url 'staff_kitchen' %}">لوحة التحضير</a>{% endif %}
-      </div>
-      <div class="staff-workspace__orders">
+    <aside class="staff-v2-panel ops-v2__orders-panel" id="active-orders" data-ops-section="orders">
+      <div class="staff-v2-panel-head"><div><h3>الطلبات النشطة</h3><p>ما يحتاج انتباهاً الآن.</p></div>{% if staff_caps.kitchen_board %}<a class="staff-v2-panel-link" href="{% url 'staff_kitchen' %}">لوحة التحضير</a>{% endif %}</div>
+      <div class="ops-v2__order-list">
         {% for order in active_orders %}
-          <article class="staff-workspace__order">
-            <div class="staff-workspace__order-main">
-              <strong class="hub-order-number">{{ order.display_number }}</strong>
-              <span class="hub-badge {% if order.status == 'ready' %}hub-badge-success{% else %}hub-badge-info{% endif %}">{{ order.get_status_display }}</span>
-              <span>{% if order.table %}{{ order.table }}{% else %}{{ order.get_fulfillment_label }}{% endif %}</span>
-            </div>
-            <div class="staff-workspace__order-meta">
-              <span>{{ order.total_syp|format_syp }}</span>
-              {% if order.remaining_syp > 0 %}<strong>متبقي {{ order.remaining_syp|format_syp }}</strong>{% else %}<span class="hub-badge hub-badge-success">مدفوع</span>{% endif %}
-            </div>
-            <div class="staff-workspace__order-actions">
-              {% if order.visit_id %}
-                <a href="{% url 'staff_visit_detail' order.visit.public_code %}" data-visit-context-url="{% url 'staff_visit_detail' order.visit.public_code %}?panel=1" data-context-title="حساب الزبون" aria-haspopup="dialog">الحساب</a>
-              {% elif staff_caps.order_edit %}
-                <a href="{% url 'staff_order_edit' order.public_code %}" data-staff-context-url="{% url 'staff_order_edit' order.public_code %}?panel=context" data-context-title="تفاصيل الطلب" aria-haspopup="dialog">عرض</a>
-              {% endif %}
-              {% if staff_caps.order_edit %}<a href="{% url 'staff_order_edit' order.public_code %}">تعديل</a>{% endif %}
-              {% if workspace_caps.cashier and order.remaining_syp > 0 %}
-                {% if order.visit_id %}<a href="{% url 'staff_cashier_order' order.visit.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' order.visit.public_code %}?panel=payment" data-context-title="الدفع وإغلاق الحساب" aria-haspopup="dialog">دفع</a>{% else %}<a href="{% url 'staff_cashier_order' order.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' order.public_code %}?panel=payment" data-context-title="قبض الطلب" aria-haspopup="dialog">دفع</a>{% endif %}
-              {% endif %}
-            </div>
-          </article>
-        {% empty %}<div class="hub-empty-state">لا توجد طلبات نشطة.</div>{% endfor %}
+        <article class="ops-v2__order">
+          <div class="ops-v2__order-main"><strong class="hub-order-number">{{ order.display_number }}</strong><span class="staff-v2-badge {% if order.status == 'ready' %}staff-v2-badge--success{% else %}staff-v2-badge--brand{% endif %}">{{ order.get_status_display }}</span></div>
+          <div class="ops-v2__order-money"><strong>{{ order.total_syp|format_syp }}</strong>{% if order.remaining_syp > 0 %}<span>متبقي {{ order.remaining_syp|format_syp }}</span>{% else %}<span>مدفوع</span>{% endif %}</div>
+          <div class="ops-v2__order-place">{% if order.table %}{{ order.table }}{% else %}{{ order.get_fulfillment_label }}{% endif %}</div>
+          <div class="ops-v2__order-links">
+            {% if order.visit_id %}<a href="{% url 'staff_visit_detail' order.visit.public_code %}" data-visit-context-url="{% url 'staff_visit_detail' order.visit.public_code %}?panel=1" data-context-title="حساب الزبون" aria-haspopup="dialog">الحساب</a>{% elif staff_caps.order_edit %}<a href="{% url 'staff_order_edit' order.public_code %}" data-staff-context-url="{% url 'staff_order_edit' order.public_code %}?panel=context" data-context-title="تفاصيل الطلب" aria-haspopup="dialog">عرض</a>{% endif %}
+            {% if workspace_caps.cashier and order.remaining_syp > 0 %}{% if order.visit_id %}<a href="{% url 'staff_cashier_order' order.visit.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' order.visit.public_code %}?panel=payment" data-context-title="الدفع وإغلاق الحساب" aria-haspopup="dialog">دفع</a>{% else %}<a href="{% url 'staff_cashier_order' order.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' order.public_code %}?panel=payment" data-context-title="قبض الطلب" aria-haspopup="dialog">دفع</a>{% endif %}{% endif %}
+          </div>
+        </article>
+        {% empty %}<div class="staff-v2-empty">لا توجد طلبات نشطة.</div>{% endfor %}
       </div>
-    </section>
+    </aside>
   </div>
 
-  <section class="hub-card staff-workspace__secondary" id="staff-more">
-    <div class="staff-workspace__panel-head"><div><p class="staff-workspace__eyebrow">عند الحاجة فقط</p><h3>المساحات المتخصصة</h3></div></div>
+  <section id="staff-more" class="staff-v2-panel">
+    <div class="staff-v2-panel-head"><div><h3>المساحات المتخصصة</h3><p>أدوات الإدارة التي لا تحتاجها في كل عملية بيع.</p></div></div>
     <nav class="staff-workspace__secondary-links" aria-label="المساحات المتخصصة">
       {% if staff_caps.kitchen_board %}<a href="{% url 'staff_kitchen' %}">المطبخ والتحضير</a>{% endif %}
       {% if staff_caps.reservations %}<a href="{% url 'staff_reservations' %}">الحجوزات</a>{% endif %}
@@ -129,15 +126,23 @@
 </section>
 
 {% if staff_caps.orders %}
+<dialog id="new-account-dialog" class="staff-v2-dialog" aria-labelledby="new-account-dialog-title">
+  <header class="staff-v2-dialog__head"><h2 id="new-account-dialog-title">+ فتح حساب / جلسة جديدة</h2><button class="staff-v2-icon-button" type="button" data-dialog-close aria-label="إغلاق">{% include "includes/staff_icon.html" with name="close" %}</button></header>
+  <div class="staff-v2-dialog__body">
+    <form method="post" action="{% url 'staff_visits' %}">
+      {% csrf_token %}<input type="hidden" name="next" value="workspace">
+      <label>الطاولة<select name="table"><option value="">بدون طاولة</option>{% for table in workspace_tables %}<option value="{{ table.pk }}">{{ table }}</option>{% endfor %}</select></label>
+      <label>العضو — اختياري<select name="member"><option value="">ضيف</option>{% for member in workspace_members %}<option value="{{ member.pk }}">{{ member }}</option>{% endfor %}</select></label>
+      <label>ملاحظة — اختياري<textarea name="notes" rows="2"></textarea></label>
+      <button class="staff-v2-button staff-v2-button--primary" type="submit">فتح الحساب</button>
+    </form>
+  </div>
+</dialog>
+
 <dialog id="staff-context-drawer" class="staff-context-drawer" aria-labelledby="staff-context-drawer-title">
   <section class="staff-context-drawer__surface" dir="rtl">
-    <header class="staff-context-drawer__header">
-      <div><p class="staff-workspace__eyebrow">الحساب الحالي</p><h2 id="staff-context-drawer-title">التفاصيل</h2></div>
-      <button type="button" class="staff-context-drawer__close" data-close-staff-context aria-label="إغلاق">×</button>
-    </header>
-    <div id="staff-context-drawer-body" class="staff-context-drawer__body" aria-live="polite">
-      <div class="staff-context-drawer__loading">اختر حساباً أو طلباً.</div>
-    </div>
+    <header class="staff-context-drawer__header"><div><p class="staff-v2-eyebrow">الحساب الحالي</p><h2 id="staff-context-drawer-title">التفاصيل</h2></div><button type="button" class="staff-context-drawer__close" data-close-staff-context aria-label="إغلاق">×</button></header>
+    <div id="staff-context-drawer-body" class="staff-context-drawer__body" aria-live="polite"><div class="staff-context-drawer__loading">اختر حساباً أو طلباً.</div></div>
   </section>
 </dialog>
 <script src="{% static 'js/currency-entry.js' %}" defer></script>
