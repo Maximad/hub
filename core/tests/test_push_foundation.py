@@ -39,6 +39,17 @@ class PushConfigurationCheckTests(SimpleTestCase):
     def test_unknown_provider_is_rejected(self):
         self.assertIn('core.E030', {error.id for error in run_checks()})
 
+    @override_settings(
+        PUSH_NOTIFICATIONS_ENABLED=True,
+        PUSH_PROVIDER='webpush',
+        VAPID_PUBLIC_KEY='public',
+        VAPID_PRIVATE_KEY='private',
+        VAPID_SUBJECT='mailto:admin@example.com',
+        PUSH_ENDPOINT_ALLOWED_HOSTS=(),
+    )
+    def test_enabled_push_requires_trusted_endpoint_hosts(self):
+        self.assertIn('core.E035', {error.id for error in run_checks()})
+
 
 class PushSubscriptionModelTests(TestCase):
     def setUp(self):

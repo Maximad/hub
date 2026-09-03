@@ -48,4 +48,9 @@ def check_push_notification_settings(app_configs, **kwargs):
             'PUSH_HTTP_TIMEOUT_SECONDS must be greater than zero.',
             id='core.E034',
         ))
+    if not getattr(settings, 'PUSH_ENDPOINT_ALLOWED_HOSTS', ()):
+        errors.append(Error(
+            'PUSH_ENDPOINT_ALLOWED_HOSTS must contain at least one trusted push-service host.',
+            id='core.E035',
+        ))
     return errors

@@ -19,6 +19,7 @@ from core.views.kitchen import staff_kitchen, staff_kitchen_partial, staff_kitch
 from core.views.staff_finance import *
 from core.views import staff_inventory
 from core.views_notifications import staff_notifications, staff_notifications_poll, staff_notifications_mark_read, staff_notifications_preferences
+from core.views_pwa import staff_web_app_manifest, service_worker, staff_push_config, staff_push_subscription
 from accounts.views_staff import (
     staff_users_list, staff_user_new, staff_user_detail, staff_user_edit, staff_user_password, staff_user_toggle_active,
 )
@@ -32,6 +33,8 @@ from core.views.wifi import wifi_entry
 
 
 urlpatterns = [
+    path('manifest.webmanifest', staff_web_app_manifest, name='staff_web_app_manifest'),
+    path('service-worker.js', service_worker, name='service_worker'),
     path('partner/internet/', internet_partner_dashboard, name='internet_partner_dashboard'),
     path('admin/', admin.site.urls),
     path('', menu.dashboard, name='dashboard'),
@@ -56,6 +59,8 @@ urlpatterns = [
     path('staff/notifications/poll/', staff_notifications_poll, name='staff_notifications_poll'),
     path('staff/notifications/mark-read/', staff_notifications_mark_read, name='staff_notifications_mark_read'),
     path('staff/notifications/preferences/', staff_notifications_preferences, name='staff_notifications_preferences'),
+    path('staff/notifications/push/config/', staff_push_config, name='staff_push_config'),
+    path('staff/notifications/push/subscription/', staff_push_subscription, name='staff_push_subscription'),
     path('staff/qr/', menu.staff_qr_links, name='staff_qr_links'),
     path('staff/qr/print/', menu.staff_qr_print, name='staff_qr_print'),
     path('staff/menu-tools/', menu.staff_menu_tools, name='staff_menu_tools'),

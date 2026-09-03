@@ -6,6 +6,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}{% if system_settings %}{{ system_settings.public_brand_title }}{% else %}مشاريب{% endif %}{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{% static 'img/favicon.svg' %}">
+  {% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %}
+  <link rel="manifest" href="{% url 'staff_web_app_manifest' %}">
+  <link rel="apple-touch-icon" href="{% static 'img/pwa-180.png' %}">
+  <meta name="theme-color" content="#176b5a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  {% endif %}
   <link rel="stylesheet" href="{% static 'css/hub.css' %}">
   <link rel="stylesheet" href="{% static 'css/staff_workspace.css' %}">
   <link rel="stylesheet" href="{% static 'css/customer_space.css' %}">

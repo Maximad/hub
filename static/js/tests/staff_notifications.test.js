@@ -16,9 +16,15 @@ class Element {
   focus() { this.focused = true; }
 }
 
-function setup(polls = [{unread_count: 0, latest: [], latest_ids: [], html: ''}]) {
+function setup(input = [{unread_count: 0, latest: [], latest_ids: [], html: ''}]) {
+  const options = Array.isArray(input) ? {polls: input} : input;
+  const polls = options.polls || [{unread_count: 0, latest: [], latest_ids: [], html: ''}];
   const elements = {
-    'staff-notifications': new Element({dataset: {pollUrl: '/poll', markReadUrl: '/read', prefUrl: '/preferences'}}),
+    'staff-notifications': new Element({dataset: {
+      pollUrl: '/poll', markReadUrl: '/read', prefUrl: '/preferences',
+      pushConfigUrl: '/push/config', pushSubscriptionUrl: '/push/subscription',
+      serviceWorkerUrl: '/service-worker.js',
+    }}),
     'staff-notification-badge': new Element(),
     'staff-notification-dropdown': new Element({hidden: true}),
     'staff-notification-status': new Element(),
@@ -29,17 +35,40 @@ function setup(polls = [{unread_count: 0, latest: [], latest_ids: [], html: ''}]
   const document = new Element({hidden: false, cookie: ''});
   document.getElementById = id => elements[id];
   const responses = [...polls];
+  const fetchCalls = [];
   const context = {
     document,
-    window: {},
+    window: {
+      Notification: options.Notification,
+      PushManager: options.PushManager,
+      navigator: options.navigator || {},
+      atob: value => Buffer.from(value, 'base64').toString('binary'),
+    },
     localStorage: {getItem: () => null, setItem() {}},
-    fetch: () => Promise.resolve({json: () => Promise.resolve(responses.shift() || polls.at(-1))}),
+    fetch: (url, request = {}) => {
+      fetchCalls.push({url, request});
+      if (url === '/push/config') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(options.pushConfig || {enabled: false, preference_enabled: false}),
+        });
+      }
+      if (url === '/push/subscription') {
+        return Promise.resolve({ok: true, json: () => Promise.resolve({ok: true})});
+      }
+      if (url === '/preferences' || url === '/read') {
+        return Promise.resolve({ok: true, json: () => Promise.resolve({ok: true})});
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(responses.shift() || polls.at(-1)),
+      });
+    },
     URLSearchParams,
     setInterval() {},
-    Notification: undefined,
   };
   vm.runInNewContext(source, context);
-  return {document, elements};
+  return {document, elements, fetchCalls};
 }
 
 const settle = () => new Promise(resolve => setImmediate(resolve));
@@ -93,4 +122,51 @@ test('polling announces only changes after the initial unread count', async () =
   await settle();
   assert.equal(status.textContent, 'عدد التنبيهات غير المقروءة: 3');
   assert.equal(elements['staff-notification-badge'].attributes['aria-label'], '3 تنبيهات غير مقروءة');
+});
+
+test('permission opt-in registers and stores a background push subscription', async () => {
+  function NotificationMock() {}
+  NotificationMock.permission = 'default';
+  NotificationMock.requestPermission = () => {
+    NotificationMock.permission = 'granted';
+    return Promise.resolve('granted');
+  };
+  let subscribeOptions;
+  const subscription = {
+    toJSON: () => ({
+      endpoint: 'https://push.example/subscription/one',
+      keys: {p256dh: 'public-key', auth: 'auth-secret'},
+    }),
+  };
+  const registration = {pushManager: {
+    getSubscription: () => Promise.resolve(null),
+    subscribe: options => {
+      subscribeOptions = options;
+      return Promise.resolve(subscription);
+    },
+  }};
+  const serviceWorker = {
+    register: () => Promise.resolve(registration),
+    ready: Promise.resolve(registration),
+    getRegistration: () => Promise.resolve(null),
+  };
+  const {elements, fetchCalls} = setup({
+    Notification: NotificationMock,
+    PushManager: function PushManager() {},
+    navigator: {serviceWorker},
+    pushConfig: {enabled: true, preference_enabled: false, public_key: 'AQID'},
+  });
+
+  await settle();
+  elements['staff-browser-toggle'].onclick();
+  for (let i = 0; i < 6; i += 1) await settle();
+
+  assert.equal(subscribeOptions.userVisibleOnly, true);
+  assert.deepEqual(Array.from(subscribeOptions.applicationServerKey), [1, 2, 3]);
+  const registrationCall = fetchCalls.find(call => call.url === '/push/subscription');
+  assert.equal(registrationCall.request.method, 'POST');
+  assert.equal(registrationCall.request.credentials, 'same-origin');
+  assert.equal(JSON.parse(registrationCall.request.body).endpoint, subscription.toJSON().endpoint);
+  assert.equal(elements['staff-browser-toggle'].textContent, 'تنبيهات الخلفية مفعّلة');
+  assert.equal(elements['staff-browser-toggle'].attributes['aria-pressed'], 'true');
 });
