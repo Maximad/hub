@@ -31,7 +31,7 @@
   <main class="hub-container" id="hub-main-content">
 
     {% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %}
-      <div id="staff-notifications" class="staff-notifications" data-poll-url="{% url 'staff_notifications_poll' %}" data-mark-read-url="{% url 'staff_notifications_mark_read_read' %}" data-pref-url="{% url 'staff_notifications_preferences' %}">
+      <div id="staff-notifications" class="staff-notifications" data-poll-url="{% url 'staff_notifications_poll' %}" data-mark-read-url="{% url 'staff_notifications_mark_read' %}" data-pref-url="{% url 'staff_notifications_preferences' %}">
         <button type="button" id="staff-notification-toggle" class="hub-btn hub-button-secondary" aria-controls="staff-notification-dropdown" aria-expanded="false">التنبيهات <span id="staff-notification-badge" aria-label="0 تنبيهات غير مقروءة">0</span></button>
         <button type="button" id="staff-sound-toggle" class="hub-btn hub-btn-secondary">تشغيل الصوت</button>
         <button type="button" id="staff-browser-toggle" class="hub-btn hub-btn-secondary">تفعيل تنبيهات المتصفح</button>
