@@ -1,18 +1,36 @@
 {% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %}
-<nav class="staff-shell-nav" aria-label="التنقل التشغيلي">
-  <div class="hub-container staff-shell-nav__inner">
-    <a{% if request.path == '/staff/' %} class="staff-shell-nav__primary" aria-current="page"{% endif %} href="{% url 'staff_home' %}">العمليات</a>
-    {% if staff_caps.kitchen_board %}<a{% if request.path|slice:":15" == '/staff/kitchen/' or request.path|slice:":12" == '/staff/prep/' %} class="staff-shell-nav__primary" aria-current="page"{% endif %} href="{% url 'staff_kitchen' %}">التحضير</a>{% endif %}
-    {% if staff_caps.inventory %}<a{% if request.path|slice:":17" == '/staff/inventory/' %} class="staff-shell-nav__primary" aria-current="page"{% endif %} href="{% url 'staff_inventory_home' %}">المخزون</a>{% endif %}
-    {% if staff_caps.finance %}<a{% if request.path|slice:":15" == '/staff/finance/' %} class="staff-shell-nav__primary" aria-current="page"{% endif %} href="{% url 'staff_finance_home' %}">المالية</a>{% endif %}
-    <a href="{% url 'staff_home' %}#staff-more">المزيد</a>
+<header class="staff-app-header">
+  <div class="hub-container staff-app-header__inner">
+    <a class="staff-app-header__brand" href="{% url 'staff_home' %}" aria-label="Hub Sweida — لوحة العمليات">
+      <span class="staff-app-header__mark">{% include "includes/staff_icon.html" with name="brand" class="staff-icon--lg" %}</span>
+      <span class="staff-app-header__brand-copy"><strong>Hub Sweida</strong><span>لوحة العمليات</span></span>
+    </a>
+
+    <nav class="staff-shell-nav" aria-label="التنقل التشغيلي">
+      <div class="staff-shell-nav__inner">
+        <a{% if request.path == '/staff/' %} class="staff-shell-nav__primary" aria-current="page"{% endif %} href="{% url 'staff_home' %}">العمليات</a>
+        {% if staff_caps.kitchen_board %}<a{% if request.path|slice:":15" == '/staff/kitchen/' or request.path|slice:":12" == '/staff/prep/' %} class="staff-shell-nav__primary" aria-current="page"{% endif %} href="{% url 'staff_kitchen' %}">التحضير</a>{% endif %}
+        {% if staff_caps.inventory %}<a{% if request.path|slice:":17" == '/staff/inventory/' %} class="staff-shell-nav__primary" aria-current="page"{% endif %} href="{% url 'staff_inventory_home' %}">المخزون</a>{% endif %}
+        {% if staff_caps.finance %}<a{% if request.path|slice:":15" == '/staff/finance/' %} class="staff-shell-nav__primary" aria-current="page"{% endif %} href="{% url 'staff_finance_home' %}">المالية</a>{% endif %}
+        <a href="{% url 'staff_home' %}#staff-more">المزيد</a>
+      </div>
+    </nav>
+
+    <div class="staff-app-header__tools">
+      <a class="staff-app-header__tool" href="{% url 'staff_home' %}#staff-more" aria-label="المساعدة">{% include "includes/staff_icon.html" with name="help" %}</a>
+      <div class="staff-app-header__user" title="{{ request.user.get_role_display }}">
+        <span class="staff-app-header__avatar">{{ request.user.username|slice:":1"|upper }}</span>
+        <span class="staff-app-header__user-copy"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><span>{{ request.user.get_role_display }}</span></span>
+      </div>
+    </div>
   </div>
-</nav>
+</header>
+
 <nav class="staff-mobile-nav" aria-label="التنقل السريع">
-  <a{% if request.path == '/staff/' %} aria-current="page"{% endif %} href="{% url 'staff_home' %}">العمليات</a>
-  {% if staff_caps.kitchen_board %}<a{% if request.path|slice:":15" == '/staff/kitchen/' or request.path|slice:":12" == '/staff/prep/' %} aria-current="page"{% endif %} href="{% url 'staff_kitchen' %}">التحضير</a>{% else %}<a href="{% url 'staff_home' %}#active-orders">الطلبات</a>{% endif %}
-  {% if staff_caps.pos %}<a class="staff-mobile-nav__create" href="{% url 'staff_pos' %}">+ طلب</a>{% else %}<a class="staff-mobile-nav__create" href="{% url 'staff_home' %}">اليوم</a>{% endif %}
-  {% if staff_caps.inventory %}<a{% if request.path|slice:":17" == '/staff/inventory/' %} aria-current="page"{% endif %} href="{% url 'staff_inventory_home' %}">المخزون</a>{% elif staff_caps.finance %}<a{% if request.path|slice:":15" == '/staff/finance/' %} aria-current="page"{% endif %} href="{% url 'staff_finance_home' %}">المالية</a>{% else %}<a href="{% url 'staff_home' %}#open-accounts">الحسابات</a>{% endif %}
-  <a href="{% url 'staff_home' %}#staff-more">المزيد</a>
+  <a{% if request.path == '/staff/' %} aria-current="page"{% endif %} href="{% url 'staff_home' %}">{% include "includes/staff_icon.html" with name="briefcase" %}<span>العمليات</span></a>
+  {% if staff_caps.kitchen_board %}<a{% if request.path|slice:":15" == '/staff/kitchen/' or request.path|slice:":12" == '/staff/prep/' %} aria-current="page"{% endif %} href="{% url 'staff_kitchen' %}">{% include "includes/staff_icon.html" with name="chef" %}<span>التحضير</span></a>{% else %}<a href="{% url 'staff_home' %}#active-orders">{% include "includes/staff_icon.html" with name="cart" %}<span>الطلبات</span></a>{% endif %}
+  {% if staff_caps.inventory %}<a{% if request.path|slice:":17" == '/staff/inventory/' %} aria-current="page"{% endif %} href="{% url 'staff_inventory_home' %}">{% include "includes/staff_icon.html" with name="box" %}<span>المخزون</span></a>{% elif staff_caps.pos %}<a class="staff-mobile-nav__create" href="{% url 'staff_pos' %}">{% include "includes/staff_icon.html" with name="plus" %}<span>طلب</span></a>{% else %}<a href="{% url 'staff_home' %}">{% include "includes/staff_icon.html" with name="grid" %}<span>اليوم</span></a>{% endif %}
+  {% if staff_caps.finance %}<a{% if request.path|slice:":15" == '/staff/finance/' %} aria-current="page"{% endif %} href="{% url 'staff_finance_home' %}">{% include "includes/staff_icon.html" with name="chart" %}<span>المالية</span></a>{% elif staff_caps.pos %}<a class="staff-mobile-nav__create" href="{% url 'staff_pos' %}">{% include "includes/staff_icon.html" with name="plus" %}<span>طلب</span></a>{% else %}<a href="{% url 'staff_home' %}#open-accounts">{% include "includes/staff_icon.html" with name="users" %}<span>الحسابات</span></a>{% endif %}
+  <a href="{% url 'staff_home' %}#staff-more">{% include "includes/staff_icon.html" with name="more" %}<span>المزيد</span></a>
 </nav>
 {% endif %}
