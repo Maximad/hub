@@ -42,7 +42,7 @@ class KitchenV2UIContractTests(SimpleTestCase):
     def test_mobile_css_stacks_status_lanes_and_focused_filters_hide_other_lanes(self):
         source = (Path(settings.BASE_DIR) / 'static/css/staff_kitchen_v2.css').read_text(encoding='utf-8')
         self.assertIn('@media(max-width:900px)', source)
-        self.assertIn('.kitchen-v2__kanban{grid-template-columns:1fr', source)
+        self.assertIn('.kitchen-v2__kanban,.kitchen-v2__kanban--active{grid-template-columns:1fr', source)
         self.assertIn('@media(max-width:700px)', source)
         self.assertIn('.kitchen-v2__tickets{grid-template-columns:1fr', source)
         self.assertIn('.kitchen-v2__kanban--working .kitchen-v2__lane:not(.kitchen-v2__lane--working)', source)
