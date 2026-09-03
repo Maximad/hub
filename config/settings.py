@@ -246,6 +246,15 @@ VAPID_PUBLIC_KEY = os.getenv('VAPID_PUBLIC_KEY', '').strip()
 VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY', '').strip()
 VAPID_SUBJECT = os.getenv('VAPID_SUBJECT', '').strip()
 PUSH_HTTP_TIMEOUT_SECONDS = float(os.getenv('PUSH_HTTP_TIMEOUT_SECONDS', '10'))
+PUSH_ENDPOINT_ALLOWED_HOSTS = tuple(
+    host.strip().lower()
+    for host in os.getenv(
+        'PUSH_ENDPOINT_ALLOWED_HOSTS',
+        'fcm.googleapis.com,updates.push.services.mozilla.com,'
+        'push.services.mozilla.com,web.push.apple.com,.notify.windows.com',
+    ).split(',')
+    if host.strip()
+)
 
 # A second, manager-level user must approve transfers at or above this amount.
 TRANSFER_APPROVAL_LIMIT_SYP = int(os.getenv('TRANSFER_APPROVAL_LIMIT_SYP', '50000'))
