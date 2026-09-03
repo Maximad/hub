@@ -1,1 +1,39 @@
-{% extends "staff/inventory_base.html" %}{% block inventory_content %}<h3 class="hub-page-header__title">تقرير المشتريات</h3><p>إجمالي المشتريات: {{ purchase_total }} — مدفوع: {{ paid_total }} — غير مدفوع: {{ unpaid_total }}</p><h3>تقرير المخزون</h3><div class="hub-table-wrap"><table class="hub-table"><tr><th>المادة</th><th>الكمية الحالية</th><th>قيمة تقديرية</th></tr>{% for i in stock_items %}<tr><td>{{ i.name_ar }}</td><td>{{ i.current_quantity }}</td><td>{% widthratio i.current_quantity 1 i.estimated_unit_cost_syp|default:0 %}</td></tr>{% endfor %}</table></div><h3>تقرير الهدر</h3><ul>{% for w in waste %}<li>{{ w.business_date }} — {{ w.inventory_item }} — {{ w.quantity }} — {{ w.reason }}</li>{% empty %}<li>لا يوجد هدر.</li>{% endfor %}</ul>{% endblock %}
+{% extends "staff/inventory_base.html" %}
+{% block inventory_content %}
+<header class="hub-page-header">
+  <div class="hub-page-header__main">
+    <h3 class="hub-page-header__title">تقارير المخزون والمشتريات</h3>
+    <p class="hub-page-header__meta">ملخص سريع للقيم الحالية والحركة المسجلة.</p>
+  </div>
+</header>
+
+<section class="hub-summary-cards" aria-label="ملخص المشتريات">
+  <div class="hub-summary-card"><span>إجمالي المشتريات</span><strong class="hub-money">{{ purchase_total }} ل.س</strong></div>
+  <div class="hub-summary-card"><span>مدفوع</span><strong class="hub-money">{{ paid_total }} ل.س</strong></div>
+  <div class="hub-summary-card"><span>غير مدفوع</span><strong class="hub-money">{{ unpaid_total }} ل.س</strong></div>
+</section>
+
+<section class="hub-section">
+  <h3 class="hub-section-title">تقرير المخزون</h3>
+  <div class="hub-table-wrap">
+    <table class="hub-table">
+      <tr><th>المادة</th><th>الكمية الحالية</th><th>قيمة تقديرية</th></tr>
+      {% for i in stock_items %}<tr><td>{{ i.name_ar }}</td><td>{{ i.current_quantity }}</td><td>{% widthratio i.current_quantity 1 i.estimated_unit_cost_syp|default:0 %}</td></tr>{% endfor %}
+    </table>
+  </div>
+</section>
+
+<section class="hub-section">
+  <h3 class="hub-section-title">تقرير الهدر</h3>
+  <div class="hub-card">
+    {% for w in waste %}
+      <div class="hub-list-row">
+        <div class="hub-list-row__main"><strong>{{ w.inventory_item }}</strong><div class="hub-list-row__meta">{{ w.business_date }} — {{ w.reason }}</div></div>
+        <strong class="hub-number">{{ w.quantity }}</strong>
+      </div>
+    {% empty %}
+      <div class="hub-empty-state">لا يوجد هدر.</div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

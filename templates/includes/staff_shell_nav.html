@@ -1,18 +1,18 @@
 {% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %}
 <nav class="staff-shell-nav" aria-label="التنقل التشغيلي">
   <div class="hub-container staff-shell-nav__inner">
-    <a{% if request.path == '/staff/' %} class="staff-shell-nav__primary"{% endif %} href="{% url 'staff_home' %}">العمليات</a>
-    {% if staff_caps.kitchen_board %}<a href="{% url 'staff_kitchen' %}">التحضير</a>{% endif %}
-    {% if staff_caps.inventory %}<a href="{% url 'staff_inventory_home' %}">المخزون</a>{% endif %}
-    {% if staff_caps.finance %}<a href="{% url 'staff_finance_home' %}">المالية</a>{% endif %}
+    <a{% if request.path == '/staff/' %} class="staff-shell-nav__primary" aria-current="page"{% endif %} href="{% url 'staff_home' %}">العمليات</a>
+    {% if staff_caps.kitchen_board %}<a{% if request.path|slice:":15" == '/staff/kitchen/' or request.path|slice:":12" == '/staff/prep/' %} class="staff-shell-nav__primary" aria-current="page"{% endif %} href="{% url 'staff_kitchen' %}">التحضير</a>{% endif %}
+    {% if staff_caps.inventory %}<a{% if request.path|slice:":17" == '/staff/inventory/' %} class="staff-shell-nav__primary" aria-current="page"{% endif %} href="{% url 'staff_inventory_home' %}">المخزون</a>{% endif %}
+    {% if staff_caps.finance %}<a{% if request.path|slice:":15" == '/staff/finance/' %} class="staff-shell-nav__primary" aria-current="page"{% endif %} href="{% url 'staff_finance_home' %}">المالية</a>{% endif %}
     <a href="{% url 'staff_home' %}#staff-more">المزيد</a>
   </div>
 </nav>
 <nav class="staff-mobile-nav" aria-label="التنقل السريع">
-  <a href="{% url 'staff_home' %}">العمليات</a>
-  {% if staff_caps.kitchen_board %}<a href="{% url 'staff_kitchen' %}">التحضير</a>{% else %}<a href="{% url 'staff_home' %}#active-orders">الطلبات</a>{% endif %}
+  <a{% if request.path == '/staff/' %} aria-current="page"{% endif %} href="{% url 'staff_home' %}">العمليات</a>
+  {% if staff_caps.kitchen_board %}<a{% if request.path|slice:":15" == '/staff/kitchen/' or request.path|slice:":12" == '/staff/prep/' %} aria-current="page"{% endif %} href="{% url 'staff_kitchen' %}">التحضير</a>{% else %}<a href="{% url 'staff_home' %}#active-orders">الطلبات</a>{% endif %}
   {% if staff_caps.pos %}<a class="staff-mobile-nav__create" href="{% url 'staff_pos' %}">+ طلب</a>{% else %}<a class="staff-mobile-nav__create" href="{% url 'staff_home' %}">اليوم</a>{% endif %}
-  {% if staff_caps.inventory %}<a href="{% url 'staff_inventory_home' %}">المخزون</a>{% elif staff_caps.finance %}<a href="{% url 'staff_finance_home' %}">المالية</a>{% else %}<a href="{% url 'staff_home' %}#open-accounts">الحسابات</a>{% endif %}
+  {% if staff_caps.inventory %}<a{% if request.path|slice:":17" == '/staff/inventory/' %} aria-current="page"{% endif %} href="{% url 'staff_inventory_home' %}">المخزون</a>{% elif staff_caps.finance %}<a{% if request.path|slice:":15" == '/staff/finance/' %} aria-current="page"{% endif %} href="{% url 'staff_finance_home' %}">المالية</a>{% else %}<a href="{% url 'staff_home' %}#open-accounts">الحسابات</a>{% endif %}
   <a href="{% url 'staff_home' %}#staff-more">المزيد</a>
 </nav>
 {% endif %}
