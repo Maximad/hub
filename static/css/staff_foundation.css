@@ -1,0 +1,753 @@
+/*
+ * Hub staff UI foundation
+ * -----------------------
+ * Final, scoped presentation layer for every /staff/ screen.
+ * It deliberately sits after the legacy component styles so older templates
+ * inherit a coherent responsive system without rewriting business flows.
+ */
+
+.hub-staff-ui {
+  --staff-shell-max: 1400px;
+  --staff-reading-max: 920px;
+  --staff-gap: clamp(.75rem, 1.4vw, 1.15rem);
+  --staff-panel-pad: clamp(.8rem, 1.4vw, 1.15rem);
+  --staff-radius: 16px;
+  --staff-radius-sm: 11px;
+  --staff-shadow: 0 6px 24px rgba(20, 49, 45, .055);
+  --staff-shadow-raised: 0 14px 38px rgba(20, 49, 45, .10);
+  --staff-soft-border: color-mix(in srgb, var(--hub-border-subtle, var(--hub-border)) 82%, transparent);
+  background: var(--hub-page-background, var(--hub-bg));
+  font-size: clamp(15px, .18vw + 14px, 17px);
+}
+
+/* ---------- Shell and hierarchy ---------- */
+.hub-staff-ui .hub-container {
+  width: min(calc(100% - clamp(1.25rem, 4vw, 3rem)), var(--staff-shell-max));
+  max-width: var(--staff-shell-max);
+  margin-inline: auto;
+  padding-inline: 0;
+}
+
+.hub-staff-ui main.hub-container {
+  padding-block: clamp(.9rem, 2vw, 1.5rem) calc(5.25rem + env(safe-area-inset-bottom));
+}
+
+.hub-staff-ui .hub-header {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-block-end: 1px solid color-mix(in srgb, #fff 14%, transparent);
+  background: var(--hub-brand, var(--hub-primary));
+}
+
+.hub-staff-ui .hub-header > .hub-container {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  gap: .7rem;
+  padding-block: .55rem;
+}
+
+.hub-staff-ui .hub-header__icon {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  border-radius: 12px;
+}
+
+.hub-staff-ui .hub-title,
+.hub-staff-ui .hub-subtitle {
+  grid-column: auto;
+  margin: 0;
+}
+
+.hub-staff-ui .hub-title {
+  font-size: clamp(1rem, 1.5vw, 1.2rem);
+  font-weight: 850;
+}
+
+.hub-staff-ui .hub-subtitle {
+  margin-inline-start: auto;
+  max-width: 56ch;
+  font-size: .76rem;
+  line-height: 1.4;
+  text-align: start;
+  color: rgba(255, 255, 255, .72);
+}
+
+.hub-staff-ui .staff-shell-nav {
+  margin: 0;
+  border-block-end: 1px solid var(--staff-soft-border);
+  background: color-mix(in srgb, var(--hub-surface-main, #fff) 96%, transparent);
+  box-shadow: 0 3px 14px rgba(20, 49, 45, .035);
+}
+
+.hub-staff-ui .staff-shell-nav__inner {
+  width: min(calc(100% - clamp(1.25rem, 4vw, 3rem)), var(--staff-shell-max));
+  min-height: 50px;
+  padding: .35rem 0;
+  gap: .25rem;
+}
+
+.hub-staff-ui .staff-shell-nav a {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  padding: .45rem .75rem;
+  border-radius: 10px;
+  font-size: .9rem;
+  font-weight: 780;
+}
+
+.hub-staff-ui .staff-shell-nav__primary {
+  border-radius: 11px;
+  box-shadow: none;
+}
+
+/* A semantic section is layout, not automatically a giant card. */
+.hub-staff-ui .hub-section:not(.hub-card):not(.hub-panel):not(.hub-form-section) {
+  margin-block: 0 var(--staff-gap);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.hub-staff-ui .hub-section > .hub-page-header__title:first-child,
+.hub-staff-ui .hub-section > .hub-section-title:first-child {
+  margin-block: 0 .75rem;
+  padding-block: 0 .6rem;
+  border-block-end: 1px solid var(--staff-soft-border);
+}
+
+.hub-staff-ui .hub-page-header,
+.hub-staff-ui .staff-workspace__hero {
+  margin-block-end: var(--staff-gap);
+  padding-block: .15rem .8rem;
+  border-block-end: 1px solid var(--staff-soft-border);
+}
+
+.hub-staff-ui .hub-page-header__title,
+.hub-staff-ui .hub-section-title,
+.hub-staff-ui .staff-workspace__hero h2 {
+  letter-spacing: -.018em;
+}
+
+.hub-staff-ui .hub-page-header__title,
+.hub-staff-ui .hub-section-title {
+  font-size: clamp(1.3rem, 2.3vw, 1.8rem);
+}
+
+.hub-staff-ui h3.hub-section-title {
+  font-size: clamp(1.08rem, 1.8vw, 1.35rem);
+}
+
+/* ---------- Cards and compact information ---------- */
+.hub-staff-ui .hub-card,
+.hub-staff-ui .hub-panel,
+.hub-staff-ui .hub-list-card,
+.hub-staff-ui .hub-stat-card,
+.hub-staff-ui .hub-summary-card {
+  border: 1px solid var(--staff-soft-border);
+  border-radius: var(--staff-radius);
+  background: var(--hub-surface-main, var(--hub-surface));
+  box-shadow: var(--staff-shadow);
+}
+
+.hub-staff-ui .hub-card,
+.hub-staff-ui .hub-panel,
+.hub-staff-ui .hub-list-card,
+.hub-staff-ui .hub-stat-card {
+  padding: var(--staff-panel-pad);
+}
+
+.hub-staff-ui .hub-grid {
+  gap: var(--staff-gap);
+}
+
+@media (min-width: 780px) {
+  .hub-staff-ui .hub-grid-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hub-staff-ui .hub-grid-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.hub-staff-ui .hub-summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: .65rem;
+}
+
+.hub-staff-ui .hub-summary-card {
+  min-height: 84px;
+  align-content: center;
+  padding: .75rem .9rem;
+  border-inline-start: 0;
+  box-shadow: none;
+}
+
+.hub-staff-ui .hub-summary-card > span {
+  color: var(--hub-text-muted, var(--hub-muted));
+  font-size: .78rem;
+}
+
+.hub-staff-ui .hub-summary-card strong,
+.hub-staff-ui .hub-summary-card .metric,
+.hub-staff-ui .hub-metric {
+  font-size: clamp(1.15rem, 2vw, 1.5rem);
+  line-height: 1.15;
+}
+
+.hub-staff-ui .hub-badge,
+.hub-staff-ui .hub-status-chip,
+.hub-staff-ui .badge,
+.hub-staff-ui .status-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 26px;
+  padding: .25rem .55rem;
+  border-radius: 999px;
+  font-size: .76rem;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+/* ---------- Notifications as a utility, not a full-width section ---------- */
+.hub-staff-ui .staff-notifications {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 0 .8rem auto;
+  padding: .32rem;
+  gap: .3rem;
+  border: 1px solid var(--staff-soft-border);
+  border-radius: 999px;
+  background: var(--hub-surface-main, #fff);
+  box-shadow: none;
+}
+
+.hub-staff-ui .staff-notifications .hub-btn,
+.hub-staff-ui .staff-notifications .hub-button {
+  min-height: 34px;
+  padding: .32rem .65rem;
+  border-radius: 999px;
+  font-size: .78rem;
+}
+
+.hub-staff-ui .staff-notification-dropdown {
+  position: absolute;
+  inset-block-start: calc(100% + .45rem);
+  inset-inline-end: 0;
+  z-index: 70;
+  width: min(420px, calc(100vw - 1.5rem));
+  max-height: min(60vh, 520px);
+  overflow: auto;
+  padding: .75rem;
+  border: 1px solid var(--staff-soft-border);
+  border-radius: 14px;
+  background: var(--hub-surface-main, #fff);
+  box-shadow: var(--staff-shadow-raised);
+}
+
+/* ---------- Navigation chips ---------- */
+.hub-staff-ui .hub-nav-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: .4rem;
+  max-width: 100%;
+  margin-block: 0 var(--staff-gap);
+  padding: 0 0 .65rem;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+  border: 0;
+  border-block-end: 1px solid var(--staff-soft-border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.hub-staff-ui .hub-nav-chip {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: .4rem .7rem;
+  border: 1px solid var(--staff-soft-border);
+  border-radius: 999px;
+  background: var(--hub-surface-main, #fff);
+  font-size: .82rem;
+  font-weight: 780;
+  white-space: nowrap;
+}
+
+.hub-staff-ui .hub-nav-chip:hover,
+.hub-staff-ui .hub-nav-chip:focus-visible,
+.hub-staff-ui .hub-nav-chip[aria-current="page"] {
+  border-color: color-mix(in srgb, var(--hub-brand, var(--hub-primary)) 35%, var(--staff-soft-border));
+  background: color-mix(in srgb, var(--hub-brand, var(--hub-primary)) 7%, #fff);
+  color: var(--hub-brand, var(--hub-primary));
+}
+
+/* ---------- Buttons and toolbars ---------- */
+.hub-staff-ui .hub-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .45rem;
+  margin-block-end: .75rem;
+}
+
+.hub-staff-ui .hub-button,
+.hub-staff-ui .hub-btn,
+.hub-staff-ui button {
+  width: auto;
+  min-height: 40px;
+  padding: .45rem .75rem;
+  border-radius: 10px;
+  font-size: .88rem;
+  line-height: 1.2;
+}
+
+.hub-staff-ui .hub-button-primary,
+.hub-staff-ui .hub-btn-primary {
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--hub-brand, var(--hub-primary)) 14%, transparent);
+}
+
+/* ---------- Forms ---------- */
+.hub-staff-ui .hub-form-section {
+  width: 100%;
+  max-width: var(--staff-reading-max);
+  margin-block: 0 var(--staff-gap);
+  padding: var(--staff-panel-pad);
+  gap: .75rem;
+  border: 1px solid var(--staff-soft-border);
+  border-radius: var(--staff-radius);
+  background: var(--hub-surface-main, #fff);
+  box-shadow: none;
+}
+
+.hub-staff-ui .hub-form-section .hub-grid,
+.hub-staff-ui .hub-form-section.hub-grid {
+  gap: .7rem;
+}
+
+.hub-staff-ui .hub-form-section label,
+.hub-staff-ui .hub-form label {
+  gap: .3rem;
+  font-size: .84rem;
+  font-weight: 750;
+}
+
+.hub-staff-ui input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+.hub-staff-ui select,
+.hub-staff-ui textarea,
+.hub-staff-ui .hub-input {
+  min-height: 42px;
+  padding: .45rem .6rem;
+  border-radius: 10px;
+  font-size: .9rem;
+}
+
+/* Search/filter forms become compact control bars on desktop. */
+@media (min-width: 760px) {
+  .hub-staff-ui form[method="get"].hub-form-section,
+  .hub-staff-ui form[method="get"].hub-form,
+  .hub-staff-ui .kitchen-filters {
+    display: flex !important;
+    align-items: end;
+    flex-wrap: wrap;
+    gap: .55rem;
+    width: 100%;
+    max-width: 100%;
+    padding: .65rem;
+  }
+
+  .hub-staff-ui form[method="get"].hub-form-section > label,
+  .hub-staff-ui form[method="get"].hub-form > label,
+  .hub-staff-ui .kitchen-filters > label {
+    flex: 1 1 170px;
+    max-width: 310px;
+    min-width: 150px;
+  }
+
+  .hub-staff-ui form[method="get"].hub-form-section > input:not([type="hidden"]),
+  .hub-staff-ui form[method="get"].hub-form > input:not([type="hidden"]) {
+    flex: 1 1 220px;
+    max-width: 380px;
+  }
+
+  .hub-staff-ui form[method="get"].hub-form-section > button,
+  .hub-staff-ui form[method="get"].hub-form > button,
+  .hub-staff-ui .kitchen-filters > button {
+    flex: 0 0 auto;
+  }
+
+  .hub-staff-ui .kitchen-tabs {
+    flex: 1 0 100%;
+    gap: .35rem;
+  }
+}
+
+/* Post/create/edit forms should be readable, not stretched to the viewport. */
+.hub-staff-ui form[method="post"].hub-form-section:not(.hub-toolbar .hub-form-section),
+.hub-staff-ui form[method="post"].hub-form:not(.staff-pos__form) {
+  max-width: var(--staff-reading-max);
+}
+
+/* ---------- Data tables ---------- */
+.hub-staff-ui .hub-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow: auto;
+  border: 1px solid var(--staff-soft-border);
+  border-radius: var(--staff-radius);
+  background: var(--hub-surface-main, #fff);
+  box-shadow: var(--staff-shadow);
+}
+
+.hub-staff-ui .hub-table {
+  width: 100%;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: .88rem;
+}
+
+.hub-staff-ui .hub-table th,
+.hub-staff-ui .hub-table td {
+  padding: .65rem .75rem;
+  border-block-end: 1px solid var(--staff-soft-border);
+  line-height: 1.45;
+}
+
+.hub-staff-ui .hub-table th {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 2;
+  background: var(--hub-surface-alternate, var(--hub-surface-alt));
+  color: var(--hub-text-muted, var(--hub-muted));
+  font-size: .76rem;
+  font-weight: 850;
+}
+
+.hub-staff-ui .hub-table tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--hub-surface-alternate, var(--hub-surface-alt)) 42%, transparent);
+}
+
+.hub-staff-ui .hub-table td .hub-toolbar {
+  margin: 0;
+  flex-wrap: nowrap;
+}
+
+.hub-staff-ui .hub-table code {
+  font-size: .8rem;
+}
+
+/* ---------- Kitchen / operational cards ---------- */
+.hub-staff-ui .kitchen-board__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: .65rem;
+  margin-block-end: .85rem;
+}
+
+.hub-staff-ui .kitchen-board__header .hub-toolbar {
+  margin: 0;
+}
+
+.hub-staff-ui .kitchen-board__alert {
+  padding: .55rem .7rem;
+  border-radius: 12px;
+  font-size: .82rem;
+}
+
+.hub-staff-ui .kitchen-items-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: .75rem;
+}
+
+.hub-staff-ui .kitchen-item-card {
+  gap: .65rem;
+  padding: .85rem;
+  border-inline-start-width: 5px;
+  border-radius: 14px;
+  box-shadow: var(--staff-shadow);
+}
+
+.hub-staff-ui .kitchen-item-name {
+  font-size: 1.12rem;
+}
+
+/* ---------- Operations workspace refinements ---------- */
+.hub-staff-ui .staff-workspace {
+  gap: var(--staff-gap);
+}
+
+.hub-staff-ui .staff-workspace__stats {
+  gap: .55rem;
+}
+
+.hub-staff-ui .staff-workspace__stat {
+  min-height: 78px;
+  padding: .75rem .85rem;
+  border-radius: 14px;
+  box-shadow: none;
+}
+
+.hub-staff-ui .staff-workspace__stat strong {
+  font-size: 1.35rem;
+}
+
+.hub-staff-ui .staff-workspace__visit-grid {
+  gap: .6rem;
+}
+
+.hub-staff-ui .staff-workspace__visit {
+  border-radius: 14px;
+  box-shadow: var(--staff-shadow);
+}
+
+.hub-staff-ui .staff-workspace__visit-main {
+  padding: .75rem;
+}
+
+.hub-staff-ui .staff-workspace__visit-actions {
+  padding: .5rem .75rem;
+}
+
+/* ---------- Details and empty states ---------- */
+.hub-staff-ui details.hub-card > summary {
+  cursor: pointer;
+  font-weight: 850;
+}
+
+.hub-staff-ui .hub-empty-state {
+  max-width: 760px;
+  padding: .8rem 1rem;
+  border-radius: 13px;
+  font-size: .9rem;
+}
+
+/* ---------- Mobile contract ---------- */
+@media (max-width: 900px) {
+  .hub-staff-ui .hub-subtitle {
+    display: none;
+  }
+
+  .hub-staff-ui .staff-mobile-nav {
+    padding-block: .3rem calc(.3rem + env(safe-area-inset-bottom));
+    border-block-start-color: var(--staff-soft-border);
+    box-shadow: 0 -7px 24px rgba(20, 49, 45, .09);
+  }
+
+  .hub-staff-ui .staff-mobile-nav a {
+    min-height: 46px;
+    font-size: .72rem;
+  }
+
+  .hub-staff-ui main.hub-container {
+    padding-block-end: calc(5.3rem + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 759px) {
+  .hub-staff-ui .hub-container {
+    width: min(calc(100% - 1rem), var(--staff-shell-max));
+  }
+
+  .hub-staff-ui main.hub-container {
+    padding-block-start: .65rem;
+  }
+
+  .hub-staff-ui .hub-header > .hub-container {
+    min-height: 52px;
+  }
+
+  .hub-staff-ui .hub-title {
+    font-size: .98rem;
+  }
+
+  .hub-staff-ui .staff-notifications {
+    width: 100%;
+    margin-inline: 0;
+    border-radius: 13px;
+  }
+
+  .hub-staff-ui .staff-notifications .hub-btn,
+  .hub-staff-ui .staff-notifications .hub-button {
+    flex: 1 1 auto;
+    min-height: 38px;
+  }
+
+  .hub-staff-ui .staff-notification-dropdown {
+    inset-inline: 0;
+    width: 100%;
+  }
+
+  .hub-staff-ui .hub-page-header,
+  .hub-staff-ui .staff-workspace__hero {
+    align-items: stretch;
+    gap: .6rem;
+  }
+
+  .hub-staff-ui .hub-page-header__title,
+  .hub-staff-ui .hub-section-title {
+    font-size: 1.28rem;
+  }
+
+  .hub-staff-ui .hub-nav-tabs {
+    margin-inline: -.5rem;
+    padding-inline: .5rem;
+  }
+
+  .hub-staff-ui .hub-form-section {
+    max-width: 100%;
+    padding: .75rem;
+    border-radius: 14px;
+  }
+
+  .hub-staff-ui .hub-form-grid,
+  .hub-staff-ui .hub-grid-2,
+  .hub-staff-ui .hub-grid-3 {
+    grid-template-columns: 1fr;
+  }
+
+  .hub-staff-ui .kitchen-board__header {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .hub-staff-ui .kitchen-board__alert,
+  .hub-staff-ui .kitchen-board__header .hub-toolbar {
+    width: fit-content;
+    max-width: 100%;
+  }
+
+  /* JS adds data-label attributes and this turns ordinary tables into cards. */
+  .hub-staff-ui .hub-table-wrap:has(.hub-responsive-table) {
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .hub-staff-ui .hub-responsive-table,
+  .hub-staff-ui .hub-responsive-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .hub-staff-ui .hub-responsive-table thead,
+  .hub-staff-ui .hub-responsive-table tr.hub-responsive-table__header,
+  .hub-staff-ui .hub-responsive-table tr:has(> th) {
+    display: none;
+  }
+
+  .hub-staff-ui .hub-responsive-table tr:not(.hub-responsive-table__header) {
+    display: grid;
+    gap: .18rem;
+    margin-block-end: .65rem;
+    padding: .7rem .8rem;
+    border: 1px solid var(--staff-soft-border);
+    border-radius: 14px;
+    background: var(--hub-surface-main, #fff);
+    box-shadow: var(--staff-shadow);
+  }
+
+  .hub-staff-ui .hub-responsive-table td {
+    display: grid;
+    grid-template-columns: minmax(94px, 38%) minmax(0, 1fr);
+    align-items: start;
+    gap: .55rem;
+    padding: .32rem 0;
+    border: 0;
+    background: transparent !important;
+    text-align: start;
+    overflow-wrap: anywhere;
+  }
+
+  .hub-staff-ui .hub-responsive-table td::before {
+    content: attr(data-label);
+    color: var(--hub-text-muted, var(--hub-muted));
+    font-size: .74rem;
+    font-weight: 800;
+    line-height: 1.45;
+  }
+
+  .hub-staff-ui .hub-responsive-table td[data-label=""]::before,
+  .hub-staff-ui .hub-responsive-table td[colspan]::before {
+    display: none;
+  }
+
+  .hub-staff-ui .hub-responsive-table td[colspan] {
+    grid-template-columns: 1fr;
+  }
+
+  .hub-staff-ui .hub-responsive-table td .hub-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .hub-staff-ui .hub-responsive-table td .hub-button,
+  .hub-staff-ui .hub-responsive-table td button {
+    min-height: 38px;
+  }
+}
+
+@media (max-width: 420px) {
+  .hub-staff-ui .hub-container {
+    width: min(calc(100% - .7rem), var(--staff-shell-max));
+  }
+
+  .hub-staff-ui .staff-workspace__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hub-staff-ui .hub-summary-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hub-staff-ui .hub-responsive-table td {
+    grid-template-columns: minmax(82px, 36%) minmax(0, 1fr);
+    gap: .4rem;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .hub-staff-ui .hub-card:hover,
+  .hub-staff-ui .staff-workspace__visit:hover {
+    border-color: color-mix(in srgb, var(--hub-brand, var(--hub-primary)) 20%, var(--staff-soft-border));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hub-staff-ui *,
+  .hub-staff-ui *::before,
+  .hub-staff-ui *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+  }
+}
+
+@media print {
+  .hub-staff-ui .staff-notifications,
+  .hub-staff-ui .staff-mobile-nav {
+    display: none !important;
+  }
+
+  .hub-staff-ui .hub-container {
+    width: 100%;
+    max-width: none;
+  }
+
+  .hub-staff-ui .hub-card,
+  .hub-staff-ui .hub-table-wrap {
+    box-shadow: none;
+  }
+}
