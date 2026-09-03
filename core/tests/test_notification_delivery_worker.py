@@ -80,10 +80,12 @@ class NotificationDeliveryRoutingTests(TestCase):
                 auth_secret=f'auth-{user.pk}',
                 device_label=f'device-{user.pk}',
             )
-        self.kitchen_station = PrepStation.objects.create(
-            name_ar='المطبخ',
+        self.kitchen_station, _ = PrepStation.objects.get_or_create(
             code='kitchen',
-            station_type='kitchen',
+            defaults={
+                'name_ar': 'المطبخ',
+                'station_type': 'kitchen',
+            },
         )
         self.order = Order.objects.create()
 
