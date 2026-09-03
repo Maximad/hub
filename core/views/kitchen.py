@@ -26,10 +26,9 @@ ACTIVE_PREP_STATUSES = [
 ]
 VISIBLE_PREP_STATUSES = ACTIVE_PREP_STATUSES + [OrderItem.PrepStatus.READY]
 STATUS_FILTERS = [
-    ('active', 'الكل'),
-    (OrderItem.PrepStatus.NEW, 'جديد'),
-    (OrderItem.PrepStatus.SENT, 'مرسل للتحضير'),
-    (OrderItem.PrepStatus.PREPARING, 'قيد التحضير'),
+    ('all_visible', 'الكل'),
+    ('incoming', 'جديد'),
+    ('working', 'قيد التحضير'),
     (OrderItem.PrepStatus.READY, 'جاهز'),
 ]
 FULFILLMENT_FILTERS = [
@@ -37,6 +36,11 @@ FULFILLMENT_FILTERS = [
     (Order.FulfillmentMode.TABLE, 'طاولة'),
     (Order.FulfillmentMode.DELIVERY, 'توصيل'),
     (Order.FulfillmentMode.TAKEAWAY, 'تيك أواي'),
+]
+KANBAN_LANES = [
+    ('incoming', 'جديد', {OrderItem.PrepStatus.NEW, OrderItem.PrepStatus.SENT}),
+    ('working', 'قيد التحضير', {OrderItem.PrepStatus.ACCEPTED, OrderItem.PrepStatus.PREPARING}),
+    ('ready', 'جاهز', {OrderItem.PrepStatus.READY}),
 ]
 NEXT_STATUS_BY_ACTION = {
     'accept': OrderItem.PrepStatus.ACCEPTED,
@@ -70,10 +74,18 @@ def _kitchen_order_notes(order):
         lines.append(clean)
     return '\n'.join(lines)
 
+
 def _prep_station_label(station):
     if station:
         return station.name_ar or station.name_en or 'محطة تحضير'
     return 'غير محدد / عام'
+
+
+def _lane_key_for_status(status):
+    for key, _label, statuses in KANBAN_LANES:
+        if status in statuses:
+            return key
+    return 'incoming'
 
 
 def _item_actions(item, user):
@@ -109,25 +121,30 @@ def _can_change_to(user, old_status, new_status):
 
 
 def _filtered_items(request):
-    status_filter = request.GET.get('status', 'active')
+    status_filter = request.GET.get('status', 'all_visible')
     station_filter = request.GET.get('station', '').strip()
     fulfillment_filter = request.GET.get('fulfillment', '').strip()
 
     items = (
         OrderItem.objects.select_related('order', 'order__table', 'order__table__room', 'product', 'prep_station', 'product__prep_station_ref')
         .exclude(order__status=Order.Status.CANCELLED)
-        .order_by('prep_station__sort_order', 'prep_station__name_ar', 'order__created_at', 'id')
+        .order_by('order__created_at', 'id')
     )
 
-    if status_filter == 'active':
-        items = items.filter(prep_status__in=ACTIVE_PREP_STATUSES)
-    elif status_filter == 'all_visible':
+    if status_filter == 'all_visible':
         items = items.filter(prep_status__in=VISIBLE_PREP_STATUSES)
+    elif status_filter == 'active':
+        # Keep legacy links valid while the v2 board defaults to all three visible lanes.
+        items = items.filter(prep_status__in=ACTIVE_PREP_STATUSES)
+    elif status_filter == 'incoming':
+        items = items.filter(prep_status__in=[OrderItem.PrepStatus.NEW, OrderItem.PrepStatus.SENT])
+    elif status_filter == 'working':
+        items = items.filter(prep_status__in=[OrderItem.PrepStatus.ACCEPTED, OrderItem.PrepStatus.PREPARING])
     elif status_filter in {choice[0] for choice in OrderItem.PrepStatus.choices}:
         items = items.filter(prep_status=status_filter)
     else:
-        status_filter = 'active'
-        items = items.filter(prep_status__in=ACTIVE_PREP_STATUSES)
+        status_filter = 'all_visible'
+        items = items.filter(prep_status__in=VISIBLE_PREP_STATUSES)
 
     if station_filter == 'none':
         items = items.filter(prep_station__isnull=True)
@@ -152,19 +169,38 @@ def _board_context(request):
     items, status_filter, station_filter, fulfillment_filter = _filtered_items(request)
     stations = list(PrepStation.objects.filter(is_active=True).order_by('sort_order', 'name_ar'))
     grouped_map = OrderedDict()
+    lane_map = OrderedDict(
+        (key, {'key': key, 'label': label, 'items': []}) for key, label, _statuses in KANBAN_LANES
+    )
     total_pending = 0
 
     for item in items:
         station = item.prep_station or item.product.prep_station_ref
-        key = station.id if station else 'none'
-        if key not in grouped_map:
-            grouped_map[key] = {'key': key, 'station': station, 'label': _prep_station_label(station), 'items': []}
+        station_key = station.id if station else 'none'
+        if station_key not in grouped_map:
+            grouped_map[station_key] = {
+                'key': station_key,
+                'station': station,
+                'label': _prep_station_label(station),
+                'items': [],
+            }
         if item.prep_status == OrderItem.PrepStatus.NEW:
             total_pending += 1
-        grouped_map[key]['items'].append({'item': item, 'actions': _item_actions(item, request.user), 'order_notes': _kitchen_order_notes(item.order)})
+
+        row = {
+            'item': item,
+            'actions': _item_actions(item, request.user),
+            'order_notes': _kitchen_order_notes(item.order),
+            'station': station,
+            'station_label': _prep_station_label(station),
+        }
+        grouped_map[station_key]['items'].append(row)
+        lane_map[_lane_key_for_status(item.prep_status)]['items'].append(row)
 
     return {
+        # groups stays available for compatibility; the v2 partial renders lanes.
         'groups': grouped_map.values(),
+        'lanes': lane_map.values(),
         'stations': stations,
         'station_choices': [('none', 'غير محدد / عام')] + [(str(station.id), _prep_station_label(station)) for station in stations],
         'status_filters': STATUS_FILTERS,
@@ -173,6 +209,7 @@ def _board_context(request):
         'station_filter': station_filter,
         'fulfillment_filter': fulfillment_filter,
         'pending_count': total_pending,
+        'visible_count': sum(len(lane['items']) for lane in lane_map.values()),
         'page_setting': get_page_setting('staff_prep', 'المطبخ / التحضير', 'Kitchen'),
     }
 
@@ -249,6 +286,7 @@ staff_kitchen = staff_prep
 staff_kitchen_partial = staff_prep_partial
 staff_kitchen_order = staff_prep_order
 staff_kitchen_item_status = staff_prep_item_status
+
 
 @require_staff_capability('kitchen_board')
 def staff_prep_station(request, station_code):
