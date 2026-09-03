@@ -5,6 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}{% if system_settings %}{{ system_settings.public_brand_title }}{% else %}مشاريب{% endif %}{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="{% static 'img/favicon.svg' %}">
   <link rel="stylesheet" href="{% static 'css/hub.css' %}">
   <link rel="stylesheet" href="{% static 'css/staff_workspace.css' %}">
   <link rel="stylesheet" href="{% static 'css/customer_space.css' %}">
@@ -12,6 +13,7 @@
   <link rel="stylesheet" href="{% static 'css/staff_foundation.css' %}">
   <link rel="stylesheet" href="{% static 'css/staff_ui_v2.css' %}">
   <link rel="stylesheet" href="{% static 'css/staff_ui_v2_refine.css' %}">
+  <link rel="stylesheet" href="{% static 'css/staff_ui_v2_mobile_fix.css' %}">
   {% include "includes/hub_theme.html" %}
   {% comment %}Legacy density choices map onto the semantic token layer.{% endcomment %}
   {% if system_settings %}<style>:root{
