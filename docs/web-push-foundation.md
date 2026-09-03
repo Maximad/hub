@@ -15,7 +15,9 @@ The current implementation includes:
 - durable push queue stored in `NotificationLog`;
 - separate `notification-worker` production process;
 - role expansion, user preference filtering, dedupe, preparation aggregation,
-  retry/backoff, and permanent subscription revocation.
+  retry/backoff, and permanent subscription revocation;
+- foreground/background duplicate suppression;
+- a read-only `push_readiness` operational audit.
 
 Push remains disabled by default and can be deployed inert before rollout.
 
@@ -74,6 +76,25 @@ New preparation-item notifications use a dedupe key based on order + preparation
 station. One order therefore produces at most one preparation push per device
 for a station, while the payload reports the grouped item count.
 
+## Foreground noise control
+
+Background push and the existing five-second polling channel intentionally stay
+separate, but they coordinate in the browser:
+
+- if a `/staff/` window is visible, the service worker does not create an OS
+  notification; it posts a `hub-push` message to the visible client instead;
+- the visible page immediately polls the existing notification endpoint, updates
+  the bell and plays the configured sound once;
+- polling does not create a second browser notification while a background push
+  subscription is active;
+- when a hidden staff page becomes visible again it polls immediately instead of
+  waiting for the next five-second interval;
+- if no staff window is visible, the service worker shows the normal OS push
+  notification and clicking it focuses/navigates an authenticated staff window.
+
+This keeps polling/audio as the foreground fallback while avoiding two OS alerts
+for the same operational event.
+
 ## Configuration
 
 Push is inert unless all of the following are supplied at runtime:
@@ -111,19 +132,41 @@ python manage.py run_notification_worker --interval 5 --limit 50
 With `PUSH_NOTIFICATIONS_ENABLED=false`, the worker stays healthy but does not
 claim or send queued deliveries.
 
-## Rollout still required
+## Readiness and monitoring
+
+Use the read-only command:
+
+```bash
+python manage.py push_readiness
+python manage.py push_readiness --json
+```
+
+When push is disabled it reports a clean inert state. When enabled it verifies,
+without printing VAPID or subscription credentials:
+
+- provider/VAPID/subject/allowed-host configuration;
+- count of active granted Web Push devices;
+- pending browser delivery count and deliveries overdue by more than ten minutes;
+- failed browser deliveries during the last 24 hours.
+
+A missing test device, stale queue, or recent provider failures are warnings.
+Invalid enabled configuration is a failure. CI runs the command with push
+disabled so deployment remains credential-free.
+
+## Remaining rollout
 
 Before broad activation:
 
-1. deploy with push disabled;
-2. configure real VAPID credentials outside Git;
-3. enable one admin device and test manager-approval push;
-4. test an Android background/closed PWA;
+1. deploy this code with push disabled;
+2. generate/configure a real VAPID key pair outside Git;
+3. run `push_readiness --json` and confirm configuration is valid;
+4. enable one modern Android admin phone and test manager-approval push with the
+   app visible, backgrounded, and closed;
 5. test an iPhone installed to the Home Screen;
-6. verify foreground noise/duplicate behavior;
-7. add a kitchen device and confirm grouped preparation pushes;
-8. expand new-order routing to cashier/service devices;
-9. extend launch readiness and operational monitoring for enabled push.
+6. add a kitchen device and confirm grouped preparation pushes;
+7. expand new-order routing to cashier/service devices;
+8. monitor stale queue, provider failures, duplicate alerts, and acknowledgement
+   times before broader rollout.
 
 The Android 4.4.2 POS tablet remains on polling/audio fallback and is not a
 supported Web Push device.

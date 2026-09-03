@@ -4,6 +4,16 @@ function safeStaffUrl(value) {
   return typeof value === 'string' && value.indexOf('/staff/') === 0 ? value : '/staff/';
 }
 
+function isVisibleStaffClient(client) {
+  if (!client || client.visibilityState !== 'visible') return false;
+  try {
+    var url = new URL(client.url);
+    return url.origin === self.location.origin && url.pathname.indexOf('/staff/') === 0;
+  } catch (error) {
+    return false;
+  }
+}
+
 self.addEventListener('install', function () {
   self.skipWaiting();
 });
@@ -28,12 +38,21 @@ self.addEventListener('push', function (event) {
   var tag = typeof payload.tag === 'string' ? payload.tag.slice(0, 120) : '';
   var url = safeStaffUrl(payload.url);
 
-  event.waitUntil(self.registration.showNotification(title, {
-    body: body,
-    tag: tag,
-    icon: '/static/img/pwa-192.png',
-    badge: '/static/img/pwa-192.png',
-    data: {url: url}
+  event.waitUntil(self.clients.matchAll({type: 'window', includeUncontrolled: true}).then(function (windows) {
+    var visibleStaffClients = windows.filter(isVisibleStaffClient);
+    if (visibleStaffClients.length) {
+      visibleStaffClients.forEach(function (client) {
+        client.postMessage({type: 'hub-push', tag: tag, url: url});
+      });
+      return undefined;
+    }
+    return self.registration.showNotification(title, {
+      body: body,
+      tag: tag,
+      icon: '/static/img/pwa-192.png',
+      badge: '/static/img/pwa-192.png',
+      data: {url: url}
+    });
   }));
 });
 
