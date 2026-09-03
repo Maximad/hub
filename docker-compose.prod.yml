@@ -56,6 +56,22 @@ services:
     networks:
       - default
 
+  notification-worker:
+    build: .
+    container_name: hub-notification-worker
+    restart: unless-stopped
+    command: >-
+      python manage.py run_notification_worker
+      --interval 5
+      --limit 50
+    env_file:
+      - .env
+    depends_on:
+      - db
+    stop_grace_period: 20s
+    networks:
+      - default
+
 volumes:
   hub_db_data:
 
