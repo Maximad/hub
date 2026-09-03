@@ -59,13 +59,19 @@ def staff_home(request):
             session.status == InternetSession.Status.ACTIVE
             for session in visit.internet_sessions.all()
         )
+        gross_syp = sum(order.total_syp for order in orders)
+        remaining_syp = sum(order.remaining_syp for order in orders)
+        active_order_count = sum(order.status in ACTIVE_ORDER_STATUSES for order in orders)
         visit_rows.append(
             {
                 "visit": visit,
-                "gross_syp": sum(order.total_syp for order in orders),
-                "remaining_syp": sum(order.remaining_syp for order in orders),
+                "gross_syp": gross_syp,
+                "remaining_syp": remaining_syp,
                 "latest_order": orders[0] if orders else None,
+                "order_count": len(orders),
+                "active_order_count": active_order_count,
                 "active_internet_count": active_internet_count,
+                "has_unpaid": remaining_syp > 0,
             }
         )
 
