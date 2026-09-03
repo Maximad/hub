@@ -1,0 +1,110 @@
+/* Kitchen / Preparation v2 — status-first operational board. */
+.kitchen-v2{gap:16px}
+.kitchen-v2__hero{align-items:center;padding:0}
+.kitchen-v2__hero .staff-v2-page-head__copy{gap:3px}
+.kitchen-v2__hero .staff-v2-title{font-size:clamp(1.65rem,2.4vw,2.15rem)}
+.kitchen-v2__hero .staff-v2-subtitle{max-width:700px;font-size:.82rem;line-height:1.45}
+.kitchen-v2__hero-actions{flex:0 0 auto}
+
+.kitchen-v2__controls{position:relative;display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:48px;padding:6px;border:1px solid var(--staff-v2-line);border-radius:15px;background:var(--staff-v2-surface);box-shadow:var(--staff-v2-shadow)}
+.kitchen-v2__status-tabs{display:flex;align-items:center;gap:3px;min-width:0;overflow-x:auto;scrollbar-width:none}
+.kitchen-v2__status-tabs::-webkit-scrollbar{display:none}
+.kitchen-v2__status-tab{display:inline-flex;align-items:center;justify-content:center;min-width:88px;height:34px;padding-inline:13px;border-radius:10px;color:var(--staff-v2-muted);font-size:.76rem;font-weight:760;text-decoration:none;white-space:nowrap}
+.kitchen-v2__status-tab:hover{background:var(--staff-v2-surface-soft);color:var(--staff-v2-ink)}
+.kitchen-v2__status-tab.is-active{background:var(--staff-v2-brand-soft);color:var(--staff-v2-brand)}
+.kitchen-v2__filters{position:relative;flex:0 0 auto}
+.kitchen-v2__filters summary{list-style:none;cursor:pointer}
+.kitchen-v2__filters summary::-webkit-details-marker{display:none}
+.kitchen-v2__filter-menu{position:absolute;z-index:40;inset-block-start:calc(100% + 8px);inset-inline-end:0;display:grid;gap:12px;width:min(340px,calc(100vw - 28px));padding:14px;border:1px solid var(--staff-v2-line);border-radius:15px;background:var(--staff-v2-surface);box-shadow:var(--staff-v2-shadow-raised)}
+.kitchen-v2__filter-menu label{display:grid;gap:6px;color:var(--staff-v2-muted);font-size:.72rem;font-weight:760}
+.kitchen-v2__filter-menu select{width:100%;min-height:42px;padding:8px 10px;border:1px solid var(--staff-v2-line);border-radius:11px;background:#fff;color:var(--staff-v2-ink);font:inherit}
+.kitchen-v2__filter-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;padding-top:2px}
+
+.kitchen-v2__live{display:grid;gap:10px;min-width:0}
+.kitchen-v2__live-meta{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-inline:2px;color:var(--staff-v2-muted);font-size:.7rem}
+.kitchen-v2__live-summary{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.kitchen-v2__live-summary strong{color:var(--staff-v2-ink);font-size:.82rem;font-variant-numeric:tabular-nums}
+.kitchen-v2__pulse{width:7px;height:7px;border-radius:50%;background:#bbb6ae}
+.kitchen-v2__pulse.is-active{background:var(--staff-v2-sand);box-shadow:0 0 0 4px var(--staff-v2-sand-soft)}
+.kitchen-v2__pending{padding:3px 7px;border-radius:999px;background:var(--staff-v2-sand-soft);color:#8d5b17;font-weight:760}
+.kitchen-v2__updated{white-space:nowrap;font-variant-numeric:tabular-nums}
+
+.kitchen-v2__kanban{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start}
+.kitchen-v2__lane{display:grid;grid-template-rows:auto 1fr;min-width:0;padding:9px;border:1px solid var(--staff-v2-line);border-radius:18px;background:color-mix(in srgb,var(--staff-v2-surface-soft),#fff 44%)}
+.kitchen-v2__lane-head{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:42px;padding:2px 4px 9px}
+.kitchen-v2__lane-title{display:flex;align-items:center;gap:8px;min-width:0}
+.kitchen-v2__lane-title h2{margin:0;font-size:.9rem;line-height:1.2}
+.kitchen-v2__lane-dot{width:8px;height:8px;border-radius:50%;background:#aaa69f}
+.kitchen-v2__lane--incoming .kitchen-v2__lane-dot{background:var(--staff-v2-sand)}
+.kitchen-v2__lane--working .kitchen-v2__lane-dot{background:var(--staff-v2-brand)}
+.kitchen-v2__lane--ready .kitchen-v2__lane-dot{background:var(--staff-v2-success)}
+.kitchen-v2__lane-count{display:grid;place-items:center;min-width:27px;height:27px;padding-inline:7px;border-radius:999px;background:var(--staff-v2-surface);color:var(--staff-v2-muted);font-size:.7rem;font-weight:800;font-variant-numeric:tabular-nums}
+.kitchen-v2__tickets{display:grid;gap:8px;align-content:start}
+
+.kitchen-v2__ticket{display:grid;gap:10px;min-width:0;padding:13px;border:1px solid var(--staff-v2-line);border-radius:14px;background:var(--staff-v2-surface);box-shadow:0 4px 18px rgba(38,44,40,.035)}
+.kitchen-v2__ticket:hover{border-color:#d7cdc0}
+.kitchen-v2__ticket-top{display:grid;gap:8px}
+.kitchen-v2__ticket-id{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
+.kitchen-v2__ticket-id strong{font-size:1rem;line-height:1;font-variant-numeric:tabular-nums}
+.kitchen-v2__ticket-id span{display:inline-flex;align-items:center;gap:4px;color:var(--staff-v2-muted);font-size:.66rem;white-space:nowrap}
+.kitchen-v2__ticket-id .staff-icon{width:13px;height:13px}
+.kitchen-v2__ticket-chips{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.kitchen-v2__ticket-chips .staff-v2-badge{min-height:25px;padding:4px 8px;border:0;border-radius:999px;background:var(--staff-v2-surface-soft);color:var(--staff-v2-muted);font-size:.65rem;font-weight:730}
+.kitchen-v2__ticket--incoming .kitchen-v2__status-badge{background:var(--staff-v2-sand-soft);color:#946018}
+.kitchen-v2__ticket--working .kitchen-v2__status-badge{background:var(--staff-v2-brand-soft);color:var(--staff-v2-brand)}
+.kitchen-v2__ticket--ready .kitchen-v2__status-badge{background:var(--staff-v2-success-soft);color:var(--staff-v2-success)}
+.kitchen-v2__station-badge{margin-inline-start:auto}
+.kitchen-v2__location{padding:7px 9px;border-radius:10px;background:var(--staff-v2-surface-soft);color:#5f5d57;font-size:.7rem;line-height:1.35}
+.kitchen-v2__item-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding-block:2px}
+.kitchen-v2__item-row h3{margin:0;font-size:1.02rem;line-height:1.4;overflow-wrap:anywhere}
+.kitchen-v2__qty{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;min-width:38px;height:30px;padding-inline:8px;border-radius:10px;background:var(--staff-v2-surface-soft);font-size:.82rem;font-weight:850;font-variant-numeric:tabular-nums}
+.kitchen-v2__options{display:flex;gap:5px;flex-wrap:wrap}
+.kitchen-v2__options span{padding:4px 7px;border:1px solid var(--staff-v2-line);border-radius:999px;color:var(--staff-v2-muted);font-size:.64rem;line-height:1.25}
+.kitchen-v2__notes{display:grid;gap:5px;padding:9px 10px;border-inline-start:3px solid var(--staff-v2-sand);border-radius:10px;background:var(--staff-v2-sand-soft);font-size:.69rem;line-height:1.45}
+.kitchen-v2__notes p{margin:0}
+.kitchen-v2__ticket-actions{display:flex;align-items:center;gap:6px;padding-top:2px;border-top:1px solid var(--staff-v2-line)}
+.kitchen-v2__ticket-actions form{display:contents}
+.kitchen-v2__ticket-actions .staff-v2-button{flex:1 1 auto;min-height:36px;padding-inline:10px;font-size:.7rem}
+.kitchen-v2__ticket-actions .kitchen-v2__print{flex:0 0 auto}
+.kitchen-v2__action-danger{border-color:#efd7d3!important;background:var(--staff-v2-danger-soft)!important;color:var(--staff-v2-danger)!important}
+.kitchen-v2__lane-empty{display:grid;place-items:center;gap:8px;min-height:130px;padding:18px;border:1px dashed #d8d1c7;border-radius:13px;color:var(--staff-v2-muted);text-align:center}
+.kitchen-v2__lane-empty-mark{width:28px;height:4px;border-radius:999px;background:#d7d1c8}
+.kitchen-v2__lane-empty p{margin:0;font-size:.72rem}
+
+@media(max-width:1100px){
+  .kitchen-v2__kanban{gap:9px}
+  .kitchen-v2__lane{padding:7px}
+  .kitchen-v2__ticket{padding:11px}
+  .kitchen-v2__ticket-actions{flex-wrap:wrap}
+}
+
+@media(max-width:900px){
+  .kitchen-v2__kanban{grid-template-columns:1fr;gap:10px}
+  .kitchen-v2__lane{padding:8px}
+  .kitchen-v2__tickets{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .kitchen-v2__filter-menu{position:fixed;inset:auto 12px calc(76px + env(safe-area-inset-bottom)) 12px;width:auto;max-height:70dvh;overflow:auto}
+}
+
+@media(max-width:700px){
+  .kitchen-v2{gap:12px}
+  .kitchen-v2__hero{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
+  .kitchen-v2__hero .staff-v2-eyebrow,.kitchen-v2__hero .staff-v2-subtitle{display:none}
+  .kitchen-v2__hero .staff-v2-title{font-size:1.35rem}
+  .kitchen-v2__hero-actions .staff-v2-button span{display:none}
+  .kitchen-v2__hero-actions .staff-v2-button{width:38px;min-width:38px;padding:0}
+  .kitchen-v2__controls{gap:6px;min-height:44px;padding:4px;border-radius:13px}
+  .kitchen-v2__status-tabs{flex:1 1 auto}
+  .kitchen-v2__status-tab{min-width:72px;height:32px;padding-inline:10px;font-size:.69rem}
+  .kitchen-v2__filters .staff-v2-button{min-height:34px;padding-inline:9px;font-size:.69rem}
+  .kitchen-v2__live-meta{font-size:.64rem}
+  .kitchen-v2__pending{display:none}
+  .kitchen-v2__kanban{gap:9px}
+  .kitchen-v2__lane{border-radius:15px}
+  .kitchen-v2__lane-head{min-height:38px;padding-bottom:7px}
+  .kitchen-v2__lane-title h2{font-size:.84rem}
+  .kitchen-v2__tickets{grid-template-columns:1fr;gap:7px}
+  .kitchen-v2__ticket{gap:9px;padding:11px;border-radius:13px}
+  .kitchen-v2__ticket-id strong{font-size:.94rem}
+  .kitchen-v2__item-row h3{font-size:.96rem}
+  .kitchen-v2__ticket-actions .staff-v2-button{min-height:40px}
+}

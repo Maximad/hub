@@ -1,52 +1,81 @@
-{% for group in groups %}
-<section class="hub-card hub-section kitchen-station">
-  <div class="kitchen-station__title">
-    <h3>{{ group.label }}</h3>
-    <span class="hub-badge hub-badge-info">{{ group.items|length }} عنصر</span>
+<div class="kitchen-v2__live-meta">
+  <div class="kitchen-v2__live-summary">
+    <span class="kitchen-v2__pulse{% if pending_count %} is-active{% endif %}" aria-hidden="true"></span>
+    <strong>{{ visible_count }}</strong>
+    <span>عنصر ظاهر</span>
+    {% if pending_count %}<span class="kitchen-v2__pending">{{ pending_count }} بانتظار الاستلام</span>{% endif %}
   </div>
-  <div class="kitchen-items-grid">
-  {% for row in group.items %}{% with item=row.item order=row.item.order %}
-    <article class="hub-list-card kitchen-item-card kitchen-status-{{ item.prep_status }}{% if item.prep_status == 'new' or item.prep_status == 'sent' %} kitchen-item-card--new{% endif %}">
-      <div class="kitchen-card-topline">
-        <strong class="kitchen-order-number">{{ order.display_number }}</strong>
-        <span class="hub-badge kitchen-fulfillment-badge">{{ order.get_fulfillment_label }}</span>
-        <span class="hub-badge kitchen-status-badge">{{ item.get_prep_status_display }}</span><span class="hub-badge hub-badge-info">{{ item.prep_station.name_ar|default:group.label }}</span>
-      </div>
-      <div class="kitchen-card-meta">
-        <span>منذ {{ order.created_at|timesince }}</span>
-        {% if order.location_detail %}<span>{{ order.location_detail }}</span>{% endif %}
-      </div>
-      <h4 class="kitchen-item-name">{{ item.product_name_ar_snapshot }}</h4>
-      <div class="kitchen-qty">الكمية: <strong>{{ item.quantity }}</strong></div>
+  <span class="kitchen-v2__updated">آخر تحديث {% now "H:i:s" %}</span>
+</div>
 
-      {% if item.selected_options_snapshot %}
-      <div class="kitchen-options">
-        <strong>الخيارات:</strong>
-        <ul>
+<div class="kitchen-v2__kanban" aria-label="لوحة التحضير">
+  {% for lane in lanes %}
+  <section class="kitchen-v2__lane kitchen-v2__lane--{{ lane.key }}" aria-labelledby="kitchen-lane-{{ lane.key }}">
+    <header class="kitchen-v2__lane-head">
+      <div class="kitchen-v2__lane-title">
+        <span class="kitchen-v2__lane-dot" aria-hidden="true"></span>
+        <h2 id="kitchen-lane-{{ lane.key }}">{{ lane.label }}</h2>
+      </div>
+      <span class="kitchen-v2__lane-count">{{ lane.items|length }}</span>
+    </header>
+
+    <div class="kitchen-v2__tickets">
+      {% for row in lane.items %}{% with item=row.item order=row.item.order %}
+      <article class="kitchen-v2__ticket kitchen-v2__ticket--{{ lane.key }}">
+        <div class="kitchen-v2__ticket-top">
+          <div class="kitchen-v2__ticket-id">
+            <strong>{{ order.display_number }}</strong>
+            <span>{% include "includes/staff_icon.html" with name="clock" class="staff-icon--sm" %} منذ {{ order.created_at|timesince }}</span>
+          </div>
+          <div class="kitchen-v2__ticket-chips">
+            <span class="staff-v2-badge">{{ order.get_fulfillment_label }}</span>
+            <span class="staff-v2-badge kitchen-v2__station-badge">{{ row.station_label }}</span>
+            <span class="staff-v2-badge kitchen-v2__status-badge">{{ item.get_prep_status_display }}</span>
+          </div>
+        </div>
+
+        {% if order.location_detail %}<div class="kitchen-v2__location">{{ order.location_detail }}</div>{% endif %}
+
+        <div class="kitchen-v2__item-row">
+          <h3>{{ item.product_name_ar_snapshot }}</h3>
+          <span class="kitchen-v2__qty">× {{ item.quantity }}</span>
+        </div>
+
+        {% if item.selected_options_snapshot %}
+        <div class="kitchen-v2__options">
           {% for group_snapshot in item.selected_options_snapshot %}
-            {% for option in group_snapshot.options %}<li>{{ group_snapshot.group_name_ar }}: {{ option.name_ar }}</li>{% endfor %}
+            {% for option in group_snapshot.options %}<span>{{ group_snapshot.group_name_ar }}: {{ option.name_ar }}</span>{% endfor %}
           {% endfor %}
-        </ul>
-      </div>
-      {% endif %}
+        </div>
+        {% endif %}
 
-      {% if item.item_note %}<div class="kitchen-note"><strong>ملاحظة العنصر:</strong> {{ item.item_note|linebreaksbr }}</div>{% endif %}
-      {% if row.order_notes %}<div class="kitchen-note kitchen-note--order"><strong>ملاحظة الطلب:</strong> {{ row.order_notes|linebreaksbr }}</div>{% endif %}
-      {% if order.is_delivery and order.delivery_notes %}<div class="kitchen-note kitchen-note--delivery"><strong>ملاحظة التوصيل:</strong> {{ order.delivery_notes|linebreaksbr }}</div>{% endif %}
+        {% if item.item_note or row.order_notes or order.is_delivery and order.delivery_notes %}
+        <div class="kitchen-v2__notes">
+          {% if item.item_note %}<p><strong>العنصر:</strong> {{ item.item_note|linebreaksbr }}</p>{% endif %}
+          {% if row.order_notes %}<p><strong>الطلب:</strong> {{ row.order_notes|linebreaksbr }}</p>{% endif %}
+          {% if order.is_delivery and order.delivery_notes %}<p><strong>التوصيل:</strong> {{ order.delivery_notes|linebreaksbr }}</p>{% endif %}
+        </div>
+        {% endif %}
 
-      <div class="kitchen-actions"><a class="hub-button" href="{% url 'staff_order_prep_ticket' order.public_code %}?station={{ item.prep_station.code|default:'' }}">طباعة التذكرة</a>
-        {% for action,label,css_class in row.actions %}
+        <div class="kitchen-v2__ticket-actions">
+          {% for action,label,css_class in row.actions %}
           <form method="post" action="{% url 'staff_kitchen_item_status' item.id %}">
             {% csrf_token %}
             <input type="hidden" name="action" value="{{ action }}">
-            <button class="{{ css_class }} kitchen-action-button" type="submit">{{ label }}</button>
+            <button class="staff-v2-button{% if action == 'cancel' %} kitchen-v2__action-danger{% elif action == 'ready' or action == 'accept' or action == 'prepare' or action == 'served' %} staff-v2-button--primary{% endif %}" type="submit">{{ label }}</button>
           </form>
-        {% empty %}<span class="hub-muted-text">لا يوجد إجراء متاح الآن.</span>{% endfor %}
+          {% endfor %}
+          <a class="staff-v2-button staff-v2-button--ghost kitchen-v2__print" href="{% url 'staff_order_prep_ticket' order.public_code %}?station={{ item.prep_station.code|default:'' }}">طباعة</a>
+        </div>
+      </article>
+      {% endwith %}
+      {% empty %}
+      <div class="kitchen-v2__lane-empty">
+        <span class="kitchen-v2__lane-empty-mark" aria-hidden="true"></span>
+        <p>لا توجد عناصر في هذه المرحلة.</p>
       </div>
-    </article>
-  {% endwith %}{% endfor %}
-  </div>
-</section>
-{% empty %}
-<section class="hub-card hub-section"><p class="hub-empty-state">لا توجد عناصر تحضير مطابقة للتصفية الحالية.</p></section>
-{% endfor %}
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+</div>
