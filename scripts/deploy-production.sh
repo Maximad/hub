@@ -74,7 +74,7 @@ on_error() {
     fi
 
     dc ps >&2 || true
-    dc logs --tail=150 web internet-worker >&2 || true
+    dc logs --tail=150 web internet-worker notification-worker >&2 || true
 
     exit "$code"
 }
@@ -148,7 +148,6 @@ docker info >/dev/null 2>&1 ||
 dc config --quiet ||
     die "Combined production Docker Compose configuration is invalid."
 
-# Validate the deploy-policy override before taking the production lock.
 if allow_operational_data; then
     log "Operational-data retention explicitly approved for this deployment"
 fi
@@ -215,7 +214,7 @@ fi
 
 log "Building application images"
 
-dc build web internet-worker
+dc build web internet-worker notification-worker
 
 log "Running pre-deployment checks"
 
@@ -248,9 +247,9 @@ else
         web python manage.py launch_readiness --json
 fi
 
-log "Replacing web + Internet worker containers"
+log "Replacing web + background worker containers"
 
-dc up -d --no-deps --force-recreate web internet-worker
+dc up -d --no-deps --force-recreate web internet-worker notification-worker
 
 log "Collecting static files"
 
@@ -290,7 +289,7 @@ check_route "/staff/pos/" "302"
 log "Checking recent logs"
 
 ERRORS="$(
-    dc logs --since=5m web internet-worker 2>&1 |
+    dc logs --since=5m web internet-worker notification-worker 2>&1 |
         grep -Ei \
         "traceback|server error|invalidstorageerror|noreversematch|templatedoesnotexist|programmingerror|operationalerror|modulenotfounderror" \
         || true

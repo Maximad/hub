@@ -1,30 +1,78 @@
-# Staff Web Push foundation
+# Staff Web Push
 
 ## Scope
 
-This foundation adds a provider boundary, durable data structures, authenticated
-browser subscription registration, a staff PWA manifest, and a root-scoped
-service worker for true background staff notifications. It does not enqueue
-delivery jobs, start a worker, or send production notifications. The feature
-remains disabled by default.
+Hub uses the existing `NotificationEvent`, `NotificationRecipient`,
+`NotificationPreference`, and `NotificationLog` records as the notification
+source of truth. Web Push is an additional delivery channel, not a second
+notification system.
 
-The existing `NotificationEvent` and `NotificationRecipient` records remain the
-source of truth. Browser push will be an additional delivery channel recorded in
-`NotificationLog`, not a parallel notification system.
+The current implementation includes:
+
+- provider-independent push transport boundary;
+- authenticated browser subscription registration;
+- staff PWA manifest and root-scoped service worker;
+- durable push queue stored in `NotificationLog`;
+- separate `notification-worker` production process;
+- role expansion, user preference filtering, dedupe, preparation aggregation,
+  retry/backoff, and permanent subscription revocation.
+
+Push remains disabled by default and can be deployed inert before rollout.
 
 ## Security boundaries
 
 - VAPID private material is server-only and must never enter Git, templates, API
   responses, client JavaScript, logs, or error messages.
 - Browser subscription endpoints and encryption keys are delivery credentials.
-  The technical admin view intentionally hides them.
+  Administrative surfaces identify subscriptions by digest/device label rather
+  than exposing those credentials.
 - Push payload links are restricted to the authenticated `/staff/` area.
 - Subscription registration requires an authenticated staff session, CSRF, a
-  small JSON request, and a trusted browser push-service hostname.
+  bounded JSON request, and a trusted browser push-service hostname.
 - The service worker does not intercept fetches or cache authenticated pages.
-- Provider acceptance will mean only that the push service accepted the request;
-  it must not be presented as proof that a person saw the notification.
-- `NotificationRecipient.read_at` remains the acknowledgement signal.
+- Lock-screen payloads are intentionally generic. They do not include customer
+  phone numbers, addresses, payment data, private notes, or product notes.
+- Provider acceptance means only that the browser push provider accepted the
+  request. It is not proof that a person saw the notification.
+- `NotificationRecipient.read_at` remains the human acknowledgement signal.
+- Queue/provider failures are isolated from order/request transactions.
+
+## Initial push routing matrix
+
+| Event | Push audience | Push |
+| --- | --- | --- |
+| New order | Admin, cashier, service/waiter | Yes |
+| New preparation items | Relevant station + admin | Yes, grouped per order/station |
+| Preparation item ready | Service/waiter + admin | Yes |
+| Manager approval needed | Admin | Yes |
+| Delivery order created | Admin, cashier, service/waiter | Yes |
+| Payment pending | Cashier | No initially |
+| Day closed | Admin, cashier | No initially |
+
+The current account model uses the role name `waiter`; notification routing maps
+the historical `service` audience to that role explicitly.
+
+## Durable delivery behavior
+
+`NotificationLog` rows with the browser channel act as the durable queue.
+Delivery records are created only after the notification transaction commits.
+The delivery worker then re-checks, immediately before sending:
+
+- event active/expiry state;
+- current user active state and role targeting;
+- current user notification preferences;
+- browser-notification opt-in;
+- subscription active/revoked/permission state.
+
+The worker claims records using database row locks plus a short lease so multiple
+worker processes cannot normally send the same row concurrently. Temporary
+provider failures use bounded exponential backoff. Permanent `404/410`
+subscription failures revoke the subscription. Provider exception text is not
+stored because browser libraries can include credentials in exception strings.
+
+New preparation-item notifications use a dedupe key based on order + preparation
+station. One order therefore produces at most one preparation push per device
+for a station, while the payload reports the grouped item count.
 
 ## Configuration
 
@@ -44,8 +92,38 @@ Django system checks fail when push is enabled with an unsupported provider,
 missing VAPID values, an invalid subject URI, identical public/private keys, or
 an empty endpoint allowlist.
 
-## Next implementation phase
+## Production process
 
-The next phase should add a database-backed worker, retry policy, recipient
-expansion, preference filtering, grouping, and staging-device tests. Delivery
-remains off until those controls are complete.
+Production Compose runs:
+
+```text
+web
+internet-worker
+notification-worker
+```
+
+The notification worker command is:
+
+```bash
+python manage.py run_notification_worker --interval 5 --limit 50
+```
+
+With `PUSH_NOTIFICATIONS_ENABLED=false`, the worker stays healthy but does not
+claim or send queued deliveries.
+
+## Rollout still required
+
+Before broad activation:
+
+1. deploy with push disabled;
+2. configure real VAPID credentials outside Git;
+3. enable one admin device and test manager-approval push;
+4. test an Android background/closed PWA;
+5. test an iPhone installed to the Home Screen;
+6. verify foreground noise/duplicate behavior;
+7. add a kitchen device and confirm grouped preparation pushes;
+8. expand new-order routing to cashier/service devices;
+9. extend launch readiness and operational monitoring for enabled push.
+
+The Android 4.4.2 POS tablet remains on polling/audio fallback and is not a
+supported Web Push device.
