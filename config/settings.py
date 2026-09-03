@@ -238,6 +238,15 @@ MEMBER_ACTIVATION_TOKEN_AGE = int(os.getenv('MEMBER_ACTIVATION_TOKEN_AGE', 60 * 
 MEMBER_DEVICE_COOKIE_SECURE = os.getenv('MEMBER_DEVICE_COOKIE_SECURE', str(not DEBUG)).lower() == 'true'
 PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', '')
 
+# True background notifications are opt-in and disabled until a worker and
+# browser subscription flow are deployed. VAPID private material is server-only.
+PUSH_NOTIFICATIONS_ENABLED = bool_env('PUSH_NOTIFICATIONS_ENABLED', False)
+PUSH_PROVIDER = os.getenv('PUSH_PROVIDER', 'webpush').strip().lower()
+VAPID_PUBLIC_KEY = os.getenv('VAPID_PUBLIC_KEY', '').strip()
+VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY', '').strip()
+VAPID_SUBJECT = os.getenv('VAPID_SUBJECT', '').strip()
+PUSH_HTTP_TIMEOUT_SECONDS = float(os.getenv('PUSH_HTTP_TIMEOUT_SECONDS', '10'))
+
 # A second, manager-level user must approve transfers at or above this amount.
 TRANSFER_APPROVAL_LIMIT_SYP = int(os.getenv('TRANSFER_APPROVAL_LIMIT_SYP', '50000'))
 

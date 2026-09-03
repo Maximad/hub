@@ -32,7 +32,7 @@ from .models import (
     OrderItem,
     PageSetting,
     Payment,
-    NotificationEvent, NotificationRecipient, NotificationPreference, NotificationLog,
+    NotificationEvent, NotificationRecipient, NotificationPreference, NotificationLog, PushSubscription,
     Product,
     Room,
     Shift,
@@ -862,9 +862,29 @@ class NotificationLogAdmin(ReadOnlyWorkflowAdmin):
     def get_model_perms(self, request):
         return {}
 
-    list_display = ('notification_event', 'channel', 'status', 'recipient_user', 'recipient_role', 'recipient_station', 'created_at', 'sent_at')
+    list_display = ('notification_event', 'channel', 'status', 'recipient_user', 'recipient_role', 'recipient_station', 'provider', 'attempt_count', 'created_at', 'sent_at')
     list_filter = ('channel', 'status', 'created_at')
-    autocomplete_fields = ('notification_event', 'recipient_user', 'recipient_station')
+    autocomplete_fields = ('notification_event', 'push_subscription', 'recipient_user', 'recipient_station')
+
+
+@admin.register(PushSubscription)
+class PushSubscriptionAdmin(ReadOnlyWorkflowAdmin):
+    def get_model_perms(self, request):
+        return {}
+
+    list_display = ('user', 'device_label', 'provider', 'permission_state', 'is_active', 'last_seen_at', 'failure_count')
+    list_filter = ('provider', 'permission_state', 'is_active')
+    search_fields = ('user__username', 'device_label')
+    autocomplete_fields = ('user',)
+
+    def get_fields(self, request, obj=None):
+        # Browser endpoints and encryption keys are delivery credentials and are
+        # intentionally absent even from this hidden technical admin view.
+        return (
+            'user', 'device_label', 'provider', 'permission_state', 'is_active',
+            'last_seen_at', 'revoked_at', 'failure_count', 'endpoint_hash',
+            'created_at', 'updated_at',
+        )
 
 
 @admin.register(NotificationPreference)

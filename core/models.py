@@ -1,3 +1,4 @@
+import hashlib
 import re
 import secrets
 import uuid
@@ -645,6 +646,89 @@ class NotificationPreference(models.Model):
         return f'تنبيهات {self.user}'
 
 
+class PushSubscription(TimeStampedModel):
+    """A browser push subscription owned by one authenticated staff user.
+
+    The endpoint and encryption keys are delivery credentials. Administrative
+    surfaces deliberately identify subscriptions by their digest and device
+    label rather than displaying those credentials.
+    """
+
+    class Provider(models.TextChoices):
+        WEBPUSH = 'webpush', 'Web Push'
+
+    class PermissionState(models.TextChoices):
+        GRANTED = 'granted', 'Granted'
+        PROMPT = 'prompt', 'Prompt'
+        DENIED = 'denied', 'Denied'
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='push_subscriptions',
+    )
+    provider = models.CharField(
+        max_length=20,
+        choices=Provider.choices,
+        default=Provider.WEBPUSH,
+    )
+    endpoint = models.TextField()
+    endpoint_hash = models.CharField(max_length=64, unique=True, editable=False)
+    p256dh = models.TextField()
+    auth_secret = models.TextField()
+    device_label = models.CharField(max_length=80, blank=True)
+    user_agent = models.CharField(max_length=255, blank=True)
+    permission_state = models.CharField(
+        max_length=16,
+        choices=PermissionState.choices,
+        default=PermissionState.GRANTED,
+    )
+    is_active = models.BooleanField(default=True)
+    last_seen_at = models.DateTimeField(default=timezone.now)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    failure_count = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ['-last_seen_at', '-created_at']
+        indexes = [
+            models.Index(fields=['user', 'is_active', 'last_seen_at']),
+            models.Index(fields=['provider', 'is_active']),
+        ]
+
+    def clean(self):
+        super().clean()
+        self.endpoint = (self.endpoint or '').strip()
+        self.p256dh = (self.p256dh or '').strip()
+        self.auth_secret = (self.auth_secret or '').strip()
+        if self.provider == self.Provider.WEBPUSH:
+            if not self.endpoint.startswith('https://'):
+                raise ValidationError({'endpoint': 'Web Push endpoints must use HTTPS.'})
+            if not self.p256dh:
+                raise ValidationError({'p256dh': 'A Web Push encryption key is required.'})
+            if not self.auth_secret:
+                raise ValidationError({'auth_secret': 'A Web Push authentication secret is required.'})
+
+    def save(self, *args, **kwargs):
+        self.endpoint = (self.endpoint or '').strip()
+        if not self.endpoint:
+            raise ValidationError({'endpoint': 'A Web Push endpoint is required.'})
+        self.endpoint_hash = hashlib.sha256(self.endpoint.encode('utf-8')).hexdigest()
+        if kwargs.get('update_fields') and 'endpoint' in kwargs['update_fields']:
+            kwargs['update_fields'] = set(kwargs['update_fields']) | {'endpoint_hash'}
+        super().save(*args, **kwargs)
+
+    def revoke(self):
+        self.is_active = False
+        self.revoked_at = timezone.now()
+        self.save(update_fields=(
+            'is_active', 'revoked_at', 'updated_at',
+        ))
+
+    def __str__(self):
+        label = self.device_label or self.endpoint_hash[:12]
+        return f'{self.user} — {label}'
+
+
 class NotificationLog(TimeStampedModel):
     class Channel(models.TextChoices):
         SYSTEM = 'system', 'System'
@@ -662,15 +746,39 @@ class NotificationLog(TimeStampedModel):
 
     notification_event = models.ForeignKey(NotificationEvent, on_delete=models.CASCADE, related_name='logs')
     channel = models.CharField(max_length=20, choices=Channel.choices, default=Channel.SYSTEM)
+    push_subscription = models.ForeignKey(
+        PushSubscription,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='notification_logs',
+    )
     recipient_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='notification_logs')
     recipient_role = models.CharField(max_length=30, blank=True)
     recipient_station = models.ForeignKey('catalog.PrepStation', on_delete=models.SET_NULL, null=True, blank=True, related_name='notification_logs')
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     error_message = models.TextField(blank=True)
+    error_code = models.CharField(max_length=80, blank=True)
+    provider = models.CharField(max_length=20, blank=True)
+    provider_message_id = models.CharField(max_length=255, blank=True)
+    attempt_count = models.PositiveSmallIntegerField(default=0)
+    next_attempt_at = models.DateTimeField(null=True, blank=True)
+    dedupe_key = models.CharField(max_length=255, blank=True)
     sent_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['channel', 'status', 'next_attempt_at']),
+            models.Index(fields=['push_subscription', 'created_at']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['push_subscription', 'channel', 'dedupe_key'],
+                condition=Q(push_subscription__isnull=False) & ~Q(dedupe_key=''),
+                name='uniq_push_delivery_dedupe',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.notification_event} — {self.channel} — {self.status}'

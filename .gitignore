@@ -6,3 +6,5 @@ __pycache__/
 *.pyc
 media/
 staticfiles/
+secrets/
+*.pem
