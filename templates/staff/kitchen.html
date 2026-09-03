@@ -1,43 +1,59 @@
 {% extends "base.html" %}
 {% block title %}المطبخ / التحضير{% endblock %}
+{% block body_class %}staff-workspace-page staff-ui-v2-page kitchen-v2-page{% endblock %}
 {% block content %}
-<section class="hub-section kitchen-board" aria-labelledby="kitchen-title">
-  <div class="kitchen-board__header">
-    <div>
-      <h2 id="kitchen-title" class="hub-section-title">{{ page_setting.title|default:"المطبخ / التحضير" }}</h2>
-      {% if page_setting.subtitle %}<p class="hub-muted-text">{{ page_setting.subtitle }}</p>{% endif %}
+<section class="staff-v2-page kitchen-v2" aria-labelledby="kitchen-title">
+  <header class="staff-v2-page-head kitchen-v2__hero">
+    <div class="staff-v2-page-head__copy">
+      <span class="staff-v2-eyebrow">تشغيل هَبّ</span>
+      <h1 id="kitchen-title" class="staff-v2-title">{{ page_setting.title|default:"التحضير" }}</h1>
+      <p class="staff-v2-subtitle">استلام الطلبات، متابعة التحضير، وتسليم العناصر الجاهزة من لوحة واحدة.</p>
     </div>
-    <div class="kitchen-board__alert{% if pending_count %} kitchen-board__alert--active{% endif %}">
-      <span class="hub-badge hub-badge-warning">جديد</span>
-      <strong>{{ pending_count }}</strong>
-      <span>عنصر بانتظار الاستلام</span>
+    <div class="staff-v2-actions kitchen-v2__hero-actions">
+      <a class="staff-v2-button staff-v2-button--ghost" href="{{ request.get_full_path }}">
+        {% include "includes/staff_icon.html" with name="clock" class="staff-icon--sm" %}
+        <span>تحديث الآن</span>
+      </a>
     </div>
-    <div class="hub-toolbar"><span class="hub-badge hub-badge-info">آخر تحديث: {% now "H:i:s" %}</span><a class="hub-button" href="{{ request.get_full_path }}">تحديث الآن</a></div>
+  </header>
+
+  <div class="kitchen-v2__controls" aria-label="أدوات تصفية التحضير">
+    <nav class="kitchen-v2__status-tabs" aria-label="حالة التحضير">
+      {% for value,label in status_filters %}
+        <a class="kitchen-v2__status-tab{% if status_filter == value %} is-active{% endif %}" href="{% url 'staff_prep' %}?status={{ value }}{% if station_filter %}&station={{ station_filter }}{% endif %}{% if fulfillment_filter %}&fulfillment={{ fulfillment_filter }}{% endif %}"{% if status_filter == value %} aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
+    </nav>
+
+    <details class="kitchen-v2__filters">
+      <summary class="staff-v2-button staff-v2-button--ghost">
+        {% include "includes/staff_icon.html" with name="filter" class="staff-icon--sm" %}
+        <span>تصفية</span>
+      </summary>
+      <form class="kitchen-v2__filter-menu" method="get" action="{% url 'staff_prep' %}">
+        <input type="hidden" name="status" value="{{ status_filter }}">
+        <label>
+          <span>محطة التحضير</span>
+          <select name="station">
+            <option value="" {% if not station_filter %}selected{% endif %}>كل المحطات</option>
+            {% for value,label in station_choices %}<option value="{{ value }}" {% if station_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </label>
+        <label>
+          <span>نوع الطلب</span>
+          <select name="fulfillment">
+            <option value="" {% if not fulfillment_filter %}selected{% endif %}>كل الأنواع</option>
+            {% for value,label in fulfillment_filters %}<option value="{{ value }}" {% if fulfillment_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </label>
+        <div class="kitchen-v2__filter-actions">
+          <a class="staff-v2-button staff-v2-button--ghost" href="{% url 'staff_prep' %}?status={{ status_filter }}">مسح</a>
+          <button class="staff-v2-button staff-v2-button--primary" type="submit">تطبيق</button>
+        </div>
+      </form>
+    </details>
   </div>
 
-  <form class="hub-card kitchen-filters hub-form-section" method="get" action="{% url 'staff_prep' %}">
-    <div class="kitchen-tabs" role="tablist" aria-label="تصفية الحالة">
-      {% for value,label in status_filters %}
-        <a class="hub-button {% if status_filter == value %}hub-button-secondary kitchen-filter-active{% else %}hub-button-secondary{% endif %}" href="{% url 'staff_prep' %}?status={{ value }}{% if station_filter %}&station={{ station_filter }}{% endif %}{% if fulfillment_filter %}&fulfillment={{ fulfillment_filter }}{% endif %}">{{ label }}</a>
-      {% endfor %}
-    </div>
-    <label>حسب محطة التحضير
-      <select class="hub-input" name="station">
-        <option value="" {% if not station_filter %}selected{% endif %}>كل المحطات</option>
-        {% for value,label in station_choices %}<option value="{{ value }}" {% if station_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
-      </select>
-    </label>
-    <label>حسب نوع الطلب
-      <select class="hub-input" name="fulfillment">
-        <option value="" {% if not fulfillment_filter %}selected{% endif %}>كل الأنواع</option>
-        {% for value,label in fulfillment_filters %}<option value="{{ value }}" {% if fulfillment_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
-      </select>
-    </label>
-    <input type="hidden" name="status" value="{{ status_filter }}">
-    <button class="hub-button" type="submit">تطبيق التصفية</button>
-  </form>
-
-  <div id="kitchen-board" hx-get="{% url 'staff_kitchen_partial' %}?{{ request.GET.urlencode }}" hx-trigger="load, every 5s" hx-target="#kitchen-board" hx-swap="innerHTML">
+  <div id="kitchen-board" class="kitchen-v2__live" hx-get="{% url 'staff_kitchen_partial' %}?{{ request.GET.urlencode }}" hx-trigger="load, every 5s" hx-target="#kitchen-board" hx-swap="innerHTML">
     {% include "staff/kitchen_partial.html" %}
   </div>
 </section>
