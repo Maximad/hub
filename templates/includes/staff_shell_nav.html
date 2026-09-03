@@ -17,7 +17,18 @@
     </nav>
 
     <div class="staff-app-header__tools">
-      <a class="staff-app-header__tool" href="{% url 'staff_home' %}#staff-more" aria-label="المساعدة">{% include "includes/staff_icon.html" with name="help" %}</a>
+      <div id="staff-notifications" class="staff-notifications staff-app-header__notifications" data-poll-url="{% url 'staff_notifications_poll' %}" data-mark-read-url="{% url 'staff_notifications_mark_read' %}" data-pref-url="{% url 'staff_notifications_preferences' %}">
+        <button type="button" id="staff-notification-toggle" class="staff-app-header__tool staff-notification-bell" aria-label="التنبيهات" aria-controls="staff-notification-dropdown" aria-expanded="false">
+          {% include "includes/staff_icon.html" with name="bell" %}
+          <span id="staff-notification-badge" aria-label="0 تنبيهات غير مقروءة">0</span>
+          <span class="hub-visually-hidden">التنبيهات</span>
+        </button>
+        <button type="button" id="staff-sound-toggle" class="staff-app-header__tool staff-notification-pref" aria-label="إعداد صوت التنبيهات" title="إعداد صوت التنبيهات">تشغيل الصوت</button>
+        <button type="button" id="staff-browser-toggle" class="staff-app-header__tool staff-notification-pref" aria-label="إعداد تنبيهات المتصفح" title="إعداد تنبيهات المتصفح">تفعيل تنبيهات المتصفح</button>
+        <div id="staff-notification-dropdown" class="staff-notification-dropdown" hidden><div class="staff-notification-empty">لا توجد تنبيهات جديدة</div></div>
+        <p id="staff-notification-status" class="hub-visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>
+      </div>
+      <a class="staff-app-header__tool staff-app-header__help" href="{% url 'staff_home' %}#staff-more" aria-label="المساعدة">{% include "includes/staff_icon.html" with name="help" %}</a>
       <div class="staff-app-header__user" title="{{ request.user.get_role_display }}">
         <span class="staff-app-header__avatar">{{ request.user.username|slice:":1"|upper }}</span>
         <span class="staff-app-header__user-copy"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><span>{{ request.user.get_role_display }}</span></span>
