@@ -8,7 +8,7 @@
   <span class="kitchen-v2__updated">آخر تحديث {% now "H:i:s" %}</span>
 </div>
 
-<div class="kitchen-v2__kanban" aria-label="لوحة التحضير">
+<div class="kitchen-v2__kanban kitchen-v2__kanban--{{ status_filter }}" aria-label="لوحة التحضير">
   {% for lane in lanes %}
   <section class="kitchen-v2__lane kitchen-v2__lane--{{ lane.key }}" aria-labelledby="kitchen-lane-{{ lane.key }}">
     <header class="kitchen-v2__lane-head">

@@ -1,0 +1,18 @@
+/* Staff UI contrast guard.
+   The shell has a generic `.hub-staff-ui a { color: inherit; }` rule with higher
+   specificity than some button variants. Keep dark primary actions readable
+   regardless of whether they are rendered as <a>, <button>, or <span>. */
+.hub-staff-ui .staff-v2-button--primary:not(:disabled):not([aria-disabled="true"]),
+.hub-staff-ui .hub-button-primary:not(:disabled):not([aria-disabled="true"]),
+.hub-staff-ui .hub-btn-primary:not(:disabled):not([aria-disabled="true"]),
+.hub-staff-ui .hub-button-success:not(:disabled):not([aria-disabled="true"]){
+  color:#fff!important;
+}
+
+.hub-staff-ui .staff-v2-button--primary:not(:disabled):not([aria-disabled="true"]) .staff-icon,
+.hub-staff-ui .hub-button-primary:not(:disabled):not([aria-disabled="true"]) .staff-icon,
+.hub-staff-ui .hub-btn-primary:not(:disabled):not([aria-disabled="true"]) .staff-icon,
+.hub-staff-ui .hub-button-success:not(:disabled):not([aria-disabled="true"]) .staff-icon{
+  color:#fff!important;
+  stroke:currentColor;
+}

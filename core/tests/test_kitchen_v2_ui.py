@@ -30,6 +30,7 @@ class KitchenV2UIContractTests(SimpleTestCase):
         source = (Path(settings.BASE_DIR) / 'templates/staff/kitchen_partial.html').read_text(encoding='utf-8')
         for marker in [
             'kitchen-v2__kanban',
+            'kitchen-v2__kanban--{{ status_filter }}',
             'kitchen-v2__lane--{{ lane.key }}',
             'kitchen-v2__ticket--{{ lane.key }}',
             'kitchen-v2__ticket-actions',
@@ -38,9 +39,19 @@ class KitchenV2UIContractTests(SimpleTestCase):
             with self.subTest(marker=marker):
                 self.assertIn(marker, source)
 
-    def test_mobile_css_stacks_status_lanes(self):
+    def test_mobile_css_stacks_status_lanes_and_focused_filters_hide_other_lanes(self):
         source = (Path(settings.BASE_DIR) / 'static/css/staff_kitchen_v2.css').read_text(encoding='utf-8')
         self.assertIn('@media(max-width:900px)', source)
-        self.assertIn('.kitchen-v2__kanban{grid-template-columns:1fr', source)
+        self.assertIn('.kitchen-v2__kanban,.kitchen-v2__kanban--active{grid-template-columns:1fr', source)
         self.assertIn('@media(max-width:700px)', source)
         self.assertIn('.kitchen-v2__tickets{grid-template-columns:1fr', source)
+        self.assertIn('.kitchen-v2__kanban--working .kitchen-v2__lane:not(.kitchen-v2__lane--working)', source)
+        self.assertIn('.kitchen-v2__kanban--ready .kitchen-v2__lane:not(.kitchen-v2__lane--ready)', source)
+
+    def test_staff_primary_actions_have_final_contrast_guard(self):
+        base = (Path(settings.BASE_DIR) / 'templates/base.html').read_text(encoding='utf-8')
+        source = (Path(settings.BASE_DIR) / 'static/css/staff_ui_v2_contrast_fix.css').read_text(encoding='utf-8')
+        self.assertIn("css/staff_ui_v2_contrast_fix.css", base)
+        self.assertIn('.hub-staff-ui .staff-v2-button--primary', source)
+        self.assertIn('.hub-staff-ui .hub-button-primary', source)
+        self.assertIn('color:#fff!important', source)

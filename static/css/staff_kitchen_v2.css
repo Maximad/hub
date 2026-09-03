@@ -30,6 +30,13 @@
 .kitchen-v2__updated{white-space:nowrap;font-variant-numeric:tabular-nums}
 
 .kitchen-v2__kanban{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start}
+/* Focused status filters show only the requested workflow stage. */
+.kitchen-v2__kanban--incoming,.kitchen-v2__kanban--working,.kitchen-v2__kanban--ready{grid-template-columns:minmax(0,1fr)}
+.kitchen-v2__kanban--incoming .kitchen-v2__lane:not(.kitchen-v2__lane--incoming),
+.kitchen-v2__kanban--working .kitchen-v2__lane:not(.kitchen-v2__lane--working),
+.kitchen-v2__kanban--ready .kitchen-v2__lane:not(.kitchen-v2__lane--ready){display:none}
+.kitchen-v2__kanban--active{grid-template-columns:repeat(2,minmax(0,1fr))}
+.kitchen-v2__kanban--active .kitchen-v2__lane--ready{display:none}
 .kitchen-v2__lane{display:grid;grid-template-rows:auto 1fr;min-width:0;padding:9px;border:1px solid var(--staff-v2-line);border-radius:18px;background:color-mix(in srgb,var(--staff-v2-surface-soft),#fff 44%)}
 .kitchen-v2__lane-head{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:42px;padding:2px 4px 9px}
 .kitchen-v2__lane-title{display:flex;align-items:center;gap:8px;min-width:0}
@@ -79,7 +86,7 @@
 }
 
 @media(max-width:900px){
-  .kitchen-v2__kanban{grid-template-columns:1fr;gap:10px}
+  .kitchen-v2__kanban,.kitchen-v2__kanban--active{grid-template-columns:1fr;gap:10px}
   .kitchen-v2__lane{padding:8px}
   .kitchen-v2__tickets{grid-template-columns:repeat(2,minmax(0,1fr))}
   .kitchen-v2__filter-menu{position:fixed;inset:auto 12px calc(76px + env(safe-area-inset-bottom)) 12px;width:auto;max-height:70dvh;overflow:auto}
