@@ -1,0 +1,60 @@
+/* Operations mobile layout hotfix after production 390px review.
+   The refinement layer reintroduced the desktop two-track workspace below 1180px.
+   Mobile must never reserve a desktop side-panel track. */
+
+@media (max-width: 900px) {
+  .hub-staff-ui .ops-v2__layout {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .hub-staff-ui .ops-v2__accounts,
+  .hub-staff-ui .ops-v2__orders-panel,
+  .hub-staff-ui [data-ops-section] {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+
+  .hub-staff-ui .ops-v2__orders-panel {
+    margin-top: 14px;
+  }
+}
+
+@media (max-width: 700px) {
+  .hub-staff-ui .ops-v2__account-grid,
+  .hub-staff-ui .ops-v2__account-grid.is-list-view {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    width: 100% !important;
+  }
+
+  .hub-staff-ui .ops-v2__account,
+  .hub-staff-ui .ops-v2__account-grid.is-list-view .ops-v2__account {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .hub-staff-ui .ops-v2__account-grid.is-list-view .ops-v2__account-main {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .hub-staff-ui .ops-v2__account-grid.is-list-view .ops-v2__account-actions {
+    width: 100% !important;
+    border-inline-start: 0 !important;
+    border-top: 1px solid var(--staff-v2-line) !important;
+  }
+
+  .hub-staff-ui .ops-v2__orders-panel {
+    margin-top: 10px;
+  }
+
+  /* A hidden tab section must consume no layout space. */
+  .hub-staff-ui [data-ops-section].is-hidden {
+    display: none !important;
+  }
+}
