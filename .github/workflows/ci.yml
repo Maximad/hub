@@ -84,6 +84,9 @@ jobs:
       - name: Exercise Internet worker once
         run: python manage.py run_internet_worker --once
 
+      - name: Exercise notification worker once
+        run: python manage.py run_notification_worker --once
+
       - name: Internet readiness smoke check
         run: python manage.py internet_readiness --json
 
