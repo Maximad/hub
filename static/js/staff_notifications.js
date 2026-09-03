@@ -16,6 +16,7 @@
   let lastId = '';
   let browser = false;
   let backgroundActive = false;
+  let suppressNextBrowserAlert = false;
   let pushConfig = null;
   let audioContext = null;
   let firstPoll = true;
@@ -281,7 +282,10 @@
   function alertNew(items) {
     if (!items.length) return;
     playNotificationDing();
-    if (browser && notificationApi && notificationApi.permission === 'granted') {
+    if (
+      browser && notificationApi && notificationApi.permission === 'granted' &&
+      !backgroundActive && !suppressNextBrowserAlert
+    ) {
       new notificationApi(items[0].title || 'تنبيه جديد', {body: items[0].message || 'تنبيه جديد'});
     }
   }
@@ -307,6 +311,7 @@
     const first = latest[0];
     if (first) lastId = String(first.id);
     firstPoll = false;
+    suppressNextBrowserAlert = false;
   }
 
   function poll() {
@@ -316,6 +321,18 @@
       .then(function (response) { return response.json(); })
       .then(render)
       .catch(function () {});
+  }
+
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) poll();
+  });
+
+  if (browserNavigator.serviceWorker && typeof browserNavigator.serviceWorker.addEventListener === 'function') {
+    browserNavigator.serviceWorker.addEventListener('message', function (event) {
+      if (!event.data || event.data.type !== 'hub-push') return;
+      suppressNextBrowserAlert = true;
+      poll();
+    });
   }
 
   if (notificationApi) {
