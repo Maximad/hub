@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="{% static 'css/staff_workspace.css' %}">
   <link rel="stylesheet" href="{% static 'css/customer_space.css' %}">
   <link rel="stylesheet" href="{% static 'css/public_menu_flow.css' %}">
+  <link rel="stylesheet" href="{% static 'css/staff_foundation.css' %}">
   {% include "includes/hub_theme.html" %}
   {% comment %}Legacy density choices map onto the semantic token layer.{% endcomment %}
   {% if system_settings %}<style>:root{
@@ -18,7 +19,7 @@
   }</style>{% endif %}
   <script src="{% static 'js/htmx.min.js' %}"></script>
 </head>
-<body class="hub-page {% block body_class %}{% endblock %}{% if system_settings %} density-{{ system_settings.safe_ui_density }} button-scale-{{ system_settings.safe_button_padding_scale }} input-size-{{ system_settings.safe_input_size }} shadow-{{ system_settings.safe_card_shadow_level }}{% if system_settings.sticky_header_enabled %} hub-sticky-header{% endif %}{% endif %}">
+<body class="hub-page {% block body_class %}{% endblock %}{% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %} hub-staff-ui{% endif %}{% if system_settings %} density-{{ system_settings.safe_ui_density }} button-scale-{{ system_settings.safe_button_padding_scale }} input-size-{{ system_settings.safe_input_size }} shadow-{{ system_settings.safe_card_shadow_level }}{% if system_settings.sticky_header_enabled %} hub-sticky-header{% endif %}{% endif %}">
   <header class="hub-header">
     <div class="hub-container">
       {% if system_settings.brand_icon_url %}<img class="hub-header__icon" src="{{ system_settings.brand_icon_url }}" alt="">{% endif %}<h1 class="hub-title">{% if system_settings %}{{ system_settings.system_title }}{% else %}نظام مشاريب{% endif %}</h1>
@@ -45,6 +46,7 @@
   <script src="{% static 'js/csrf.js' %}"></script>
   <script src="{% static 'js/staff_notifications.js' %}"></script>
   <script src="{% static 'js/hub_numbers.js' %}"></script>
+  <script src="{% static 'js/staff_responsive_tables.js' %}"></script>
   <script src="{% static 'js/hub_searchable_select.js' %}"></script>
   <script src="{% static 'js/reservation_form.js' %}"></script>
   <script src="{% static 'js/customer_space.js' %}"></script>
