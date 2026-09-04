@@ -34,10 +34,10 @@ class StaffCapabilityTests(TestCase):
             role='kitchen',
         )
 
-    def test_role_defaults_keep_preparation_board_kitchen_only(self):
+    def test_role_defaults_keep_preparation_for_station_operator_roles(self):
         self.assertTrue(user_has_capability(self.kitchen, 'kitchen_board'))
+        self.assertTrue(user_has_capability(self.cashier, 'kitchen_board'))
         self.assertFalse(user_has_capability(self.waiter, 'kitchen_board'))
-        self.assertFalse(user_has_capability(self.cashier, 'kitchen_board'))
         self.assertTrue(user_has_capability(self.admin, 'kitchen_board'))
 
     def test_per_user_allow_and_deny_override_role_defaults(self):
