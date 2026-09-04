@@ -6,9 +6,22 @@
   <h2 class="hub-page-header__title">{% if mode == 'create' %}إنشاء مستخدم جديد{% else %}تعديل {{ target_user.username }}{% endif %}</h2>
   <form method="post" class="hub-form hub-form-section">{% csrf_token %}
     {{ form.non_field_errors }}
-    {% for field in form %}
+
+    <h3>بيانات المستخدم والدور</h3>
+    {% for field in basic_fields %}
       <label>{{ field.label }}{{ field }}{% if field.help_text %}<small class="hub-help-text">{{ field.help_text }}</small>{% endif %}{% for error in field.errors %}<small class="hub-error">{{ error }}</small>{% endfor %}</label>
     {% endfor %}
+
+    <div class="hub-form-section">
+      <h3>صلاحيات Hub الفعلية</h3>
+      <p class="hub-help-text">يحدد الدور الصلاحيات الافتراضية. استخدم سماح أو منع فقط عندما يحتاج هذا المستخدم إلى استثناء خاص. المدير يحصل على جميع الصلاحيات تلقائياً.</p>
+      <div class="hub-grid hub-grid-2">
+        {% for field in capability_fields %}
+          <label>{{ field.label }}{{ field }}{% if field.help_text %}<small class="hub-help-text">{{ field.help_text }}</small>{% endif %}{% for error in field.errors %}<small class="hub-error">{{ error }}</small>{% endfor %}</label>
+        {% endfor %}
+      </div>
+    </div>
+
     <button class="hub-button hub-button-primary" type="submit">حفظ</button>
   </form>
 </section>
