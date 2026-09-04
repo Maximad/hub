@@ -5,7 +5,13 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from accounts.forms import StaffUserCreateForm, StaffUserEditForm, StaffUserPasswordForm
-from accounts.permissions import ADMIN_ONLY_MESSAGE, require_staff_capability
+from accounts.permissions import (
+    ADMIN_ONLY_MESSAGE,
+    CAPABILITY_LABELS,
+    get_capability_overrides,
+    get_staff_capabilities,
+    require_staff_capability,
+)
 
 User = get_user_model()
 
@@ -67,7 +73,21 @@ def staff_user_new(request):
 @require_staff_capability('users', ADMIN_ONLY_MESSAGE)
 def staff_user_detail(request, user_id):
     target = get_object_or_404(User, pk=user_id)
-    return render(request, 'staff/users/detail.html', {'target_user': target})
+    effective = get_staff_capabilities(target)
+    overrides = get_capability_overrides(target)
+    capability_rows = [
+        {
+            'name': name,
+            'label': CAPABILITY_LABELS.get(name, name),
+            'effective': effective.get(name, False),
+            'override': overrides.get(name),
+        }
+        for name in CAPABILITY_LABELS
+    ]
+    return render(request, 'staff/users/detail.html', {
+        'target_user': target,
+        'capability_rows': capability_rows,
+    })
 
 
 @require_staff_capability('users', ADMIN_ONLY_MESSAGE)
@@ -84,7 +104,7 @@ def staff_user_edit(request, user_id):
             form.add_error(None, 'لا يمكن تعطيل أو إزالة آخر مدير/مالك نشط.')
         else:
             user = form.save()
-            messages.success(request, 'تم تحديث بيانات المستخدم.')
+            messages.success(request, 'تم تحديث بيانات المستخدم وصلاحياته.')
             return redirect('staff_user_detail', user_id=user.pk)
     return render(request, 'staff/users/form.html', {'form': form, 'mode': 'edit', 'target_user': target})
 
