@@ -3,7 +3,7 @@ from django.test import TestCase
 
 from accounts.models import StaffCapabilityOverride
 from core.models import NotificationEvent, NotificationRecipient
-from core.notifications import visible_recipients_for
+from core.notifications import create_notification, link_for_event, visible_recipients_for
 
 
 class NotificationPermissionVisibilityTests(TestCase):
@@ -79,3 +79,16 @@ class NotificationPermissionVisibilityTests(TestCase):
         )
         self.assertTrue(visible_recipients_for(self.kitchen).filter(pk=recipient.pk).exists())
         self.assertTrue(visible_recipients_for(self.admin).filter(pk=recipient.pk).exists())
+
+    def test_ready_prep_alert_moves_from_station_operator_to_service(self):
+        with self.captureOnCommitCallbacks(execute=False):
+            event = create_notification(
+                NotificationEvent.EventType.PREP_ITEM_READY,
+                'عنصر جاهز',
+            )
+        self.assertIsNotNone(event)
+        self.assertEqual(set(event.recipients.values_list('role', flat=True)), {'admin', 'service'})
+        service_recipient = event.recipients.get(role='service')
+        self.assertTrue(visible_recipients_for(self.waiter).filter(pk=service_recipient.pk).exists())
+        self.assertFalse(visible_recipients_for(self.kitchen).filter(pk=service_recipient.pk).exists())
+        self.assertEqual(link_for_event(event), '/staff/orders/')
