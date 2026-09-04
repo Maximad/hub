@@ -65,9 +65,10 @@
 
 @media(max-width:900px){
   .hub-staff-ui .staff-app-header__inner{min-height:56px}
-  .hub-staff-ui .staff-app-header__notifications .staff-notification-pref,
+  .hub-staff-ui .staff-app-header__notifications #staff-sound-toggle,
   .hub-staff-ui .staff-app-header__help,
   .hub-staff-ui .staff-app-header__user{display:none}
+  .hub-staff-ui .staff-app-header__notifications #staff-browser-toggle{display:grid;width:34px;height:34px;min-height:34px;border-color:var(--staff-v2-line);background:var(--staff-v2-surface-soft)}
   .hub-staff-ui .staff-app-header__brand-copy span{display:none}
   .hub-staff-ui .staff-app-header__mark{width:36px;height:36px;border-radius:11px}
   .hub-staff-ui main.hub-container{padding-top:14px}
@@ -79,13 +80,14 @@
   .hub-staff-ui main.hub-container{padding-top:10px;padding-bottom:88px}
   .staff-v2-page{gap:12px}
 
-  /* Mobile header: brand + bell only. */
+  /* Mobile header: brand + browser push control + bell. */
   .hub-staff-ui .staff-app-header__inner{min-height:52px}
   .hub-staff-ui .staff-app-header__brand{gap:7px}
   .hub-staff-ui .staff-app-header__brand-copy strong{font-size:.82rem}
   .hub-staff-ui .staff-app-header__mark{width:32px;height:32px;border-radius:10px}
   .hub-staff-ui .staff-app-header__mark .staff-icon{width:18px;height:18px}
-  .hub-staff-ui .staff-app-header__notifications .staff-notification-bell{width:34px;height:34px;min-height:34px}
+  .hub-staff-ui .staff-app-header__notifications .staff-notification-bell,
+  .hub-staff-ui .staff-app-header__notifications #staff-browser-toggle{width:34px;height:34px;min-height:34px}
 
   /* Title/actions become a compact control strip. */
   .ops-v2__hero{display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
