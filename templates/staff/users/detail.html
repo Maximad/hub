@@ -14,6 +14,31 @@
     <p><strong>نشط:</strong> {{ target_user.is_active|yesno:'نعم,لا' }}</p><p><strong>is_staff:</strong> {{ target_user.is_staff|yesno:'نعم,لا' }}</p>
     <p><strong>is_superuser:</strong> {{ target_user.is_superuser|yesno:'نعم,لا' }}</p><p><strong>آخر دخول:</strong> {{ target_user.last_login|date:'Y-m-d H:i'|default:'-' }}</p>
   </div>
+
+  <div class="hub-form-section">
+    <h3>الصلاحيات الفعلية</h3>
+    <p class="hub-help-text">الدور يحدد الصلاحيات الافتراضية، والاستثناءات الفردية أدناه يمكن أن تمنح أو تمنع صلاحية لهذا المستخدم فقط.</p>
+    <div class="hub-table-wrap">
+      <table class="hub-table">
+        <thead><tr><th>الصلاحية</th><th>الحالة</th><th>المصدر</th></tr></thead>
+        <tbody>
+          {% for row in capability_rows %}
+            <tr>
+              <td>{{ row.label }}</td>
+              <td>{% if row.effective %}مسموح{% else %}ممنوع{% endif %}</td>
+              <td>
+                {% if row.override is True %}استثناء: منح
+                {% elif row.override is False %}استثناء: منع
+                {% elif target_user.is_superuser %}Superuser
+                {% else %}افتراضي حسب الدور{% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   <form class="hub-form-section" method="post" action="{% url 'staff_user_toggle_active' target_user.id %}">{% csrf_token %}
     <button class="hub-button {% if target_user.is_active %}hub-button-secondary{% else %}hub-button-primary{% endif %}" type="submit">{% if target_user.is_active %}تعطيل المستخدم{% else %}تفعيل المستخدم{% endif %}</button>
   </form>
