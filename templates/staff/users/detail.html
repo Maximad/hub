@@ -4,8 +4,10 @@
 <section class="hub-section hub-card">
   <div class="hub-toolbar">
     <a class="hub-button hub-button-secondary" href="{% url 'staff_users_list' %}">العودة للمستخدمين</a>
-    <a class="hub-button" href="{% url 'staff_user_edit' target_user.id %}">تعديل</a>
-    <a class="hub-button" href="{% url 'staff_user_password' target_user.id %}">تعيين كلمة المرور</a>
+    {% if can_manage_target %}
+      <a class="hub-button" href="{% url 'staff_user_edit' target_user.id %}">تعديل</a>
+      <a class="hub-button" href="{% url 'staff_user_password' target_user.id %}">تعيين كلمة المرور</a>
+    {% endif %}
   </div>
   <h2 class="hub-page-header__title">{{ target_user.get_full_name|default:target_user.username }}</h2>
   <div class="hub-grid hub-grid-2">
@@ -29,8 +31,12 @@
     </div>
   </div>
 
-  <form class="hub-form-section" method="post" action="{% url 'staff_user_toggle_active' target_user.id %}">{% csrf_token %}
-    <button class="hub-button {% if target_user.is_active %}hub-button-secondary{% else %}hub-button-primary{% endif %}" type="submit">{% if target_user.is_active %}تعطيل المستخدم{% else %}تفعيل المستخدم{% endif %}</button>
-  </form>
+  {% if can_manage_target %}
+    <form class="hub-form-section" method="post" action="{% url 'staff_user_toggle_active' target_user.id %}">{% csrf_token %}
+      <button class="hub-button {% if target_user.is_active %}hub-button-secondary{% else %}hub-button-primary{% endif %}" type="submit">{% if target_user.is_active %}تعطيل المستخدم{% else %}تفعيل المستخدم{% endif %}</button>
+    </form>
+  {% else %}
+    <p class="hub-help-text">يمكنك مراجعة هذا الحساب، لكن تعديل حسابات المديرين يحتاج صلاحية مدير فعلية.</p>
+  {% endif %}
 </section>
 {% endblock %}
