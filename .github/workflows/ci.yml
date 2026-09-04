@@ -93,5 +93,8 @@ jobs:
       - name: Push readiness smoke check
         run: python manage.py push_readiness --json
 
+      - name: Hub v1 launch readiness smoke check
+        run: python manage.py hub_v1_readiness --json
+
       - name: Run full Django test suite on PostgreSQL
         run: python manage.py test --noinput
