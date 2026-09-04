@@ -26,6 +26,8 @@ from core.models import (
 logger = logging.getLogger(__name__)
 
 PREP_EVENTS = {'new_prep_item', 'prep_item_ready', 'prep_item_cancelled'}
+PREP_STATION_EVENTS = {'new_prep_item'}
+PREP_SERVICE_EVENTS = {'prep_item_ready', 'prep_item_cancelled'}
 PAYMENT_EVENTS = {'payment_pending', 'partial_payment_requested', 'discount_added'}
 MANAGER_EVENTS = {'manager_approval_needed'}
 DAILY_EVENTS = {'close_day_finalized'}
@@ -46,8 +48,9 @@ NOTIFICATION_EVENT_CAPABILITIES = {
     'order_edited': 'orders',
     'order_cancelled': 'orders',
     'new_prep_item': 'kitchen_board',
-    'prep_item_ready': 'kitchen_board',
-    'prep_item_cancelled': 'kitchen_board',
+    # A station operator creates ready/cancelled state; service staff consume it.
+    'prep_item_ready': 'delivery_management',
+    'prep_item_cancelled': 'delivery_management',
     'payment_pending': 'cashier',
     'partial_payment_requested': 'partial_payment_approval',
     'discount_added': 'cashier',
@@ -86,9 +89,11 @@ def _roles_for_event(event_type, station=None, target_role=''):
         return ['admin', 'cashier', 'service']
     if event_type in {'delivery_delivered', 'delivery_cancelled'}:
         return ['admin', 'cashier']
-    if event_type in PREP_EVENTS:
+    if event_type in PREP_STATION_EVENTS:
         role = role_for_station(station)
         return [role] if role else ['kitchen', 'cashier']
+    if event_type in PREP_SERVICE_EVENTS:
+        return ['admin', 'service']
     if event_type in PAYMENT_EVENTS:
         return ['admin', 'cashier']
     if event_type in MANAGER_EVENTS:
@@ -100,8 +105,10 @@ def _roles_for_event(event_type, station=None, target_role=''):
 
 def link_for_event(event):
     code = getattr(event.target_station, 'code', '') if event.target_station_id else ''
-    if event.event_type in PREP_EVENTS:
+    if event.event_type in PREP_STATION_EVENTS:
         return reverse('staff_prep_station', kwargs={'station_code': code}) if code else reverse('staff_prep')
+    if event.event_type in PREP_SERVICE_EVENTS:
+        return reverse('staff_orders')
     if event.event_type in PAYMENT_EVENTS or event.event_type in MANAGER_EVENTS:
         return reverse('staff_cashier_order', kwargs={'public_code': event.order.public_code}) if event.order_id else reverse('staff_cashier')
     if event.event_type in DAILY_EVENTS:
