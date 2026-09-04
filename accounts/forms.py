@@ -5,7 +5,8 @@ from django.contrib.auth import get_user_model, password_validation
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from django.core.exceptions import ValidationError
 
-from accounts.permissions import is_owner_or_admin
+from accounts.models import UserCapabilityOverride
+from accounts.permissions import CAPABILITY_LABELS, get_capability_overrides, is_owner_or_admin
 
 User = get_user_model()
 
@@ -97,14 +98,62 @@ class StaffUserCreateForm(StaffUserBaseForm):
 
 
 class StaffUserEditForm(StaffUserBaseForm):
+    capability_allow = forms.MultipleChoiceField(
+        label='صلاحيات إضافية لهذا المستخدم',
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text='تتجاوز افتراضات الدور وتمنح الصلاحيات المحددة لهذا المستخدم فقط.',
+    )
+    capability_deny = forms.MultipleChoiceField(
+        label='صلاحيات ممنوعة لهذا المستخدم',
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text='تتجاوز افتراضات الدور وتمنع الصلاحيات المحددة لهذا المستخدم فقط.',
+    )
+
     class Meta(StaffUserBaseForm.Meta):
         fields = ['first_name', 'last_name', 'email', 'phone', 'role', 'is_active']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        choices = list(CAPABILITY_LABELS.items())
+        self.fields['capability_allow'].choices = choices
+        self.fields['capability_deny'].choices = choices
+        if self.instance and self.instance.pk:
+            overrides = get_capability_overrides(self.instance)
+            self.fields['capability_allow'].initial = [name for name, allowed in overrides.items() if allowed]
+            self.fields['capability_deny'].initial = [name for name, allowed in overrides.items() if not allowed]
 
     def clean_is_active(self):
         is_active = self.cleaned_data['is_active']
         if self.instance.pk and self.actor and self.instance.pk == self.actor.pk and not is_active:
             raise ValidationError('لا يمكنك تعطيل حسابك الحالي.')
         return is_active
+
+    def clean(self):
+        cleaned = super().clean()
+        allowed = set(cleaned.get('capability_allow') or [])
+        denied = set(cleaned.get('capability_deny') or [])
+        overlap = allowed & denied
+        if overlap:
+            labels = [CAPABILITY_LABELS.get(name, name) for name in sorted(overlap)]
+            raise ValidationError('لا يمكن منح ومنع الصلاحية نفسها: ' + '، '.join(labels))
+        return cleaned
+
+    def save(self, commit=True):
+        user = super().save(commit=commit)
+        if commit:
+            allowed = set(self.cleaned_data.get('capability_allow') or [])
+            denied = set(self.cleaned_data.get('capability_deny') or [])
+            UserCapabilityOverride.objects.filter(user=user).delete()
+            UserCapabilityOverride.objects.bulk_create([
+                UserCapabilityOverride(user=user, capability=name, allowed=True)
+                for name in sorted(allowed)
+            ] + [
+                UserCapabilityOverride(user=user, capability=name, allowed=False)
+                for name in sorted(denied)
+            ])
+        return user
 
 
 class StaffUserPasswordForm(forms.Form):
