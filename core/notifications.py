@@ -8,11 +8,12 @@ Notification sounds are generated in-browser using the Web Audio API; no audio a
 """
 import logging
 
-from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
 
+from accounts.permissions import user_has_capability
 from core.models import (
     NotificationEvent,
     NotificationLog,
@@ -28,6 +29,43 @@ PREP_EVENTS = {'new_prep_item', 'prep_item_ready', 'prep_item_cancelled'}
 PAYMENT_EVENTS = {'payment_pending', 'partial_payment_requested', 'discount_added'}
 MANAGER_EVENTS = {'manager_approval_needed'}
 DAILY_EVENTS = {'close_day_finalized'}
+DELIVERY_EVENTS = {
+    'delivery_order_created',
+    'delivery_order_confirmed',
+    'delivery_ready_for_delivery',
+    'delivery_out_for_delivery',
+    'delivery_delivered',
+    'delivery_cancelled',
+}
+
+# Notification visibility uses the same effective capability resolver as page
+# access. Role/station still determines who is a candidate recipient; capability
+# determines whether that candidate is allowed to see/act on the event.
+NOTIFICATION_EVENT_CAPABILITIES = {
+    'new_order': 'orders',
+    'order_edited': 'orders',
+    'order_cancelled': 'orders',
+    'new_prep_item': 'kitchen_board',
+    'prep_item_ready': 'kitchen_board',
+    'prep_item_cancelled': 'kitchen_board',
+    'payment_pending': 'cashier',
+    'partial_payment_requested': 'partial_payment_approval',
+    'discount_added': 'cashier',
+    'manager_approval_needed': 'partial_payment_approval',
+    'close_day_finalized': 'finance',
+    **{event_type: 'delivery_management' for event_type in DELIVERY_EVENTS},
+}
+
+ACCOUNT_ROLE_TO_NOTIFICATION_ROLES = {
+    'admin': ('admin',),
+    'cashier': ('cashier',),
+    'waiter': ('waiter', 'service'),
+    'kitchen': ('kitchen',),
+}
+
+
+def notification_capability_for_event_type(event_type):
+    return NOTIFICATION_EVENT_CAPABILITIES.get(event_type, 'staff_home')
 
 
 def role_for_station(station):
@@ -50,7 +88,7 @@ def _roles_for_event(event_type, station=None, target_role=''):
         return ['admin', 'cashier']
     if event_type in PREP_EVENTS:
         role = role_for_station(station)
-        return ['admin', role] if role else ['admin', 'kitchen', 'cashier']
+        return [role] if role else ['kitchen', 'cashier']
     if event_type in PAYMENT_EVENTS:
         return ['admin', 'cashier']
     if event_type in MANAGER_EVENTS:
@@ -104,26 +142,19 @@ def create_notification(
                 target_role=target_role or '',
                 created_by=created_by if getattr(created_by, 'is_authenticated', False) else None,
             )
-            User = get_user_model()
             roles = _roles_for_event(event_type, target_station, target_role)
-            recipients = []
-            for role in roles:
-                recipients.append(
-                    NotificationRecipient(
-                        notification_event=event,
-                        role=role,
-                        station=target_station,
-                    )
+            recipients = [
+                NotificationRecipient(
+                    notification_event=event,
+                    role=role,
+                    station=target_station,
                 )
-            for user in User.objects.filter(is_active=True, is_superuser=True):
-                recipients.append(
-                    NotificationRecipient(
-                        notification_event=event,
-                        user=user,
-                        role='admin',
-                        station=target_station,
-                    )
-                )
+                for role in roles
+            ]
+            # Do not create a second explicit recipient row for every superuser.
+            # Admin users already see the complete in-app stream and push routing
+            # explicitly includes admin where appropriate. The old duplicate row
+            # made preparation events leak into admin push delivery.
             NotificationRecipient.objects.bulk_create(recipients)
             NotificationLog.objects.create(
                 notification_event=event,
@@ -304,6 +335,20 @@ def mark_grouped_notification_read(user, group_key=None, recipient_id=None):
 
 def visible_recipients_for(user):
     role = getattr(user, 'role', '')
-    if user.is_superuser or role == 'admin':
-        return NotificationRecipient.objects.all()
-    return NotificationRecipient.objects.filter(user=user) | NotificationRecipient.objects.filter(role=role)
+    if not getattr(user, 'is_active', False):
+        return NotificationRecipient.objects.none()
+
+    if user_is_notification_admin(user):
+        candidates = NotificationRecipient.objects.all()
+    else:
+        notification_roles = ACCOUNT_ROLE_TO_NOTIFICATION_ROLES.get(role, (role,))
+        candidates = NotificationRecipient.objects.filter(
+            Q(user=user) | Q(role__in=notification_roles)
+        )
+
+    allowed_event_types = [
+        event_type
+        for event_type, _label in NotificationEvent.EventType.choices
+        if user_has_capability(user, notification_capability_for_event_type(event_type))
+    ]
+    return candidates.filter(notification_event__event_type__in=allowed_event_types)
