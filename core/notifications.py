@@ -34,7 +34,9 @@ def role_for_station(station):
     code = getattr(station, 'code', '') or getattr(station, 'station_type', '') or ''
     if code == 'kitchen':
         return 'kitchen'
-    if code in {'bar', 'cashier', 'internet', 'service'}:
+    if code == 'bar':
+        return 'bartender'
+    if code in {'cashier', 'internet', 'service'}:
         return 'cashier'
     return ''
 
