@@ -17,6 +17,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from accounts.permissions import user_has_capability
 from core.models import (
     NotificationEvent,
     NotificationLog,
@@ -37,26 +38,30 @@ PUSH_RETRY_DELAYS_SECONDS = (30, 120, 300, 900)
 class PushRoute:
     roles: tuple[str, ...]
     preference_field: str
+    required_capability: str
     aggregate_prep: bool = False
+    include_explicit_recipients: bool = True
 
 
-# This is intentionally smaller than the in-app notification matrix. Push is
-# reserved for events that need timely attention on a backgrounded device.
+# Push routing is deliberately narrower than the in-app notification matrix.
+# Role/station targeting chooses who should care; the required capability then
+# applies the same effective permission resolver used by staff views.
 PUSH_ROUTES = {
     NotificationEvent.EventType.NEW_ORDER: PushRoute(
-        ('admin', 'cashier', 'service'), 'notify_new_orders'
+        ('admin', 'cashier', 'service'), 'notify_new_orders', 'orders'
     ),
     NotificationEvent.EventType.DELIVERY_ORDER_CREATED: PushRoute(
-        ('admin', 'cashier', 'service'), 'notify_new_orders'
+        ('admin', 'cashier', 'service'), 'notify_new_orders', 'delivery_management'
     ),
     NotificationEvent.EventType.NEW_PREP_ITEM: PushRoute(
-        ('admin',), 'notify_prep_items', aggregate_prep=True
+        (), 'notify_prep_items', 'kitchen_board', aggregate_prep=True,
+        include_explicit_recipients=False,
     ),
     NotificationEvent.EventType.PREP_ITEM_READY: PushRoute(
-        ('admin', 'service'), 'notify_prep_items'
+        ('service',), 'notify_prep_items', 'delivery_management'
     ),
     NotificationEvent.EventType.MANAGER_APPROVAL_NEEDED: PushRoute(
-        ('admin',), 'notify_manager_approvals'
+        ('admin',), 'notify_manager_approvals', 'partial_payment_approval'
     ),
 }
 
@@ -83,7 +88,13 @@ def push_route_for_event(event: NotificationEvent) -> PushRoute | None:
             roles.append(station_role)
         elif 'kitchen' not in roles:
             roles.append('kitchen')
-        return PushRoute(tuple(dict.fromkeys(roles)), route.preference_field, True)
+        return PushRoute(
+            tuple(dict.fromkeys(roles)),
+            route.preference_field,
+            route.required_capability,
+            True,
+            route.include_explicit_recipients,
+        )
     return route
 
 
@@ -104,9 +115,9 @@ def user_is_push_target(event: NotificationEvent, user) -> bool:
     if not getattr(user, 'is_active', False):
         return False
     route = push_route_for_event(event)
-    if route is None:
+    if route is None or not user_has_capability(user, route.required_capability):
         return False
-    if event.recipients.filter(user_id=user.pk).exists():
+    if route.include_explicit_recipients and event.recipients.filter(user_id=user.pk).exists():
         return True
     return any(_role_matches_user(role, user) for role in route.roles)
 
@@ -117,7 +128,9 @@ def _target_users(event: NotificationEvent):
     if route is None:
         return User.objects.none()
 
-    query = Q(pk__in=event.recipients.filter(user__isnull=False).values('user_id'))
+    query = Q(pk__in=[])
+    if route.include_explicit_recipients:
+        query |= Q(pk__in=event.recipients.filter(user__isnull=False).values('user_id'))
     for role in route.roles:
         if role == 'admin':
             query |= Q(is_superuser=True) | Q(role='admin')
@@ -128,7 +141,7 @@ def _target_users(event: NotificationEvent):
 
 def _preference_allows(event: NotificationEvent, user) -> bool:
     route = push_route_for_event(event)
-    if route is None:
+    if route is None or not user_has_capability(user, route.required_capability):
         return False
     try:
         preference = user.notification_preference
@@ -169,7 +182,11 @@ def enqueue_push_deliveries_for_event(event_or_id) -> int:
     if event is None or not _event_is_deliverable(event):
         return 0
 
-    user_ids = [user.pk for user in _target_users(event) if _preference_allows(event, user)]
+    user_ids = [
+        user.pk
+        for user in _target_users(event)
+        if user_is_push_target(event, user) and _preference_allows(event, user)
+    ]
     if not user_ids:
         return 0
 
