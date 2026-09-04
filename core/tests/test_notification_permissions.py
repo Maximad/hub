@@ -49,7 +49,7 @@ class NotificationPermissionVisibilityTests(TestCase):
         )
         self.assertFalse(visible_recipients_for(self.waiter).filter(pk=recipient.pk).exists())
 
-    def test_cashier_does_not_see_prep_event_without_kitchen_capability(self):
+    def test_cashier_can_receive_cashier_station_prep_but_user_deny_blocks_it(self):
         event = NotificationEvent.objects.create(
             event_type=NotificationEvent.EventType.NEW_PREP_ITEM,
             title_ar='تحضير',
@@ -58,7 +58,15 @@ class NotificationPermissionVisibilityTests(TestCase):
             notification_event=event,
             role='cashier',
         )
-        self.assertFalse(visible_recipients_for(self.cashier).filter(pk=recipient.pk).exists())
+        self.assertTrue(visible_recipients_for(self.cashier).filter(pk=recipient.pk).exists())
+
+        StaffCapabilityOverride.objects.create(
+            user=self.cashier,
+            capability='kitchen_board',
+            allowed=False,
+        )
+        cashier = type(self.cashier).objects.get(pk=self.cashier.pk)
+        self.assertFalse(visible_recipients_for(cashier).filter(pk=recipient.pk).exists())
 
     def test_kitchen_sees_prep_and_admin_keeps_full_in_app_visibility(self):
         event = NotificationEvent.objects.create(
