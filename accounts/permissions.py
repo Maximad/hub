@@ -52,7 +52,9 @@ def is_waiter(user):
 
 
 def is_kitchen(user):
-    return _is_authenticated_active(user) and _role(user) == 'kitchen'
+    # Preparation-operator compatibility helper. Bartenders use the same prep
+    # state machine as kitchen staff while notifications remain station-specific.
+    return _is_authenticated_active(user) and _role(user) in {'kitchen', 'bartender'}
 
 
 def is_bartender(user):
@@ -67,7 +69,6 @@ def _default_staff_home(user):
         or is_cashier(user)
         or is_waiter(user)
         or is_kitchen(user)
-        or is_bartender(user)
     )
 
 
@@ -126,7 +127,7 @@ def _default_internet_billing(user):
 def _default_kitchen_board(user):
     # Kitchen and bar are first-class preparation roles. Cashier access remains
     # for launch compatibility with existing non-kitchen prep workflows.
-    return is_owner_or_admin(user) or is_cashier(user) or is_kitchen(user) or is_bartender(user)
+    return is_owner_or_admin(user) or is_cashier(user) or is_kitchen(user)
 
 
 def _default_partial_payment_approval(user):
