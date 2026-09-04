@@ -7,6 +7,7 @@ from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
+from accounts.models import StaffCapabilityOverride
 from catalog.models import PrepStation
 from core.models import (
     NotificationEvent,
@@ -110,7 +111,7 @@ class NotificationDeliveryRoutingTests(TestCase):
             {'push-admin', 'push-cashier', 'push-waiter'},
         )
 
-    def test_prep_order_is_grouped_by_order_and_station_per_device(self):
+    def test_prep_order_is_grouped_by_order_and_station_for_kitchen_only(self):
         first = NotificationEvent.objects.create(
             event_type=NotificationEvent.EventType.NEW_PREP_ITEM,
             title_ar='عنصر جديد',
@@ -129,8 +130,8 @@ class NotificationDeliveryRoutingTests(TestCase):
         enqueue_push_deliveries_for_event(second)
 
         logs = NotificationLog.objects.filter(channel=NotificationLog.Channel.BROWSER)
-        self.assertEqual(logs.count(), 2)
-        self.assertEqual(set(logs.values_list('recipient_user__username', flat=True)), {'push-admin', 'push-kitchen'})
+        self.assertEqual(logs.count(), 1)
+        self.assertEqual(set(logs.values_list('recipient_user__username', flat=True)), {'push-kitchen'})
         self.assertEqual(set(logs.values_list('dedupe_key', flat=True)), {push_dedupe_key(first)})
 
         payload = build_push_payload(first).as_dict()
@@ -182,6 +183,20 @@ class NotificationDeliveryRoutingTests(TestCase):
         enqueue_push_deliveries_for_event(event)
         self.assertEqual(self.queued_users(), {'push-admin'})
 
+    def test_effective_capability_can_block_role_matched_push(self):
+        StaffCapabilityOverride.objects.create(
+            user=self.waiter,
+            capability='orders',
+            allowed=False,
+        )
+        event = NotificationEvent.objects.create(
+            event_type=NotificationEvent.EventType.NEW_ORDER,
+            title_ar='طلب جديد',
+            order=self.order,
+        )
+        enqueue_push_deliveries_for_event(event)
+        self.assertEqual(self.queued_users(), {'push-admin', 'push-cashier'})
+
     def test_generic_payload_never_reuses_private_event_message_or_delivery_details(self):
         self.order.fulfillment_mode = Order.FulfillmentMode.DELIVERY
         self.order.delivery_phone = '+963-SECRET-PHONE'
@@ -210,6 +225,21 @@ class NotificationDeliveryRoutingTests(TestCase):
             )
         self.assertIsNotNone(event)
         self.assertEqual(self.queued_users(), {'push-admin', 'push-cashier', 'push-waiter'})
+
+    def test_create_notification_does_not_add_explicit_superuser_recipient(self):
+        self.admin.is_superuser = True
+        self.admin.is_staff = True
+        self.admin.save(update_fields=('is_superuser', 'is_staff'))
+        with self.captureOnCommitCallbacks(execute=False):
+            event = create_notification(
+                NotificationEvent.EventType.NEW_PREP_ITEM,
+                'عنصر جديد',
+                order=self.order,
+                target_station=self.kitchen_station,
+            )
+        self.assertIsNotNone(event)
+        self.assertFalse(event.recipients.filter(user=self.admin).exists())
+        self.assertEqual(set(event.recipients.values_list('role', flat=True)), {'kitchen'})
 
     def test_explicit_and_role_admin_recipients_do_not_duplicate_device_alerts(self):
         self.admin.is_superuser = True
