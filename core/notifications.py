@@ -143,15 +143,31 @@ def create_notification(
         return None
 
 
+def _ensure_push_enqueued(event):
+    """Best-effort immediate DB enqueue for post-commit order notifications.
+
+    Order creation itself is normally scheduled with ``transaction.on_commit``.
+    Production showed that a nested commit callback could leave the first
+    ``new_order`` browser delivery unqueued while later prep callbacks were
+    enqueued. Calling the idempotent DB enqueue here removes that timing gap.
+    The delivery service uses a unique dedupe key, so the regular callback may
+    still run without creating a duplicate device alert.
+    """
+    if event is not None and getattr(event, 'pk', None):
+        _safe_enqueue_push(event.pk)
+
+
 def notify_order_created(order, created_by=None):
-    create_notification(
+    order_event = create_notification(
         'delivery_order_created' if order.is_delivery else 'new_order',
         f'طلب جديد {order.display_number}',
         order.location_label,
         order=order,
         created_by=created_by,
     )
-    create_notification(
+    _ensure_push_enqueued(order_event)
+
+    payment_event = create_notification(
         'payment_pending',
         f'الدفع بانتظار الكاشير {order.display_number}',
         order.location_label,
@@ -159,9 +175,11 @@ def notify_order_created(order, created_by=None):
         target_role='cashier',
         created_by=created_by,
     )
+    _ensure_push_enqueued(payment_event)
+
     for item in order.items.select_related('prep_station'):
         if item.prep_status != OrderItem.PrepStatus.NO_PREP:
-            create_notification(
+            prep_event = create_notification(
                 'new_prep_item',
                 'عنصر جديد للتحضير',
                 f'{item.product_name_ar_snapshot} × {item.quantity} — {order.display_number}',
@@ -170,6 +188,7 @@ def notify_order_created(order, created_by=None):
                 target_station=item.prep_station,
                 created_by=created_by,
             )
+            _ensure_push_enqueued(prep_event)
 
 
 def user_is_notification_admin(user):
