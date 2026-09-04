@@ -42,7 +42,6 @@ from core.views_legacy import (
     _menu_context,
     dashboard,
     order_public,
-    staff_pos,
     staff_qr_links,
     staff_qr_print,
     staff_menu_tools,
@@ -67,6 +66,7 @@ from core.views_legacy import (
     staff_order_prep_ticket,
     staff_order_delivery_ticket,
 )
+from core.views.staff_pos_v2 import staff_pos
 
 
 def _validation_message(error):
