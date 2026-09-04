@@ -14,8 +14,9 @@ The current implementation includes:
 - staff PWA manifest and root-scoped service worker;
 - durable push queue stored in `NotificationLog`;
 - separate `notification-worker` production process;
-- role expansion, user preference filtering, dedupe, preparation aggregation,
-  retry/backoff, and permanent subscription revocation;
+- role expansion, effective Hub-capability filtering, user preference filtering,
+  dedupe, preparation aggregation, retry/backoff, and permanent subscription
+  revocation;
 - foreground/background duplicate suppression;
 - a read-only `push_readiness` operational audit.
 
@@ -39,20 +40,42 @@ Push remains disabled by default and can be deployed inert before rollout.
 - `NotificationRecipient.read_at` remains the human acknowledgement signal.
 - Queue/provider failures are isolated from order/request transactions.
 
-## Initial push routing matrix
+## Push routing matrix
 
-| Event | Push audience | Push |
-| --- | --- | --- |
-| New order | Admin, cashier, service/waiter | Yes |
-| New preparation items | Relevant station + admin | Yes, grouped per order/station |
-| Preparation item ready | Service/waiter + admin | Yes |
-| Manager approval needed | Admin | Yes |
-| Delivery order created | Admin, cashier, service/waiter | Yes |
-| Payment pending | Cashier | No initially |
-| Day closed | Admin, cashier | No initially |
+| Event | Push audience | Required Hub capability | Push |
+| --- | --- | --- | --- |
+| New order | Admin, cashier, service/waiter | `orders` | Yes |
+| New preparation items | Relevant preparation station operator | `kitchen_board` | Yes, grouped per order/station |
+| Preparation item ready | Service/waiter + admin | `delivery_management` | Yes |
+| Manager approval needed | Admin | `partial_payment_approval` | Yes |
+| Delivery order created | Admin, cashier, service/waiter | `delivery_management` | Yes |
+| Payment pending | Cashier | `cashier` | No initially |
+| Day closed | Admin, cashier | `finance` | No initially |
 
 The current account model uses the role name `waiter`; notification routing maps
 the historical `service` audience to that role explicitly.
+
+Preparation push is deliberately different from admin in-app visibility. Admins
+can inspect preparation events in the staff notification stream, but an admin is
+not sent a second lock-screen preparation push for every ordinary order. The
+station operator receives the preparation push; the admin continues to receive
+the new-order push.
+
+## Permission gate
+
+Role targeting is only the first audience filter. A browser push is queued only
+when all of the following are true:
+
+1. the account is active and matches the event role/station audience;
+2. the user has the effective Hub capability required for that event;
+3. the relevant notification category preference is enabled;
+4. browser notifications are enabled for the user;
+5. the browser subscription is active and permission is granted.
+
+The effective Hub capability is resolved by `accounts.permissions` from role
+defaults plus any explicit per-user allow/deny override. The worker repeats the
+capability and preference checks immediately before provider delivery, so a
+permission removed after queueing prevents the pending push from being sent.
 
 ## Durable delivery behavior
 
@@ -61,7 +84,9 @@ Delivery records are created only after the notification transaction commits.
 The delivery worker then re-checks, immediately before sending:
 
 - event active/expiry state;
-- current user active state and role targeting;
+- current user active state;
+- current role/station targeting;
+- current effective Hub capability;
 - current user notification preferences;
 - browser-notification opt-in;
 - subscription active/revoked/permission state.
@@ -153,19 +178,19 @@ A missing test device, stale queue, or recent provider failures are warnings.
 Invalid enabled configuration is a failure. CI runs the command with push
 disabled so deployment remains credential-free.
 
-## Remaining rollout
+## Recommended rollout
 
 Before broad activation:
 
-1. deploy this code with push disabled;
-2. generate/configure a real VAPID key pair outside Git;
-3. run `push_readiness --json` and confirm configuration is valid;
-4. enable one modern Android admin phone and test manager-approval push with the
-   app visible, backgrounded, and closed;
-5. test an iPhone installed to the Home Screen;
-6. add a kitchen device and confirm grouped preparation pushes;
-7. expand new-order routing to cashier/service devices;
-8. monitor stale queue, provider failures, duplicate alerts, and acknowledgement
+1. deploy with push disabled and validate configuration;
+2. enable one modern Android admin phone and test foreground, background, and
+   closed-browser delivery;
+3. add a kitchen device and verify grouped preparation pushes go to the station
+   operator without creating a second admin preparation push;
+4. test an iPhone installed to the Home Screen;
+5. add cashier/service devices and verify both role and per-user capability
+   filtering;
+6. monitor stale queue, provider failures, duplicate alerts, and acknowledgement
    times before broader rollout.
 
 The Android 4.4.2 POS tablet remains on polling/audio fallback and is not a
