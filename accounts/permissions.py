@@ -9,6 +9,53 @@ MANAGER_REQUIRED_MESSAGE = 'هذه العملية تحتاج صلاحية الم
 ACCESS_DENIED_MESSAGE = 'لا تملك صلاحية الوصول إلى هذه الصفحة.'
 
 
+# One capability vocabulary is shared by server-side authorization, staff UI,
+# and notification routing. Role membership supplies defaults; non-admin users
+# may then receive an explicit per-user allow/deny override.
+CAPABILITY_LABELS = {
+    'staff_home': 'مساحة العمليات',
+    'orders': 'الطلبات',
+    'pos': 'إدخال الطلبات / نقطة البيع',
+    'cashier': 'الكاشير والتحصيل',
+    'reports': 'التقارير',
+    'finance': 'المالية',
+    'inventory': 'المخزون',
+    'reservations': 'الحجوزات',
+    'events': 'الفعاليات',
+    'settings': 'الإعدادات',
+    'imports': 'الاستيراد',
+    'users': 'المستخدمون والصلاحيات',
+    'modifiers': 'خيارات المنتجات',
+    'internet_billing': 'فواتير الإنترنت',
+    'members/internet': 'الأعضاء والإنترنت',
+    'kitchen_board': 'لوحة التحضير',
+    'partial_payment_approval': 'الموافقة على الدفع الجزئي',
+    'order_edit': 'تعديل الطلب',
+    'delivery_management': 'إدارة التوصيل',
+}
+
+_ALL_CAPABILITIES = frozenset(CAPABILITY_LABELS)
+
+# Preserve the existing role policy except for the preparation board: it is now
+# kitchen-only by default. Cashiers/waiters can still be granted that capability
+# individually when their real shift duties require it.
+ROLE_DEFAULT_CAPABILITIES = {
+    'admin': _ALL_CAPABILITIES,
+    'cashier': frozenset({
+        'staff_home', 'orders', 'pos', 'cashier', 'finance', 'inventory',
+        'internet_billing', 'members/internet', 'order_edit',
+        'delivery_management',
+    }),
+    'waiter': frozenset({
+        'staff_home', 'orders', 'pos', 'reservations', 'events', 'order_edit',
+        'delivery_management',
+    }),
+    'kitchen': frozenset({
+        'staff_home', 'inventory', 'kitchen_board',
+    }),
+}
+
+
 def _role(user):
     return getattr(user, 'role', '')
 
@@ -33,78 +80,147 @@ def is_kitchen(user):
     return _is_authenticated_active(user) and _role(user) == 'kitchen'
 
 
+def role_default_has_capability(role, capability):
+    return capability in ROLE_DEFAULT_CAPABILITIES.get(role or '', frozenset())
+
+
+def _override_map(user):
+    if not getattr(user, 'pk', None):
+        return {}
+    cache_name = '_staff_capability_override_cache'
+    cached = getattr(user, cache_name, None)
+    if cached is not None:
+        return cached
+    overrides = {
+        row.capability: bool(row.allowed)
+        for row in user.staff_capability_overrides.all()
+        if row.capability in CAPABILITY_LABELS
+    }
+    setattr(user, cache_name, overrides)
+    return overrides
+
+
+def clear_staff_capability_cache(user):
+    if hasattr(user, '_staff_capability_override_cache'):
+        delattr(user, '_staff_capability_override_cache')
+
+
+def user_has_capability(user, capability):
+    if capability not in CAPABILITY_LABELS or not _is_authenticated_active(user):
+        return False
+
+    # Admin is deliberately a full-access role. Per-user overrides are intended
+    # for operational roles; they cannot silently cripple the last admin path.
+    if getattr(user, 'is_superuser', False) or _role(user) == 'admin':
+        return True
+
+    overrides = _override_map(user)
+    if capability in overrides:
+        return overrides[capability]
+    return role_default_has_capability(_role(user), capability)
+
+
+def get_staff_capabilities(user):
+    return {name: user_has_capability(user, name) for name in CAPABILITY_LABELS}
+
+
+def get_staff_capability_details(user):
+    overrides = {} if is_owner_or_admin(user) else _override_map(user)
+    details = []
+    for capability, label in CAPABILITY_LABELS.items():
+        allowed = user_has_capability(user, capability)
+        if is_owner_or_admin(user):
+            source = 'admin'
+            source_label = 'مدير — سماح كامل'
+        elif capability in overrides:
+            source = 'override_allow' if overrides[capability] else 'override_deny'
+            source_label = 'سماح فردي' if overrides[capability] else 'منع فردي'
+        else:
+            source = 'role'
+            source_label = 'حسب الدور'
+        details.append({
+            'key': capability,
+            'label': label,
+            'allowed': allowed,
+            'source': source,
+            'source_label': source_label,
+        })
+    return details
+
+
 def can_access_staff_home(user):
-    return is_owner_or_admin(user) or is_cashier(user) or is_waiter(user) or is_kitchen(user)
+    return user_has_capability(user, 'staff_home')
 
 
 def can_access_orders(user):
-    return is_owner_or_admin(user) or is_cashier(user) or is_waiter(user)
+    return user_has_capability(user, 'orders')
 
 
 def can_access_pos(user):
-    return is_owner_or_admin(user) or is_cashier(user) or is_waiter(user)
+    return user_has_capability(user, 'pos')
 
 
 def can_access_cashier(user):
-    return is_owner_or_admin(user) or is_cashier(user)
+    return user_has_capability(user, 'cashier')
 
 
 def can_access_reports(user):
-    return is_owner_or_admin(user)
+    return user_has_capability(user, 'reports')
 
 
 def can_access_finance(user):
-    return is_owner_or_admin(user) or is_cashier(user)
+    return user_has_capability(user, 'finance')
 
 
 def can_access_inventory(user):
-    return is_owner_or_admin(user) or is_cashier(user) or is_kitchen(user)
+    return user_has_capability(user, 'inventory')
 
 
 def can_access_reservations(user):
-    return is_owner_or_admin(user) or is_waiter(user)
+    return user_has_capability(user, 'reservations')
 
 
 def can_access_events(user):
-    return is_owner_or_admin(user) or is_waiter(user)
+    return user_has_capability(user, 'events')
 
 
 def can_access_settings(user):
-    return is_owner_or_admin(user)
+    return user_has_capability(user, 'settings')
 
 
 def can_access_imports(user):
-    return is_owner_or_admin(user)
+    return user_has_capability(user, 'imports')
 
 
 def can_access_users(user):
-    return is_owner_or_admin(user)
+    return user_has_capability(user, 'users')
 
 
 def can_access_modifiers(user):
-    return is_owner_or_admin(user)
+    return user_has_capability(user, 'modifiers')
 
 
 def can_access_internet_billing(user):
-    return is_owner_or_admin(user) or is_cashier(user)
+    return user_has_capability(user, 'internet_billing')
 
 
 def can_access_kitchen_board(user):
-    return can_access_staff_home(user)
+    return user_has_capability(user, 'kitchen_board')
 
 
 def can_approve_partial_payment(user):
-    return is_owner_or_admin(user)
+    return user_has_capability(user, 'partial_payment_approval')
 
 
 def can_edit_order(user):
-    return is_owner_or_admin(user) or is_cashier(user) or is_waiter(user)
+    return user_has_capability(user, 'order_edit')
 
 
 def can_manage_delivery(user):
-    return is_owner_or_admin(user) or is_cashier(user) or is_waiter(user)
+    return user_has_capability(user, 'delivery_management')
 
 
+# Compatibility map for callers that introspect the old function registry.
 CAPABILITY_CHECKS = {
     'staff_home': can_access_staff_home,
     'orders': can_access_orders,
@@ -120,21 +236,12 @@ CAPABILITY_CHECKS = {
     'users': can_access_users,
     'modifiers': can_access_modifiers,
     'internet_billing': can_access_internet_billing,
-    'members/internet': can_access_internet_billing,
+    'members/internet': lambda user: user_has_capability(user, 'members/internet'),
     'kitchen_board': can_access_kitchen_board,
     'partial_payment_approval': can_approve_partial_payment,
     'order_edit': can_edit_order,
     'delivery_management': can_manage_delivery,
 }
-
-
-def get_staff_capabilities(user):
-    return {name: checker(user) for name, checker in CAPABILITY_CHECKS.items()}
-
-
-def user_has_capability(user, capability):
-    checker = CAPABILITY_CHECKS.get(capability)
-    return bool(checker and checker(user))
 
 
 def require_staff_capability(capability, message=ACCESS_DENIED_MESSAGE):
