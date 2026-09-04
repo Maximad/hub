@@ -8,6 +8,28 @@ ADMIN_ONLY_MESSAGE = 'هذه الصفحة مخصصة للمدير فقط.'
 MANAGER_REQUIRED_MESSAGE = 'هذه العملية تحتاج صلاحية المدير أو صاحب المحل.'
 ACCESS_DENIED_MESSAGE = 'لا تملك صلاحية الوصول إلى هذه الصفحة.'
 
+CAPABILITY_LABELS = {
+    'staff_home': 'مساحة العمل',
+    'orders': 'الطلبات',
+    'pos': 'نقطة البيع',
+    'cashier': 'الكاشير والتحصيل',
+    'reports': 'التقارير',
+    'finance': 'المالية',
+    'inventory': 'المخزون',
+    'reservations': 'الحجوزات',
+    'events': 'الفعاليات',
+    'settings': 'الإعدادات',
+    'imports': 'الاستيراد',
+    'users': 'إدارة المستخدمين',
+    'modifiers': 'إضافات وخيارات المنتجات',
+    'internet_billing': 'فوترة الإنترنت',
+    'members/internet': 'الأعضاء والإنترنت',
+    'kitchen_board': 'لوحة التحضير',
+    'partial_payment_approval': 'الموافقات الإدارية',
+    'order_edit': 'تعديل الطلبات',
+    'delivery_management': 'إدارة التوصيل',
+}
+
 
 def _role(user):
     return getattr(user, 'role', '')
@@ -90,7 +112,10 @@ def can_access_internet_billing(user):
 
 
 def can_access_kitchen_board(user):
-    return can_access_staff_home(user)
+    # Preparation is a dedicated operational capability. Waiters/cashiers can
+    # still receive ready/order events through their own capabilities without
+    # gaining access to the full preparation board.
+    return is_owner_or_admin(user) or is_kitchen(user)
 
 
 def can_approve_partial_payment(user):
@@ -128,13 +153,38 @@ CAPABILITY_CHECKS = {
 }
 
 
-def get_staff_capabilities(user):
-    return {name: checker(user) for name, checker in CAPABILITY_CHECKS.items()}
+def _capability_override(user, capability):
+    if not getattr(user, 'pk', None):
+        return None
+    try:
+        return user.capability_overrides.filter(capability=capability).values_list('allowed', flat=True).first()
+    except (AttributeError, TypeError):
+        return None
 
 
 def user_has_capability(user, capability):
     checker = CAPABILITY_CHECKS.get(capability)
-    return bool(checker and checker(user))
+    if checker is None or not _is_authenticated_active(user):
+        return False
+
+    # Keep Django superusers as an emergency all-access path.
+    if getattr(user, 'is_superuser', False):
+        return True
+
+    override = _capability_override(user, capability)
+    if override is not None:
+        return bool(override)
+    return bool(checker(user))
+
+
+def get_staff_capabilities(user):
+    return {name: user_has_capability(user, name) for name in CAPABILITY_CHECKS}
+
+
+def get_capability_overrides(user):
+    if not getattr(user, 'pk', None):
+        return {}
+    return dict(user.capability_overrides.values_list('capability', 'allowed'))
 
 
 def require_staff_capability(capability, message=ACCESS_DENIED_MESSAGE):
@@ -145,7 +195,7 @@ def require_staff_capability(capability, message=ACCESS_DENIED_MESSAGE):
             if user_has_capability(request.user, capability):
                 return view_func(request, *args, **kwargs)
             messages.error(request, message)
-            if can_access_staff_home(request.user):
+            if user_has_capability(request.user, 'staff_home'):
                 return redirect('staff_home')
             return redirect('admin:login')
         return wrapper
