@@ -51,6 +51,14 @@ class StaffUserBaseForm(forms.ModelForm):
             self.fields.pop('make_superuser', None)
         if not is_owner_or_admin(actor):
             self.fields.pop('allow_django_admin_access', None)
+            # A user may be delegated the Hub "users" capability without being
+            # an administrator. That delegation may manage operational accounts,
+            # but it must not be a path to assigning the full admin role.
+            self.fields['role'].choices = [
+                (value, label)
+                for value, label in User.Role.choices
+                if value != User.Role.ADMIN
+            ]
 
         # Keep the ordinary account fields and the capability matrix visually
         # separate in the staff template.
