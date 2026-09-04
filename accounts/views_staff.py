@@ -5,7 +5,11 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from accounts.forms import StaffUserCreateForm, StaffUserEditForm, StaffUserPasswordForm
-from accounts.permissions import ADMIN_ONLY_MESSAGE, require_staff_capability
+from accounts.permissions import (
+    ADMIN_ONLY_MESSAGE,
+    get_staff_capability_details,
+    require_staff_capability,
+)
 
 User = get_user_model()
 
@@ -23,6 +27,15 @@ def _would_remove_last_active_admin(user, new_active=None, new_role=None, new_su
         return False
     was_active_admin = user.is_active and (user.is_superuser or user.role == User.Role.ADMIN)
     return was_active_admin and _last_active_admin_count() <= 1
+
+
+def _user_form_context(form, **extra):
+    return {
+        'form': form,
+        'basic_fields': [form[name] for name in form.basic_field_names],
+        'capability_fields': [form[name] for name in form.capability_field_names],
+        **extra,
+    }
 
 
 @require_staff_capability('users', ADMIN_ONLY_MESSAGE)
@@ -61,13 +74,20 @@ def staff_user_new(request):
         user = form.save()
         messages.success(request, f'تم إنشاء المستخدم {user.username}.')
         return redirect('staff_user_detail', user_id=user.pk)
-    return render(request, 'staff/users/form.html', {'form': form, 'mode': 'create'})
+    return render(
+        request,
+        'staff/users/form.html',
+        _user_form_context(form, mode='create'),
+    )
 
 
 @require_staff_capability('users', ADMIN_ONLY_MESSAGE)
 def staff_user_detail(request, user_id):
     target = get_object_or_404(User, pk=user_id)
-    return render(request, 'staff/users/detail.html', {'target_user': target})
+    return render(request, 'staff/users/detail.html', {
+        'target_user': target,
+        'capability_details': get_staff_capability_details(target),
+    })
 
 
 @require_staff_capability('users', ADMIN_ONLY_MESSAGE)
@@ -84,9 +104,13 @@ def staff_user_edit(request, user_id):
             form.add_error(None, 'لا يمكن تعطيل أو إزالة آخر مدير/مالك نشط.')
         else:
             user = form.save()
-            messages.success(request, 'تم تحديث بيانات المستخدم.')
+            messages.success(request, 'تم تحديث بيانات المستخدم وصلاحياته.')
             return redirect('staff_user_detail', user_id=user.pk)
-    return render(request, 'staff/users/form.html', {'form': form, 'mode': 'edit', 'target_user': target})
+    return render(
+        request,
+        'staff/users/form.html',
+        _user_form_context(form, mode='edit', target_user=target),
+    )
 
 
 @require_staff_capability('users', ADMIN_ONLY_MESSAGE)
