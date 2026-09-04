@@ -7,6 +7,7 @@ from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
+from accounts.models import UserCapabilityOverride
 from catalog.models import PrepStation
 from core.models import (
     NotificationEvent,
@@ -110,7 +111,7 @@ class NotificationDeliveryRoutingTests(TestCase):
             {'push-admin', 'push-cashier', 'push-waiter'},
         )
 
-    def test_prep_order_is_grouped_by_order_and_station_per_device(self):
+    def test_prep_order_is_grouped_by_order_and_station_for_kitchen_only(self):
         first = NotificationEvent.objects.create(
             event_type=NotificationEvent.EventType.NEW_PREP_ITEM,
             title_ar='عنصر جديد',
@@ -129,8 +130,8 @@ class NotificationDeliveryRoutingTests(TestCase):
         enqueue_push_deliveries_for_event(second)
 
         logs = NotificationLog.objects.filter(channel=NotificationLog.Channel.BROWSER)
-        self.assertEqual(logs.count(), 2)
-        self.assertEqual(set(logs.values_list('recipient_user__username', flat=True)), {'push-admin', 'push-kitchen'})
+        self.assertEqual(logs.count(), 1)
+        self.assertEqual(set(logs.values_list('recipient_user__username', flat=True)), {'push-kitchen'})
         self.assertEqual(set(logs.values_list('dedupe_key', flat=True)), {push_dedupe_key(first)})
 
         payload = build_push_payload(first).as_dict()
@@ -138,7 +139,7 @@ class NotificationDeliveryRoutingTests(TestCase):
         self.assertNotIn('SECRET ITEM ONE', str(payload))
         self.assertNotIn('SECRET ITEM TWO', str(payload))
 
-    def test_ready_item_routes_to_admin_and_service_not_station_operator(self):
+    def test_ready_item_routes_to_service_not_station_operator_or_admin(self):
         event = NotificationEvent.objects.create(
             event_type=NotificationEvent.EventType.PREP_ITEM_READY,
             title_ar='عنصر جاهز',
@@ -146,7 +147,7 @@ class NotificationDeliveryRoutingTests(TestCase):
             target_station=self.kitchen_station,
         )
         enqueue_push_deliveries_for_event(event)
-        self.assertEqual(self.queued_users(), {'push-admin', 'push-waiter'})
+        self.assertEqual(self.queued_users(), {'push-waiter'})
 
     def test_manager_approval_is_admin_only(self):
         event = NotificationEvent.objects.create(
@@ -156,6 +157,35 @@ class NotificationDeliveryRoutingTests(TestCase):
         )
         enqueue_push_deliveries_for_event(event)
         self.assertEqual(self.queued_users(), {'push-admin'})
+
+    def test_capability_deny_override_blocks_push_even_when_role_matches(self):
+        UserCapabilityOverride.objects.create(
+            user=self.cashier,
+            capability='orders',
+            allowed=False,
+        )
+        event = NotificationEvent.objects.create(
+            event_type=NotificationEvent.EventType.NEW_ORDER,
+            title_ar='طلب جديد',
+            order=self.order,
+        )
+        enqueue_push_deliveries_for_event(event)
+        self.assertEqual(self.queued_users(), {'push-admin', 'push-waiter'})
+
+    def test_kitchen_capability_deny_override_blocks_prep_push(self):
+        UserCapabilityOverride.objects.create(
+            user=self.kitchen,
+            capability='kitchen_board',
+            allowed=False,
+        )
+        event = NotificationEvent.objects.create(
+            event_type=NotificationEvent.EventType.NEW_PREP_ITEM,
+            title_ar='عنصر جديد',
+            order=self.order,
+            target_station=self.kitchen_station,
+        )
+        self.assertEqual(enqueue_push_deliveries_for_event(event), 0)
+        self.assertFalse(self.queued_users())
 
     def test_payment_and_daily_close_do_not_generate_push(self):
         for event_type in (
@@ -315,6 +345,20 @@ class NotificationDeliveryWorkerTests(TestCase):
         self.log.refresh_from_db()
         self.assertEqual(self.log.status, NotificationLog.Status.SKIPPED)
         self.assertEqual(self.log.error_code, 'preference_disabled')
+        self.assertFalse(transport.calls)
+
+    def test_worker_rechecks_effective_capability_before_send(self):
+        UserCapabilityOverride.objects.create(
+            user=self.user,
+            capability='partial_payment_approval',
+            allowed=False,
+        )
+        transport = FakeTransport()
+        summary, _ = run_notification_worker_cycle(limit=1, transport=transport)
+        self.assertEqual(summary['skipped'], 1)
+        self.log.refresh_from_db()
+        self.assertEqual(self.log.status, NotificationLog.Status.SKIPPED)
+        self.assertEqual(self.log.error_code, 'recipient_not_targeted')
         self.assertFalse(transport.calls)
 
     def test_claim_lease_prevents_immediate_second_claim(self):
