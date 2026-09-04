@@ -8,6 +8,7 @@ from accounts.forms import StaffUserCreateForm, StaffUserEditForm, StaffUserPass
 from accounts.permissions import (
     ADMIN_ONLY_MESSAGE,
     get_staff_capability_details,
+    is_owner_or_admin,
     require_staff_capability,
 )
 
@@ -16,6 +17,15 @@ User = get_user_model()
 
 def _last_active_admin_count():
     return User.objects.filter(is_active=True).filter(Q(is_superuser=True) | Q(role=User.Role.ADMIN)).count()
+
+
+def _is_admin_identity(user):
+    return bool(getattr(user, 'is_superuser', False) or getattr(user, 'role', '') == User.Role.ADMIN)
+
+
+def _can_manage_target(actor, target):
+    """Delegated user managers may manage operational users, never admins."""
+    return is_owner_or_admin(actor) or not _is_admin_identity(target)
 
 
 def _would_remove_last_active_admin(user, new_active=None, new_role=None, new_superuser=None):
@@ -36,6 +46,13 @@ def _user_form_context(form, **extra):
         'capability_fields': [form[name] for name in form.capability_field_names],
         **extra,
     }
+
+
+def _deny_admin_target(request, target):
+    if _can_manage_target(request.user, target):
+        return None
+    messages.error(request, 'لا يمكنك تعديل حساب مدير بهذه الصلاحية المفوّضة.')
+    return redirect('staff_user_detail', user_id=target.pk)
 
 
 @require_staff_capability('users', ADMIN_ONLY_MESSAGE)
@@ -87,12 +104,16 @@ def staff_user_detail(request, user_id):
     return render(request, 'staff/users/detail.html', {
         'target_user': target,
         'capability_details': get_staff_capability_details(target),
+        'can_manage_target': _can_manage_target(request.user, target),
     })
 
 
 @require_staff_capability('users', ADMIN_ONLY_MESSAGE)
 def staff_user_edit(request, user_id):
     target = get_object_or_404(User, pk=user_id)
+    denied = _deny_admin_target(request, target)
+    if denied:
+        return denied
     form = StaffUserEditForm(request.POST or None, instance=target, actor=request.user)
     if request.method == 'POST' and form.is_valid():
         if _would_remove_last_active_admin(
@@ -116,6 +137,9 @@ def staff_user_edit(request, user_id):
 @require_staff_capability('users', ADMIN_ONLY_MESSAGE)
 def staff_user_password(request, user_id):
     target = get_object_or_404(User, pk=user_id)
+    denied = _deny_admin_target(request, target)
+    if denied:
+        return denied
     form = StaffUserPasswordForm(request.POST or None, user=target)
     if request.method == 'POST' and form.is_valid():
         target.set_password(form.cleaned_data['new_password'])
@@ -129,6 +153,9 @@ def staff_user_password(request, user_id):
 @require_staff_capability('users', ADMIN_ONLY_MESSAGE)
 def staff_user_toggle_active(request, user_id):
     target = get_object_or_404(User, pk=user_id)
+    denied = _deny_admin_target(request, target)
+    if denied:
+        return denied
     if target.pk == request.user.pk:
         messages.error(request, 'لا يمكنك تعطيل حسابك الحالي.')
         return redirect('staff_user_detail', user_id=target.pk)
