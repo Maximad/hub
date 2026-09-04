@@ -14,7 +14,7 @@ from django.utils import timezone
 from django.utils.cache import patch_vary_headers
 from django.views.decorators.http import require_GET, require_http_methods
 
-from accounts.permissions import can_access_staff_home
+from accounts.permissions import user_has_capability
 from core.models import NotificationPreference, PushSubscription
 
 
@@ -25,7 +25,7 @@ MAX_AUTH_SECRET_LENGTH = 256
 
 
 def _deny(user):
-    return not (user.is_authenticated and can_access_staff_home(user))
+    return not (user.is_authenticated and user_has_capability(user, 'staff_home'))
 
 
 def _registration_enabled():
