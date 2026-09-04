@@ -1,3 +1,4 @@
+{% load prep_timing %}
 <div class="kitchen-v2__live-meta">
   <div class="kitchen-v2__live-summary">
     <span class="kitchen-v2__pulse{% if pending_count %} is-active{% endif %}" aria-hidden="true"></span>
@@ -20,8 +21,8 @@
     </header>
 
     <div class="kitchen-v2__tickets">
-      {% for row in lane.items %}{% with item=row.item order=row.item.order %}
-      <article class="kitchen-v2__ticket kitchen-v2__ticket--{{ lane.key }}">
+      {% for row in lane.items %}{% with item=row.item order=row.item.order %}{% prep_timing item as timing %}
+      <article class="kitchen-v2__ticket kitchen-v2__ticket--{{ lane.key }}{% if timing.css_class %} {{ timing.css_class }}{% endif %}">
         <div class="kitchen-v2__ticket-top">
           <div class="kitchen-v2__ticket-id">
             <strong>{{ order.display_number }}</strong>
@@ -33,6 +34,8 @@
             <span class="staff-v2-badge kitchen-v2__status-badge">{{ item.get_prep_status_display }}</span>
           </div>
         </div>
+
+        {% if timing.label %}<div class="kitchen-v2__timing-alert {{ timing.css_class }}" role="status">{{ timing.label }}</div>{% endif %}
 
         {% if order.location_detail %}<div class="kitchen-v2__location">{{ order.location_detail }}</div>{% endif %}
 
