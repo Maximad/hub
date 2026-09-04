@@ -4,6 +4,7 @@ from django.test import TestCase
 from accounts.forms import StaffUserEditForm
 from accounts.models import StaffCapabilityOverride
 from accounts.permissions import get_staff_capabilities, user_has_capability
+from accounts.views_staff import _can_manage_target
 
 
 class StaffCapabilityTests(TestCase):
@@ -106,3 +107,45 @@ class StaffCapabilityTests(TestCase):
                 capability='kitchen_board',
             ).exists()
         )
+
+    def test_delegated_user_manager_cannot_assign_admin_or_mutate_admin_account(self):
+        StaffCapabilityOverride.objects.create(
+            user=self.waiter,
+            capability='users',
+            allowed=True,
+        )
+        delegated = type(self.waiter).objects.get(pk=self.waiter.pk)
+        self.assertTrue(user_has_capability(delegated, 'users'))
+        self.assertFalse(_can_manage_target(delegated, self.admin))
+        self.assertTrue(_can_manage_target(delegated, self.cashier))
+
+        form = StaffUserEditForm(instance=self.cashier, actor=delegated)
+        role_values = {value for value, _label in form.fields['role'].choices}
+        self.assertNotIn('admin', role_values)
+        self.assertNotIn('allow_django_admin_access', form.fields)
+        self.assertNotIn('make_superuser', form.fields)
+
+    def test_delegated_user_manager_preserves_hidden_django_admin_flag(self):
+        StaffCapabilityOverride.objects.create(
+            user=self.waiter,
+            capability='users',
+            allowed=True,
+        )
+        delegated = type(self.waiter).objects.get(pk=self.waiter.pk)
+        self.cashier.is_staff = True
+        self.cashier.save(update_fields=['is_staff'])
+        form = StaffUserEditForm(
+            data={
+                'first_name': '',
+                'last_name': '',
+                'email': '',
+                'phone': self.cashier.phone,
+                'role': 'cashier',
+                'is_active': 'on',
+            },
+            instance=self.cashier,
+            actor=delegated,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        user = form.save()
+        self.assertTrue(user.is_staff)
