@@ -50,6 +50,8 @@
 
 .kitchen-v2__ticket{display:grid;gap:10px;min-width:0;padding:13px;border:1px solid var(--staff-v2-line);border-radius:14px;background:var(--staff-v2-surface);box-shadow:0 4px 18px rgba(38,44,40,.035)}
 .kitchen-v2__ticket:hover{border-color:#d7cdc0}
+.kitchen-v2__ticket.is-warning{border-color:#e7c98b;box-shadow:0 0 0 1px rgba(174,116,27,.08)}
+.kitchen-v2__ticket.is-late{border-color:#dfaaa1;box-shadow:0 0 0 1px rgba(155,61,49,.12)}
 .kitchen-v2__ticket-top{display:grid;gap:8px}
 .kitchen-v2__ticket-id{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
 .kitchen-v2__ticket-id strong{font-size:1rem;line-height:1;font-variant-numeric:tabular-nums}
@@ -61,6 +63,9 @@
 .kitchen-v2__ticket--working .kitchen-v2__status-badge{background:var(--staff-v2-brand-soft);color:var(--staff-v2-brand)}
 .kitchen-v2__ticket--ready .kitchen-v2__status-badge{background:var(--staff-v2-success-soft);color:var(--staff-v2-success)}
 .kitchen-v2__station-badge{margin-inline-start:auto}
+.kitchen-v2__timing-alert{padding:7px 9px;border-radius:10px;font-size:.7rem;font-weight:800;line-height:1.35}
+.kitchen-v2__timing-alert.is-warning{background:var(--staff-v2-sand-soft);color:#855616}
+.kitchen-v2__timing-alert.is-late{background:var(--staff-v2-danger-soft);color:var(--staff-v2-danger)}
 .kitchen-v2__location{padding:7px 9px;border-radius:10px;background:var(--staff-v2-surface-soft);color:#5f5d57;font-size:.7rem;line-height:1.35}
 .kitchen-v2__item-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding-block:2px}
 .kitchen-v2__item-row h3{margin:0;font-size:1.02rem;line-height:1.4;overflow-wrap:anywhere}
