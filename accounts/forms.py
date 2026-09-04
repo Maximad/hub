@@ -30,7 +30,7 @@ class StaffUserBaseForm(forms.ModelForm):
         labels = {
             'username': 'اسم المستخدم',
             'first_name': 'الاسم الأول',
-            'last_name': 'اسم العائلة',
+            'last_name': 'الاسم الأخير',
             'email': 'البريد الإلكتروني',
             'phone': 'الهاتف',
             'role': 'الدور داخل Hub/Masharib',
@@ -139,7 +139,13 @@ class StaffUserBaseForm(forms.ModelForm):
 
     def save(self, commit=True):
         user = super().save(commit=False)
-        user.is_staff = bool(self.cleaned_data.get('allow_django_admin_access', False))
+        # A non-admin can be delegated Hub user-management through a capability
+        # override, but that must not silently alter the separate Django-admin
+        # access flag that the delegated manager is not allowed to edit.
+        if 'allow_django_admin_access' in self.cleaned_data:
+            user.is_staff = bool(self.cleaned_data['allow_django_admin_access'])
+        else:
+            user.is_staff = bool(getattr(user, 'is_staff', False))
         user.is_superuser = bool(self.cleaned_data.get('make_superuser', False)) if self.actor and self.actor.is_superuser else bool(getattr(user, 'is_superuser', False))
         if user.is_superuser:
             user.is_staff = True
