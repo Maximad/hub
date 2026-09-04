@@ -36,14 +36,15 @@ CAPABILITY_LABELS = {
 
 _ALL_CAPABILITIES = frozenset(CAPABILITY_LABELS)
 
-# Preserve the existing role policy except for the preparation board: it is now
-# kitchen-only by default. Cashiers/waiters can still be granted that capability
-# individually when their real shift duties require it.
+# Preserve existing operational duties while tightening preparation access:
+# kitchen users handle kitchen prep, cashiers retain preparation access because
+# bar/cashier/service prep stations resolve to the cashier operator role, and
+# waiters no longer get the board merely because they can enter orders.
 ROLE_DEFAULT_CAPABILITIES = {
     'admin': _ALL_CAPABILITIES,
     'cashier': frozenset({
         'staff_home', 'orders', 'pos', 'cashier', 'finance', 'inventory',
-        'internet_billing', 'members/internet', 'order_edit',
+        'internet_billing', 'members/internet', 'kitchen_board', 'order_edit',
         'delivery_management',
     }),
     'waiter': frozenset({
