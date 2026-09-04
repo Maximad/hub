@@ -3,13 +3,14 @@ from django.http import JsonResponse, Http404
 from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
-from accounts.permissions import can_access_staff_home
+
+from accounts.permissions import user_has_capability
 from core.models import NotificationPreference
 from core.notifications import group_notification_recipients_for_user, mark_grouped_notification_read
 
 
 def _deny(user):
-    return not (user.is_authenticated and can_access_staff_home(user))
+    return not (user.is_authenticated and user_has_capability(user, 'staff_home'))
 
 
 def _serialize(card):
