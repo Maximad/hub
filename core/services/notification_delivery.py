@@ -17,6 +17,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from accounts.permissions import user_has_capability
 from core.models import (
     NotificationEvent,
     NotificationLog,
@@ -37,26 +38,31 @@ PUSH_RETRY_DELAYS_SECONDS = (30, 120, 300, 900)
 class PushRoute:
     roles: tuple[str, ...]
     preference_field: str
+    capability: str
     aggregate_prep: bool = False
 
 
-# This is intentionally smaller than the in-app notification matrix. Push is
-# reserved for events that need timely attention on a backgrounded device.
+# Push is intentionally narrower than the in-app notification matrix. Role is
+# only the audience candidate; the effective Hub capability is the final access
+# gate before a delivery can be queued or sent.
 PUSH_ROUTES = {
     NotificationEvent.EventType.NEW_ORDER: PushRoute(
-        ('admin', 'cashier', 'service'), 'notify_new_orders'
+        ('admin', 'cashier', 'service'), 'notify_new_orders', 'orders'
     ),
     NotificationEvent.EventType.DELIVERY_ORDER_CREATED: PushRoute(
-        ('admin', 'cashier', 'service'), 'notify_new_orders'
+        ('admin', 'cashier', 'service'), 'notify_new_orders', 'delivery_management'
     ),
+    # Preparation alerts belong to the responsible preparation role/station.
+    # Admins still see preparation activity in-app, but do not receive a second
+    # lock-screen push for every ordinary order by default.
     NotificationEvent.EventType.NEW_PREP_ITEM: PushRoute(
-        ('admin',), 'notify_prep_items', aggregate_prep=True
+        (), 'notify_prep_items', 'kitchen_board', aggregate_prep=True
     ),
     NotificationEvent.EventType.PREP_ITEM_READY: PushRoute(
-        ('admin', 'service'), 'notify_prep_items'
+        ('admin', 'service'), 'notify_prep_items', 'delivery_management'
     ),
     NotificationEvent.EventType.MANAGER_APPROVAL_NEEDED: PushRoute(
-        ('admin',), 'notify_manager_approvals'
+        ('admin',), 'notify_manager_approvals', 'partial_payment_approval'
     ),
 }
 
@@ -83,7 +89,12 @@ def push_route_for_event(event: NotificationEvent) -> PushRoute | None:
             roles.append(station_role)
         elif 'kitchen' not in roles:
             roles.append('kitchen')
-        return PushRoute(tuple(dict.fromkeys(roles)), route.preference_field, True)
+        return PushRoute(
+            tuple(dict.fromkeys(roles)),
+            route.preference_field,
+            route.capability,
+            True,
+        )
     return route
 
 
@@ -104,7 +115,7 @@ def user_is_push_target(event: NotificationEvent, user) -> bool:
     if not getattr(user, 'is_active', False):
         return False
     route = push_route_for_event(event)
-    if route is None:
+    if route is None or not user_has_capability(user, route.capability):
         return False
     if event.recipients.filter(user_id=user.pk).exists():
         return True
@@ -169,7 +180,11 @@ def enqueue_push_deliveries_for_event(event_or_id) -> int:
     if event is None or not _event_is_deliverable(event):
         return 0
 
-    user_ids = [user.pk for user in _target_users(event) if _preference_allows(event, user)]
+    user_ids = [
+        user.pk
+        for user in _target_users(event)
+        if user_is_push_target(event, user) and _preference_allows(event, user)
+    ]
     if not user_ids:
         return 0
 
