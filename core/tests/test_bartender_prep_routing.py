@@ -54,11 +54,13 @@ class BartenderPrepRoutingTests(TestCase):
                 p256dh=f'p256dh-{user.username}',
                 auth_secret=f'auth-{user.username}',
             )
-        self.bar = PrepStation.objects.create(
+        self.bar, _ = PrepStation.objects.get_or_create(
             code='bar',
-            name_ar='البار',
-            station_type='bar',
-            is_active=True,
+            defaults={
+                'name_ar': 'البار',
+                'station_type': 'bar',
+                'is_active': True,
+            },
         )
         self.category = Category.objects.create(name_ar='مشروبات')
         self.product = Product.objects.create(
