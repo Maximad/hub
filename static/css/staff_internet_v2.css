@@ -1,0 +1,46 @@
+/* Internet v2 launch pass — operational status before technical detail. */
+.staff-internet-v2 main.hub-container{display:grid;gap:14px}
+.staff-internet-v2 main.hub-container>p:first-child{margin:0;justify-self:end}
+.staff-internet-v2 main.hub-container>.hub-section{margin:0}
+.staff-internet-v2 main.hub-container>section:first-of-type{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:0}
+.staff-internet-v2 main.hub-container>section:first-of-type h2{margin:0;font-size:clamp(1.55rem,2.2vw,2rem)}
+.staff-internet-v2 .internet-v2__intro{margin:0;padding:7px 10px;border:0;border-radius:999px;background:var(--staff-v2-brand-soft);color:var(--staff-v2-brand);font-size:.7rem}
+
+.staff-internet-v2 .hub-summary-cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.staff-internet-v2 .hub-summary-card{display:grid;gap:3px;min-height:76px;padding:11px 13px;border:1px solid var(--staff-v2-line);border-radius:14px;background:var(--staff-v2-surface);box-shadow:none}
+.staff-internet-v2 .hub-summary-card span{color:var(--staff-v2-muted);font-size:.68rem}
+.staff-internet-v2 .hub-summary-card .metric{font-size:1.4rem;font-variant-numeric:tabular-nums}
+
+.staff-internet-v2 .hub-card{border-color:var(--staff-v2-line);border-radius:16px;box-shadow:none}
+.staff-internet-v2 .hub-card>.hub-section-title,.staff-internet-v2 section>.hub-section-title{margin-block:0 10px;font-size:.9rem}
+.staff-internet-v2 .hub-form label{display:grid;gap:5px;color:var(--staff-v2-muted);font-size:.7rem;font-weight:760}
+.staff-internet-v2 .hub-form input,.staff-internet-v2 .hub-form select{min-height:40px;border-color:var(--staff-v2-line);border-radius:10px;background:#fff}
+.staff-internet-v2 .hub-form .hub-button-primary{min-height:40px;align-self:end}
+
+.staff-internet-v2 .hub-table-wrap{border:1px solid var(--staff-v2-line);border-radius:13px;background:var(--staff-v2-surface);overflow:auto}
+.staff-internet-v2 .hub-table{margin:0;border:0;font-size:.7rem}
+.staff-internet-v2 .hub-table th{position:sticky;z-index:1;inset-block-start:0;background:var(--staff-v2-surface-soft);color:var(--staff-v2-muted);font-size:.64rem;white-space:nowrap}
+.staff-internet-v2 .hub-table td{vertical-align:middle}
+.staff-internet-v2 .hub-table .hub-toolbar{display:flex;gap:5px;flex-wrap:nowrap}
+.staff-internet-v2 .hub-table .hub-button{min-height:32px;padding:5px 8px;font-size:.64rem;white-space:nowrap}
+.staff-internet-v2 .hub-table .hub-form-section{margin:0;padding:0;border:0;background:transparent;box-shadow:none}
+.staff-internet-v2 details.hub-card{padding:11px 13px}
+.staff-internet-v2 details.hub-card>summary{cursor:pointer;margin:0;font-size:.78rem}
+.staff-internet-v2 details.hub-card:not([open])>*:not(summary){display:none}
+
+@media(max-width:1000px){
+  .staff-internet-v2 .hub-summary-cards{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+
+@media(max-width:700px){
+  .staff-internet-v2 main.hub-container{gap:10px}
+  .staff-internet-v2 main.hub-container>section:first-of-type{display:grid;gap:7px}
+  .staff-internet-v2 .internet-v2__intro{justify-self:start;border-radius:10px;line-height:1.4}
+  .staff-internet-v2 .hub-summary-cards{display:flex;gap:7px;margin-inline:-10px;padding-inline:10px;overflow-x:auto;scrollbar-width:none}
+  .staff-internet-v2 .hub-summary-cards::-webkit-scrollbar{display:none}
+  .staff-internet-v2 .hub-summary-card{flex:0 0 125px;min-height:66px;padding:9px 10px}
+  .staff-internet-v2 .hub-summary-card .metric{font-size:1.18rem}
+  .staff-internet-v2 .hub-grid-2{grid-template-columns:1fr!important}
+  .staff-internet-v2 .hub-card{padding:10px}
+  .staff-internet-v2 .hub-table-wrap{border-radius:11px}
+}
