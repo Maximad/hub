@@ -5,9 +5,19 @@ from django.contrib.auth import get_user_model, password_validation
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from django.core.exceptions import ValidationError
 
-from accounts.permissions import is_owner_or_admin
+from accounts.models import StaffCapabilityOverride
+from accounts.permissions import (
+    CAPABILITY_LABELS,
+    clear_staff_capability_cache,
+    is_owner_or_admin,
+    role_default_has_capability,
+)
 
 User = get_user_model()
+
+
+def _capability_field_name(capability):
+    return f"capability_{capability.replace('/', '__')}"
 
 
 class StaffUserBaseForm(forms.ModelForm):
@@ -20,7 +30,7 @@ class StaffUserBaseForm(forms.ModelForm):
         labels = {
             'username': 'اسم المستخدم',
             'first_name': 'الاسم الأول',
-            'last_name': 'الاسم الأخير',
+            'last_name': 'اسم العائلة',
             'email': 'البريد الإلكتروني',
             'phone': 'الهاتف',
             'role': 'الدور داخل Hub/Masharib',
@@ -42,6 +52,56 @@ class StaffUserBaseForm(forms.ModelForm):
         if not is_owner_or_admin(actor):
             self.fields.pop('allow_django_admin_access', None)
 
+        # Keep the ordinary account fields and the capability matrix visually
+        # separate in the staff template.
+        self.basic_field_names = list(self.fields.keys())
+        self.capability_field_names = []
+        self._capability_field_map = {}
+
+        override_map = {}
+        if self.instance and self.instance.pk:
+            override_map = {
+                row.capability: row.allowed
+                for row in self.instance.staff_capability_overrides.all()
+            }
+
+        selected_role = (
+            self.data.get('role') if self.is_bound else getattr(self.instance, 'role', User.Role.WAITER)
+        ) or User.Role.WAITER
+        fixed_admin = bool(
+            self.instance
+            and self.instance.pk
+            and (self.instance.is_superuser or self.instance.role == User.Role.ADMIN)
+        )
+
+        for capability, label in CAPABILITY_LABELS.items():
+            field_name = _capability_field_name(capability)
+            default_allowed = role_default_has_capability(selected_role, capability)
+            field = forms.ChoiceField(
+                label=label,
+                required=False,
+                choices=(
+                    ('inherit', 'حسب الدور'),
+                    ('allow', 'سماح لهذا المستخدم'),
+                    ('deny', 'منع لهذا المستخدم'),
+                ),
+                initial=(
+                    'allow' if override_map.get(capability) is True
+                    else 'deny' if override_map.get(capability) is False
+                    else 'inherit'
+                ),
+                help_text=(
+                    'المدير يحصل على جميع صلاحيات Hub تلقائياً.'
+                    if fixed_admin
+                    else f"افتراضي الدور الحالي: {'سماح' if default_allowed else 'منع'}."
+                ),
+                widget=forms.Select(attrs={'class': 'hub-input'}),
+                disabled=fixed_admin,
+            )
+            self.fields[field_name] = field
+            self.capability_field_names.append(field_name)
+            self._capability_field_map[field_name] = capability
+
     def clean_make_superuser(self):
         return bool(self.cleaned_data.get('make_superuser')) if self.actor and self.actor.is_superuser else False
 
@@ -54,6 +114,29 @@ class StaffUserBaseForm(forms.ModelForm):
             return phone
         return f'no-phone-{uuid.uuid4().hex[:12]}'
 
+    def _sync_capability_overrides(self, user):
+        # Admin is a deliberately full-access role. Clear stale overrides when a
+        # user is promoted so the matrix cannot create surprising admin denies.
+        if user.is_superuser or user.role == User.Role.ADMIN:
+            user.staff_capability_overrides.all().delete()
+            clear_staff_capability_cache(user)
+            return
+
+        for field_name, capability in self._capability_field_map.items():
+            value = self.cleaned_data.get(field_name, 'inherit') or 'inherit'
+            if value == 'inherit':
+                StaffCapabilityOverride.objects.filter(
+                    user=user,
+                    capability=capability,
+                ).delete()
+                continue
+            StaffCapabilityOverride.objects.update_or_create(
+                user=user,
+                capability=capability,
+                defaults={'allowed': value == 'allow'},
+            )
+        clear_staff_capability_cache(user)
+
     def save(self, commit=True):
         user = super().save(commit=False)
         user.is_staff = bool(self.cleaned_data.get('allow_django_admin_access', False))
@@ -64,6 +147,7 @@ class StaffUserBaseForm(forms.ModelForm):
         if commit:
             user.save()
             self.save_m2m()
+            self._sync_capability_overrides(user)
         return user
 
 
@@ -93,6 +177,7 @@ class StaffUserCreateForm(StaffUserBaseForm):
         if commit:
             user.save()
             self.save_m2m()
+            self._sync_capability_overrides(user)
         return user
 
 
