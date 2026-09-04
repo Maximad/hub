@@ -10,6 +10,7 @@ class User(AbstractUser):
         CASHIER = 'cashier', 'كاشير'
         WAITER = 'waiter', 'نادل'
         KITCHEN = 'kitchen', 'مطبخ'
+        BARTENDER = 'bartender', 'بار'
 
     class PreferredLanguage(models.TextChoices):
         ARABIC = 'ar', 'العربية'
