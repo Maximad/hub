@@ -55,10 +55,20 @@ def is_kitchen(user):
     return _is_authenticated_active(user) and _role(user) == 'kitchen'
 
 
+def is_bartender(user):
+    return _is_authenticated_active(user) and _role(user) == 'bartender'
+
+
 # Role defaults. These are the baseline policy only; callers should use the
 # public can_* helpers or user_has_capability() so per-user overrides apply.
 def _default_staff_home(user):
-    return is_owner_or_admin(user) or is_cashier(user) or is_waiter(user) or is_kitchen(user)
+    return (
+        is_owner_or_admin(user)
+        or is_cashier(user)
+        or is_waiter(user)
+        or is_kitchen(user)
+        or is_bartender(user)
+    )
 
 
 def _default_orders(user):
@@ -114,9 +124,9 @@ def _default_internet_billing(user):
 
 
 def _default_kitchen_board(user):
-    # Cashiers can operate non-kitchen prep stations such as the bar. Waiters
-    # do not get the full preparation board by default.
-    return is_owner_or_admin(user) or is_cashier(user) or is_kitchen(user)
+    # Kitchen and bar are first-class preparation roles. Cashier access remains
+    # for launch compatibility with existing non-kitchen prep workflows.
+    return is_owner_or_admin(user) or is_cashier(user) or is_kitchen(user) or is_bartender(user)
 
 
 def _default_partial_payment_approval(user):
