@@ -83,7 +83,7 @@
           <div class="ops-v2__account-actions">
             {% if workspace_caps.pos %}<a class="staff-v2-button staff-v2-button--primary" href="{% url 'staff_pos' %}?visit={{ visit.public_code }}">+ طلب</a>{% endif %}
             {% if workspace_caps.cashier %}<a class="staff-v2-button" href="{% url 'staff_cashier_order' visit.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' visit.public_code %}?panel=payment" data-context-title="الدفع وإغلاق الحساب" aria-haspopup="dialog">الدفع</a>{% endif %}
-            {% if workspace_caps.internet_billing %}<a class="staff-v2-button" href="{% url 'staff_visit_detail' visit.public_code %}?panel=internet" data-staff-context-url="{% url 'staff_visit_detail' visit.public_code %}?panel=internet" data-context-title="إنترنت الحساب" aria-haspopup="dialog">الإنترنت</a>{% endif %}
+            {% if workspace_caps.internet_billing %}<a class="staff-v2-button" href="{% url 'staff_visit_detail' visit.public_code %}" data-staff-context-url="{% url 'staff_visit_detail' visit.public_code %}?panel=internet" data-context-title="إنترنت الحساب" aria-haspopup="dialog">الإنترنت</a>{% endif %}
           </div>
         </article>
         {% endwith %}{% empty %}<div class="staff-v2-empty">لا توجد حسابات مفتوحة حالياً.</div>{% endfor %}
