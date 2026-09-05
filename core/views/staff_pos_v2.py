@@ -64,8 +64,19 @@ def staff_pos(request):
 
     settings = get_system_settings()
     requested_visit = (
-        HubVisit.objects.filter(public_code=request.GET.get('visit'), status=HubVisit.Status.OPEN).first()
+        HubVisit.objects.select_related('table').filter(
+            public_code=request.GET.get('visit'),
+            status=HubVisit.Status.OPEN,
+        ).first()
         if request.GET.get('visit') else None
+    )
+    requested_table_id = str(requested_visit.table_id) if requested_visit and requested_visit.table_id else ''
+    initial_form_values = (
+        {
+            'table_id': requested_table_id,
+            'fulfillment_mode': Order.FulfillmentMode.TABLE,
+        }
+        if requested_table_id else {}
     )
     context = {
         'section_products': section_products,
@@ -76,6 +87,8 @@ def staff_pos(request):
         'open_visits': HubVisit.objects.filter(status=HubVisit.Status.OPEN)
         .select_related('table').order_by('-last_activity_at'),
         'selected_visit_id': str(requested_visit.pk) if requested_visit else '',
+        'selected_table_id': requested_table_id,
+        'form_values': initial_form_values,
         'page_setting': get_page_setting(
             'staff_pos',
             'نقطة البيع',
@@ -96,11 +109,33 @@ def staff_pos(request):
             if table is None:
                 validation_errors.append('الطاولة المحددة غير صالحة.')
 
-        fulfillment_mode, fulfillment_error = _validate_fulfillment_mode(
-            request, settings, table=table, allow_table=bool(table)
+        visit_id = request.POST.get('visit_id', '').strip()
+        visit = (
+            HubVisit.objects.select_related('table').filter(
+                pk=visit_id,
+                status=HubVisit.Status.OPEN,
+            ).first()
+            if visit_id.isdigit() else None
         )
-        if table:
+        if visit_id and visit is None:
+            validation_errors.append('الجلسة المحددة غير صالحة أو مغلقة.')
+
+        if visit and visit.table_id:
+            if table is not None and table.pk != visit.table_id:
+                validation_errors.append('الطاولة المحددة لا تطابق طاولة الحساب المفتوح.')
+            table = visit.table
+            table_id = str(visit.table_id)
+            posted_mode = request.POST.get('fulfillment_mode', '').strip()
+            if posted_mode and posted_mode != Order.FulfillmentMode.TABLE:
+                validation_errors.append('طريقة الطلب لا تطابق الحساب المرتبط بطاولة.')
             fulfillment_mode = Order.FulfillmentMode.TABLE
+            fulfillment_error = ''
+        else:
+            fulfillment_mode, fulfillment_error = _validate_fulfillment_mode(
+                request, settings, table=table, allow_table=bool(table)
+            )
+            if table:
+                fulfillment_mode = Order.FulfillmentMode.TABLE
         if fulfillment_error:
             validation_errors.append(fulfillment_error)
         if request.POST.get('fulfillment_mode') == Order.FulfillmentMode.TABLE and not table:
@@ -110,6 +145,7 @@ def staff_pos(request):
                 'error': 'يرجى اختيار عنصر واحد على الأقل.',
                 'form_values': request.POST,
                 'selected_table_id': table_id,
+                'selected_visit_id': visit_id,
             })
             return render(request, 'staff/pos.html', context)
 
@@ -141,19 +177,12 @@ def staff_pos(request):
             validation_errors.append('العضو المحدد غير صالح.')
         member_context = get_active_member_context(member) if member else None
 
-        visit_id = request.POST.get('visit_id', '').strip()
-        visit = (
-            HubVisit.objects.filter(pk=visit_id, status=HubVisit.Status.OPEN).first()
-            if visit_id.isdigit() else None
-        )
-        if visit_id and visit is None:
-            validation_errors.append('الجلسة المحددة غير صالحة أو مغلقة.')
-
         if validation_errors:
             context.update({
                 'error': ' '.join(validation_errors),
                 'form_values': request.POST,
                 'selected_table_id': table_id,
+                'selected_visit_id': visit_id,
             })
             return render(request, 'staff/pos.html', context)
 
