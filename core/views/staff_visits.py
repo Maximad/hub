@@ -131,6 +131,19 @@ def staff_visit_detail(request, public_code):
             if action == 'close':
                 Reservation.objects.select_for_update().filter(visit_id=visit.pk).first()
             visit = HubVisit.objects.select_for_update().get(pk=visit.pk)
+
+            # A closed account is historical. The UI already hides its editing
+            # controls; enforce the same invariant server-side so direct POSTs or
+            # stale tabs cannot move orders/tables/members or stop services later.
+            if visit.status != HubVisit.Status.OPEN:
+                if action == 'close':
+                    messages.info(request, 'الجلسة مغلقة بالفعل.')
+                else:
+                    messages.error(request, 'الجلسة مغلقة ولا يمكن تعديلها.')
+                if panel in {'1', 'internet'}:
+                    return _render_visit_panel(request, visit, panel)
+                return redirect('staff_visit_detail', public_code=visit.public_code)
+
             if action == 'attach_order':
                 order = get_object_or_404(Order, public_code=request.POST.get('order_code'))
                 old_visit_id = order.visit_id
