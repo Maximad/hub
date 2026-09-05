@@ -111,3 +111,24 @@ class StaffWorkspaceAcceptanceRegressionTests(TestCase):
             'name="fulfillment_mode" value="table" checked',
             html=False,
         )
+
+    def test_closed_visit_rejects_stale_mutation_and_hides_pos_action(self):
+        other_table = TableArea.objects.create(room=self.room, name_ar='طاولة أخرى')
+        self.visit.status = HubVisit.Status.CLOSED
+        self.visit.closed_at = timezone.now()
+        self.visit.save(update_fields=['status', 'closed_at', 'updated_at'])
+        visit_url = reverse(
+            'staff_visit_detail',
+            kwargs={'public_code': self.visit.public_code},
+        )
+
+        response = self.client.post(
+            visit_url,
+            {'action': 'change_table', 'table': other_table.pk},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.visit.refresh_from_db()
+        self.assertEqual(self.visit.table_id, self.table.pk)
+        detail = self.client.get(visit_url)
+        self.assertNotContains(detail, 'فتح POS لهذه الجلسة')
