@@ -41,7 +41,7 @@
   <section class="hub-card">
     <h4>إنهاء الزيارة</h4>
     <p class="hub-help-text">هذا هو الإجراء المعتاد عند مغادرة الزبون: يوقف الإنترنت، يحسب التكلفة النهائية، يسدد المتبقي، ثم يغلق الحساب.</p>
-    <form method="post" action="{% url 'staff_cashier_pay' visit.public_code %}?panel=payment" hx-post="{% url 'staff_cashier_pay' visit.public_code %}?panel=payment" hx-target="#staff-context-drawer-body" hx-swap="innerHTML" class="hub-form hub-form-section">
+    <form method="post" action="{% url 'staff_cashier_pay' visit.public_code %}" hx-post="{% url 'staff_cashier_pay' visit.public_code %}?panel=payment" hx-target="#staff-context-drawer-body" hx-swap="innerHTML" class="hub-form hub-form-section">
       {% csrf_token %}
       <input type="hidden" name="action" value="settle_close">
       {% if remaining > 0 or active_internet_sessions %}<label>طريقة تسديد الرصيد النهائي<select class="hub-input" name="method" required>{% for value,label in methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>{% endif %}
