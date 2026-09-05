@@ -5,7 +5,7 @@ existing visit, POS, cashier and Internet logic rather than duplicating those
 domain services.
 """
 
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 from django.shortcuts import render
 
 from accounts.permissions import require_staff_capability, user_has_capability
@@ -75,9 +75,13 @@ def staff_home(request):
             }
         )
 
+    # Orders attached to a closed visit are historical even if their prep/order
+    # status was never advanced beyond NEW/READY before the cashier closed the
+    # account. Keep standalone orders visible until their own status is terminal.
     active_orders = list(
         _workspace_order_queryset()
         .filter(status__in=ACTIVE_ORDER_STATUSES)
+        .filter(Q(visit__isnull=True) | Q(visit__status=HubVisit.Status.OPEN))
         .select_related("visit")[:20]
     )
 
