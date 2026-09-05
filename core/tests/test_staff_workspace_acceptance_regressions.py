@@ -64,3 +64,50 @@ class StaffWorkspaceAcceptanceRegressionTests(TestCase):
         self.assertContains(response, f'action="{pay_url}"')
         self.assertContains(response, f'hx-post="{pay_url}?panel=payment"')
         self.assertNotContains(response, f'action="{pay_url}?panel=payment"')
+
+    def test_internet_drawer_links_keep_styled_full_page_fallback(self):
+        visit_url = reverse(
+            'staff_visit_detail',
+            kwargs={'public_code': self.visit.public_code},
+        )
+        workspace = self.client.get(reverse('staff_home'))
+        panel = self.client.get(visit_url, {'panel': '1'})
+
+        expected = (
+            f'href="{visit_url}" '
+            f'data-staff-context-url="{visit_url}?panel=internet"'
+        )
+        self.assertContains(workspace, expected)
+        self.assertContains(panel, expected)
+        self.assertNotContains(
+            workspace,
+            f'href="{visit_url}?panel=internet" data-staff-context-url=',
+        )
+        self.assertNotContains(
+            panel,
+            f'href="{visit_url}?panel=internet" data-staff-context-url=',
+        )
+
+    def test_context_bound_pos_preselects_visit_table_and_table_mode(self):
+        response = self.client.get(
+            reverse('staff_pos'),
+            {'visit': str(self.visit.public_code)},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['selected_visit_id'], str(self.visit.pk))
+        self.assertEqual(response.context['selected_table_id'], str(self.table.pk))
+        self.assertEqual(
+            response.context['form_values']['fulfillment_mode'],
+            Order.FulfillmentMode.TABLE,
+        )
+        self.assertContains(
+            response,
+            f'<option value="{self.table.pk}" selected>',
+            html=False,
+        )
+        self.assertContains(
+            response,
+            'name="fulfillment_mode" value="table" checked',
+            html=False,
+        )
