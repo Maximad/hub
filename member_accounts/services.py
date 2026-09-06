@@ -255,8 +255,10 @@ def request_login_challenge(phone, *, ip='', user_agent='', next_path=''):
 def verify_login_challenge(challenge_uuid, code, *, device_label=''):
     """Verify one OTP and issue a long-lived revocable trusted-device credential."""
     now = timezone.now()
+    # Lock only the challenge row. member is nullable, so PostgreSQL cannot
+    # apply FOR UPDATE to the LEFT OUTER JOIN produced by select_related.
     challenge = (
-        MemberLoginChallenge.objects.select_for_update()
+        MemberLoginChallenge.objects.select_for_update(of=('self',))
         .select_related('member')
         .filter(uuid=challenge_uuid)
         .first()
