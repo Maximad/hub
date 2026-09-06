@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}دعوة حساب عضو{% endblock %}
+{% block content %}
+<h2 class="hub-page-header__title">دعوة حساب عضو</h2>
+<p>الدعوة تنشئ/تستعيد حساب العضو وتربط الجهاز بالحساب. العضوية المدفوعة أو المجانية تبقى مستقلة وتدار من شاشة الاشتراك.</p>
+{% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+{% if invitation_url %}
+<section class="hub-card" style="margin-bottom:1rem;">
+  <p><strong>رابط الدعوة — يظهر الآن فقط:</strong></p>
+  <input value="{{ invitation_url }}" readonly style="width:100%;box-sizing:border-box;padding:.6rem;direction:ltr;text-align:left">
+  <p><small>الرابط أحادي الاستخدام وينتهي تلقائياً. أرسله للشخص عبر قناة خاصة.</small></p>
+</section>
+{% endif %}
+<form method="post" class="hub-form-section">
+  {% csrf_token %}
+  <label for="invite-name">الاسم</label>
+  <input id="invite-name" name="name" value="{% if member %}{{ member.name_ar }}{% endif %}" {% if member %}readonly{% endif %} style="display:block;width:100%;margin-bottom:.6rem;">
+  <label for="invite-phone">رقم الهاتف</label>
+  <input id="invite-phone" name="phone" value="{% if member %}{{ member.phone }}{% endif %}" {% if member %}readonly{% endif %} required style="display:block;width:100%;margin-bottom:.6rem;direction:ltr;text-align:left;">
+  <button type="submit">إنشاء دعوة جديدة</button>
+</form>
+{% if member %}<p><a href="{% url 'staff_member_detail' member.public_code %}">العودة إلى العضو</a></p>{% endif %}
+{% endblock %}
