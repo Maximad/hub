@@ -1,4 +1,6 @@
 /* POS launch polish: compact controls without changing order semantics. */
+.hub-staff-ui .staff-pos [hidden]{display:none!important}
+
 .hub-staff-ui .staff-pos input[type="radio"],
 .hub-staff-ui .staff-pos input[type="checkbox"]{
   width:auto;
@@ -12,6 +14,22 @@
   margin-top:5px;
   font-size:.78rem;
 }
+
+.hub-staff-ui .staff-pos__bound-context{
+  grid-column:1/-1;
+  display:flex;
+  align-items:center;
+  gap:8px 12px;
+  min-height:40px;
+  padding:8px 10px;
+  border:1px solid var(--staff-v2-line,var(--hub-border));
+  border-radius:11px;
+  background:var(--staff-v2-surface-soft,var(--hub-surface-alt));
+  font-size:.76rem;
+}
+
+.hub-staff-ui .staff-pos__bound-context strong{white-space:nowrap}
+.hub-staff-ui .staff-pos__bound-context span{color:var(--staff-v2-muted,var(--hub-muted));overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 @media(min-width:901px){
   .hub-staff-ui .staff-pos__setup{
@@ -52,5 +70,11 @@
 
   .hub-staff-ui .staff-pos__catalog-tools{
     width:100%;
+  }
+
+  .hub-staff-ui .staff-pos__bound-context{
+    align-items:flex-start;
+    flex-direction:column;
+    gap:2px;
   }
 }
