@@ -91,6 +91,14 @@ def consume_activation_token(raw, device_label=''):
     candidate = MemberActivationToken.objects.select_for_update().select_related('member').filter(token_hash=_digest(raw)).first()
     if not candidate or not hmac.compare_digest(candidate.token_hash, _digest(raw)) or candidate.consumed_at or candidate.revoked_at or candidate.expires_at <= now:
         return None, None
+
+    # Legacy activation links remain supported, but they now enter the same
+    # permanent account authority as invitation-based onboarding.
+    from member_accounts.models import MemberAccount
+    account, _ = MemberAccount.objects.get_or_create(member=candidate.member)
+    if account.status == MemberAccount.Status.LOCKED:
+        return None, None
+
     candidate.consumed_at = now
     candidate.save(update_fields=['consumed_at'])
     secret = secrets.token_urlsafe(32)
@@ -98,6 +106,8 @@ def consume_activation_token(raw, device_label=''):
         member=candidate.member, token_hash=_digest(secret), device_label=device_label[:120],
         expires_at=now + timedelta(seconds=settings.MEMBER_DEVICE_COOKIE_AGE),
     )
+    if not account.is_claimed:
+        account.mark_claimed(now)
     return device, f'{device.uuid}.{secret}'
 
 
@@ -112,6 +122,14 @@ def resolve_member_from_request(request, touch=True):
     now = timezone.now()
     if device.revoked_at or (device.expires_at and device.expires_at <= now) or not hmac.compare_digest(device.token_hash, _digest(secret)):
         return None
+
+    from member_accounts.models import MemberAccount
+    account, _ = MemberAccount.objects.get_or_create(member=device.member)
+    if account.status == MemberAccount.Status.LOCKED:
+        return None
+    if not account.is_claimed:
+        account.mark_claimed(now)
+
     context = get_member_context(device.member, now, device)
     if context and touch and (not device.last_used_at or now - device.last_used_at > timedelta(hours=1)):
         MemberDeviceToken.objects.filter(pk=device.pk, revoked_at__isnull=True).update(last_used_at=now)
