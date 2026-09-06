@@ -88,3 +88,52 @@ class MemberInvitation(models.Model):
     def is_available(self, at=None):
         at = at or timezone.now()
         return not self.claimed_at and not self.revoked_at and self.expires_at > at
+
+
+class MemberLoginChallenge(models.Model):
+    """Short-lived passwordless phone verification challenge.
+
+    Unknown phone numbers intentionally receive a member-less challenge so the
+    public request flow does not reveal whether an account exists. Raw codes are
+    never stored; phone numbers are represented only by a keyed digest.
+    """
+
+    class DeliveryStatus(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        SENT = 'sent', 'Sent'
+        SKIPPED = 'skipped', 'Skipped'
+        FAILED = 'failed', 'Failed'
+
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    member = models.ForeignKey(
+        'core.Member', on_delete=models.CASCADE, null=True, blank=True,
+        related_name='login_challenges',
+    )
+    phone_hash = models.CharField(max_length=64, db_index=True)
+    code_hash = models.CharField(max_length=64, editable=False)
+    expires_at = models.DateTimeField()
+    consumed_at = models.DateTimeField(null=True, blank=True)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    max_attempts = models.PositiveSmallIntegerField(default=5)
+    delivery_status = models.CharField(
+        max_length=16, choices=DeliveryStatus.choices, default=DeliveryStatus.PENDING
+    )
+    requested_ip_hash = models.CharField(max_length=64, blank=True, db_index=True)
+    next_path = models.CharField(max_length=500, blank=True)
+    user_agent = models.CharField(max_length=160, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('-created_at',)
+        indexes = [
+            models.Index(fields=('member', 'created_at'), name='member_login_member_idx'),
+            models.Index(fields=('expires_at',), name='member_login_expiry_idx'),
+        ]
+
+    @property
+    def is_open(self):
+        return (
+            self.consumed_at is None
+            and self.expires_at > timezone.now()
+            and self.attempts < self.max_attempts
+        )
