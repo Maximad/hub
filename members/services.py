@@ -19,8 +19,8 @@ def _digest(raw):
 @dataclass(frozen=True)
 class MemberContext:
     member: object
-    subscription: MembershipSubscription
-    plan: object
+    subscription: MembershipSubscription | None
+    plan: object | None
     device: MemberDeviceToken | None = None
 
 
@@ -45,6 +45,15 @@ def get_active_member_context(member, at=None, device=None):
         .order_by('-starts_at'))
     subscription = next((candidate for candidate in candidates if candidate.is_active_at(at)), None)
     return MemberContext(member, subscription, subscription.plan, device) if subscription else None
+
+
+def get_member_context(member, at=None, device=None):
+    """Return permanent member identity plus an active subscription when one exists."""
+    at = at or timezone.now()
+    if not getattr(member, 'is_active', True):
+        return None
+    active = get_active_member_context(member, at, device)
+    return active or MemberContext(member=member, subscription=None, plan=None, device=device)
 
 
 # Imported here to keep the public API above uncluttered.
@@ -93,6 +102,7 @@ def consume_activation_token(raw, device_label=''):
 
 
 def resolve_member_from_request(request, touch=True):
+    """Resolve a trusted member device even when the current subscription has expired."""
     raw = request.COOKIES.get(settings.MEMBER_DEVICE_COOKIE_NAME, '')
     try:
         public_id, secret = raw.split('.', 1)
@@ -102,7 +112,7 @@ def resolve_member_from_request(request, touch=True):
     now = timezone.now()
     if device.revoked_at or (device.expires_at and device.expires_at <= now) or not hmac.compare_digest(device.token_hash, _digest(secret)):
         return None
-    context = get_active_member_context(device.member, now, device)
+    context = get_member_context(device.member, now, device)
     if context and touch and (not device.last_used_at or now - device.last_used_at > timedelta(hours=1)):
         MemberDeviceToken.objects.filter(pk=device.pk, revoked_at__isnull=True).update(last_used_at=now)
     return context
@@ -110,7 +120,7 @@ def resolve_member_from_request(request, touch=True):
 
 def evaluate_membership_benefit(context, product, quantity=1, unit_price=None):
     total = max(int(unit_price if unit_price is not None else product.price_syp), 0) * max(int(quantity), 0)
-    if not context or product.not_discountable or not product.is_available:
+    if not context or not context.plan or product.not_discountable or not product.is_available:
         return BenefitResult(None, total, 0)
     rules = context.plan.benefit_rules.filter(is_active=True).select_related('product', 'category', 'menu_section', 'tag').order_by('-priority', 'pk')
     section_ids = set(product.menu_sections.values_list('pk', flat=True))
