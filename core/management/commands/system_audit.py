@@ -31,8 +31,11 @@ class Command(BaseCommand):
         costing_enabled = bool(settings_obj and getattr(settings_obj, 'auto_deduct_inventory_on_sale', False))
         self.report('products_without_menu_section', Product.objects.annotate(section_count=Count('menu_sections')).filter(section_count=0))
         self.report('products_without_product_type', Product.objects.filter(Q(product_type='') | Q(product_type__isnull=True)))
-        self.report('products_visible_but_unavailable', Product.objects.filter(Q(visible_on_qr=True) | Q(visible_on_pos=True), is_available=False))
-        self.report('products_orderable_but_unavailable', Product.objects.filter(Q(orderable_on_qr=True) | Q(orderable_on_pos=True), is_available=False))
+        # visible_on_qr / orderable_on_qr are the canonical product-level controls
+        # for both the public menu and Staff POS. Legacy POS flags are retained in
+        # the schema only for compatibility and must not affect operational audits.
+        self.report('products_visible_but_unavailable', Product.objects.filter(visible_on_qr=True, is_available=False))
+        self.report('products_orderable_but_unavailable', Product.objects.filter(orderable_on_qr=True, is_available=False))
         self.report('products_missing_price', Product.objects.filter(price_syp__isnull=True))
         self.report('products_missing_media', Product.objects.annotate(media_count=Count('media')).filter(media_count=0))
         self.report('media_assets_missing_file_on_disk', missing_files)
