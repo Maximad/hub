@@ -32,7 +32,12 @@ class MemberIdentity:
 
 
 def resolve_member_identity(request, touch=True):
-    """Resolve permanent account identity without requiring an active subscription."""
+    """Resolve permanent account identity without requiring an active subscription.
+
+    A valid device issued by the pre-account membership flow is authoritative
+    enough to promote its pending compatibility account to claimed state. This
+    gives existing members a seamless migration instead of forcing re-enrolment.
+    """
     raw = request.COOKIES.get(settings.MEMBER_DEVICE_COOKIE_NAME, '')
     try:
         public_id, secret = raw.split('.', 1)
@@ -51,6 +56,8 @@ def resolve_member_identity(request, touch=True):
     account, _ = MemberAccount.objects.get_or_create(member=device.member)
     if account.status == MemberAccount.Status.LOCKED:
         return None
+    if not account.is_claimed:
+        account.mark_claimed(now)
 
     membership = get_active_member_context(device.member, now, device)
     if touch:
