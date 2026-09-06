@@ -1,0 +1,56 @@
+/* POS launch polish: compact controls without changing order semantics. */
+.hub-staff-ui .staff-pos input[type="radio"],
+.hub-staff-ui .staff-pos input[type="checkbox"]{
+  width:auto;
+  min-height:auto;
+  padding:0;
+}
+
+.hub-staff-ui .staff-pos__fulfillment-select{
+  width:min(100%,190px);
+  min-height:38px;
+  margin-top:5px;
+  font-size:.78rem;
+}
+
+@media(min-width:901px){
+  .hub-staff-ui .staff-pos__setup{
+    grid-template-columns:minmax(160px,190px) repeat(4,minmax(140px,1fr));
+  }
+
+  .hub-staff-ui .staff-pos__catalog-tools{
+    width:min(100%,820px);
+    grid-template-columns:minmax(180px,230px) minmax(0,1fr);
+    justify-self:start;
+    align-items:end;
+    padding:7px 9px;
+  }
+
+  .hub-staff-ui .staff-pos__catalog-tools>div:first-child{
+    width:100%;
+    max-width:230px;
+  }
+
+  .hub-staff-ui .staff-pos__chips{
+    width:max-content;
+    max-width:560px;
+    justify-self:start;
+  }
+
+  .hub-staff-ui .staff-pos__chips .menu-section-chip{
+    min-height:34px;
+    padding:.34rem .65rem;
+    font-size:.76rem;
+  }
+}
+
+@media(max-width:900px){
+  .hub-staff-ui .staff-pos__fulfillment-select{
+    width:100%;
+    max-width:none;
+  }
+
+  .hub-staff-ui .staff-pos__catalog-tools{
+    width:100%;
+  }
+}
