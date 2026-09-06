@@ -12,6 +12,7 @@ class StaffDesignSystemContractTests(SimpleTestCase):
         self.js = (self.root / 'static/js/staff_responsive_tables.js').read_text(encoding='utf-8')
         self.v2_css = (self.root / 'static/css/staff_ui_v2.css').read_text(encoding='utf-8')
         self.v2_js = (self.root / 'static/js/staff_ui_v2.js').read_text(encoding='utf-8')
+        self.pos_css = (self.root / 'static/css/staff_pos_v2.css').read_text(encoding='utf-8')
         self.shell = (self.root / 'templates/includes/staff_shell_nav.html').read_text(encoding='utf-8')
         self.operations = (self.root / 'templates/staff/home.html').read_text(encoding='utf-8')
 
@@ -47,6 +48,11 @@ class StaffDesignSystemContractTests(SimpleTestCase):
         self.assertIn('.staff-v2-toolbar', self.v2_css)
         self.assertIn('.staff-v2-search', self.v2_css)
         self.assertIn('ops-v2__filter-menu', self.operations)
+
+    def test_pos_workspace_is_not_constrained_to_reading_form_width(self):
+        self.assertIn('form.staff-pos__form', self.pos_css)
+        self.assertIn('width:100%;max-width:none!important', self.pos_css)
+        self.assertIn('grid-template-columns:minmax(0,1fr) 320px', self.pos_css)
 
     def test_mobile_tables_are_progressively_enhanced(self):
         self.assertIn("{% static 'js/staff_responsive_tables.js' %}", self.base)
