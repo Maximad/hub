@@ -1,9 +1,8 @@
 """Launch-ready POS view.
 
-The POS must reflect the same public menu visibility as the customer menu while
-retaining POS-specific orderability controls. Keeping this view outside the
-legacy module lets the launch sprint simplify the high-frequency surface without
-rewriting unrelated legacy operations.
+Product visibility and orderability use the public menu fields as the canonical
+source for both the customer menu and Staff POS. Specialized workflows such as
+Internet remain outside the ordinary product-card catalog.
 """
 
 from django.db.models import Q
@@ -11,7 +10,7 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 
 from accounts.permissions import require_staff_capability
-from core.models import ActivityLog, HubVisit, Member, Order, TableArea
+from core.models import ActivityLog, HubVisit, Member, Order, Product, TableArea
 from core.settings_helpers import get_page_setting, get_system_settings
 from core.views_legacy import (
     _create_order_from_selected_items,
@@ -27,25 +26,35 @@ from members.services import get_active_member_context
 
 
 def _pos_catalog():
-    """Return the menu-visible catalog that is also usable from staff POS.
+    """Return the canonical menu-visible/orderable catalog for Staff POS.
 
-    Public menu visibility is the baseline source of truth. POS-specific flags
-    may further restrict an item, but they can no longer make a customer-hidden
-    section/product reappear in POS. Unsectioned products are intentionally
-    omitted because the public menu omits them as well.
+    ``visible_on_qr`` and ``orderable_on_qr`` are the single product-level
+    visibility/orderability controls used by both the public menu and POS.
+    Unsectioned products remain omitted because the public menu omits them too.
+    Bound Internet products are excluded because Internet uses its dedicated
+    account/session workflow rather than ordinary product cards.
     """
 
-    return _section_products_for_ordering(
+    section_products = _section_products_for_ordering(
         product_filter={
             'is_available': True,
             'visible_on_qr': True,
-            'visible_on_pos': True,
-            'orderable_on_pos': True,
+            'orderable_on_qr': True,
         },
         section_filter={'visible_on_qr': True},
         include_unsectioned=False,
         media_filter={'display_on_pos': True},
     )
+    visible_sections = []
+    for section, section_items in section_products:
+        ordinary_items = [
+            product
+            for product in section_items
+            if product.product_type != Product.ProductType.INTERNET
+        ]
+        if ordinary_items:
+            visible_sections.append((section, ordinary_items))
+    return visible_sections
 
 
 @require_staff_capability('pos')
