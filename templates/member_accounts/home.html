@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}حسابي في هَب{% endblock %}
+{% block content %}
+<section class="hub-card" style="margin-bottom:1rem;">
+  <h2 class="hub-page-header__title" style="margin-top:0;">مرحباً، {{ member.name_ar }}</h2>
+  <p>{{ member.phone }}</p>
+  {% if active_subscription %}
+    <p><strong>العضوية الحالية:</strong> {{ active_subscription.plan.name_ar }}</p>
+    <p><strong>الحالة:</strong> {{ active_subscription.get_status_display }}{% if active_subscription.ends_at %} — حتى {{ active_subscription.ends_at }}{% endif %}</p>
+  {% else %}
+    <p><strong>الحساب فعال.</strong> لا توجد عضوية فعالة حالياً.</p>
+  {% endif %}
+  <p><a class="hub-button" href="{% url 'menu_public' %}">فتح المنيو</a></p>
+</section>
+
+<section class="hub-card" style="margin-bottom:1rem;">
+  <h3>الاشتراكات</h3>
+  <div class="hub-table-wrap"><table class="hub-table" style="width:100%">
+    <tr><th>الخطة</th><th>الحالة</th><th>البداية</th><th>النهاية</th></tr>
+    {% for subscription in subscriptions %}
+      <tr><td>{{ subscription.plan.name_ar }}</td><td>{{ subscription.get_status_display }}</td><td>{{ subscription.starts_at }}</td><td>{{ subscription.ends_at|default:'—' }}</td></tr>
+    {% empty %}<tr><td colspan="4">لا توجد اشتراكات.</td></tr>{% endfor %}
+  </table></div>
+</section>
+
+<section class="hub-card" style="margin-bottom:1rem;">
+  <h3>أجهزتي</h3>
+  <div class="hub-table-wrap"><table class="hub-table" style="width:100%">
+    <tr><th>الجهاز</th><th>تاريخ التفعيل</th><th>آخر استخدام</th></tr>
+    {% for device in devices %}<tr><td>{{ device.device_label|default:'جهاز' }}</td><td>{{ device.created_at }}</td><td>{{ device.last_used_at|default:'—' }}</td></tr>
+    {% empty %}<tr><td colspan="3">لا توجد أجهزة مفعّلة.</td></tr>{% endfor %}
+  </table></div>
+</section>
+
+<section class="hub-card" style="margin-bottom:1rem;">
+  <h3>جلسات الإنترنت</h3>
+  <div class="hub-table-wrap"><table class="hub-table" style="width:100%">
+    <tr><th>الباقة</th><th>البداية</th><th>النهاية</th><th>الحالة</th></tr>
+    {% for session in sessions %}<tr><td>{{ session.package.name_ar|default:'—' }}</td><td>{{ session.start_time }}</td><td>{{ session.end_time|default:'—' }}</td><td>{{ session.status }}</td></tr>
+    {% empty %}<tr><td colspan="4">لا توجد جلسات إنترنت.</td></tr>{% endfor %}
+  </table></div>
+</section>
+
+<section class="hub-card" style="margin-bottom:1rem;">
+  <h3>طلباتي الأخيرة</h3>
+  <div class="hub-table-wrap"><table class="hub-table" style="width:100%">
+    <tr><th>#</th><th>المجموع</th><th>التاريخ</th></tr>
+    {% for order in orders %}<tr><td>{{ order.display_number }}</td><td>{{ order.total_syp }} ل.س</td><td>{{ order.created_at }}</td></tr>
+    {% empty %}<tr><td colspan="3">لا توجد طلبات.</td></tr>{% endfor %}
+  </table></div>
+</section>
+
+<form method="post" action="{% url 'member_account_logout' %}" style="margin:1rem 0 2rem;">
+  {% csrf_token %}
+  <button type="submit" class="hub-button">تسجيل الخروج من هذا الجهاز</button>
+</form>
+{% endblock %}
