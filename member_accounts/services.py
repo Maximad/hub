@@ -251,64 +251,75 @@ def request_login_challenge(phone, *, ip='', user_agent='', next_path=''):
     return LoginRequestResult(challenge, delivered=delivered, throttled=False)
 
 
-@transaction.atomic
 def verify_login_challenge(challenge_uuid, code, *, device_label=''):
-    """Verify one OTP and issue a long-lived revocable trusted-device credential."""
+    """Verify one OTP and issue a long-lived revocable trusted-device credential.
+
+    Failed-attempt writes must commit before ValidationError is raised; otherwise
+    the enclosing atomic block would roll the counter back on every bad code.
+    """
     now = timezone.now()
-    # Lock only the challenge row. member is nullable, so PostgreSQL cannot
-    # apply FOR UPDATE to the LEFT OUTER JOIN produced by select_related.
-    challenge = (
-        MemberLoginChallenge.objects.select_for_update(of=('self',))
-        .select_related('member')
-        .filter(uuid=challenge_uuid)
-        .first()
-    )
-    if (
-        not challenge
-        or challenge.consumed_at
-        or challenge.expires_at <= now
-        or challenge.attempts >= challenge.max_attempts
-    ):
-        raise ValidationError('رمز التحقق غير صالح أو منتهي الصلاحية.')
+    validation_error = None
+    result = None
 
-    challenge.attempts += 1
-    submitted = (code or '').strip()
-    valid = bool(challenge.member) and hmac.compare_digest(
-        challenge.code_hash,
-        _login_code_hash(challenge.uuid, submitted),
-    )
-    if not valid:
-        fields = ['attempts']
-        if challenge.attempts >= challenge.max_attempts:
-            challenge.consumed_at = now
-            fields.append('consumed_at')
-        challenge.save(update_fields=fields)
-        raise ValidationError('رمز التحقق غير صالح أو منتهي الصلاحية.')
+    with transaction.atomic():
+        # Lock only the challenge row. member is nullable, so PostgreSQL cannot
+        # apply FOR UPDATE to the LEFT OUTER JOIN produced by select_related.
+        challenge = (
+            MemberLoginChallenge.objects.select_for_update(of=('self',))
+            .select_related('member')
+            .filter(uuid=challenge_uuid)
+            .first()
+        )
+        if (
+            not challenge
+            or challenge.consumed_at
+            or challenge.expires_at <= now
+            or challenge.attempts >= challenge.max_attempts
+        ):
+            validation_error = ValidationError('رمز التحقق غير صالح أو منتهي الصلاحية.')
+        else:
+            challenge.attempts += 1
+            submitted = (code or '').strip()
+            valid = bool(challenge.member) and hmac.compare_digest(
+                challenge.code_hash,
+                _login_code_hash(challenge.uuid, submitted),
+            )
+            if not valid:
+                fields = ['attempts']
+                if challenge.attempts >= challenge.max_attempts:
+                    challenge.consumed_at = now
+                    fields.append('consumed_at')
+                challenge.save(update_fields=fields)
+                validation_error = ValidationError('رمز التحقق غير صالح أو منتهي الصلاحية.')
+            else:
+                account = ensure_member_account(challenge.member)
+                if account.status == MemberAccount.Status.LOCKED:
+                    challenge.consumed_at = now
+                    challenge.save(update_fields=['attempts', 'consumed_at'])
+                    validation_error = ValidationError('تعذر تسجيل الدخول إلى هذا الحساب.')
+                else:
+                    account.mark_claimed(now)
+                    account.phone_verified_at = now
+                    account.save(update_fields=['phone_verified_at', 'updated_at'])
+                    challenge.consumed_at = now
+                    challenge.save(update_fields=['attempts', 'consumed_at'])
 
-    account = ensure_member_account(challenge.member)
-    if account.status == MemberAccount.Status.LOCKED:
-        challenge.consumed_at = now
-        challenge.save(update_fields=['attempts', 'consumed_at'])
-        raise ValidationError('تعذر تسجيل الدخول إلى هذا الحساب.')
+                    device, cookie_value = issue_trusted_device(challenge.member, device_label)
+                    ActivityLog.objects.create(
+                        action='member_account.login_verified',
+                        details={
+                            'member_public_code': str(challenge.member.public_code),
+                            'challenge_uuid': str(challenge.uuid),
+                            'device_uuid': str(device.uuid),
+                        },
+                    )
+                    result = ClaimResult(
+                        account=account,
+                        member=challenge.member,
+                        device=device,
+                        cookie_value=cookie_value,
+                    )
 
-    account.mark_claimed(now)
-    account.phone_verified_at = now
-    account.save(update_fields=['phone_verified_at', 'updated_at'])
-    challenge.consumed_at = now
-    challenge.save(update_fields=['attempts', 'consumed_at'])
-
-    device, cookie_value = issue_trusted_device(challenge.member, device_label)
-    ActivityLog.objects.create(
-        action='member_account.login_verified',
-        details={
-            'member_public_code': str(challenge.member.public_code),
-            'challenge_uuid': str(challenge.uuid),
-            'device_uuid': str(device.uuid),
-        },
-    )
-    return ClaimResult(
-        account=account,
-        member=challenge.member,
-        device=device,
-        cookie_value=cookie_value,
-    )
+    if validation_error is not None:
+        raise validation_error
+    return result
