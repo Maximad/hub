@@ -6,6 +6,7 @@
   <input type="text" name="q" value="{{ query }}" placeholder="ابحث بالاسم أو الهاتف أو الكود" style="flex:1; min-width:220px; padding:.5rem;">
   <button type="submit">بحث</button>
   <a href="{% url 'staff_member_new' %}">عضو جديد</a>
+  <a href="{% url 'staff_member_invitation_new' %}">دعوة عضو</a>
 </form>
 <div class="hub-table-wrap"><table class="hub-table" style="width:100%; border-collapse:collapse;">
   <tr><th>الاسم</th><th>الهاتف</th><th>الرصيد</th><th>الاشتراك الفعال</th><th>الدقائق المتبقية</th><th></th></tr>
