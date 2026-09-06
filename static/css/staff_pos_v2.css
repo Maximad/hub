@@ -7,7 +7,10 @@
 .hub-staff-ui .staff-pos__header .hub-toolbar{flex:0 0 auto;margin:0}
 .hub-staff-ui .staff-pos__logo{max-height:36px;width:auto}
 
-.hub-staff-ui .staff-pos__form{display:grid;grid-template-columns:minmax(0,1fr) 320px;grid-template-areas:"setup setup" "member member" "catalog cart";gap:12px;align-items:start;margin:0;padding:0;border:0;background:transparent;box-shadow:none}
+/* POS is a full operational workspace, not a reading-width form. The shared
+   staff form foundation intentionally caps ordinary forms, so override that
+   cap here to keep the catalog and sticky cart usable on desktop. */
+.hub-staff-ui form.staff-pos__form{display:grid;grid-template-columns:minmax(0,1fr) 320px;grid-template-areas:"setup setup" "member member" "catalog cart";gap:12px;align-items:start;width:100%;max-width:none!important;margin:0;padding:0;border:0;background:transparent;box-shadow:none}
 .hub-staff-ui .staff-pos__setup{grid-area:setup;display:grid;grid-template-columns:1.4fr repeat(4,minmax(130px,1fr));gap:9px;padding:11px 12px;border-radius:15px;box-shadow:none}
 .hub-staff-ui .staff-pos__setup>div{min-width:0}
 .hub-staff-ui .staff-pos__setup label,.hub-staff-ui .staff-pos__setup strong{font-size:.69rem}
@@ -50,7 +53,7 @@
 .hub-staff-ui .staff-pos__cart .hub-button-primary{min-height:42px}
 
 @media(max-width:1180px){
-  .hub-staff-ui .staff-pos__form{grid-template-columns:minmax(0,1fr) 285px}
+  .hub-staff-ui form.staff-pos__form{grid-template-columns:minmax(0,1fr) 285px}
   .hub-staff-ui .staff-pos__setup{grid-template-columns:1.3fr repeat(2,minmax(150px,1fr))}
   .hub-staff-ui .staff-pos__grid{grid-template-columns:repeat(3,minmax(0,1fr))!important}
 }
@@ -59,7 +62,7 @@
   .hub-staff-ui .staff-pos__header{padding:10px 11px}
   .hub-staff-ui .staff-pos__header>div>p:not(.hub-badge){display:none}
   .hub-staff-ui .staff-pos__header h2{font-size:1.1rem}
-  .hub-staff-ui .staff-pos__form{grid-template-columns:1fr;grid-template-areas:"setup" "member" "catalog" "cart"}
+  .hub-staff-ui form.staff-pos__form{grid-template-columns:1fr;grid-template-areas:"setup" "member" "catalog" "cart"}
   .hub-staff-ui .staff-pos__setup{grid-template-columns:1fr 1fr}
   .hub-staff-ui .staff-pos__setup>div:first-child{grid-column:1/-1}
   .hub-staff-ui .staff-pos__member-search{grid-template-columns:1fr}
