@@ -1,0 +1,45 @@
+{% load static %}
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="same-origin">
+  <title>دعوة حساب هَب</title>
+  <style>
+    body{margin:0;background:#f5f1e8;color:#29251f;font-family:system-ui,sans-serif}
+    main{box-sizing:border-box;max-width:36rem;margin:9vh auto;padding:2rem;background:#fff;border-radius:1rem;box-shadow:0 .5rem 2rem #0002}
+    input{box-sizing:border-box;width:100%;padding:.75rem;margin:.35rem 0 1rem;border:1px solid #cabfae;border-radius:.6rem;font:inherit}
+    button{border:0;border-radius:.6rem;padding:.8rem 1.4rem;background:#725438;color:#fff;font:inherit;cursor:pointer}
+    .muted{color:#71685d}.error{padding:.8rem;border-radius:.6rem;background:#f8dddd;color:#712b2b}
+  </style>
+</head>
+<body>
+<main>
+  {% if invalid %}
+    <h1>الدعوة غير صالحة</h1>
+    <p>قد تكون الدعوة مستخدمة أو منتهية الصلاحية. اطلب دعوة جديدة من هَب.</p>
+  {% else %}
+    <h1>أهلاً بك في حساب هَب</h1>
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    {% if invitation.target_member %}
+      <p>هذه الدعوة مخصصة لـ <strong>{{ invitation.target_member.name_ar }}</strong>.</p>
+      <p class="muted">بعد التأكيد سيصبح هذا الجهاز جهازاً موثوقاً للحساب.</p>
+    {% else %}
+      <p>أكمل اسمك لإنشاء حسابك. رقم الهاتف المرتبط بالدعوة: <strong>{{ invitation.invited_phone }}</strong></p>
+    {% endif %}
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="confirm" value="yes">
+      {% if not invitation.target_member %}
+        <label for="member-name">الاسم</label>
+        <input id="member-name" name="name" value="{{ invitation.invited_name }}" autocomplete="name" required>
+      {% endif %}
+      <button type="submit">تفعيل حسابي على هذا الجهاز</button>
+    </form>
+    <p class="muted"><small>الدعوة تستخدم مرة واحدة فقط. يمكنك لاحقاً استخدام حسابك حتى لو انتهت العضوية الحالية.</small></p>
+  {% endif %}
+</main>
+<script src="{% static 'js/csrf.js' %}"></script>
+</body>
+</html>
