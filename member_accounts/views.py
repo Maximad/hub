@@ -8,13 +8,20 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_http_methods, require_POST
 
 from accounts.permissions import user_has_capability
 from core.models import ActivityLog, InternetSession, Member
 from member_accounts.identity import resolve_member_identity
-from member_accounts.models import MemberAccount, MemberInvitation
-from member_accounts.services import claim_invitation, create_invitation, validate_invitation
+from member_accounts.models import MemberAccount, MemberInvitation, MemberLoginChallenge
+from member_accounts.services import (
+    claim_invitation,
+    create_invitation,
+    request_login_challenge,
+    validate_invitation,
+    verify_login_challenge,
+)
 
 
 def _public_url(request, path):
@@ -39,6 +46,23 @@ def _staff_can_manage_members(user):
     return user.is_authenticated and user_has_capability(user, 'members/internet')
 
 
+def _safe_next(request, candidate):
+    candidate = (candidate or '').strip()
+    if candidate and url_has_allowed_host_and_scheme(
+        candidate,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return candidate
+    return ''
+
+
+def _no_store(response):
+    response.headers['Cache-Control'] = 'no-store'
+    response.headers['Referrer-Policy'] = 'same-origin'
+    return response
+
+
 @require_http_methods(['GET', 'HEAD', 'POST'])
 def join_invitation(request, token):
     invitation = validate_invitation(token)
@@ -47,9 +71,7 @@ def join_invitation(request, token):
             'invitation': invitation,
             'invalid': invitation is None,
         })
-        response.headers['Cache-Control'] = 'no-store'
-        response.headers['Referrer-Policy'] = 'same-origin'
-        return response
+        return _no_store(response)
 
     if invitation is None:
         return render(request, 'member_accounts/join.html', {
@@ -78,11 +100,72 @@ def join_invitation(request, token):
     return _set_member_cookie(response, result.cookie_value)
 
 
+@require_http_methods(['GET', 'HEAD', 'POST'])
+def member_login(request):
+    identity = resolve_member_identity(request)
+    if identity is not None:
+        return redirect('member_account_home')
+
+    next_path = _safe_next(request, request.GET.get('next') if request.method != 'POST' else request.POST.get('next'))
+    error = ''
+    if request.method == 'POST':
+        phone = (request.POST.get('phone') or '').strip()
+        try:
+            result = request_login_challenge(
+                phone,
+                ip=request.META.get('REMOTE_ADDR', ''),
+                user_agent=request.META.get('HTTP_USER_AGENT', ''),
+                next_path=next_path,
+            )
+        except ValidationError as exc:
+            error = ' '.join(exc.messages)
+        else:
+            response = redirect(
+                'member_account_login_verify',
+                challenge_id=result.challenge.uuid,
+            )
+            return _no_store(response)
+
+    response = render(request, 'member_accounts/login.html', {
+        'error': error,
+        'next_path': next_path,
+    })
+    return _no_store(response)
+
+
+@require_http_methods(['GET', 'HEAD', 'POST'])
+def member_login_verify(request, challenge_id):
+    challenge = MemberLoginChallenge.objects.filter(uuid=challenge_id).first()
+    if challenge is None:
+        raise Http404()
+
+    error = ''
+    if request.method == 'POST':
+        try:
+            result = verify_login_challenge(
+                challenge_id,
+                request.POST.get('code', ''),
+                device_label=request.META.get('HTTP_USER_AGENT', '').split(')')[0][:120],
+            )
+        except ValidationError as exc:
+            error = ' '.join(exc.messages)
+        else:
+            destination = _safe_next(request, challenge.next_path) or reverse('member_account_home')
+            messages.success(request, 'تم تسجيل الدخول إلى حساب هَب.')
+            response = redirect(destination)
+            return _set_member_cookie(response, result.cookie_value)
+
+    response = render(request, 'member_accounts/login_verify.html', {
+        'challenge': challenge,
+        'error': error,
+    })
+    return _no_store(response)
+
+
 def member_home(request):
     identity = resolve_member_identity(request)
     if identity is None:
-        messages.info(request, 'سجّل الدخول إلى حساب العضوية أولاً.')
-        return redirect('menu_public')
+        return redirect(f"{reverse('member_account_login')}?next={reverse('member_account_home')}")
 
     member = identity.member
     subscriptions = member.subscriptions.select_related('plan').order_by('-created_at')[:20]
