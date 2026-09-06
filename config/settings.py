@@ -106,6 +106,7 @@ INSTALLED_APPS = [
     'orders',
     'payments',
     'members',
+    'member_accounts',
     'internet',
     'reports',
     'audit',
@@ -235,6 +236,7 @@ LOGGING = {
 MEMBER_DEVICE_COOKIE_NAME = os.getenv('MEMBER_DEVICE_COOKIE_NAME', 'hub_member_device')
 MEMBER_DEVICE_COOKIE_AGE = int(os.getenv('MEMBER_DEVICE_COOKIE_AGE', 60 * 60 * 24 * 365))
 MEMBER_ACTIVATION_TOKEN_AGE = int(os.getenv('MEMBER_ACTIVATION_TOKEN_AGE', 60 * 60 * 24 * 7))
+MEMBER_INVITATION_TOKEN_AGE = int(os.getenv('MEMBER_INVITATION_TOKEN_AGE', 60 * 60 * 24 * 14))
 MEMBER_DEVICE_COOKIE_SECURE = os.getenv('MEMBER_DEVICE_COOKIE_SECURE', str(not DEBUG)).lower() == 'true'
 PUBLIC_BASE_URL = os.getenv('PUBLIC_BASE_URL', '')
 
