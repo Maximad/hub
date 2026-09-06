@@ -19,8 +19,7 @@ class HubV1ReadinessTests(TestCase):
             price_syp=100,
             is_available=True,
             visible_on_qr=True,
-            visible_on_pos=True,
-            orderable_on_pos=True,
+            orderable_on_qr=True,
             item_type=Product.ItemType.FOOD,
             product_type=Product.ProductType.FOOD,
         )
@@ -68,9 +67,16 @@ class HubV1ReadinessTests(TestCase):
         with self.assertRaises(CommandError):
             call_command('hub_v1_readiness', stdout=StringIO())
 
-    def test_hidden_public_product_with_pos_flags_is_warning_not_failure(self):
-        self.product.visible_on_qr = False
-        self.product.save(update_fields=['visible_on_qr'])
+    def test_legacy_pos_flag_mismatch_is_not_a_readiness_warning(self):
+        # Reproduce old imported data without invoking the save-time synchronizer.
+        Product.objects.filter(pk=self.product.pk).update(
+            visible_on_pos=False,
+            orderable_on_pos=False,
+        )
         payload = self.run_json()
-        check = next(row for row in payload['checks'] if row['code'] == 'legacy_pos_only_visibility')
-        self.assertEqual(check['status'], 'WARN')
+        check = next(row for row in payload['checks'] if row['code'] == 'catalog_visibility_source')
+        self.assertEqual(check['status'], 'PASS')
+        self.assertNotIn(
+            'legacy_pos_only_visibility',
+            [row['code'] for row in payload['checks']],
+        )
