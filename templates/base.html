@@ -43,7 +43,7 @@
       <div class="hub-container">
         {% if system_settings.brand_icon_url %}<img class="hub-header__icon" src="{{ system_settings.brand_icon_url }}" alt="">{% endif %}<h1 class="hub-title">{% if system_settings %}{{ system_settings.system_title }}{% else %}نظام مشاريب{% endif %}</h1>
         <div class="hub-subtitle">{% if system_settings %}{{ system_settings.header_subtitle }}{% else %}Hub Sueda • تشغيل يومي مرن{% endif %}</div>
-        {% if member_identity_context %}<div><a class="hub-button hub-button-secondary" href="{% url 'member_account_home' %}">حسابي</a></div>{% endif %}
+        {% if member_identity_context %}<div><a class="hub-button hub-button-secondary" href="{% url 'member_account_home' %}">حسابي</a></div>{% else %}<div><a class="hub-button hub-button-secondary" href="{% url 'member_account_login' %}">تسجيل الدخول</a></div>{% endif %}
       </div>
     </header>
   {% endif %}
