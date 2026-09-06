@@ -125,12 +125,22 @@ def ensure_package_catalog_product(package):
 
 
 def decorate_menu_context(context, *, table):
-    """Remove bound Internet identities from the ordinary food/drink catalog.
+    """Prepare the customer menu while keeping identity independent of benefits.
 
-    Internet still has a stable Product/OrderItem identity internally, but the
-    customer starts it from the dedicated table quick-start UI instead of seeing
-    modifiers, notes or quantity controls intended for normal products.
+    A trusted member device remains a signed-in account even when its membership
+    expires.  ``member_identity_context`` therefore always carries recognized
+    identity, while the legacy ``member_context`` key is kept only when an active
+    plan exists so existing menu pricing/benefit UI cannot claim expired benefits.
+
+    Bound Internet identities are also removed from the ordinary food/drink
+    catalog because Internet starts through the dedicated table flow.
     """
+    identity_context = context.get('member_context')
+    if identity_context:
+        context['member_identity_context'] = identity_context
+        if not getattr(identity_context, 'plan', None):
+            context['member_context'] = None
+
     internet_product_ids = set(
         InternetCatalogBinding.objects.values_list('product_id', flat=True)
     )
