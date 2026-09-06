@@ -4,8 +4,8 @@
 <h2 class="hub-page-header__title">{{ member.name_ar }}</h2>
 <p>الهاتف: {{ member.phone }} | الرصيد: {{ member.balance_syp }}</p>
 {% if active_subscription %}<p><strong>الاشتراك الفعّال:</strong> {{ active_subscription.plan.name_ar }} ({{ active_subscription.subscription.starts_at }} — {{ active_subscription.subscription.ends_at|default:'مفتوح' }})</p>{% else %}<p>لا يوجد اشتراك فعّال حالياً.</p>{% endif %}
-<form class="hub-form-section" method="post" action="{% url 'staff_member_activation' member.public_code %}">{% csrf_token %}<button type="submit">إنشاء رابط تفعيل جديد</button></form>
-{% if activation_url %}<section class="hub-card"><p><strong>يظهر هذا الرابط مرة واحدة:</strong></p><input value="{{ activation_url }}" readonly style="width:100%"><img src="{% url 'staff_member_activation_qr' member.public_code %}" alt="رمز QR لتفعيل العضوية" style="max-width:240px"></section>{% endif %}
+<p><a class="hub-button" href="{% url 'staff_member_invitation_existing' member.public_code %}">إنشاء دعوة حساب / جهاز جديد</a></p>
+{% if activation_url %}<section class="hub-card"><p><strong>رابط تفعيل قديم — يظهر مرة واحدة:</strong></p><input value="{{ activation_url }}" readonly style="width:100%"><img src="{% url 'staff_member_activation_qr' member.public_code %}" alt="رمز QR لتفعيل العضوية" style="max-width:240px"></section>{% endif %}
 <h3>الأجهزة المفعّلة ({{ devices|length }})</h3>
 <form class="hub-form-section" method="post" action="{% url 'staff_member_devices_revoke' member.public_code %}">{% csrf_token %}<button type="submit">إلغاء تفعيل جميع الأجهزة</button></form>
 <div class="hub-table-wrap"><table class="hub-table" style="width:100%"><tr><th>تاريخ التفعيل</th><th>آخر استخدام</th><th>الجهاز</th><th></th></tr>{% for d in devices %}<tr><td>{{ d.created_at }}</td><td>{{ d.last_used_at|default:'—' }}</td><td>{{ d.device_label|default:'جهاز' }}</td><td><form class="hub-form-section" method="post" action="{% url 'staff_member_device_revoke' member.public_code d.uuid %}">{% csrf_token %}<button>إلغاء</button></form></td></tr>{% empty %}<tr><td colspan="4">لا توجد أجهزة.</td></tr>{% endfor %}</table></div>
