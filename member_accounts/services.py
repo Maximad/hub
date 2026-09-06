@@ -111,8 +111,10 @@ class ClaimResult:
 def claim_invitation(raw, *, name='', device_label=''):
     now = timezone.now()
     digest = _digest(raw)
+    # Lock only the invitation row. target_member is nullable, so PostgreSQL
+    # cannot apply FOR UPDATE to the LEFT OUTER JOIN produced by select_related.
     invitation = (
-        MemberInvitation.objects.select_for_update()
+        MemberInvitation.objects.select_for_update(of=('self',))
         .select_related('target_member')
         .filter(token_hash=digest)
         .first()
