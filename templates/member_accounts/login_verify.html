@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}تأكيد تسجيل الدخول{% endblock %}
+{% block content %}
+<section class="hub-card" style="max-width:520px;margin:2rem auto;">
+  <h2 class="hub-page-header__title" style="margin-top:0;">تأكيد تسجيل الدخول</h2>
+  <p>إذا كان الرقم مرتبطاً بحساب هَب، فقد أرسلنا رمز تحقق. أدخل الرمز هنا.</p>
+  {% if error %}<div class="hub-message hub-message-error" role="alert">{{ error }}</div>{% endif %}
+  <form method="post" class="hub-form">
+    {% csrf_token %}
+    <label for="member-code">رمز التحقق</label>
+    <input id="member-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required autofocus>
+    <button class="hub-button hub-button-primary" type="submit">تسجيل الدخول</button>
+  </form>
+  <p class="hub-help-text">الرمز قصير العمر وله عدد محاولات محدود.</p>
+  <p><a class="hub-button hub-button-secondary" href="{% url 'member_account_login' %}">إرسال رمز جديد</a></p>
+</section>
+{% endblock %}
