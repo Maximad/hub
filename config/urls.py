@@ -122,7 +122,7 @@ urlpatterns = [
     path('staff/finance/cashbox/new/', staff_cashbox_new, name='staff_finance_cashbox_new'),
     path('staff/finance/cashbox.csv', staff_cashbox_csv, name='staff_finance_cashbox_csv'),
     path('staff/finance/transfers/', staff_transfers, name='staff_finance_transfers'),
-    path('staff/finance/transfers/new/', staff_transfers_new if 'staff_transfers_new' in globals() else staff_transfer_new, name='staff_finance_transfer_new'),
+    path('staff/finance/transfers/new/', staff_transfer_new, name='staff_finance_transfer_new'),
     path('staff/finance/transfers/<int:transfer_id>/', staff_transfer_detail, name='staff_finance_transfer_detail'),
     path('staff/finance/transfers/<int:transfer_id>/reverse/', staff_transfer_reverse, name='staff_finance_transfer_reverse'),
 
