@@ -1,5 +1,8 @@
 /* POS v2 launch pass — prioritize fast catalog selection and a stable order panel. */
-.hub-staff-ui .staff-pos{display:grid;gap:12px}
+/* The POS wrapper also receives catalog layout classes such as layout-grid-4.
+   Those global classes use !important grid-template-columns for product grids;
+   reset the wrapper itself to one column so only the product grid is affected. */
+.hub-staff-ui .staff-pos{display:grid;grid-template-columns:1fr!important;gap:12px}
 .hub-staff-ui .staff-pos__header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;border-radius:16px;box-shadow:none}
 .hub-staff-ui .staff-pos__header .menu-public__brand{margin:0 0 2px;color:var(--staff-v2-muted);font-size:.68rem;font-weight:800}
 .hub-staff-ui .staff-pos__header h2{margin:0;font-size:1.35rem}
