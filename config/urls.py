@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.contrib import admin
-from django.urls import path, re_path
+from django.urls import include, path, re_path
 from core.views import menu
 from core.media_views import serve_media
 from core.views.staff_reports import staff_reports_home, staff_reports_day, staff_reports_day_csv, staff_product_margin_report, staff_product_margin_csv, staff_close_day, staff_close_day_print
@@ -37,6 +37,7 @@ urlpatterns = [
     path('service-worker.js', service_worker, name='service_worker'),
     path('partner/internet/', internet_partner_dashboard, name='internet_partner_dashboard'),
     path('admin/', admin.site.urls),
+    path('', include('member_accounts.urls')),
     path('', menu.dashboard, name='dashboard'),
     path('wifi/', wifi_entry, name='wifi_entry'),
     path('menu/', menu.menu_public, name='menu_public'),
@@ -121,7 +122,7 @@ urlpatterns = [
     path('staff/finance/cashbox/new/', staff_cashbox_new, name='staff_finance_cashbox_new'),
     path('staff/finance/cashbox.csv', staff_cashbox_csv, name='staff_finance_cashbox_csv'),
     path('staff/finance/transfers/', staff_transfers, name='staff_finance_transfers'),
-    path('staff/finance/transfers/new/', staff_transfer_new, name='staff_finance_transfer_new'),
+    path('staff/finance/transfers/new/', staff_transfers_new if 'staff_transfers_new' in globals() else staff_transfer_new, name='staff_finance_transfer_new'),
     path('staff/finance/transfers/<int:transfer_id>/', staff_transfer_detail, name='staff_finance_transfer_detail'),
     path('staff/finance/transfers/<int:transfer_id>/reverse/', staff_transfer_reverse, name='staff_finance_transfer_reverse'),
 
