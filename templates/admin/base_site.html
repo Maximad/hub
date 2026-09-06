@@ -1,6 +1,6 @@
 {% extends "admin/base_site.html" %}
 {% load static %}
-{% block extrahead %}{{ block.super }}<meta name="viewport" content="width=device-width, initial-scale=1">{% include "includes/hub_theme.html" %}<link rel="stylesheet" href="{% static 'admin/css/hub_admin.css' %}">{% endblock %}
+{% block extrahead %}{{ block.super }}<meta name="viewport" content="width=device-width, initial-scale=1">{% include "includes/hub_theme.html" %}<link rel="stylesheet" href="{% static 'admin/css/hub_admin.css' %}"><link rel="stylesheet" href="{% static 'admin/css/product_visibility_source.css' %}"><script src="{% static 'admin/js/product_visibility_source.js' %}" defer></script>{% endblock %}
 {% block welcome-msg %}مرحباً، <strong>{% firstof user.get_short_name user.get_username %}</strong>{% endblock %}
 {% block userlinks %}
   {% if user.has_usable_password %}<a href="{% url 'admin:password_change' %}">تغيير كلمة المرور</a>{% endif %}
