@@ -107,6 +107,31 @@ class MemberAccountFlowTests(TestCase):
         self.assertContains(portal, 'الحساب فعال')
         self.assertContains(portal, 'لا توجد عضوية فعالة حالياً')
 
+        menu = self.client.get(reverse('menu_public'))
+        self.assertEqual(menu.status_code, 200)
+        self.assertEqual(menu.context['member_identity_context'].member, self.member)
+        self.assertIsNone(menu.context['member_context'])
+        self.assertContains(menu, reverse('member_account_home'))
+        self.assertNotContains(menu, 'عضويتك مفعّلة')
+
+    def test_active_membership_keeps_benefit_context_and_account_link(self):
+        _, _, response = self.claim(invitation_member=self.member)
+        self.client.cookies['hub_member_device'] = response.cookies['hub_member_device'].value
+        plan = MembershipPlan.objects.create(code='active-account-plan', name_ar='فعالة')
+        MembershipSubscription.objects.create(
+            member=self.member,
+            plan=plan,
+            starts_at=timezone.now() - timedelta(days=1),
+            ends_at=timezone.now() + timedelta(days=30),
+            status=MembershipSubscription.Status.ACTIVE,
+        )
+        menu = self.client.get(reverse('menu_public'))
+        self.assertEqual(menu.status_code, 200)
+        self.assertEqual(menu.context['member_context'].member, self.member)
+        self.assertEqual(menu.context['member_identity_context'].member, self.member)
+        self.assertContains(menu, 'عضويتك مفعّلة')
+        self.assertContains(menu, reverse('member_account_home'))
+
     def test_logout_revokes_only_current_device(self):
         _, _, response = self.claim(invitation_member=self.member)
         self.client.cookies['hub_member_device'] = response.cookies['hub_member_device'].value
