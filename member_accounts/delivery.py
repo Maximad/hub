@@ -1,4 +1,5 @@
 import logging
+import os
 
 import requests
 from django.conf import settings
@@ -13,6 +14,13 @@ class LoginDeliveryUnavailable(Exception):
 LOC_MEM_OUTBOX = []
 
 
+def _setting(name, default=''):
+    value = getattr(settings, name, None)
+    if value is None:
+        value = os.getenv(name, default)
+    return value
+
+
 def _send_locmem(phone, code, challenge_uuid):
     LOC_MEM_OUTBOX.append({
         'phone': phone,
@@ -22,11 +30,11 @@ def _send_locmem(phone, code, challenge_uuid):
 
 
 def _send_webhook(phone, code, challenge_uuid):
-    url = getattr(settings, 'MEMBER_LOGIN_WEBHOOK_URL', '').strip()
+    url = str(_setting('MEMBER_LOGIN_WEBHOOK_URL', '')).strip()
     if not url:
         raise LoginDeliveryUnavailable('member login webhook is not configured')
     headers = {'Content-Type': 'application/json'}
-    token = getattr(settings, 'MEMBER_LOGIN_WEBHOOK_TOKEN', '').strip()
+    token = str(_setting('MEMBER_LOGIN_WEBHOOK_TOKEN', '')).strip()
     if token:
         headers['Authorization'] = f'Bearer {token}'
     try:
@@ -37,10 +45,10 @@ def _send_webhook(phone, code, challenge_uuid):
                 'code': code,
                 'purpose': 'member_login',
                 'challenge_id': str(challenge_uuid),
-                'expires_in_seconds': int(getattr(settings, 'MEMBER_LOGIN_CODE_AGE', 600)),
+                'expires_in_seconds': int(_setting('MEMBER_LOGIN_CODE_AGE', 600)),
             },
             headers=headers,
-            timeout=float(getattr(settings, 'MEMBER_LOGIN_WEBHOOK_TIMEOUT_SECONDS', 5)),
+            timeout=float(_setting('MEMBER_LOGIN_WEBHOOK_TIMEOUT_SECONDS', 5)),
         )
         response.raise_for_status()
     except requests.RequestException as exc:
@@ -48,7 +56,7 @@ def _send_webhook(phone, code, challenge_uuid):
 
 
 def send_login_code(phone, code, challenge_uuid):
-    backend = getattr(settings, 'MEMBER_LOGIN_DELIVERY_BACKEND', 'disabled').strip().lower()
+    backend = str(_setting('MEMBER_LOGIN_DELIVERY_BACKEND', 'disabled')).strip().lower()
     if backend == 'locmem':
         _send_locmem(phone, code, challenge_uuid)
         return
