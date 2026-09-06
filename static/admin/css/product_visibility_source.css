@@ -1,0 +1,18 @@
+/* Product visibility has one source of truth: the English Menu + POS fields. */
+body.app-core.model-product .form-row.field-visible_on_pos,
+body.app-core.model-product .form-row.field-orderable_on_pos,
+body.app-core.model-product th.column-visible_on_pos,
+body.app-core.model-product td.field-visible_on_pos,
+body.app-core.model-product th.column-orderable_on_pos,
+body.app-core.model-product td.field-orderable_on_pos {
+  display: none !important;
+}
+
+body.app-core.model-product .hub-canonical-product-help {
+  display: block;
+  margin-block-start: .35rem;
+  max-width: 46rem;
+  color: var(--body-quiet-color, #666);
+  font-size: .82rem;
+  line-height: 1.45;
+}
