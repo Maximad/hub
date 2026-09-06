@@ -34,15 +34,14 @@ class PosCatalogConsistencyTests(TestCase):
             visible_on_qr=False,
         )
 
-    def product(self, name, *, visible_on_qr=True, section=None):
+    def product(self, name, *, visible_on_qr=True, orderable_on_qr=True, section=None):
         product = Product.objects.create(
             category=self.category,
             name_ar=name,
             price_syp=100,
             is_available=True,
             visible_on_qr=visible_on_qr,
-            visible_on_pos=True,
-            orderable_on_pos=True,
+            orderable_on_qr=orderable_on_qr,
             item_type=Product.ItemType.FOOD,
             product_type=Product.ProductType.FOOD,
         )
@@ -64,6 +63,43 @@ class PosCatalogConsistencyTests(TestCase):
         self.assertNotIn('داخل قسم مخفي', content)
         self.assertNotIn('قسم مخفي', content)
         self.assertNotIn('بدون قسم', content)
+
+    def test_pos_uses_canonical_orderable_field(self):
+        visible = self.product('قابل للطلب', section=self.visible_section)
+        self.product('غير قابل للطلب', orderable_on_qr=False, section=self.visible_section)
+
+        response = self.client.get(reverse('staff_pos'))
+        content = response.content.decode('utf-8')
+        self.assertIn(visible.name_ar, content)
+        self.assertNotIn('غير قابل للطلب', content)
+
+    def test_stale_legacy_pos_flags_do_not_hide_canonical_product(self):
+        product = self.product('حقول قديمة متعارضة', section=self.visible_section)
+        # Bypass Product.save/pre_save to reproduce historical production rows.
+        Product.objects.filter(pk=product.pk).update(
+            visible_on_pos=False,
+            orderable_on_pos=False,
+        )
+
+        response = self.client.get(reverse('staff_pos'))
+        self.assertContains(response, product.name_ar)
+
+    def test_internet_identity_stays_out_of_generic_pos(self):
+        product = Product.objects.create(
+            category=self.category,
+            name_ar='باقة إنترنت داخلية',
+            price_syp=100,
+            is_available=True,
+            visible_on_qr=True,
+            orderable_on_qr=True,
+            item_type=Product.ItemType.SERVICE,
+            service_type=Product.ServiceType.INTERNET,
+            product_type=Product.ProductType.INTERNET,
+        )
+        product.menu_sections.add(self.visible_section)
+
+        response = self.client.get(reverse('staff_pos'))
+        self.assertNotContains(response, product.name_ar)
 
     def test_active_modifier_configuration_appears_in_pos(self):
         sandwich = self.product('ساندويشة اختبار', section=self.visible_section)
