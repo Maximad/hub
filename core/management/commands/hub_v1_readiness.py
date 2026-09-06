@@ -11,7 +11,6 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 
 from catalog.models import PrepStation, ProductOptionGroupAssignment
-from core.models import Product
 from core.services.internet_readiness import internet_readiness_report
 
 
@@ -101,25 +100,10 @@ class Command(BaseCommand):
             self.add('PASS', 'empty_option_assignments', 'كل ربط خيارات فعّال يملك خياراً فعّالاً.')
 
     def _catalog_channels(self):
-        # POS intentionally uses the public menu as its visibility baseline.
-        # These rows are not broken anymore, but surfacing them helps admins see
-        # legacy configuration that no longer has an effect.
-        hidden_but_pos = Product.objects.filter(
-            is_available=True,
-            visible_on_qr=False,
-            visible_on_pos=True,
-            orderable_on_pos=True,
-        ).count()
         self.add(
-            'WARN' if hidden_but_pos else 'PASS',
-            'legacy_pos_only_visibility',
-            (
-                f'{hidden_but_pos} منتجات مهيأة كنقطة بيع لكنها مخفية من المنيو؛ '
-                'Hub v1 سيخفيها من POS أيضاً.'
-                if hidden_but_pos
-                else 'لا توجد منتجات تعتمد على اختلاف قديم بين ظهور المنيو وPOS.'
-            ),
-            'راجع المنتج إذا كان المقصود أن يظهر في التشغيل؛ اجعل ظهوره في المنيو صريحاً.',
+            'PASS',
+            'catalog_visibility_source',
+            'ظهور وإتاحة المنتج موحدان بين المنيو وPOS عبر الحقول الأساسية نفسها.',
         )
 
     def _prep_roles(self):
