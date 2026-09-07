@@ -4,7 +4,7 @@ HubVisit remains the shared commercial bill.  A HubVisitBrowserCredential identi
 one browser/device that selected or joined that bill, and each new self-service
 InternetSession is bound to that credential through InternetSessionBrowserBinding.
 
-Historical sessions created before this feature may be unbound.  They are treated as
+Historical sessions created before this feature may remain unbound.  They are treated as
 visit-wide legacy sessions until they end so a deployment cannot strand live access.
 """
 import hashlib
@@ -25,7 +25,7 @@ from core.services.visit_internet import (
     package_customer_error,
 )
 from core.settings_helpers import get_system_settings
-from internet.models import InternetSessionBrowserBinding, InternetSessionNetworkOperation
+from internet.models import GuestWifiGrant, InternetSessionBrowserBinding, InternetSessionNetworkOperation
 from internet.session_network_backends import NOT_PROVISIONED
 from internet.session_network_operations import enqueue_session_network_operation
 
@@ -93,6 +93,21 @@ def _active_for_device(visit, credential):
     )
 
 
+def _active_for_fast_start(visit, credential, *, actor=None, at=None):
+    """Return a blocking fast/commercial session, pausing basic access when present.
+
+    Basic complimentary access is a fallback, not a competing Internet product. A
+    customer choosing paid fast access or an entitlement should therefore move from
+    basic -> fast in one action. Unused basic allowance remains available for later.
+    """
+    active = _active_for_device(visit, credential)
+    if active and GuestWifiGrant.objects.filter(session_id=active.pk).exists():
+        from internet.guest_wifi import pause_guest_wifi_session
+        pause_guest_wifi_session(active, actor=actor, at=at, reason='upgraded_to_fast')
+        return None
+    return active
+
+
 @transaction.atomic
 def create_visit_internet_sale_and_start(*, visit, credential, package, request_key,
                                          member=None, actor=None, at=None):
@@ -105,12 +120,12 @@ def create_visit_internet_sale_and_start(*, visit, credential, package, request_
         raise ValidationError(error)
 
     sale_key = _device_sale_key(credential, request_key)
-    active_for_device = _active_for_device(visit, credential)
+    active_for_device = _active_for_fast_start(visit, credential, actor=actor, at=at)
     if active_for_device:
         if (active_for_device.entitlement_id
                 and active_for_device.entitlement.idempotency_key == sale_key):
             return active_for_device.entitlement, _apply_customer_bandwidth_profile(active_for_device), False
-        raise ValidationError('لديك جلسة إنترنت فعالة على هذا الجهاز. أنهِها قبل بدء باقة أخرى.')
+        raise ValidationError('لديك جلسة إنترنت سريعة فعالة على هذا الجهاز. أنهِها قبل بدء باقة أخرى.')
 
     entitlement = create_commercial_sale(
         package,
@@ -164,12 +179,12 @@ def start_visit_metered_session(*, visit, credential, member=None, guest_phone='
     if member is None and settings_obj.require_phone_for_guest_session and not (guest_phone or '').strip():
         raise ValidationError('رقم الهاتف مطلوب لبدء الإنترنت.')
 
-    active = _active_for_device(visit, credential)
+    active = _active_for_fast_start(visit, credential, actor=actor, at=at)
     if active:
         if (active.entitlement_id is None and active.package_id is None
                 and active.billing_mode == InternetSession.BillingMode.OPEN_METERED):
             return _apply_customer_bandwidth_profile(active), False
-        raise ValidationError('لديك جلسة إنترنت فعالة على هذا الجهاز. أنهِها قبل بدء جلسة أخرى.')
+        raise ValidationError('لديك جلسة إنترنت سريعة فعالة على هذا الجهاز. أنهِها قبل بدء جلسة أخرى.')
 
     requested = at or timezone.now()
     network_provider = _metered_network_provider()
@@ -227,11 +242,11 @@ def start_existing_visit_entitlement(*, visit, credential, entitlement, actor=No
     entitlement = InternetEntitlement.objects.select_for_update().get(pk=entitlement.pk)
     authorize_entitlement(visit, entitlement, at)
 
-    active_for_device = _active_for_device(visit, credential)
+    active_for_device = _active_for_fast_start(visit, credential, actor=actor, at=at)
     if active_for_device:
         if active_for_device.entitlement_id == entitlement.pk:
             return _apply_customer_bandwidth_profile(active_for_device), False
-        raise ValidationError('لديك جلسة إنترنت فعالة على هذا الجهاز. أنهِها قبل بدء جلسة أخرى.')
+        raise ValidationError('لديك جلسة إنترنت سريعة فعالة على هذا الجهاز. أنهِها قبل بدء جلسة أخرى.')
 
     # Other browser-bound sessions on the same visit do not block this device.
     # The generic entitlement engine remains authoritative for timed one-shot and
