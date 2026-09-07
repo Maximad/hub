@@ -87,8 +87,8 @@ class InternetSessionNetworkState(models.Model):
     InternetSession keeps the public operational fields (provider, RouterOS identity,
     network status). This companion row keeps encrypted credentials and retry
     diagnostics out of the commercial session model. ``network_activated_at`` is
-    the billing gate for network-managed metered sessions: time is never charged
-    before the first successful provision.
+    the billing gate for network-managed metered sessions and the activation gate
+    for complimentary guest sessions: time never starts before provisioning works.
     """
 
     session = models.OneToOneField(
@@ -171,3 +171,74 @@ class InternetOperationsState(models.Model):
 
     def __str__(self):
         return f'Internet operations state ({self.key})'
+
+
+class GuestWifiPolicy(models.Model):
+    """Single venue policy for complimentary captive-portal Internet.
+
+    The rotating venue code itself is never stored. It is derived from the server
+    secret and the current rotation slot, so a database read cannot reveal future
+    codes.
+    """
+
+    key = models.CharField(max_length=40, unique=True, default='default')
+    enabled = models.BooleanField(default=False)
+    require_venue_code = models.BooleanField(default=True)
+    member_bypass_venue_code = models.BooleanField(default=True)
+    session_minutes = models.PositiveSmallIntegerField(default=120)
+    max_sessions_per_day = models.PositiveSmallIntegerField(default=1)
+    code_rotation_minutes = models.PositiveSmallIntegerField(default=240)
+    bandwidth_profile = models.ForeignKey(
+        'core.InternetBandwidthProfile',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='guest_wifi_policies',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'Guest Wi-Fi policy ({self.key})'
+
+
+class GuestWifiGrant(models.Model):
+    """Audit row for one complimentary Internet grant to one browser credential."""
+
+    credential = models.ForeignKey(
+        'core.HubVisitBrowserCredential',
+        on_delete=models.CASCADE,
+        related_name='guest_wifi_grants',
+    )
+    session = models.OneToOneField(
+        'core.InternetSession',
+        on_delete=models.CASCADE,
+        related_name='guest_wifi_grant',
+    )
+    business_date = models.DateField(db_index=True)
+    code_slot = models.BigIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=('credential', 'business_date'),
+                name='guest_wifi_cred_day_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return f'Guest Wi-Fi grant {self.session_id}'
+
+
+class GuestWifiCodeAttempt(models.Model):
+    """Hashed abuse-control bucket; no raw client IP or venue code is stored."""
+
+    fingerprint_hash = models.CharField(max_length=64, unique=True, editable=False)
+    window_started_at = models.DateTimeField()
+    attempt_count = models.PositiveSmallIntegerField(default=0)
+    blocked_until = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'Guest Wi-Fi attempts {self.fingerprint_hash[:10]}'
