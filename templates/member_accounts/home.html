@@ -13,6 +13,25 @@
   <p><a class="hub-button" href="{% url 'menu_public' %}">فتح المنيو</a></p>
 </section>
 
+<section class="hub-card" style="margin-bottom:1rem;text-align:center;">
+  <h3 style="margin-top:0;">بطاقة هَب</h3>
+  <p style="margin:.25rem 0 1rem;">اعرض هذا الرمز لموظف هَب لربط حسابك بالجلسة. يتجدد تلقائياً ولا يحتوي بيانات تسجيل الدخول.</p>
+  <div style="display:inline-flex;background:#fff;padding:.75rem;border-radius:1rem;max-width:100%;">
+    <img id="member-card-qr" src="{% url 'member_card_qr' %}" alt="رمز بطاقة هَب" width="240" height="240" style="display:block;max-width:70vw;height:auto;">
+  </div>
+  <p style="margin:.75rem 0 0;"><strong>{{ member.name_ar }}</strong>{% if active_subscription %} · {{ active_subscription.plan.name_ar }}{% else %} · حساب هَب{% endif %}</p>
+</section>
+<script>
+(function () {
+  const qr = document.getElementById('member-card-qr');
+  if (!qr) return;
+  const base = qr.getAttribute('src').split('?')[0];
+  window.setInterval(function () {
+    qr.src = base + '?r=' + Date.now();
+  }, 30000);
+})();
+</script>
+
 <section class="hub-card" style="margin-bottom:1rem;">
   <h3>الاشتراكات</h3>
   <div class="hub-table-wrap"><table class="hub-table" style="width:100%">
