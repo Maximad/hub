@@ -179,6 +179,31 @@ class FastCustomerProfileTests(CustomerInternetFlowMixin, TestCase):
         self.assertEqual(session.bandwidth_profile, 'fast')
         self.assertEqual(session.browser_binding.credential_id, credential.pk)
 
+    @patch('core.views.visits.one_tap_session_connect_configured', return_value=False)
+    @patch('core.views.visits.prepare_visit_metered_session_network', return_value=True)
+    def test_tableless_walk_in_can_buy_fast_metered_internet_without_membership(
+        self,
+        _prepare_network,
+        _one_tap,
+    ):
+        self.make_customer_setup()
+
+        opened = self.client.post(reverse('wifi_entry'), {'wifi_action': 'internet_options'})
+        self.assertEqual(opened.status_code, 302)
+        visit = HubVisit.objects.get()
+        self.assertIsNone(visit.table_id)
+        self.assertIsNone(visit.member_id)
+
+        response = self.client.post(reverse('visit_internet_start'), {'mode': 'metered'})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], reverse('current_visit'))
+        session = InternetSession.objects.get()
+        self.assertEqual(session.visit_id, visit.pk)
+        self.assertIsNone(session.member_id)
+        self.assertEqual(session.billing_mode, InternetSession.BillingMode.OPEN_METERED)
+        self.assertEqual(session.bandwidth_profile, 'fast')
+
     @patch('core.views.visits.build_session_hotspot_login_payload')
     @patch('core.views.visits.prepare_visit_metered_session_network', return_value=True)
     def test_first_start_action_returns_automatic_hotspot_relay(
