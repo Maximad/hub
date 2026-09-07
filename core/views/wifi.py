@@ -40,6 +40,73 @@ def _wifi_destination(request):
     return _absolute_destination(request, reverse('wifi_entry') + '?free=1')
 
 
+def _attach_member_to_visit(visit, member_context, *, source):
+    if not member_context:
+        return visit
+    if visit.member_id is None:
+        visit.member = member_context.member
+        visit.save(update_fields=['member', 'updated_at'])
+        ActivityLog.objects.create(action='visit.member_auto_attached', details={
+            'visit_id': visit.pk,
+            'member_id': member_context.member.pk,
+            'source': source,
+        })
+        return visit
+    if visit.member_id != member_context.member.pk:
+        raise ValidationError('تعذر مطابقة الحساب مع جلسة هذا الجهاز.')
+    return visit
+
+
+def _ensure_wifi_visit(request, *, source='wifi_access'):
+    """Return a browser-bound Hub visit without requiring a table or membership.
+
+    Internet access source and customer identity are deliberately separate.  A walk-in
+    visitor can therefore use commercial fast Internet without becoming a member,
+    while a recognised member can reuse the same visit and let existing entitlements
+    or benefit rules decide what access is included.
+    """
+    member_context = resolve_member_from_request(request)
+    credential = resolve_visit_credential(request)
+    raw_cookie = None
+
+    if credential:
+        visit = _attach_member_to_visit(credential.visit, member_context, source=source)
+        return visit, credential, raw_cookie, member_context
+
+    visit = HubVisit.objects.create(
+        table=None,
+        member=member_context.member if member_context else None,
+        notes=source,
+    )
+    credential, raw_cookie = issue_visit_credential(visit)
+    ActivityLog.objects.create(action='visit.created', details={
+        'visit_id': visit.pk,
+        'source': source,
+    })
+    ActivityLog.objects.create(action='visit.browser_bound', details={
+        'visit_id': visit.pk,
+        'source': source,
+    })
+    return visit, credential, raw_cookie, member_context
+
+
+def _open_internet_options(request):
+    """Open the existing Internet storefront for a visitor or member, table optional."""
+    if not self_service_enabled(get_system_settings()):
+        messages.error(request, 'خدمة الإنترنت الذاتية غير متاحة حالياً.')
+        return redirect('wifi_entry')
+    try:
+        _visit, _credential, raw_cookie, _member_context = _ensure_wifi_visit(
+            request,
+            source='wifi_internet_options',
+        )
+    except ValidationError as exc:
+        messages.error(request, _validation_message(exc))
+        return redirect('wifi_entry')
+    response = redirect('current_visit')
+    return set_visit_cookie(response, raw_cookie) if raw_cookie else response
+
+
 def _start_guest_wifi(request):
     """Create/reuse an anonymous visit and authorize bounded complimentary access."""
     system_settings = get_system_settings()
@@ -52,38 +119,14 @@ def _start_guest_wifi(request):
         messages.error(request, policy_error)
         return redirect('wifi_entry')
 
-    credential = resolve_visit_credential(request)
-    raw_cookie = None
-    member_context = resolve_member_from_request(request)
-
-    if credential:
-        visit = credential.visit
-        if member_context and visit.member_id is None:
-            visit.member = member_context.member
-            visit.save(update_fields=['member', 'updated_at'])
-            ActivityLog.objects.create(action='visit.member_auto_attached', details={
-                'visit_id': visit.pk,
-                'member_id': member_context.member.pk,
-                'source': 'guest_wifi',
-            })
-        elif member_context and visit.member_id != member_context.member.pk:
-            messages.error(request, 'تعذر مطابقة الحساب مع جلسة هذا الجهاز.')
-            return redirect('wifi_entry')
-    else:
-        visit = HubVisit.objects.create(
-            table=None,
-            member=member_context.member if member_context else None,
-            notes='guest_wifi',
+    try:
+        visit, credential, raw_cookie, member_context = _ensure_wifi_visit(
+            request,
+            source='guest_wifi',
         )
-        credential, raw_cookie = issue_visit_credential(visit)
-        ActivityLog.objects.create(action='visit.created', details={
-            'visit_id': visit.pk,
-            'source': 'guest_wifi',
-        })
-        ActivityLog.objects.create(action='visit.browser_bound', details={
-            'visit_id': visit.pk,
-            'source': 'guest_wifi',
-        })
+    except ValidationError as exc:
+        messages.error(request, _validation_message(exc))
+        return redirect('wifi_entry')
 
     try:
         session, created = start_guest_wifi_session(
@@ -107,7 +150,7 @@ def _start_guest_wifi(request):
     if network_ready:
         messages.success(
             request,
-            'تم تفعيل إنترنت الزوار.' if created else 'جلسة الإنترنت ما تزال فعالة على هذا الجهاز.',
+            'تم تفعيل الإنترنت الأساسي.' if created else 'جلسة الإنترنت ما تزال فعالة على هذا الجهاز.',
         )
     else:
         messages.warning(request, 'يجري تجهيز الاتصال. يمكنك المحاولة مجدداً بعد لحظات.')
@@ -135,8 +178,12 @@ def wifi_entry(request):
     remains responsible for the physical HotSpot session; this page never accepts a
     router password or trusts a client-supplied MAC address.
     """
-    if request.method == 'POST' and request.POST.get('wifi_action') == 'start_guest_wifi':
-        return _start_guest_wifi(request)
+    if request.method == 'POST':
+        action = request.POST.get('wifi_action')
+        if action == 'start_guest_wifi':
+            return _start_guest_wifi(request)
+        if action == 'internet_options':
+            return _open_internet_options(request)
 
     raw_number = request.GET.get('table_number', '').strip()
     table_number_error = ''
@@ -160,12 +207,14 @@ def wifi_entry(request):
         )
 
     member_context = resolve_member_from_request(request, touch=False)
+    system_settings = get_system_settings()
     policy = get_guest_wifi_policy()
     guest_error = guest_wifi_policy_error(policy)
     guest_available = bool(
         not guest_error
-        and self_service_enabled(get_system_settings())
+        and self_service_enabled(system_settings)
     )
+    internet_options_available = self_service_enabled(system_settings)
     active_session = active_browser_session(credential) if credential else None
     active_guest_session = None
     if active_session and hasattr(active_session, 'guest_wifi_grant'):
@@ -179,6 +228,7 @@ def wifi_entry(request):
         'current_table_url': current_table_url,
         'came_from_free_access': request.GET.get('free') == '1',
         'member_context': member_context,
+        'internet_options_available': internet_options_available,
         'guest_wifi_available': guest_available,
         'guest_wifi_unavailable_reason': guest_error or '',
         'guest_wifi_code_required': (
@@ -196,8 +246,6 @@ def wifi_entry(request):
             active_guest_session and active_guest_session.network_status == 'provisioned'
         ),
     })
-    # Captive-portal state is device/session specific. Avoid stale intermediary or
-    # browser caches showing an old table/account choice on a later connection.
     response['Cache-Control'] = 'no-store, private, max-age=0'
     response['Pragma'] = 'no-cache'
     response['X-Robots-Tag'] = 'noindex, nofollow, noarchive'
