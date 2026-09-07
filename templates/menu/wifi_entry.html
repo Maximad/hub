@@ -7,7 +7,7 @@
     <div>
       <p class="table-entry__eyebrow">هَبّ</p>
       <h2>أهلاً بك في هَبّ</h2>
-      <p>اتصل بالإنترنت المجاني، أو أدخل رقم طاولتك للطلبات والحساب والإنترنت السريع.</p>
+      <p>شبكة هَبّ مفتوحة. فعّل الإنترنت كزائر، ادخل إلى حسابك، أو اختر طاولتك والمنيو.</p>
     </div>
   </header>
 
@@ -15,6 +15,65 @@
     <div class="hub-alert hub-alert-success" role="status">
       تم تحويلك من خيار الإنترنت المجاني. يمكنك متابعة التصفح أو الدخول إلى طاولتك من هنا.
     </div>
+  {% endif %}
+
+  {% if active_guest_wifi_session %}
+    <section class="hub-card">
+      <p class="table-entry__eyebrow">إنترنت الزوار</p>
+      <h3>جلستك المجانية فعالة</h3>
+      {% if active_guest_wifi_network_ready %}
+        <p>الاتصال جاهز على هذا الجهاز{% if active_guest_wifi_session.authorized_until %} حتى {{ active_guest_wifi_session.authorized_until|date:"H:i" }}{% endif %}.</p>
+      {% else %}
+        <p>يجري تجهيز الاتصال بالشبكة. يمكنك إعادة المحاولة بدون إدخال رمز المكان من جديد.</p>
+      {% endif %}
+      <form method="post" action="{% url 'wifi_entry' %}">
+        {% csrf_token %}
+        <input type="hidden" name="wifi_action" value="start_guest_wifi">
+        <button class="hub-button hub-button-primary" type="submit">اتصل بالإنترنت</button>
+      </form>
+    </section>
+  {% elif guest_wifi_available %}
+    <section class="hub-card">
+      <p class="table-entry__eyebrow">بدون عضوية</p>
+      <h3>إنترنت للزوار</h3>
+      <p>يمكنك استخدام الإنترنت لمدة {{ guest_wifi_session_minutes }} دقيقة بدون إنشاء حساب أو عضوية.</p>
+      {% if guest_wifi_grants_remaining > 0 %}
+        <p class="table-entry__internet-note">المتاح لهذا الجهاز اليوم: {{ guest_wifi_grants_remaining }} جلسة.</p>
+        <form method="post" action="{% url 'wifi_entry' %}">
+          {% csrf_token %}
+          <input type="hidden" name="wifi_action" value="start_guest_wifi">
+          {% if guest_wifi_code_required %}
+            <label for="venue-code">رمز المكان</label>
+            <input class="hub-input" id="venue-code" name="venue_code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9٠-٩۰-۹]{4}" maxlength="4" placeholder="••••" required>
+            <p class="table-entry__internet-note">الرمز موجود داخل هَبّ ويتغيّر دورياً.</p>
+          {% elif member_context and member_context.subscription %}
+            <p class="hub-alert hub-alert-success">تم التعرّف على عضويتك على هذا الجهاز؛ لا تحتاج إلى رمز المكان.</p>
+          {% endif %}
+          <button class="hub-button hub-button-primary" type="submit">فعّل الإنترنت</button>
+        </form>
+      {% else %}
+        <div class="hub-alert hub-alert-warning">استخدم هذا الجهاز الحد المجاني المتاح لليوم.</div>
+      {% endif %}
+    </section>
+  {% else %}
+    <section class="hub-card">
+      <h3>إنترنت الزوار</h3>
+      <p>الإنترنت المجاني غير متاح حالياً. يمكنك استخدام خيارات الإنترنت المرتبطة بحسابك أو طاولتك عندما تكون متاحة.</p>
+    </section>
+  {% endif %}
+
+  {% if member_context %}
+    <section class="hub-card">
+      <p class="table-entry__eyebrow">حساب هَبّ</p>
+      <h3>{{ member_context.member.name_ar }}</h3>
+      <a class="hub-button" href="{% url 'member_portal' %}">فتح حسابي</a>
+    </section>
+  {% else %}
+    <section class="hub-card">
+      <p class="table-entry__eyebrow">لديك حساب؟</p>
+      <p>يمكنك تسجيل الدخول إلى حساب هَبّ بدون أن تحتاج لذلك لاستخدام إنترنت الزوار.</p>
+      <a class="hub-button" href="{% url 'member_login' %}?next={% url 'wifi_entry' %}">تسجيل الدخول</a>
+    </section>
   {% endif %}
 
   {% if current_visit and current_table %}
@@ -32,17 +91,12 @@
   {% endif %}
 
   <form method="get" action="{% url 'wifi_entry' %}" class="hub-card">
+    <h3>أنا على طاولة</h3>
     <label for="wifi-table-number">رقم الطاولة</label>
     <input class="hub-input" id="wifi-table-number" name="table_number" value="{{ table_number_value }}" inputmode="numeric" autocomplete="off" pattern="[0-9٠-٩۰-۹]{1,6}" placeholder="11" required>
     <button class="hub-button hub-button-primary" type="submit">دخول إلى طاولتي</button>
-    <p class="table-entry__internet-note">بعد اختيار الطاولة يمكنك الانضمام إلى حساب موجود بالرمز القصير أو فتح حساب منفصل.</p>
+    <p class="table-entry__internet-note">من الطاولة يمكنك متابعة الطلبات والحساب وخيارات الإنترنت الأخرى المتاحة لك.</p>
   </form>
-
-  <section class="hub-card">
-    <h3>الإنترنت المجاني</h3>
-    <p>السرعة المجانية تُفعّل من نافذة تسجيل الدخول الخاصة بشبكة هَبّ. لا تحتاج إلى رقم طاولة أو حساب لاستخدامها.</p>
-    <p class="table-entry__internet-note">عند تفعيل الإنترنت السريع لاحقاً، يكون الاستخدام خاصاً بهذا الجهاز ويُضاف إلى حساب الطاولة الذي اخترته.</p>
-  </section>
 
   <a class="hub-button" href="{% url 'menu_public' %}">تصفح المنيو بدون طاولة</a>
 </section>
