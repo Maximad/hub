@@ -4,7 +4,7 @@
 <section class="hub-section">
   <p><a class="hub-button" href="{% url 'staff_internet' %}">← الإنترنت والعمل</a></p>
   <h1 class="hub-section-title">تشغيل وإعدادات الإنترنت</h1>
-  <p class="hub-text-muted">مكان واحد لمراقبة تشغيل الإنترنت، جاهزية MikroTik، عمليات الشبكة، ملفات السرعة والشركاء. لا تعرض الصفحة كلمات مرور أو مفاتيح.</p>
+  <p class="hub-text-muted">مكان واحد لمراقبة تشغيل الإنترنت، سياسة الاتصال الأساسي، جاهزية MikroTik، عمليات الشبكة، ملفات السرعة والشركاء. لا تعرض الصفحة كلمات مرور أو مفاتيح.</p>
 </section>
 
 <section class="hub-section hub-summary-cards">
@@ -12,6 +12,94 @@
   <div class="hub-summary-card"><span>عامل الإنترنت</span><strong class="metric">{% if worker_fresh %}يعمل{% else %}متوقف / متأخر{% endif %}</strong></div>
   <div class="hub-summary-card"><span>MikroTik</span><strong class="metric">{% if preflight.enabled %}مفعّل{% else %}معطّل{% endif %}</strong></div>
   <div class="hub-summary-card"><span>جاهز للتفعيل</span><strong class="metric">{% if preflight.ready %}نعم{% else %}لا{% endif %}</strong></div>
+</section>
+
+<section class="hub-section hub-card internet-policy-panel" id="basic-wifi-policy">
+  <div class="internet-policy-panel__head">
+    <div>
+      <p class="internet-policy-panel__eyebrow">سياسة المكان</p>
+      <h2 class="hub-section-title">الإنترنت الأساسي</h2>
+      <p class="hub-text-muted">اتصال بطيء ومجاني للزائر داخل هَبّ. الرصيد الأولي محدود، والطلب المؤهل يمكن أن يمدده حتى السقف اليومي. الإنترنت السريع المدفوع والاستحقاقات لا تدخل في هذا السقف.</p>
+    </div>
+    <div class="internet-policy-status {% if guest_wifi_policy.enabled %}is-on{% endif %}">
+      <span>{% if guest_wifi_policy.enabled %}مفعّل{% else %}معطّل{% endif %}</span>
+      <strong>{{ guest_wifi_policy.session_minutes }} دقيقة أولية</strong>
+    </div>
+  </div>
+
+  <form method="post" action="{% url 'staff_internet_settings' %}" class="internet-policy-form">
+    {% csrf_token %}
+    <input type="hidden" name="settings_action" value="save_basic_wifi_policy">
+
+    <div class="internet-policy-switches">
+      <label class="internet-policy-switch">
+        {{ guest_wifi_form.enabled }}
+        <span><strong>تفعيل الاتصال الأساسي</strong><small>يبقي شبكة Hub المفتوحة خاضعة لقواعد هَبّ بدل إنترنت غير محدود.</small></span>
+      </label>
+      <label class="internet-policy-switch">
+        {{ guest_wifi_form.order_bonus_enabled }}
+        <span><strong>مكافأة الطلب</strong><small>يُضاف وقت مجاني تلقائياً بعد قبول طلب مؤهل مرتبط بنفس جلسة الزائر.</small></span>
+      </label>
+      <label class="internet-policy-switch">
+        {{ guest_wifi_form.require_venue_code }}
+        <span><strong>رمز المكان</strong><small>يُطلب عند أول اتصال أساسي في اليوم فقط لإثبات وجود الزائر داخل هَبّ.</small></span>
+      </label>
+      <label class="internet-policy-switch">
+        {{ guest_wifi_form.member_bypass_venue_code }}
+        <span><strong>تجاوز الرمز للحسابات ذات اشتراك فعال</strong><small>يتجاوز رمز المكان فقط؛ لا يمنح إنترنت سريعاً تلقائياً.</small></span>
+      </label>
+    </div>
+
+    <div class="internet-policy-grid">
+      <label class="internet-policy-field">
+        <span>{{ guest_wifi_form.bandwidth_profile.label }}</span>
+        {{ guest_wifi_form.bandwidth_profile }}
+        <small>ملف السرعة الذي يطبّق على الاتصال الأساسي.</small>
+      </label>
+      <label class="internet-policy-field">
+        <span>{{ guest_wifi_form.session_minutes.label }}</span>
+        {{ guest_wifi_form.session_minutes }}
+        <small>مرة واحدة للجهاز في يوم العمل.</small>
+      </label>
+      <label class="internet-policy-field">
+        <span>{{ guest_wifi_form.daily_complimentary_minutes.label }}</span>
+        {{ guest_wifi_form.daily_complimentary_minutes }}
+        <small>الرصيد الأولي + مكافآت الطلب + أي منح يدوية مستقبلية.</small>
+      </label>
+      <label class="internet-policy-field">
+        <span>{{ guest_wifi_form.order_bonus_minutes.label }}</span>
+        {{ guest_wifi_form.order_bonus_minutes }}
+        <small>لا يمكن أن ترفع المجاني فوق السقف اليومي.</small>
+      </label>
+      <label class="internet-policy-field">
+        <span>{{ guest_wifi_form.qualifying_order_minimum_syp.label }}</span>
+        {{ guest_wifi_form.qualifying_order_minimum_syp }}
+        <small>لا تُمنح المكافأة قبل قبول الطلب. صفر = أي طلب مقبول بقيمة أكبر من صفر.</small>
+      </label>
+      <label class="internet-policy-field">
+        <span>{{ guest_wifi_form.code_rotation_minutes.label }}</span>
+        {{ guest_wifi_form.code_rotation_minutes }}
+        <small>الرمز السابق يبقى مقبولاً لفترة انتقال قصيرة.</small>
+      </label>
+    </div>
+
+    <div class="internet-policy-preview">
+      <div>
+        <span>التجربة الحالية</span>
+        <strong>{{ guest_wifi_policy.session_minutes }} دقيقة عند الوصول</strong>
+        {% if guest_wifi_policy.order_bonus_enabled %}<small>+{{ guest_wifi_policy.order_bonus_minutes }} دقيقة بعد كل طلب مؤهل، حتى {{ guest_wifi_policy.daily_complimentary_minutes }} دقيقة مجانية يومياً.</small>{% else %}<small>لا توجد مكافأة تلقائية مرتبطة بالطلب.</small>{% endif %}
+      </div>
+      {% if guest_wifi_current_code %}
+      <div class="internet-policy-code">
+        <span>رمز المكان الحالي</span>
+        <strong>{{ guest_wifi_current_code }}</strong>
+        <small>يمكن عرضه داخل هَبّ؛ لا يُخزّن كرمز دائم.</small>
+      </div>
+      {% endif %}
+    </div>
+
+    <button class="hub-button hub-button-primary internet-policy-save" type="submit">حفظ سياسة الإنترنت الأساسي</button>
+  </form>
 </section>
 
 {% if not preflight.enabled %}
