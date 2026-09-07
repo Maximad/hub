@@ -85,7 +85,7 @@ def staff_member_card_scan(request, token):
         try:
             with transaction.atomic():
                 selected_visit = (
-                    HubVisit.objects.select_for_update()
+                    HubVisit.objects.select_for_update(of=('self',))
                     .select_related('table', 'member')
                     .filter(public_code=raw_visit, status=HubVisit.Status.OPEN)
                     .first()
