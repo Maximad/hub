@@ -74,7 +74,7 @@ class WifiEntryTests(TestCase):
         response = self.client.get(reverse('wifi_entry'), {'free': '1'})
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'الاتصال الأساسي مفعّل على هذا الجهاز')
+        self.assertContains(response, 'اتصالك الأساسي جاهز على هذا الجهاز')
         self.assertNotContains(response, 'mac-address')
         self.assertNotContains(response, 'username')
         self.assertNotContains(response, 'password')

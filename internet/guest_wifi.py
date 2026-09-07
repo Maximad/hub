@@ -406,7 +406,6 @@ def account_guest_wifi_session_usage(session, *, at=None):
     at = at or timezone.now()
     grant = (
         GuestWifiGrant.objects.select_for_update()
-        .select_related('allowance', 'session')
         .filter(session_id=session.pk)
         .first()
     )
