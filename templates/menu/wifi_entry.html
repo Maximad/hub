@@ -1,132 +1,95 @@
 {% extends "base.html" %}
 {% block title %}واي فاي هَبّ{% endblock %}
-{% block body_class %}table-entry-page wifi-entry-page{% endblock %}
+{% block body_class %}wifi-entry-page{% endblock %}
 {% block content %}
-<section class="table-entry" dir="rtl">
-  <header class="table-entry__hero">
+<section class="wifi-portal" dir="rtl">
+  <header class="wifi-portal__hero">
+    <div class="wifi-portal__mark">هَبّ</div>
     <div>
-      <p class="table-entry__eyebrow">هَبّ</p>
-      <h2>أهلاً بك في هَبّ</h2>
-      <p>اختر نوع الإنترنت الذي تحتاجه. الحساب والعضوية منفصلان عن نوع الاتصال.</p>
+      <p class="wifi-portal__eyebrow">شبكة Hub</p>
+      <h1>أهلاً بك في هَبّ</h1>
+      <p>استخدم الاتصال الأساسي للاستخدام الخفيف، أو اختر الإنترنت السريع إذا كنت جاي تشتغل.</p>
     </div>
   </header>
 
   {% if came_from_free_access %}
-    <div class="hub-alert hub-alert-success" role="status">
-      الاتصال الأساسي مفعّل على هذا الجهاز. يمكنك متابعة التصفح أو اختيار إنترنت أسرع عند الحاجة.
+  <div class="hub-alert hub-alert-success" role="status">تم تحويلك من خيار الإنترنت المجاني. اتصالك الأساسي جاهز على هذا الجهاز.</div>
+  {% endif %}
+
+  {% if active_fast_wifi_session %}
+  <section class="wifi-plan wifi-plan--fast wifi-plan--active">
+    <div class="wifi-plan__top"><span class="wifi-plan__badge">فعّال الآن</span><span>إنترنت سريع</span></div>
+    <h2>أنت على الإنترنت السريع</h2>
+    <p>هذه الجلسة تستخدم خياراً مدفوعاً أو استحقاقاً مرتبطاً بحسابك. الرصيد المجاني الأساسي لا يُستهلك أثناءها.</p>
+    <a class="hub-button hub-button-primary" href="{% url 'current_visit' %}">عرض جلسة الإنترنت</a>
+  </section>
+  {% elif active_guest_wifi_session %}
+  <section class="wifi-plan wifi-plan--basic wifi-plan--active">
+    <div class="wifi-plan__top"><span class="wifi-plan__badge">فعّال الآن</span><span>إنترنت أساسي</span></div>
+    <h2>{{ guest_wifi_daily_minutes_remaining }} دقيقة متاحة اليوم</h2>
+    {% if active_guest_wifi_network_ready %}
+      <p>الاتصال جاهز{% if active_guest_wifi_session.authorized_until %} حتى {{ active_guest_wifi_session.authorized_until|date:"H:i" }} في هذه الجولة{% endif %}.</p>
+    {% else %}<p>يجري تجهيز الاتصال بالشبكة. لن يبدأ الوقت قبل نجاح الاتصال.</p>{% endif %}
+    {% if guest_wifi_order_bonus_enabled %}<p class="wifi-plan__note">أي طلب مؤهل يضيف حتى {{ guest_wifi_order_bonus_minutes }} دقيقة، ضمن سقف {{ guest_wifi_daily_cap_minutes }} دقيقة مجانية يومياً.</p>{% endif %}
+    <div class="wifi-plan__actions">
+      <form method="post" action="{% url 'wifi_entry' %}">{% csrf_token %}<input type="hidden" name="wifi_action" value="start_guest_wifi"><button class="hub-button" type="submit">إعادة الاتصال</button></form>
+      {% if internet_options_available %}<form method="post" action="{% url 'wifi_entry' %}">{% csrf_token %}<input type="hidden" name="wifi_action" value="internet_options"><button class="hub-button hub-button-primary" type="submit">أريد إنترنت أسرع</button></form>{% endif %}
     </div>
-  {% endif %}
-
-  {% if active_guest_wifi_session %}
-    <section class="hub-card">
-      <p class="table-entry__eyebrow">الاتصال الحالي</p>
-      <h3>الإنترنت الأساسي فعّال</h3>
-      {% if active_guest_wifi_network_ready %}
-        <p>الاتصال جاهز على هذا الجهاز{% if active_guest_wifi_session.authorized_until %} حتى {{ active_guest_wifi_session.authorized_until|date:"H:i" }}{% endif %}.</p>
-      {% else %}
-        <p>يجري تجهيز الاتصال بالشبكة. يمكنك إعادة المحاولة بدون إدخال رمز المكان من جديد.</p>
-      {% endif %}
-      <form method="post" action="{% url 'wifi_entry' %}">
-        {% csrf_token %}
-        <input type="hidden" name="wifi_action" value="start_guest_wifi">
-        <button class="hub-button hub-button-primary" type="submit">اتصل بالإنترنت</button>
-      </form>
-      {% if internet_options_available %}
-        <form method="post" action="{% url 'wifi_entry' %}" style="margin-top:.75rem;">
-          {% csrf_token %}
-          <input type="hidden" name="wifi_action" value="internet_options">
-          <button class="hub-button" type="submit">عرض خيارات الإنترنت السريع</button>
-        </form>
-      {% endif %}
-    </section>
+  </section>
   {% else %}
-    <section class="hub-card">
-      <p class="table-entry__eyebrow">للتصفح والاستخدام الخفيف</p>
-      <h3>إنترنت أساسي</h3>
-      {% if guest_wifi_available %}
-        <p>اتصال محدود السرعة لمدة {{ guest_wifi_session_minutes }} دقيقة. لا يحتاج إلى حساب أو عضوية.</p>
-        {% if guest_wifi_grants_remaining > 0 %}
-          <p class="table-entry__internet-note">المتاح لهذا الجهاز اليوم: {{ guest_wifi_grants_remaining }} جلسة.</p>
-          <form method="post" action="{% url 'wifi_entry' %}">
-            {% csrf_token %}
-            <input type="hidden" name="wifi_action" value="start_guest_wifi">
-            {% if guest_wifi_code_required %}
-              <label for="venue-code">رمز المكان</label>
-              <input class="hub-input" id="venue-code" name="venue_code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9٠-٩۰-۹]{4}" maxlength="4" placeholder="••••" required>
-              <p class="table-entry__internet-note">الرمز موجود داخل هَبّ ويتغيّر دورياً.</p>
-            {% elif member_context and member_context.subscription %}
-              <p class="hub-alert hub-alert-success">تم التعرّف على حسابك؛ لا تحتاج إلى رمز المكان للاتصال الأساسي.</p>
-            {% endif %}
-            <button class="hub-button hub-button-primary" type="submit">فعّل الإنترنت الأساسي</button>
-          </form>
-        {% else %}
-          <div class="hub-alert hub-alert-warning">استخدم هذا الجهاز الحد المجاني المتاح لليوم.</div>
+  <section class="wifi-plan wifi-plan--basic">
+    <div class="wifi-plan__top"><span class="wifi-plan__badge">مجاني</span><span>للتصفح والاستخدام الخفيف</span></div>
+    <h2>الإنترنت الأساسي</h2>
+    {% if guest_wifi_available %}
+      <p>ابدأ بـ {{ guest_wifi_initial_minutes }} دقيقة على السرعة الأساسية. لا تحتاج إلى حساب أو عضوية.</p>
+      {% if guest_wifi_order_bonus_enabled %}
+      <p class="wifi-plan__note">بعد طلب مقبول{% if guest_wifi_qualifying_order_minimum_syp %} بقيمة {{ guest_wifi_qualifying_order_minimum_syp }} ل.س أو أكثر{% endif %}: +{{ guest_wifi_order_bonus_minutes }} دقيقة، حتى {{ guest_wifi_daily_cap_minutes }} دقيقة مجانية باليوم.</p>
+      {% endif %}
+      {% if guest_wifi_can_start %}
+      <form method="post" action="{% url 'wifi_entry' %}" class="wifi-basic-start">
+        {% csrf_token %}<input type="hidden" name="wifi_action" value="start_guest_wifi">
+        {% if guest_wifi_code_required %}
+          <label for="venue-code">رمز المكان</label>
+          <input class="hub-input wifi-venue-code" id="venue-code" name="venue_code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9٠-٩۰-۹]{4}" maxlength="4" placeholder="••••" required>
+          <small>ستجد الرمز داخل هَبّ. نطلبه فقط عند أول تفعيل أساسي اليوم.</small>
         {% endif %}
-      {% else %}
-        <p>{{ guest_wifi_unavailable_reason|default:'الاتصال الأساسي غير متاح حالياً.' }}</p>
-      {% endif %}
-    </section>
-  {% endif %}
-
-  {% if internet_options_available %}
-    <section class="hub-card">
-      <p class="table-entry__eyebrow">للعمل والاستخدام المكثف</p>
-      <h3>إنترنت سريع</h3>
-      <p>متاح للزوار أيضاً، بدون الحاجة إلى عضوية. يمكنك استخدامه حسب الوقت أو عبر باقة متاحة.</p>
-      {% if member_context %}
-        <p class="table-entry__internet-note">إذا كان حسابك يملك رصيد إنترنت أو ميزة مرتبطة بعضوية أو برنامج، ستظهر تلقائياً ضمن الخيارات.</p>
-      {% else %}
-        <p class="table-entry__internet-note">تسجيل الدخول اختياري. تحتاجه فقط إذا كنت تريد استخدام رصيد أو ميزة مرتبطة بحسابك.</p>
-      {% endif %}
-      <form method="post" action="{% url 'wifi_entry' %}">
-        {% csrf_token %}
-        <input type="hidden" name="wifi_action" value="internet_options">
-        <button class="hub-button hub-button-primary" type="submit">عرض خيارات الإنترنت السريع</button>
+        <button class="hub-button hub-button-primary wifi-plan__primary" type="submit">{% if guest_wifi_code_required %}ابدأ الإنترنت{% else %}متابعة الإنترنت الأساسي{% endif %}</button>
       </form>
-    </section>
+      {% else %}<div class="hub-alert hub-alert-warning">انتهى رصيد الإنترنت الأساسي المجاني لهذا الجهاز اليوم.</div>{% endif %}
+    {% else %}<p>{{ guest_wifi_unavailable_reason|default:'الاتصال الأساسي غير متاح حالياً.' }}</p>{% endif %}
+  </section>
   {% endif %}
 
-  {% if member_context %}
-    <section class="hub-card">
-      <p class="table-entry__eyebrow">حساب هَبّ</p>
-      <h3>{{ member_context.member.name_ar }}</h3>
-      {% if member_context.subscription %}
-        <p>هناك اشتراك فعال على هذا الحساب. نوع الإنترنت المتاح يحدده ما يتضمنه الاشتراك أو أي رصيد/ميزة أخرى.</p>
+  {% if internet_options_available and not active_fast_wifi_session %}
+  <section class="wifi-plan wifi-plan--fast">
+    <div class="wifi-plan__top"><span class="wifi-plan__badge">للعمل</span><span>سرعة أعلى</span></div>
+    <h2>الإنترنت السريع</h2>
+    <p>متاح لأي زائر حسب الوقت أو عبر باقة. لا تحتاج إلى عضوية؛ وإذا كان لديك رصيد أو ميزة على حسابك سنستخدمها من نفس المكان.</p>
+    <form method="post" action="{% url 'wifi_entry' %}">{% csrf_token %}<input type="hidden" name="wifi_action" value="internet_options"><button class="hub-button hub-button-primary wifi-plan__primary" type="submit">خيارات الإنترنت السريع</button></form>
+  </section>
+  {% endif %}
+
+  <details class="wifi-more">
+    <summary>خيارات أخرى</summary>
+    <div class="wifi-more__body">
+      {% if member_context %}
+        <div><strong>{{ member_context.member.name_ar }}</strong><p>الحساب معروف على هذا الجهاز. العضوية بحد ذاتها لا تعني إنترنت سريعاً.</p><a class="hub-button" href="{% url 'member_account_home' %}">فتح حسابي</a></div>
       {% else %}
-        <p>الحساب معروف على هذا الجهاز، ولا يعني ذلك تلقائياً وجود اشتراك أو إنترنت سريع مجاني.</p>
+        <div><strong>لديك حساب هَبّ؟</strong><p>الدخول اختياري، ويُستخدم فقط للوصول إلى رصيد أو استحقاقات مرتبطة بك.</p><a class="hub-button" href="{% url 'member_account_login' %}?next={% url 'wifi_entry' %}">تسجيل الدخول</a></div>
       {% endif %}
-      <a class="hub-button" href="{% url 'member_account_home' %}">فتح حسابي</a>
-    </section>
-  {% else %}
-    <section class="hub-card">
-      <p class="table-entry__eyebrow">لديك حساب؟</p>
-      <p>تسجيل الدخول اختياري، ويسمح للنظام بالتعرّف على الاشتراكات والأرصدة والمزايا المرتبطة بحسابك.</p>
-      <a class="hub-button" href="{% url 'member_account_login' %}?next={% url 'wifi_entry' %}">تسجيل الدخول</a>
-    </section>
-  {% endif %}
 
-  {% if current_visit and current_table %}
-    <section class="hub-card">
-      <p class="table-entry__eyebrow">حسابك الحالي</p>
-      <h3>{{ current_table.display_name }}</h3>
-      <p>هذا الجهاز مرتبط حالياً بحساب مفتوح على هذه الطاولة.</p>
-      <a class="hub-button hub-button-primary" href="{{ current_table_url }}">العودة إلى طاولتي</a>
-      <a class="hub-button" href="{% url 'current_visit' %}">عرض الحساب الحالي</a>
-    </section>
-  {% endif %}
+      {% if current_visit and current_table %}
+        <div><strong>حسابك الحالي: {{ current_table.display_name }}</strong><p>هذا الجهاز مرتبط بهذه الطاولة.</p><a class="hub-button" href="{{ current_table_url }}">العودة إلى طاولتي</a></div>
+      {% endif %}
 
-  {% if table_number_error %}
-    <div class="hub-alert hub-alert-danger" role="alert">{{ table_number_error }}</div>
-  {% endif %}
-
-  <form method="get" action="{% url 'wifi_entry' %}" class="hub-card">
-    <h3>أنا على طاولة</h3>
-    <label for="wifi-table-number">رقم الطاولة</label>
-    <input class="hub-input" id="wifi-table-number" name="table_number" value="{{ table_number_value }}" inputmode="numeric" autocomplete="off" pattern="[0-9٠-٩۰-۹]{1,6}" placeholder="11" required>
-    <button class="hub-button hub-button-primary" type="submit">دخول إلى طاولتي</button>
-    <p class="table-entry__internet-note">الطاولة تجمع الطلبات والحساب، لكنها ليست شرطاً لشراء أو استخدام الإنترنت السريع.</p>
-  </form>
-
-  <a class="hub-button" href="{% url 'menu_public' %}">تصفح المنيو بدون طاولة</a>
+      <form method="get" action="{% url 'wifi_entry' %}" class="wifi-table-entry">
+        <label for="wifi-table-number">رقم الطاولة</label>
+        <input class="hub-input" id="wifi-table-number" name="table_number" value="{{ table_number_value }}" inputmode="numeric" autocomplete="off" pattern="[0-9٠-٩۰-۹]{1,6}" placeholder="11" required>
+        <button class="hub-button" type="submit">دخول إلى طاولتي</button>
+        {% if table_number_error %}<div class="hub-alert hub-alert-danger" role="alert">{{ table_number_error }}</div>{% endif %}
+      </form>
+      <a class="hub-button" href="{% url 'menu_public' %}">تصفح المنيو</a>
+    </div>
+  </details>
 </section>
 {% endblock %}
