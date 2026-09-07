@@ -1,7 +1,7 @@
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from core.models import Room, SystemSetting, TableArea
+from core.models import HubVisit, HubVisitBrowserCredential, Room, SystemSetting, TableArea
 from core.settings_helpers import get_system_settings
 from locations.models import TableAreaSettings
 
@@ -31,6 +31,7 @@ class WifiEntryTests(TestCase):
         self.assertTemplateUsed(response, 'menu/wifi_entry.html')
         self.assertContains(response, 'أهلاً بك في هَبّ')
         self.assertContains(response, 'رقم الطاولة')
+        self.assertContains(response, reverse('member_account_login'))
         self.assertNotContains(response, self.access.staff_description)
         self.assertEqual(response['Cache-Control'], 'no-store, private, max-age=0')
         self.assertEqual(response['Pragma'], 'no-cache')
@@ -73,7 +74,29 @@ class WifiEntryTests(TestCase):
         response = self.client.get(reverse('wifi_entry'), {'free': '1'})
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'تم تحويلك من خيار الإنترنت المجاني')
+        self.assertContains(response, 'الاتصال الأساسي مفعّل على هذا الجهاز')
         self.assertNotContains(response, 'mac-address')
         self.assertNotContains(response, 'username')
         self.assertNotContains(response, 'password')
+
+    def test_fast_internet_options_create_tableless_visit_without_membership(self):
+        SystemSetting.objects.create(
+            customer_visits_enabled=True,
+            customer_internet_self_service_enabled=True,
+        )
+        get_system_settings.cache_clear()
+
+        response = self.client.post(reverse('wifi_entry'), {'wifi_action': 'internet_options'})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], reverse('current_visit'))
+        self.assertIn('hub_visit', self.client.cookies)
+        visit = HubVisit.objects.get()
+        self.assertIsNone(visit.table_id)
+        self.assertIsNone(visit.member_id)
+        self.assertEqual(visit.notes, 'wifi_internet_options')
+        self.assertEqual(HubVisitBrowserCredential.objects.get().visit_id, visit.pk)
+
+        page = self.client.get(reverse('current_visit'))
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, 'العضوية ليست شرطاً لشراء الإنترنت السريع')
