@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}بطاقة عضو هَب{% endblock %}
+{% block content %}
+<main dir="rtl" style="max-width:760px;margin:0 auto;">
+  <header class="hub-page-header">
+    <div>
+      <p class="hub-page-header__meta">بطاقة عضو</p>
+      <h1 class="hub-page-header__title">التعرّف على عضو هَب</h1>
+    </div>
+    <a class="hub-button" href="{% url 'staff_home' %}">عمليات الفريق</a>
+  </header>
+
+  {% if invalid %}
+    <section class="hub-card">
+      <h2 style="margin-top:0;">الرمز غير صالح أو انتهت صلاحيته</h2>
+      <p>اطلب من العضو فتح بطاقة هَب من جديد ثم امسح الرمز الحالي.</p>
+    </section>
+  {% else %}
+    <section class="hub-card" style="margin-bottom:1rem;">
+      <h2 style="margin-top:0;">{{ member.name_ar }}</h2>
+      <p>{{ member.phone }}</p>
+      {% if active_membership %}
+        <p><strong>عضوية فعالة:</strong> {{ active_membership.plan.name_ar }}</p>
+      {% else %}
+        <p><strong>حساب هَب معروف.</strong> لا توجد عضوية فعالة حالياً.</p>
+      {% endif %}
+      <p style="margin-bottom:0;">الرمز مؤقت ويُعاد التحقق منه عند كل فتح لهذه الصفحة.</p>
+    </section>
+
+    {% if error %}
+      <section class="hub-card" style="margin-bottom:1rem;">
+        <p style="margin:0;"><strong>{{ error }}</strong></p>
+      </section>
+    {% endif %}
+
+    <section class="hub-card">
+      <h3 style="margin-top:0;">ربط العضو بجلسة مفتوحة</h3>
+      <p>لن يتم استبدال هوية عضو آخر، ولن تُعاد كتابة أسعار طلبات سابقة. بعد الربط تستخدم الطلبات الجديدة وخدمات العضو هويته الحالية ومزاياه الفعالة.</p>
+      {% if visits %}
+        <form method="post">
+          {% csrf_token %}
+          <label for="visit"><strong>الجلسة</strong></label>
+          <select id="visit" name="visit" required style="width:100%;margin:.5rem 0 1rem;">
+            <option value="">اختر جلسة...</option>
+            {% for visit in visits %}
+              <option value="{{ visit.public_code }}">
+                {{ visit.display_number }}{% if visit.table %} — {{ visit.table }}{% endif %}{% if visit.member %} — {{ visit.member.name_ar }}{% endif %}
+              </option>
+            {% endfor %}
+          </select>
+          <button class="hub-button hub-button-primary" type="submit">ربط العضو بهذه الجلسة</button>
+        </form>
+      {% else %}
+        <p>لا توجد جلسات مفتوحة حالياً.</p>
+      {% endif %}
+    </section>
+  {% endif %}
+</main>
+{% endblock %}
