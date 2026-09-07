@@ -23,7 +23,8 @@ from core.services.internet_readiness import (
     mikrotik_enablement_preflight,
     worker_is_fresh,
 )
-from internet.models import InternetSessionNetworkOperation, WifiNetwork
+from internet.guest_wifi import current_venue_code
+from internet.models import GuestWifiPolicy, InternetSessionNetworkOperation, WifiNetwork
 
 
 class PartnerForm(forms.ModelForm):
@@ -36,6 +37,45 @@ class ProfileForm(forms.ModelForm):
     class Meta:
         model = InternetBandwidthProfile
         fields = ('code', 'name', 'download_limit_kbps', 'upload_limit_kbps', 'router_profile_name', 'is_active')
+
+
+class GuestWifiPolicyForm(forms.ModelForm):
+    """Deliberately compact controls for the slow/basic Internet business policy."""
+
+    class Meta:
+        model = GuestWifiPolicy
+        fields = (
+            'enabled',
+            'bandwidth_profile',
+            'session_minutes',
+            'daily_complimentary_minutes',
+            'order_bonus_enabled',
+            'order_bonus_minutes',
+            'qualifying_order_minimum_syp',
+            'require_venue_code',
+            'code_rotation_minutes',
+            'member_bypass_venue_code',
+        )
+        widgets = {
+            'bandwidth_profile': forms.Select(attrs={'class': 'hub-input'}),
+            'session_minutes': forms.NumberInput(attrs={'class': 'hub-input', 'min': 1, 'inputmode': 'numeric'}),
+            'daily_complimentary_minutes': forms.NumberInput(attrs={'class': 'hub-input', 'min': 1, 'inputmode': 'numeric'}),
+            'order_bonus_minutes': forms.NumberInput(attrs={'class': 'hub-input', 'min': 0, 'inputmode': 'numeric'}),
+            'qualifying_order_minimum_syp': forms.NumberInput(attrs={'class': 'hub-input', 'min': 0, 'inputmode': 'numeric'}),
+            'code_rotation_minutes': forms.NumberInput(attrs={'class': 'hub-input', 'min': 1, 'inputmode': 'numeric'}),
+        }
+
+    def clean(self):
+        cleaned = super().clean()
+        initial = int(cleaned.get('session_minutes') or 0)
+        cap = int(cleaned.get('daily_complimentary_minutes') or 0)
+        if initial and cap and cap < initial:
+            self.add_error('daily_complimentary_minutes', 'السقف اليومي يجب أن يساوي أو يتجاوز الرصيد الأولي.')
+        if cleaned.get('order_bonus_enabled') and int(cleaned.get('order_bonus_minutes') or 0) <= 0:
+            self.add_error('order_bonus_minutes', 'حدد دقائق مكافأة أكبر من صفر أو عطّل مكافأة الطلب.')
+        if cleaned.get('require_venue_code') and int(cleaned.get('code_rotation_minutes') or 0) <= 0:
+            self.add_error('code_rotation_minutes', 'حدد مدة صالحة لتغيير رمز المكان.')
+        return cleaned
 
 
 def _handle_operations_action(request):
@@ -64,9 +104,38 @@ def _handle_operations_action(request):
     return False
 
 
+def _save_guest_wifi_policy(request, policy):
+    form = GuestWifiPolicyForm(request.POST, instance=policy)
+    if not form.is_valid():
+        for field_errors in form.errors.values():
+            for error in field_errors:
+                messages.error(request, error)
+        return False
+    before = {
+        name: getattr(policy, name)
+        for name in form.fields
+    }
+    policy = form.save()
+    changed = [
+        name for name in form.changed_data
+        if before.get(name) != getattr(policy, name)
+    ]
+    ActivityLog.objects.create(
+        actor=request.user,
+        action='internet.basic_wifi_policy_changed',
+        details={'policy_id': policy.pk, 'fields_changed': changed},
+    )
+    messages.success(request, 'تم حفظ سياسة الإنترنت الأساسي. تطبّق القواعد الجديدة على المنح والجلسات الجديدة.')
+    return True
+
+
 @require_staff_capability('settings')
 def internet_settings(request):
+    guest_wifi_policy, _ = GuestWifiPolicy.objects.get_or_create(key='default')
     if request.method == 'POST':
+        if request.POST.get('settings_action') == 'save_basic_wifi_policy':
+            _save_guest_wifi_policy(request, guest_wifi_policy)
+            return redirect('staff_internet_settings')
         if _handle_operations_action(request):
             return redirect('staff_internet_settings')
         messages.error(request, 'إجراء التشغيل غير معروف.')
@@ -125,6 +194,13 @@ def internet_settings(request):
         'last_network_operation': entitlement_operations[0] if entitlement_operations else None,
         'partner_form': PartnerForm(),
         'profile_form': ProfileForm(),
+        'guest_wifi_policy': guest_wifi_policy,
+        'guest_wifi_form': GuestWifiPolicyForm(instance=guest_wifi_policy),
+        'guest_wifi_current_code': (
+            current_venue_code(guest_wifi_policy)
+            if guest_wifi_policy.enabled and guest_wifi_policy.require_venue_code
+            else ''
+        ),
         'readiness': readiness,
         'preflight': preflight,
         'operations_state': state,
