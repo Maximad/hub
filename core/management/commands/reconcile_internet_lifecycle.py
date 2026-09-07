@@ -9,6 +9,8 @@ from core.services.internet_lifecycle import (expire_internet_entitlement,
                                                unfreeze_membership)
 from core.services.internet_access import end_usage_session
 from core.services.network_operations import enqueue_network_operation
+from internet.models import InternetSessionNetworkOperation
+from internet.session_network_operations import enqueue_session_network_operation
 from members.models import MembershipSubscription
 
 
@@ -56,10 +58,19 @@ class Command(BaseCommand):
                 ended = end_usage_session(session, at=session.authorized_until)
                 ended.lifecycle_end_reason = 'authorization_expired'
                 ended.save(update_fields=('lifecycle_end_reason', 'updated_at'))
-                enqueue_network_operation(
-                    session.entitlement, InternetNetworkOperation.Operation.REFRESH,
-                    reason='authorization_expired',
-                    idempotency_key=f'internet-session:{session.pk}:authorization-expired')
+                if session.entitlement_id:
+                    enqueue_network_operation(
+                        session.entitlement, InternetNetworkOperation.Operation.REFRESH,
+                        reason='authorization_expired',
+                        idempotency_key=f'internet-session:{session.pk}:authorization-expired')
+                else:
+                    enqueue_session_network_operation(
+                        session,
+                        InternetSessionNetworkOperation.Operation.DISCONNECT,
+                        reason='authorization_expired',
+                        idempotency_key=f'internet-session:{session.pk}:authorization-expired',
+                        process_after_commit=False,
+                    )
         output = json.dumps(result) if options['json'] else '\n'.join(
             f'{key}: {value}' for key, value in result.items())
         self.stdout.write(output)
