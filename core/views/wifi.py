@@ -21,8 +21,10 @@ from core.views.visits import _absolute_destination, _hotspot_relay_response
 from internet.guest_wifi import (
     get_guest_wifi_policy,
     guest_wifi_code_required,
+    guest_wifi_daily_minutes_remaining,
     guest_wifi_grants_remaining,
     guest_wifi_policy_error,
+    pending_order_bonus_minutes,
     prepare_guest_wifi_session_network,
     start_guest_wifi_session,
 )
@@ -60,9 +62,9 @@ def _attach_member_to_visit(visit, member_context, *, source):
 def _ensure_wifi_visit(request, *, source='wifi_access'):
     """Return a browser-bound Hub visit without requiring a table or membership.
 
-    Internet access source and customer identity are deliberately separate.  A walk-in
+    Internet access source and customer identity are deliberately separate. A walk-in
     visitor can therefore use commercial fast Internet without becoming a member,
-    while a recognised member can reuse the same visit and let existing entitlements
+    while a recognised account can reuse the same visit and let existing entitlements
     or benefit rules decide what access is included.
     """
     member_context = resolve_member_from_request(request)
@@ -108,7 +110,7 @@ def _open_internet_options(request):
 
 
 def _start_guest_wifi(request):
-    """Create/reuse an anonymous visit and authorize bounded complimentary access."""
+    """Create/reuse a browser-bound visit and authorize bounded basic access."""
     system_settings = get_system_settings()
     policy = get_guest_wifi_policy()
     if not self_service_enabled(system_settings):
@@ -150,7 +152,7 @@ def _start_guest_wifi(request):
     if network_ready:
         messages.success(
             request,
-            'تم تفعيل الإنترنت الأساسي.' if created else 'جلسة الإنترنت ما تزال فعالة على هذا الجهاز.',
+            'تم تفعيل الإنترنت الأساسي.' if created else 'الإنترنت الأساسي ما يزال فعالاً على هذا الجهاز.',
         )
     else:
         messages.warning(request, 'يجري تجهيز الاتصال. يمكنك المحاولة مجدداً بعد لحظات.')
@@ -172,7 +174,7 @@ def _start_guest_wifi(request):
 
 
 def wifi_entry(request):
-    """Render one stable Hub landing for captive Wi-Fi and manual table entry.
+    """Render the stable Hub-owned captive landing page.
 
     The SSID may be open, but Internet authorization is controlled here. RouterOS
     remains responsible for the physical HotSpot session; this page never accepts a
@@ -210,15 +212,27 @@ def wifi_entry(request):
     system_settings = get_system_settings()
     policy = get_guest_wifi_policy()
     guest_error = guest_wifi_policy_error(policy)
-    guest_available = bool(
-        not guest_error
-        and self_service_enabled(system_settings)
-    )
+    guest_available = bool(not guest_error and self_service_enabled(system_settings))
     internet_options_available = self_service_enabled(system_settings)
     active_session = active_browser_session(credential) if credential else None
     active_guest_session = None
+    active_fast_session = None
     if active_session and hasattr(active_session, 'guest_wifi_grant'):
         active_guest_session = active_session
+    elif active_session:
+        active_fast_session = active_session
+
+    if credential:
+        daily_remaining = guest_wifi_daily_minutes_remaining(credential, policy)
+        pending_bonus = pending_order_bonus_minutes(credential)
+        basic_can_start = bool(guest_wifi_grants_remaining(credential, policy))
+    else:
+        daily_remaining = min(
+            int(policy.session_minutes or 0),
+            int(policy.daily_complimentary_minutes or 0),
+        )
+        pending_bonus = 0
+        basic_can_start = True
 
     response = render(request, 'menu/wifi_entry.html', {
         'table_number_error': table_number_error,
@@ -232,13 +246,19 @@ def wifi_entry(request):
         'guest_wifi_available': guest_available,
         'guest_wifi_unavailable_reason': guest_error or '',
         'guest_wifi_code_required': (
-            guest_wifi_code_required(policy, member_context) if guest_available else False
+            guest_wifi_code_required(policy, member_context, credential)
+            if guest_available else False
         ),
-        'guest_wifi_session_minutes': int(policy.session_minutes or 0),
-        'guest_wifi_grants_remaining': (
-            guest_wifi_grants_remaining(credential, policy) if credential else int(policy.max_sessions_per_day or 0)
-        ),
+        'guest_wifi_initial_minutes': int(policy.session_minutes or 0),
+        'guest_wifi_daily_cap_minutes': int(policy.daily_complimentary_minutes or 0),
+        'guest_wifi_daily_minutes_remaining': daily_remaining,
+        'guest_wifi_can_start': basic_can_start,
+        'guest_wifi_order_bonus_enabled': bool(policy.order_bonus_enabled),
+        'guest_wifi_order_bonus_minutes': int(policy.order_bonus_minutes or 0),
+        'guest_wifi_qualifying_order_minimum_syp': int(policy.qualifying_order_minimum_syp or 0),
+        'guest_wifi_pending_bonus_minutes': pending_bonus,
         'active_guest_wifi_session': active_guest_session,
+        'active_fast_wifi_session': active_fast_session,
         'active_guest_wifi_network_ready': bool(
             active_guest_session
             and active_guest_session.network_status == InternetSession.NetworkStatus.PROVISIONED
