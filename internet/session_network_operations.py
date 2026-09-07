@@ -81,28 +81,39 @@ def _record_session_failure(session, safe_error, now):
     state.save(update_fields=['last_network_error', 'last_network_sync_at', 'updated_at'])
 
 
-def _activate_metered_billing_clock(session, now):
-    """Anchor billing only after the first successful network provision.
+def _activate_package_less_network_clock(session, now):
+    """Anchor package-less access only after the first successful provision.
 
-    InternetSession historically requires ``start_time`` at creation. Customer
-    metered sessions therefore carry a provisional timestamp while the router is
-    being prepared. This durable activation marker lets every billing path prove
-    that network access became ready, and rewrites the commercial clock exactly
-    once to that successful provision time.
+    Metered sessions must never bill before network access works. Complimentary
+    guest sessions must likewise receive their full authorized duration, rather
+    than losing minutes while RouterOS provisioning is pending or retrying.
     """
     from core.models import InternetSession
 
     if (session.entitlement_id is not None
             or session.package_id is not None
-            or session.billing_mode != InternetSession.BillingMode.OPEN_METERED
-            or session.status != InternetSession.Status.ACTIVE):
+            or session.status != InternetSession.Status.ACTIVE
+            or session.billing_mode not in {
+                InternetSession.BillingMode.OPEN_METERED,
+                InternetSession.BillingMode.FREE,
+            }):
         return False
+    if (session.billing_mode == InternetSession.BillingMode.FREE
+            and not session.authorized_minutes):
+        return False
+
     state, _ = InternetSessionNetworkState.objects.select_for_update().get_or_create(session=session)
     if state.network_activated_at is not None:
         return False
+
     session.started_at = now
     session.start_time = now
-    session.save(update_fields=['started_at', 'start_time', 'updated_at'])
+    update_fields = ['started_at', 'start_time', 'updated_at']
+    if session.billing_mode == InternetSession.BillingMode.FREE:
+        session.authorized_until = now + timedelta(minutes=int(session.authorized_minutes))
+        update_fields.append('authorized_until')
+    session.save(update_fields=update_fields)
+
     state.network_activated_at = now
     state.save(update_fields=['network_activated_at', 'updated_at'])
     return True
@@ -131,7 +142,7 @@ def _execute_claimed(claimed_id):
     with transaction.atomic():
         if job.operation == InternetSessionNetworkOperation.Operation.PROVISION:
             locked_session = job.session.__class__.objects.select_for_update().get(pk=session.pk)
-            _activate_metered_billing_clock(locked_session, now)
+            _activate_package_less_network_clock(locked_session, now)
         InternetSessionNetworkOperation.objects.filter(pk=job.pk).update(
             status=job.Status.SUCCEEDED,
             completed_at=now,
