@@ -174,22 +174,46 @@ class InternetOperationsState(models.Model):
 
 
 class GuestWifiPolicy(models.Model):
-    """Single venue policy for complimentary captive-portal Internet.
+    """Compact venue policy for complimentary/basic captive-portal Internet.
 
-    The rotating venue code itself is never stored. It is derived from the server
-    secret and the current rotation slot, so a database read cannot reveal future
-    codes.
+    Identity and Internet tier remain separate. This policy only governs the slow,
+    complimentary baseline used to keep an open SSID useful inside Hub without
+    becoming neighbourhood Internet. Paid fast access and entitlements remain owned
+    by the existing commercial Internet engine.
     """
 
     key = models.CharField(max_length=40, unique=True, default='default')
-    enabled = models.BooleanField(default=False)
-    require_venue_code = models.BooleanField(default=True)
-    member_bypass_venue_code = models.BooleanField(default=True)
-    session_minutes = models.PositiveSmallIntegerField(default=120)
-    max_sessions_per_day = models.PositiveSmallIntegerField(default=1)
-    code_rotation_minutes = models.PositiveSmallIntegerField(default=240)
+    enabled = models.BooleanField('تفعيل الإنترنت الأساسي', default=False)
+    require_venue_code = models.BooleanField('طلب رمز المكان عند أول اتصال يومي', default=True)
+    member_bypass_venue_code = models.BooleanField('الحساب ذو الاشتراك الفعال يتجاوز رمز المكان', default=True)
+    session_minutes = models.PositiveSmallIntegerField(
+        'الرصيد المجاني الأولي بالدقائق',
+        default=120,
+        help_text='يُمنح مرة واحدة للجهاز في يوم العمل عند أول تفعيل للإنترنت الأساسي.',
+    )
+    max_sessions_per_day = models.PositiveSmallIntegerField(
+        default=1,
+        help_text='حقل توافق قديم؛ السياسة الحالية تعتمد سقف الدقائق اليومي بدلاً من عدد الجلسات.',
+    )
+    daily_complimentary_minutes = models.PositiveSmallIntegerField(
+        'السقف المجاني اليومي بالدقائق',
+        default=360,
+        help_text='يشمل الرصيد الأولي ومكافآت الطلبات والمنح اليدوية، ولا يقيّد الإنترنت المدفوع أو الاستحقاقات.',
+    )
+    order_bonus_enabled = models.BooleanField('تمديد الإنترنت الأساسي بعد طلب مؤهل', default=True)
+    order_bonus_minutes = models.PositiveSmallIntegerField(
+        'دقائق المكافأة لكل طلب مؤهل',
+        default=120,
+    )
+    qualifying_order_minimum_syp = models.PositiveBigIntegerField(
+        'الحد الأدنى لقيمة الطلب المؤهل',
+        default=0,
+        help_text='صفر يعني أن أي طلب مقبول بقيمة أكبر من صفر مؤهل.',
+    )
+    code_rotation_minutes = models.PositiveSmallIntegerField('تغيير رمز المكان كل (دقيقة)', default=240)
     bandwidth_profile = models.ForeignKey(
         'core.InternetBandwidthProfile',
+        verbose_name='ملف سرعة الإنترنت الأساسي',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -202,8 +226,50 @@ class GuestWifiPolicy(models.Model):
         return f'Guest Wi-Fi policy ({self.key})'
 
 
+class GuestWifiDailyAllowance(models.Model):
+    """One browser/device's complimentary allowance for one Hub business date."""
+
+    credential = models.ForeignKey(
+        'core.HubVisitBrowserCredential',
+        on_delete=models.CASCADE,
+        related_name='guest_wifi_daily_allowances',
+    )
+    business_date = models.DateField(db_index=True)
+    initial_minutes_granted = models.PositiveSmallIntegerField(default=0)
+    order_bonus_minutes_granted = models.PositiveSmallIntegerField(default=0)
+    manual_bonus_minutes_granted = models.PositiveSmallIntegerField(default=0)
+    consumed_seconds = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=('credential', 'business_date'),
+                name='uniq_guest_wifi_allowance_per_day',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=('business_date', 'credential'),
+                name='guest_wifi_allow_day_idx',
+            ),
+        ]
+
+    @property
+    def total_granted_minutes(self):
+        return (
+            int(self.initial_minutes_granted or 0)
+            + int(self.order_bonus_minutes_granted or 0)
+            + int(self.manual_bonus_minutes_granted or 0)
+        )
+
+    def __str__(self):
+        return f'Basic Wi-Fi allowance {self.credential_id} / {self.business_date}'
+
+
 class GuestWifiGrant(models.Model):
-    """Audit row for one complimentary Internet grant to one browser credential."""
+    """Audit row for one complimentary/basic InternetSession on one browser."""
 
     credential = models.ForeignKey(
         'core.HubVisitBrowserCredential',
@@ -215,8 +281,16 @@ class GuestWifiGrant(models.Model):
         on_delete=models.CASCADE,
         related_name='guest_wifi_grant',
     )
+    allowance = models.ForeignKey(
+        GuestWifiDailyAllowance,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='sessions',
+    )
     business_date = models.DateField(db_index=True)
     code_slot = models.BigIntegerField(null=True, blank=True)
+    usage_accounted_at = models.DateTimeField(null=True, blank=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -229,6 +303,51 @@ class GuestWifiGrant(models.Model):
 
     def __str__(self):
         return f'Guest Wi-Fi grant {self.session_id}'
+
+
+class GuestWifiOrderBonus(models.Model):
+    """Idempotent complimentary-time bonus created from one accepted Hub order."""
+
+    order = models.OneToOneField(
+        'core.Order',
+        on_delete=models.CASCADE,
+        related_name='guest_wifi_order_bonus',
+    )
+    allowance = models.ForeignKey(
+        GuestWifiDailyAllowance,
+        on_delete=models.CASCADE,
+        related_name='order_bonuses',
+    )
+    credential = models.ForeignKey(
+        'core.HubVisitBrowserCredential',
+        on_delete=models.CASCADE,
+        related_name='guest_wifi_order_bonuses',
+    )
+    business_date = models.DateField(db_index=True)
+    minutes = models.PositiveSmallIntegerField()
+    order_total_syp_snapshot = models.PositiveBigIntegerField(default=0)
+    applied_session = models.ForeignKey(
+        'core.InternetSession',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='guest_wifi_applied_order_bonuses',
+    )
+    applied_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=('credential', 'business_date', 'revoked_at'),
+                name='guest_wifi_bonus_day_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return f'Order {self.order_id} → +{self.minutes} min basic Wi-Fi'
 
 
 class GuestWifiCodeAttempt(models.Model):
