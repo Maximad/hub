@@ -62,10 +62,6 @@ class IntegrationRequestLog(models.Model):
 
     class Meta:
         ordering = ['-created_at']
-        indexes = [
-            models.Index(fields=['token', 'created_at']),
-            models.Index(fields=['scope', 'created_at']),
-        ]
 
     def __str__(self):
         return f'{self.method} {self.path} — {self.status_code}'
