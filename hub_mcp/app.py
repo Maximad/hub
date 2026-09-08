@@ -78,9 +78,9 @@ async def _record_request(*, token, scope, request_id, status_code):
 class HubMCPAuthMiddleware:
     """Fail-closed bearer gate for the MCP transport.
 
-    Tool handlers repeat authorization with their specific Hub scope. This
-    outer gate protects discovery and prevents the public endpoint from
-    revealing the tool surface to unauthenticated callers.
+    A credential must explicitly carry ``mcp.connect`` before it can discover
+    the MCP tool surface. Tool handlers then repeat authorization with their
+    own business-data scope (catalog.read, inventory.read, etc.).
     """
 
     def __init__(self, app):
@@ -139,7 +139,7 @@ class HubMCPAuthMiddleware:
         try:
             token = await sync_to_async(authenticate_bearer_header, thread_sensitive=True)(
                 headers.get('authorization', ''),
-                None,
+                'mcp.connect',
             )
         except IntegrationAuthError as exc:
             response = JSONResponse(
