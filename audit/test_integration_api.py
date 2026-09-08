@@ -4,7 +4,7 @@ from unittest import mock
 from django.test import Client, TestCase
 
 from audit.integration_auth import generate_token_value
-from audit.models import IntegrationRequestLog, IntegrationToken
+from audit.models import IntegrationMutationApproval, IntegrationRequestLog, IntegrationToken
 from core.models import ActivityLog, Category, InventoryItem, Product, ProductRecipeItem
 
 
@@ -30,6 +30,7 @@ class ManagementApiTests(TestCase):
             price_syp=100,
             product_type=Product.ProductType.FOOD,
             item_type=Product.ItemType.FOOD,
+            metadata={'masharib_menu_code': 'test_product'},
         )
         self.inventory_item = InventoryItem.objects.create(
             code='TEST-ING',
@@ -108,6 +109,25 @@ class ManagementApiTests(TestCase):
         self.assertEqual(recipes.json()['items'][0]['product']['name_ar'], 'منتج اختبار')
         self.assertEqual(recipes.json()['items'][0]['inventory_item']['code'], 'TEST-ING')
 
+    def test_recipe_filter_accepts_non_uuid_product_key(self):
+        _, token = self._token('recipes.read')
+        response = self._get(
+            '/api/v1/management/recipes/?product=test_product',
+            token,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['count'], 1)
+        self.assertEqual(response.json()['items'][0]['product']['key'], 'test_product')
+
+    def test_recipe_filter_accepts_non_uuid_arabic_product_name(self):
+        _, token = self._token('recipes.read')
+        response = self._get(
+            '/api/v1/management/recipes/?product=%D9%85%D9%86%D8%AA%D8%AC%20%D8%A7%D8%AE%D8%AA%D8%A8%D8%A7%D8%B1',
+            token,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['count'], 1)
+
     def test_catalog_write_requires_preview_then_apply(self):
         token_record, token = self._token('catalog.write')
         preview = self._post(
@@ -123,6 +143,8 @@ class ManagementApiTests(TestCase):
         self.product.refresh_from_db()
         self.assertEqual(self.product.price_syp, 100)
         self.assertEqual(preview.json()['preview']['changes'][0]['changes']['price_syp']['after'], 125)
+        approval = IntegrationMutationApproval.objects.get(token=token_record)
+        self.assertIsNone(approval.consumed_at)
 
         apply_response = self._post(
             '/api/v1/management/catalog/apply/',
@@ -132,11 +154,46 @@ class ManagementApiTests(TestCase):
         self.assertEqual(apply_response.status_code, 200)
         self.product.refresh_from_db()
         self.assertEqual(self.product.price_syp, 125)
+        approval.refresh_from_db()
+        self.assertIsNotNone(approval.consumed_at)
 
         activity = ActivityLog.objects.get(pk=apply_response.json()['applied']['activity_log_ids'][0])
         self.assertEqual(activity.details['integration']['token_id'], token_record.pk)
         self.assertEqual(activity.details['integration']['token_prefix'], token_record.prefix)
         self.assertTrue(activity.details['integration']['request_id'])
+
+    def test_confirmation_is_single_use_for_relative_price_change(self):
+        _, token = self._token('catalog.write')
+        preview = self._post(
+            '/api/v1/management/catalog/preview/',
+            {
+                'identifiers': [self.product.pk],
+                'action': 'increase_price_fixed',
+                'value': '10',
+            },
+            token,
+        )
+        self.assertEqual(preview.status_code, 200)
+        confirmation = preview.json()['confirmation_token']
+
+        first = self._post(
+            '/api/v1/management/catalog/apply/',
+            {'confirmation_token': confirmation},
+            token,
+        )
+        self.assertEqual(first.status_code, 200)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.price_syp, 110)
+
+        replay = self._post(
+            '/api/v1/management/catalog/apply/',
+            {'confirmation_token': confirmation},
+            token,
+        )
+        self.assertEqual(replay.status_code, 409)
+        self.assertEqual(replay.json()['error']['code'], 'confirmation_already_used')
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.price_syp, 110)
 
     def test_confirmation_token_cannot_be_reused_by_another_integration(self):
         _, token_a = self._token('catalog.write')
