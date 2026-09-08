@@ -1,3 +1,5 @@
+import uuid
+
 from django.conf import settings
 from django.db import models
 
@@ -35,6 +37,29 @@ class IntegrationToken(models.Model):
 
     def __str__(self):
         return f'{self.name} — {self.prefix}'
+
+
+class IntegrationMutationApproval(models.Model):
+    """One-time approval backing a signed preview/apply mutation."""
+
+    token = models.ForeignKey(
+        IntegrationToken,
+        on_delete=models.CASCADE,
+        related_name='mutation_approvals',
+    )
+    nonce = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    operation = models.CharField(max_length=80)
+    payload_digest = models.CharField(max_length=64, editable=False)
+    expires_at = models.DateTimeField()
+    consumed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        state = 'used' if self.consumed_at else 'pending'
+        return f'{self.token} — {self.operation} — {state}'
 
 
 class IntegrationRequestLog(models.Model):
