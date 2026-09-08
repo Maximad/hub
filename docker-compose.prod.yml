@@ -56,6 +56,7 @@ services:
       - "127.0.0.1:8900:8001"
     networks:
       - default
+      - proxy
     healthcheck:
       test:
         - CMD
