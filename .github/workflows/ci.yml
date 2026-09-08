@@ -72,6 +72,9 @@ jobs:
       - name: Django system check
         run: python manage.py check
 
+      - name: MCP bridge readiness probe
+        run: python scripts/check-mcp-bridge.py
+
       - name: Check for missing migrations
         run: python manage.py makemigrations --check --dry-run
 
