@@ -2,6 +2,16 @@
 """Small import/readiness probe used by deployment and operators."""
 
 import os
+import sys
+from pathlib import Path
+
+# When invoked as ``python scripts/check-mcp-bridge.py``, Python puts
+# ``/app/scripts`` (not the repository root) at sys.path[0]. Ensure the project
+# root is importable so ``config.settings`` and ``hub_mcp`` resolve the same way
+# they do under Uvicorn/Gunicorn.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 
