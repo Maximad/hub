@@ -6,7 +6,6 @@ import os
 import secrets
 import uuid
 from dataclasses import dataclass
-from datetime import timedelta
 from functools import wraps
 
 from django.http import JsonResponse
@@ -154,9 +153,12 @@ def integration_endpoint(scope: str, *, methods=('GET',)):
                 response['X-Hub-Request-ID'] = str(request_id)
                 return response
             finally:
-                if response is not None:
+                # Persist API audit metadata only after successful authentication.
+                # This avoids turning unauthenticated probes into database-write
+                # amplification while reverse-proxy logs still capture rejects.
+                if response is not None and credential is not None:
                     _record_request(
-                        token=credential.token if credential else None,
+                        token=credential.token,
                         request=request,
                         request_id=request_id,
                         scope=scope,
