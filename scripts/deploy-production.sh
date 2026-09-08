@@ -74,7 +74,7 @@ on_error() {
     fi
 
     dc ps >&2 || true
-    dc logs --tail=150 web internet-worker notification-worker >&2 || true
+    dc logs --tail=150 web management-mcp internet-worker notification-worker >&2 || true
 
     exit "$code"
 }
@@ -214,7 +214,7 @@ fi
 
 log "Building application images"
 
-dc build web internet-worker notification-worker
+dc build web management-mcp internet-worker notification-worker
 
 log "Running pre-deployment checks"
 
@@ -247,9 +247,13 @@ else
         web python manage.py launch_readiness --json
 fi
 
-log "Replacing web + background worker containers"
+log "Replacing web + management integration + background worker containers"
 
-dc up -d --no-deps --force-recreate web internet-worker notification-worker
+dc up -d --no-deps --force-recreate web management-mcp internet-worker notification-worker
+
+log "Checking MCP bridge registration"
+
+dc exec -T management-mcp python scripts/check-mcp-bridge.py
 
 log "Collecting static files"
 
@@ -289,7 +293,7 @@ check_route "/staff/pos/" "302"
 log "Checking recent logs"
 
 ERRORS="$(
-    dc logs --since=5m web internet-worker notification-worker 2>&1 |
+    dc logs --since=5m web management-mcp internet-worker notification-worker 2>&1 |
         grep -Ei \
         "traceback|server error|invalidstorageerror|noreversematch|templatedoesnotexist|programmingerror|operationalerror|modulenotfounderror" \
         || true
