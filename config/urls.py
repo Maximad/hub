@@ -37,6 +37,7 @@ urlpatterns = [
     path('service-worker.js', service_worker, name='service_worker'),
     path('partner/internet/', internet_partner_dashboard, name='internet_partner_dashboard'),
     path('admin/', admin.site.urls),
+    path('api/v1/management/', include('audit.integration_urls')),
     path('', include('member_accounts.urls')),
     path('', menu.dashboard, name='dashboard'),
     path('wifi/', wifi_entry, name='wifi_entry'),
@@ -122,7 +123,7 @@ urlpatterns = [
     path('staff/finance/cashbox/new/', staff_cashbox_new, name='staff_finance_cashbox_new'),
     path('staff/finance/cashbox.csv', staff_cashbox_csv, name='staff_finance_cashbox_csv'),
     path('staff/finance/transfers/', staff_transfers, name='staff_finance_transfers'),
-    path('staff/finance/transfers/new/', staff_transfer_new, name='staff_finance_transfer_new'),
+    path('staff/finance/transfers/new/', staff_transfer_new, name='staff_finance_transfers_new'),
     path('staff/finance/transfers/<int:transfer_id>/', staff_transfer_detail, name='staff_finance_transfer_detail'),
     path('staff/finance/transfers/<int:transfer_id>/reverse/', staff_transfer_reverse, name='staff_finance_transfer_reverse'),
 
