@@ -16,6 +16,7 @@ from .models import IntegrationRequestLog, IntegrationToken
 
 TOKEN_VERSION = 'hubm1'
 ALL_SCOPES = frozenset({
+    'mcp.connect',
     'schema.read',
     'catalog.read',
     'catalog.write',
@@ -85,13 +86,11 @@ def _parse_bearer(raw_header: str) -> tuple[str, str]:
 
 
 def authenticate_bearer_header(raw_header: str, required_scope: str | None = None) -> IntegrationToken:
-    """Authenticate a Hub management bearer credential outside Django views.
+    """Authenticate a Hub integration bearer credential.
 
-    The REST management API and the MCP sidecar share this verifier so token
+    REST management endpoints and the MCP sidecar share this verifier so token
     expiry, revocation, digest comparison and scope checks cannot drift apart.
-    ``required_scope=None`` authenticates the credential without authorizing a
-    specific business operation; MCP uses that for transport-level discovery,
-    then each tool checks its own required scope.
+    Passing a scope performs authorization as part of the same operation.
     """
     if not management_api_enabled():
         raise IntegrationAuthError('Management API is disabled.', status=503, code='integration_disabled')
