@@ -43,6 +43,18 @@ class SharedIntegrationBearerTests(TestCase):
         self.assertEqual(raised.exception.status, 403)
         self.assertEqual(raised.exception.code, 'insufficient_scope')
 
+    def test_rest_read_scope_does_not_grant_mcp_connection(self):
+        _record, complete = self._token('catalog.read', 'inventory.read')
+        with self.assertRaises(IntegrationAuthError) as raised:
+            authenticate_bearer_header(f'Bearer {complete}', 'mcp.connect')
+        self.assertEqual(raised.exception.status, 403)
+        self.assertEqual(raised.exception.code, 'insufficient_scope')
+
+    def test_explicit_mcp_connection_scope_is_accepted(self):
+        record, complete = self._token('mcp.connect', 'catalog.read')
+        authenticated = authenticate_bearer_header(f'Bearer {complete}', 'mcp.connect')
+        self.assertEqual(authenticated.pk, record.pk)
+
     def test_header_auth_rejects_inactive_token(self):
         record, complete = self._token('catalog.read')
         record.is_active = False
