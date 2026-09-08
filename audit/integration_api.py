@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
+import uuid
+from datetime import timedelta
 from decimal import Decimal
 
 from django.core import signing
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.models import Count, Q
 from django.http import JsonResponse
+from django.utils import timezone
 
 from core.models import ActivityLog, InventoryItem, Product, ProductRecipeItem
 from core.services.bulk_edit import BulkEditValidationError
@@ -21,6 +27,7 @@ from .integration_auth import (
     confirmation_ttl_seconds,
     integration_endpoint,
 )
+from .models import IntegrationMutationApproval
 
 CONFIRMATION_SALT = 'hub.management.catalog.preview.v1'
 MAX_PAGE_SIZE = 200
@@ -67,6 +74,19 @@ def _pagination(request):
     if offset < 0:
         raise ValueError('offset must be zero or greater.')
     return limit, offset
+
+
+def _canonical_payload(payload):
+    return json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(',', ':'),
+        ensure_ascii=False,
+    ).encode('utf-8')
+
+
+def _payload_digest(payload):
+    return hashlib.sha256(_canonical_payload(payload)).hexdigest()
 
 
 def _product_dict(product):
@@ -172,6 +192,19 @@ def _change_dict(change):
     }
 
 
+def _annotate_activity_logs(result, request):
+    for log in ActivityLog.objects.filter(pk__in=(result.activity_log_ids or [])):
+        details = dict(log.details or {})
+        details['integration'] = {
+            'token_id': request.integration_token.pk,
+            'token_prefix': request.integration_token.prefix,
+            'token_name': request.integration_token.name,
+            'request_id': str(request.integration_request_id),
+        }
+        log.details = details
+        log.save(update_fields=['details'])
+
+
 @integration_endpoint('schema.read', methods=('GET',))
 def management_schema(request):
     return _response(request, {
@@ -182,7 +215,7 @@ def management_schema(request):
             for code, label in sorted(ALLOWED_ACTIONS.items())
         ],
         'write_contract': {
-            'catalog': 'preview_then_apply',
+            'catalog': 'preview_then_single_use_apply',
             'confirmation_ttl_seconds': confirmation_ttl_seconds(),
             'destructive_operations': False,
             'finance_writes': False,
@@ -259,11 +292,17 @@ def recipes_list(request):
     queryset = ProductRecipeItem.objects.select_related('product', 'inventory_item').order_by('product__name_ar', 'pk')
     product = (request.GET.get('product') or '').strip()
     if product:
-        queryset = queryset.filter(
-            Q(product__public_code=product)
-            | Q(product__metadata__masharib_menu_code=product)
+        product_filter = (
+            Q(product__metadata__masharib_menu_code=product)
             | Q(product__name_ar__iexact=product)
         )
+        try:
+            product_uuid = uuid.UUID(product)
+        except (ValueError, AttributeError):
+            product_uuid = None
+        if product_uuid is not None:
+            product_filter |= Q(product__public_code=product_uuid)
+        queryset = queryset.filter(product_filter)
     if request.GET.get('active') in {'0', '1'}:
         queryset = queryset.filter(is_active=request.GET['active'] == '1')
 
@@ -287,13 +326,28 @@ def catalog_preview(request):
     except (ValueError, BulkEditValidationError, ValidationError) as exc:
         return _error(request, 'invalid_catalog_change', str(exc))
 
-    signed_payload = {
-        'token_pk': request.integration_token.pk,
+    mutation_payload = {
         'identifiers': identifiers,
         'action': action,
         'value': value,
     }
-    confirmation_token = signing.dumps(signed_payload, key=None, salt=CONFIRMATION_SALT, compress=True)
+    expires_at = timezone.now() + timedelta(seconds=confirmation_ttl_seconds())
+    approval = IntegrationMutationApproval.objects.create(
+        token=request.integration_token,
+        operation='catalog.write',
+        payload_digest=_payload_digest(mutation_payload),
+        expires_at=expires_at,
+    )
+    signed_payload = {
+        'token_pk': request.integration_token.pk,
+        'approval_nonce': str(approval.nonce),
+        'mutation': mutation_payload,
+    }
+    confirmation_token = signing.dumps(
+        signed_payload,
+        salt=CONFIRMATION_SALT,
+        compress=True,
+    )
     return _response(request, {
         'preview': {
             'action': {'code': result.action.code, 'label': result.action.label, 'target': result.action.target_label},
@@ -303,6 +357,7 @@ def catalog_preview(request):
         },
         'confirmation_token': confirmation_token,
         'confirmation_expires_in_seconds': confirmation_ttl_seconds(),
+        'confirmation_expires_at': expires_at.isoformat(),
     })
 
 
@@ -319,30 +374,62 @@ def catalog_apply(request):
             max_age=confirmation_ttl_seconds(),
         )
         if signed_payload.get('token_pk') != request.integration_token.pk:
-            return _error(request, 'confirmation_token_mismatch', 'Confirmation token belongs to a different integration credential.', status=403)
-        result = apply_product_bulk_action(
-            signed_payload.get('identifiers') or [],
-            signed_payload.get('action') or '',
-            signed_payload.get('value') or '',
-            actor=None,
-        )
+            return _error(
+                request,
+                'confirmation_token_mismatch',
+                'Confirmation token belongs to a different integration credential.',
+                status=403,
+            )
+
+        mutation_payload = signed_payload.get('mutation')
+        if not isinstance(mutation_payload, dict):
+            return _error(request, 'invalid_confirmation', 'Confirmation payload is invalid.')
+        approval_nonce = signed_payload.get('approval_nonce')
+        try:
+            approval_uuid = uuid.UUID(str(approval_nonce))
+        except (ValueError, TypeError, AttributeError):
+            return _error(request, 'invalid_confirmation', 'Confirmation approval identifier is invalid.')
+
+        with transaction.atomic():
+            try:
+                approval = IntegrationMutationApproval.objects.select_for_update().get(
+                    nonce=approval_uuid,
+                    token=request.integration_token,
+                    operation='catalog.write',
+                )
+            except IntegrationMutationApproval.DoesNotExist:
+                return _error(request, 'invalid_confirmation', 'Confirmation approval does not exist.', status=403)
+
+            if approval.consumed_at is not None:
+                return _error(
+                    request,
+                    'confirmation_already_used',
+                    'Confirmation token has already been used.',
+                    status=409,
+                )
+            if approval.expires_at <= timezone.now():
+                return _error(request, 'confirmation_expired', 'Confirmation token has expired.')
+            if not hmac.compare_digest(
+                approval.payload_digest,
+                _payload_digest(mutation_payload),
+            ):
+                return _error(request, 'invalid_confirmation', 'Confirmation payload does not match its approved preview.', status=403)
+
+            result = apply_product_bulk_action(
+                mutation_payload.get('identifiers') or [],
+                mutation_payload.get('action') or '',
+                mutation_payload.get('value') or '',
+                actor=None,
+            )
+            _annotate_activity_logs(result, request)
+            approval.consumed_at = timezone.now()
+            approval.save(update_fields=['consumed_at'])
     except signing.SignatureExpired:
         return _error(request, 'confirmation_expired', 'Confirmation token has expired.')
     except signing.BadSignature:
         return _error(request, 'invalid_confirmation', 'Confirmation token is invalid.')
     except (ValueError, BulkEditValidationError, ValidationError) as exc:
         return _error(request, 'invalid_catalog_change', str(exc))
-
-    for log in ActivityLog.objects.filter(pk__in=(result.activity_log_ids or [])):
-        details = dict(log.details or {})
-        details['integration'] = {
-            'token_id': request.integration_token.pk,
-            'token_prefix': request.integration_token.prefix,
-            'token_name': request.integration_token.name,
-            'request_id': str(request.integration_request_id),
-        }
-        log.details = details
-        log.save(update_fields=['details'])
 
     return _response(request, {
         'applied': {
