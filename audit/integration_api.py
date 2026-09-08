@@ -192,6 +192,18 @@ def _change_dict(change):
     }
 
 
+def _preview_state(result):
+    """Stable business state used to prove apply still matches the approved preview."""
+    return [
+        {
+            'object_pk': change.object_pk,
+            'object_identifier': change.object_identifier,
+            'changes': change.changes,
+        }
+        for change in result.changes
+    ]
+
+
 def _annotate_activity_logs(result, request):
     for log in ActivityLog.objects.filter(pk__in=(result.activity_log_ids or [])):
         details = dict(log.details or {})
@@ -216,6 +228,7 @@ def management_schema(request):
         ],
         'write_contract': {
             'catalog': 'preview_then_single_use_apply',
+            'stale_preview_policy': 'reject_and_repreview',
             'confirmation_ttl_seconds': confirmation_ttl_seconds(),
             'destructive_operations': False,
             'finance_writes': False,
@@ -326,10 +339,12 @@ def catalog_preview(request):
     except (ValueError, BulkEditValidationError, ValidationError) as exc:
         return _error(request, 'invalid_catalog_change', str(exc))
 
+    expected_changes = _preview_state(result)
     mutation_payload = {
         'identifiers': identifiers,
         'action': action,
         'value': value,
+        'expected_changes': expected_changes,
     }
     expires_at = timezone.now() + timedelta(seconds=confirmation_ttl_seconds())
     approval = IntegrationMutationApproval.objects.create(
@@ -415,11 +430,38 @@ def catalog_apply(request):
             ):
                 return _error(request, 'invalid_confirmation', 'Confirmation payload does not match its approved preview.', status=403)
 
+            identifiers = mutation_payload.get('identifiers') or []
+            action = mutation_payload.get('action') or ''
+            value = mutation_payload.get('value') or ''
+            expected_changes = mutation_payload.get('expected_changes')
+            if not isinstance(expected_changes, list):
+                return _error(request, 'invalid_confirmation', 'Confirmation is missing its approved change state.')
+
+            locked_products = Product.objects.select_for_update()
+            current_preview = preview_product_bulk_action(
+                identifiers,
+                action,
+                value,
+                base_queryset=locked_products,
+            )
+            current_changes = _preview_state(current_preview)
+            if not hmac.compare_digest(
+                _payload_digest(expected_changes),
+                _payload_digest(current_changes),
+            ):
+                return _error(
+                    request,
+                    'preview_stale',
+                    'Catalog state changed after preview. Create a new preview before applying.',
+                    status=409,
+                )
+
             result = apply_product_bulk_action(
-                mutation_payload.get('identifiers') or [],
-                mutation_payload.get('action') or '',
-                mutation_payload.get('value') or '',
+                identifiers,
+                action,
+                value,
                 actor=None,
+                base_queryset=locked_products,
             )
             _annotate_activity_logs(result, request)
             approval.consumed_at = timezone.now()
