@@ -16,6 +16,7 @@ from .models import IntegrationRequestLog, IntegrationToken
 
 TOKEN_VERSION = 'hubm1'
 ALL_SCOPES = frozenset({
+    'mcp.connect',
     'schema.read',
     'catalog.read',
     'catalog.write',
@@ -84,15 +85,19 @@ def _parse_bearer(raw_header: str) -> tuple[str, str]:
     return prefix, secret
 
 
-def authenticate_request(request, required_scope: str) -> IntegrationCredential:
+def authenticate_bearer_header(raw_header: str, required_scope: str | None = None) -> IntegrationToken:
+    """Authenticate a Hub integration bearer credential.
+
+    REST management endpoints and the MCP sidecar share this verifier so token
+    expiry, revocation, digest comparison and scope checks cannot drift apart.
+    Passing a scope performs authorization as part of the same operation.
+    """
     if not management_api_enabled():
         raise IntegrationAuthError('Management API is disabled.', status=503, code='integration_disabled')
-    if management_api_require_https() and not request.is_secure():
-        raise IntegrationAuthError('HTTPS is required.', status=400, code='https_required')
-    if required_scope not in ALL_SCOPES:
+    if required_scope is not None and required_scope not in ALL_SCOPES:
         raise IntegrationAuthError('Server integration scope is invalid.', status=500, code='invalid_server_scope')
 
-    prefix, secret = _parse_bearer(request.headers.get('Authorization', ''))
+    prefix, secret = _parse_bearer(raw_header)
     try:
         token = IntegrationToken.objects.get(prefix=prefix, is_active=True)
     except IntegrationToken.DoesNotExist as exc:
@@ -105,16 +110,23 @@ def authenticate_request(request, required_scope: str) -> IntegrationCredential:
     if not hmac.compare_digest(candidate_digest, token.secret_digest):
         raise IntegrationAuthError('Invalid management integration credential.')
 
-    scopes = set(token.scopes or [])
-    if required_scope not in scopes:
+    if required_scope is not None and required_scope not in set(token.scopes or []):
         raise IntegrationAuthError(
             f'Missing required scope: {required_scope}',
             status=403,
             code='insufficient_scope',
         )
 
-    request_id = _request_id(request)
     IntegrationToken.objects.filter(pk=token.pk).update(last_used_at=timezone.now())
+    return token
+
+
+def authenticate_request(request, required_scope: str) -> IntegrationCredential:
+    if management_api_require_https() and not request.is_secure():
+        raise IntegrationAuthError('HTTPS is required.', status=400, code='https_required')
+
+    token = authenticate_bearer_header(request.headers.get('Authorization', ''), required_scope)
+    request_id = _request_id(request)
     return IntegrationCredential(token=token, request_id=request_id)
 
 

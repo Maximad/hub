@@ -10,3 +10,8 @@ cryptography>=42.0,<47.0
 # Keep Web Push inside the application's current cryptography<47 compatibility
 # envelope until that dependency boundary is reviewed separately.
 pywebpush>=2.2.1,<2.3
+
+# Hub remote management bridge. MCP runs in a separate ASGI sidecar so the
+# existing Django/Gunicorn production web process remains unchanged.
+mcp>=2.0,<3.0
+uvicorn>=0.30,<1.0
