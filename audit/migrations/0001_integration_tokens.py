@@ -1,3 +1,5 @@
+import uuid
+
 from django.conf import settings
 from django.db import migrations, models
 import django.db.models.deletion
@@ -33,6 +35,20 @@ class Migration(migrations.Migration):
                 'verbose_name_plural': 'Management integration tokens',
                 'ordering': ['name', 'prefix'],
             },
+        ),
+        migrations.CreateModel(
+            name='IntegrationMutationApproval',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('nonce', models.UUIDField(default=uuid.uuid4, editable=False, unique=True)),
+                ('operation', models.CharField(max_length=80)),
+                ('payload_digest', models.CharField(editable=False, max_length=64)),
+                ('expires_at', models.DateTimeField()),
+                ('consumed_at', models.DateTimeField(blank=True, null=True)),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('token', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='mutation_approvals', to='audit.integrationtoken')),
+            ],
+            options={'ordering': ['-created_at']},
         ),
         migrations.CreateModel(
             name='IntegrationRequestLog',
