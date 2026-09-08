@@ -75,6 +75,12 @@ class ManagementApiTests(TestCase):
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.json()['error']['code'], 'unauthorized')
 
+    def test_unauthenticated_probe_does_not_create_database_audit_row(self):
+        self.assertEqual(IntegrationRequestLog.objects.count(), 0)
+        response = self._get('/api/v1/management/catalog/products/')
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(IntegrationRequestLog.objects.count(), 0)
+
     def test_plain_http_is_rejected(self):
         _, token = self._token('catalog.read')
         response = self.client.get(
@@ -194,6 +200,34 @@ class ManagementApiTests(TestCase):
         self.assertEqual(replay.json()['error']['code'], 'confirmation_already_used')
         self.product.refresh_from_db()
         self.assertEqual(self.product.price_syp, 110)
+
+    def test_stale_preview_is_rejected_without_consuming_confirmation(self):
+        token_record, token = self._token('catalog.write')
+        preview = self._post(
+            '/api/v1/management/catalog/preview/',
+            {
+                'identifiers': [self.product.pk],
+                'action': 'increase_price_fixed',
+                'value': '10',
+            },
+            token,
+        )
+        self.assertEqual(preview.status_code, 200)
+
+        # Simulate a concurrent staff/admin edit after the integration preview.
+        Product.objects.filter(pk=self.product.pk).update(price_syp=175)
+
+        response = self._post(
+            '/api/v1/management/catalog/apply/',
+            {'confirmation_token': preview.json()['confirmation_token']},
+            token,
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()['error']['code'], 'preview_stale')
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.price_syp, 175)
+        approval = IntegrationMutationApproval.objects.get(token=token_record)
+        self.assertIsNone(approval.consumed_at)
 
     def test_confirmation_token_cannot_be_reused_by_another_integration(self):
         _, token_a = self._token('catalog.write')
