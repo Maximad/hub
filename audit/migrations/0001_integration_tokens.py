@@ -49,12 +49,4 @@ class Migration(migrations.Migration):
             ],
             options={'ordering': ['-created_at']},
         ),
-        migrations.AddIndex(
-            model_name='integrationrequestlog',
-            index=models.Index(fields=['token', 'created_at'], name='audit_integ_token_i_1d7554_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='integrationrequestlog',
-            index=models.Index(fields=['scope', 'created_at'], name='audit_integ_scope_54e1d8_idx'),
-        ),
     ]
