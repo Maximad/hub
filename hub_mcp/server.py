@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import uuid
 from decimal import Decimal
+from typing import Any
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 
@@ -42,7 +43,7 @@ def _page_size(limit: int) -> int:
     return limit
 
 
-def _product_dict(product: Product) -> dict:
+def _product_dict(product: Product) -> dict[str, Any]:
     return {
         'id': product.pk,
         'public_code': str(product.public_code),
@@ -92,7 +93,7 @@ def _product_dict(product: Product) -> dict:
     }
 
 
-def _inventory_dict(item: InventoryItem) -> dict:
+def _inventory_dict(item: InventoryItem) -> dict[str, Any]:
     return {
         'id': item.pk,
         'code': item.code,
@@ -115,7 +116,7 @@ def _inventory_dict(item: InventoryItem) -> dict:
     }
 
 
-def _recipe_dict(line: ProductRecipeItem) -> dict:
+def _recipe_dict(line: ProductRecipeItem) -> dict[str, Any]:
     return {
         'id': line.pk,
         'product': {
@@ -152,8 +153,8 @@ def build_server(*, enforce_auth: bool = True) -> MCPServer:
         ),
     )
 
-    @server.tool(name='hub_capabilities')
-    def hub_capabilities(ctx: Context) -> dict:
+    @server.tool(name='hub_capabilities', structured_output=True)
+    def hub_capabilities(ctx: Context) -> dict[str, Any]:
         """Return Hub integration scopes and the current safe write boundary."""
         _authorize(ctx, 'schema.read', enforce_auth)
         return {
@@ -168,14 +169,14 @@ def build_server(*, enforce_auth: bool = True) -> MCPServer:
             'destructive_operations': False,
         }
 
-    @server.tool(name='hub_search_products')
+    @server.tool(name='hub_search_products', structured_output=True)
     def hub_search_products(
         ctx: Context,
         q: str = '',
         limit: int = 50,
         available: bool | None = None,
         product_type: str = '',
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Search live Hub products by Arabic/English name or menu key."""
         _authorize(ctx, 'catalog.read', enforce_auth)
         limit = _page_size(limit)
@@ -204,7 +205,7 @@ def build_server(*, enforce_auth: bool = True) -> MCPServer:
             'items': [_product_dict(item) for item in queryset[:limit]],
         }
 
-    @server.tool(name='hub_search_inventory')
+    @server.tool(name='hub_search_inventory', structured_output=True)
     def hub_search_inventory(
         ctx: Context,
         q: str = '',
@@ -212,7 +213,7 @@ def build_server(*, enforce_auth: bool = True) -> MCPServer:
         active: bool | None = None,
         item_type: str = '',
         used_in_recipes_only: bool = False,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Search live Hub inventory items, including current quantity, cost and recipe usage."""
         _authorize(ctx, 'inventory.read', enforce_auth)
         limit = _page_size(limit)
@@ -240,13 +241,13 @@ def build_server(*, enforce_auth: bool = True) -> MCPServer:
             'items': [_inventory_dict(item) for item in queryset[:limit]],
         }
 
-    @server.tool(name='hub_get_recipe_lines')
+    @server.tool(name='hub_get_recipe_lines', structured_output=True)
     def hub_get_recipe_lines(
         ctx: Context,
         product: str,
         limit: int = 100,
         active: bool | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Return recipe lines for a product UUID, menu key, or exact Arabic name."""
         _authorize(ctx, 'recipes.read', enforce_auth)
         limit = _page_size(limit)
