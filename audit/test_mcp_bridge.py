@@ -1,12 +1,19 @@
 from asgiref.sync import async_to_sync
-from django.test import TestCase
+from django.test import TransactionTestCase
 from mcp import Client
 
 from core.models import Category, InventoryItem, Product, ProductRecipeItem
 from hub_mcp.server import build_server
 
 
-class HubMCPBridgeTests(TestCase):
+class HubMCPBridgeTests(TransactionTestCase):
+    """Exercise MCP calls across the SDK worker-thread database connection.
+
+    TransactionTestCase is intentional here: the MCP client may execute sync
+    tools in another thread/connection, so setup rows must be committed and
+    visible outside the test method's connection.
+    """
+
     def setUp(self):
         self.category = Category.objects.create(name_ar='اختبار MCP')
         self.product = Product.objects.create(
