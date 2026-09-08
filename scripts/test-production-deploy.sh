@@ -11,13 +11,16 @@ bash -n "$repo/scripts/deploy-production.sh"
 
 # Keep the MikroTik production overlay mandatory when the feature is enabled,
 # ensure all long-running application services use the same Compose stack,
-# and ensure a freshly created backup is restore-verified before readiness.
+# keep the MCP bridge in the deploy/recovery/logging path, and ensure a freshly
+# created backup is restore-verified before readiness.
 grep -Fq 'MIKROTIK_COMPOSE_FILE="docker-compose.mikrotik.yml"' "$repo/scripts/deploy-production.sh"
 grep -Fq 'COMPOSE_ARGS+=(-f "$MIKROTIK_COMPOSE_FILE")' "$repo/scripts/deploy-production.sh"
 grep -Fq 'MIKROTIK_ENABLED=true requires' "$repo/scripts/deploy-production.sh"
-grep -Fq 'dc build web internet-worker notification-worker' "$repo/scripts/deploy-production.sh"
-grep -Fq 'dc up -d --no-deps --force-recreate web internet-worker notification-worker' "$repo/scripts/deploy-production.sh"
-grep -Fq 'dc logs --tail=150 web internet-worker notification-worker' "$repo/scripts/deploy-production.sh"
+grep -Fq 'dc build web management-mcp internet-worker notification-worker' "$repo/scripts/deploy-production.sh"
+grep -Fq 'dc up -d --no-deps --force-recreate web management-mcp internet-worker notification-worker' "$repo/scripts/deploy-production.sh"
+grep -Fq 'dc exec -T management-mcp python scripts/check-mcp-bridge.py' "$repo/scripts/deploy-production.sh"
+grep -Fq 'dc logs --tail=150 web management-mcp internet-worker notification-worker' "$repo/scripts/deploy-production.sh"
+grep -Fq 'dc logs --since=5m web management-mcp internet-worker notification-worker' "$repo/scripts/deploy-production.sh"
 grep -Fq 'log "Verifying fresh production backup restore"' "$repo/scripts/deploy-production.sh"
 grep -Fq './scripts/verify-production-backup.sh "$LATEST_BACKUP"' "$repo/scripts/deploy-production.sh"
 grep -Fq 'ALLOW_PRELAUNCH_OPERATIONAL_DATA=' "$repo/scripts/deploy-production.sh"
@@ -79,11 +82,12 @@ line_of() {
     printf '%s\n' "$line"
 }
 
-build_line="$(line_of 'DC <build> <web> <internet-worker> <notification-worker>' "$events")"
+build_line="$(line_of 'DC <build> <web> <management-mcp> <internet-worker> <notification-worker>' "$events")"
 check_line="$(line_of 'DC <run> <--rm> <-T> <web> <python> <manage.py> <check>' "$events")"
 migration_line="$(line_of 'DC <run> <--rm> <-T> <web> <python> <manage.py> <migrate> <--noinput>' "$events")"
 readiness_line="$(line_of '<manage.py> <launch_readiness> <--json>' "$events")"
-replacement_line="$(line_of 'DC <up> <-d> <--no-deps> <--force-recreate> <web> <internet-worker> <notification-worker>' "$events")"
+replacement_line="$(line_of 'DC <up> <-d> <--no-deps> <--force-recreate> <web> <management-mcp> <internet-worker> <notification-worker>' "$events")"
+mcp_line="$(line_of 'DC <exec> <-T> <management-mcp> <python> <scripts/check-mcp-bridge.py>' "$events")"
 static_line="$(line_of 'DC <exec> <-T> <web> <python> <manage.py> <collectstatic> <--noinput> <--clear>' "$events")"
 restart_line="$(line_of 'DC <restart> <web>' "$events")"
 route_line="$(line_of 'ROUTE /menu/ 200' "$events")"
@@ -94,7 +98,8 @@ runtime_readiness_line="$(line_of 'DC <exec> <-T> <web> <python> <manage.py> <in
 (( check_line < migration_line ))
 (( migration_line < readiness_line ))
 (( readiness_line < replacement_line ))
-(( replacement_line < static_line ))
+(( replacement_line < mcp_line ))
+(( mcp_line < static_line ))
 (( static_line < restart_line ))
 (( restart_line < route_line ))
 (( route_line < mikrotik_line ))
@@ -115,7 +120,7 @@ if (( failure_status == 0 )); then
     exit 1
 fi
 grep -Fq 'DC <run> <--rm> <-T> <web> <python> <manage.py> <migrate> <--noinput>' "$failed_events"
-if grep -Fq 'DC <up> <-d> <--no-deps> <--force-recreate> <web> <internet-worker> <notification-worker>' "$failed_events"; then
+if grep -Fq 'DC <up> <-d> <--no-deps> <--force-recreate> <web> <management-mcp> <internet-worker> <notification-worker>' "$failed_events"; then
     echo "application replacement ran after a failed migration" >&2
     exit 1
 fi
@@ -130,7 +135,7 @@ if (( readiness_failure_status == 0 )); then
     exit 1
 fi
 grep -Fq '<manage.py> <launch_readiness> <--json>' "$readiness_failed_events"
-if grep -Fq 'DC <up> <-d> <--no-deps> <--force-recreate> <web> <internet-worker> <notification-worker>' "$readiness_failed_events"; then
+if grep -Fq 'DC <up> <-d> <--no-deps> <--force-recreate> <web> <management-mcp> <internet-worker> <notification-worker>' "$readiness_failed_events"; then
     echo "application replacement ran after a failed launch readiness gate" >&2
     exit 1
 fi
