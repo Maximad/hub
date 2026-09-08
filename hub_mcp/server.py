@@ -170,11 +170,11 @@ def build_server(*, enforce_auth: bool = True) -> MCPServer:
 
     @server.tool(name='hub_search_products')
     def hub_search_products(
+        ctx: Context,
         q: str = '',
         limit: int = 50,
         available: bool | None = None,
         product_type: str = '',
-        ctx: Context = None,
     ) -> dict:
         """Search live Hub products by Arabic/English name or menu key."""
         _authorize(ctx, 'catalog.read', enforce_auth)
@@ -206,12 +206,12 @@ def build_server(*, enforce_auth: bool = True) -> MCPServer:
 
     @server.tool(name='hub_search_inventory')
     def hub_search_inventory(
+        ctx: Context,
         q: str = '',
         limit: int = 50,
         active: bool | None = None,
         item_type: str = '',
         used_in_recipes_only: bool = False,
-        ctx: Context = None,
     ) -> dict:
         """Search live Hub inventory items, including current quantity, cost and recipe usage."""
         _authorize(ctx, 'inventory.read', enforce_auth)
@@ -242,10 +242,10 @@ def build_server(*, enforce_auth: bool = True) -> MCPServer:
 
     @server.tool(name='hub_get_recipe_lines')
     def hub_get_recipe_lines(
+        ctx: Context,
         product: str,
         limit: int = 100,
         active: bool | None = None,
-        ctx: Context = None,
     ) -> dict:
         """Return recipe lines for a product UUID, menu key, or exact Arabic name."""
         _authorize(ctx, 'recipes.read', enforce_auth)
