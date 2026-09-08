@@ -37,6 +37,7 @@ urlpatterns = [
     path('service-worker.js', service_worker, name='service_worker'),
     path('partner/internet/', internet_partner_dashboard, name='internet_partner_dashboard'),
     path('admin/', admin.site.urls),
+    path('api/v1/management/', include('audit.integration_urls')),
     path('', include('member_accounts.urls')),
     path('', menu.dashboard, name='dashboard'),
     path('wifi/', wifi_entry, name='wifi_entry'),
