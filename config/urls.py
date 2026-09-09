@@ -140,6 +140,7 @@ urlpatterns = [
     path('staff/inventory/movements/new/', staff_inventory.staff_inventory_movement_new, name='staff_inventory_movement_new'),
     path('staff/inventory/movements.csv', staff_inventory.staff_inventory_movements_csv, name='staff_inventory_movements_csv'),
     path('staff/inventory/low-stock/', staff_inventory.staff_inventory_low_stock, name='staff_inventory_low_stock'),
+    path('staff/inventory/recipes/', include('core.recipe_urls')),
     path('staff/inventory/reports/', staff_inventory.staff_inventory_reports, name='staff_inventory_reports'),
     path('staff/reports/recipes/', staff_inventory.staff_recipe_report, name='staff_recipe_report'),
     path('staff/reports/production/', staff_inventory.staff_production_report, name='staff_production_report'),
