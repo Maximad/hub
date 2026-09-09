@@ -1,0 +1,120 @@
+{% extends "staff/inventory_base.html" %}
+{% block inventory_content %}
+<style>
+.recipe-edit{display:grid;gap:1rem}.recipe-edit__head{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;padding:1.1rem;border:1px solid var(--hub-border);border-radius:18px;background:var(--hub-surface)}.recipe-edit__head h3{margin:0 0 .25rem;font-size:1.4rem}.recipe-edit__meta{color:var(--hub-muted);font-size:.9rem}.recipe-back{display:inline-flex;text-decoration:none;color:var(--hub-primary);border:1px solid var(--hub-border);border-radius:12px;padding:.65rem .85rem;background:var(--hub-surface-alt)}.recipe-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.7rem}.recipe-summary__card{border:1px solid var(--hub-border);border-radius:15px;background:var(--hub-surface);padding:.85rem}.recipe-summary__card span{display:block;color:var(--hub-muted);font-size:.78rem}.recipe-summary__card strong{display:block;margin-top:.2rem;font-size:1.08rem}.recipe-note{padding:.8rem .9rem;border:1px dashed var(--hub-border);border-radius:14px;background:var(--hub-surface-alt);color:var(--hub-muted);font-size:.88rem}.recipe-form{display:grid;gap:.85rem}.recipe-lines{display:grid;gap:.7rem}.recipe-line{display:grid;grid-template-columns:minmax(180px,2fr) minmax(90px,.8fr) minmax(105px,.9fr) minmax(80px,.65fr) minmax(100px,.8fr) minmax(150px,1.35fr) minmax(95px,.75fr);gap:.55rem;align-items:end;padding:.8rem;border:1px solid var(--hub-border);border-radius:16px;background:var(--hub-surface)}.recipe-field{display:grid;gap:.3rem;min-width:0}.recipe-field label{font-size:.75rem;color:var(--hub-muted)}.recipe-field input,.recipe-field select{width:100%;min-width:0;box-sizing:border-box;border:1px solid var(--hub-border);border-radius:10px;padding:.62rem .65rem;background:var(--hub-surface);color:var(--hub-text);font:inherit}.recipe-line__cost{font-size:.78rem;color:var(--hub-muted);margin-top:.2rem}.recipe-actions{position:sticky;bottom:.65rem;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:.7rem;flex-wrap:wrap;padding:.75rem;border:1px solid var(--hub-border);border-radius:16px;background:color-mix(in srgb,var(--hub-surface) 94%,transparent);backdrop-filter:blur(8px)}.recipe-actions__left{display:flex;gap:.55rem;flex-wrap:wrap}.recipe-btn{border:0;border-radius:12px;padding:.72rem 1rem;font:inherit;cursor:pointer;text-decoration:none}.recipe-btn--primary{background:var(--hub-primary);color:#fff}.recipe-btn--secondary{background:var(--hub-surface-alt);color:var(--hub-text);border:1px solid var(--hub-border)}.recipe-btn--danger{background:transparent;color:var(--hub-text);border:1px solid var(--hub-border)}.recipe-empty-row{display:none}.recipe-missing{color:var(--hub-muted);font-size:.82rem}@media(max-width:1020px){.recipe-line{grid-template-columns:repeat(2,minmax(0,1fr))}.recipe-field--ingredient,.recipe-field--notes{grid-column:1/-1}.recipe-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:620px){.recipe-summary{grid-template-columns:1fr 1fr}.recipe-line{grid-template-columns:1fr}.recipe-field--ingredient,.recipe-field--notes{grid-column:auto}.recipe-actions{position:static}.recipe-actions,.recipe-actions__left{align-items:stretch}.recipe-actions__left{width:100%}.recipe-btn{flex:1;text-align:center}}
+</style>
+<div class="recipe-edit" dir="rtl">
+  <header class="recipe-edit__head">
+    <div>
+      <h3>وصفة {{ product.name_ar|default:product.name_en }}</h3>
+      <div class="recipe-edit__meta">{{ product.category.name_ar }} · كل كمية أدناه هي الكمية المستخدمة لإنتاج وحدة واحدة من المنتج.</div>
+    </div>
+    <a class="recipe-back" href="{% url 'staff_recipe_manager' %}">العودة إلى الوصفات</a>
+  </header>
+
+  <div class="recipe-summary">
+    <div class="recipe-summary__card"><span>سعر البيع</span><strong>{{ product.price_syp }}</strong></div>
+    <div class="recipe-summary__card"><span>الكلفة المسجلة</span><strong>{{ product.estimated_unit_cost_syp|default:"—" }}</strong></div>
+    <div class="recipe-summary__card"><span>كلفة الوصفة الآن</span><strong>{{ recipe.recipe_estimated_unit_cost_syp|floatformat:0 }}</strong></div>
+    <div class="recipe-summary__card"><span>الهامش حسب الوصفة</span><strong>{{ recipe.recipe_margin_syp|floatformat:0 }}</strong></div>
+  </div>
+
+  {% if recipe.missing_cost_items %}<div class="recipe-note">هناك مواد بدون كلفة تقديرية، لذلك الكلفة الظاهرة ناقصة: {{ recipe.missing_cost_items|join:"، " }}</div>{% endif %}
+  <div class="recipe-note">حفظ الوصفة يحدّث كلفة المنتج التقديرية مباشرة. وحدة الوصفة تُضبط تلقائياً على وحدة مادة المخزون عند اختيار مادة جديدة، ويمكن تعديلها عند الحاجة.</div>
+
+  <form class="recipe-form" method="post" id="recipe-form">
+    {% csrf_token %}
+    <div class="recipe-lines" id="recipe-lines">
+      {% if posted_rows %}
+        {% for row in posted_rows %}
+          <div class="recipe-line">
+            <input type="hidden" name="line_id" value="{{ row.line_id }}">
+            <div class="recipe-field recipe-field--ingredient"><label>مادة المخزون</label><select name="inventory_item" class="js-inventory-item"><option value="">— اختر —</option>{% for item in inventory_items %}<option value="{{ item.id }}" data-unit="{{ item.unit }}" data-cost="{{ item.estimated_unit_cost_syp|default_if_none:'' }}" {% if item.id|stringformat:"s" == row.inventory_item %}selected{% endif %}>{{ item.name_ar }} · {{ item.get_unit_display }}{% if item.estimated_unit_cost_syp != None %} · {{ item.estimated_unit_cost_syp|floatformat:0 }}{% endif %}</option>{% endfor %}</select><div class="recipe-line__cost js-line-cost"></div></div>
+            <div class="recipe-field"><label>الكمية / وحدة منتج</label><input name="quantity_per_unit" class="js-quantity" type="number" min="0.001" step="0.001" value="{{ row.quantity_per_unit }}"></div>
+            <div class="recipe-field"><label>الوحدة</label><select name="unit" class="js-unit">{% for value,label in units %}<option value="{{ value }}" {% if value == row.unit %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+            <div class="recipe-field"><label>الهدر %</label><input name="waste_factor_percent" class="js-waste" type="number" min="0" step="0.01" value="{{ row.waste_factor_percent }}"></div>
+            <div class="recipe-field"><label>الحالة</label><select name="is_active"><option value="1" {% if row.is_active %}selected{% endif %}>نشط</option><option value="0" {% if not row.is_active %}selected{% endif %}>موقوف</option></select></div>
+            <div class="recipe-field recipe-field--notes"><label>ملاحظات</label><input name="notes" value="{{ row.notes }}" placeholder="اختياري"></div>
+            <div class="recipe-field"><label>الإجراء</label><select name="action"><option value="keep" {% if row.action != 'delete' %}selected{% endif %}>احتفاظ</option><option value="delete" {% if row.action == 'delete' %}selected{% endif %}>حذف</option></select></div>
+          </div>
+        {% endfor %}
+      {% else %}
+        {% for line in lines %}
+          <div class="recipe-line">
+            <input type="hidden" name="line_id" value="{{ line.id }}">
+            <div class="recipe-field recipe-field--ingredient"><label>مادة المخزون</label><select name="inventory_item" class="js-inventory-item"><option value="">— اختر —</option>{% for item in inventory_items %}<option value="{{ item.id }}" data-unit="{{ item.unit }}" data-cost="{{ item.estimated_unit_cost_syp|default_if_none:'' }}" {% if item.id == line.inventory_item_id %}selected{% endif %}>{{ item.name_ar }} · {{ item.get_unit_display }}{% if item.estimated_unit_cost_syp != None %} · {{ item.estimated_unit_cost_syp|floatformat:0 }}{% endif %}</option>{% endfor %}</select><div class="recipe-line__cost js-line-cost">{% if line.line_cost != None %}كلفة السطر: {{ line.line_cost|floatformat:0 }}{% endif %}</div></div>
+            <div class="recipe-field"><label>الكمية / وحدة منتج</label><input name="quantity_per_unit" class="js-quantity" type="number" min="0.001" step="0.001" value="{{ line.quantity_per_unit }}"></div>
+            <div class="recipe-field"><label>الوحدة</label><select name="unit" class="js-unit">{% for value,label in units %}<option value="{{ value }}" {% if value == line.unit %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+            <div class="recipe-field"><label>الهدر %</label><input name="waste_factor_percent" class="js-waste" type="number" min="0" step="0.01" value="{{ line.waste_factor_percent }}"></div>
+            <div class="recipe-field"><label>الحالة</label><select name="is_active"><option value="1" {% if line.is_active %}selected{% endif %}>نشط</option><option value="0" {% if not line.is_active %}selected{% endif %}>موقوف</option></select></div>
+            <div class="recipe-field recipe-field--notes"><label>ملاحظات</label><input name="notes" value="{{ line.notes }}" placeholder="اختياري"></div>
+            <div class="recipe-field"><label>الإجراء</label><select name="action"><option value="keep">احتفاظ</option><option value="delete">حذف</option></select></div>
+          </div>
+        {% empty %}
+          <div class="recipe-missing">لا توجد مكوّنات بعد. أضف أول مكوّن للوصفة.</div>
+        {% endfor %}
+      {% endif %}
+    </div>
+
+    <div class="recipe-actions">
+      <div class="recipe-actions__left">
+        <button class="recipe-btn recipe-btn--secondary" type="button" id="add-recipe-line">+ إضافة مكوّن</button>
+        <a class="recipe-btn recipe-btn--danger" href="{% url 'staff_recipe_manager' %}">إلغاء</a>
+      </div>
+      <button class="recipe-btn recipe-btn--primary" type="submit">حفظ الوصفة وتحديث الكلفة</button>
+    </div>
+  </form>
+</div>
+
+<template id="recipe-line-template">
+  <div class="recipe-line">
+    <input type="hidden" name="line_id" value="">
+    <div class="recipe-field recipe-field--ingredient"><label>مادة المخزون</label><select name="inventory_item" class="js-inventory-item"><option value="">— اختر —</option>{% for item in inventory_items %}<option value="{{ item.id }}" data-unit="{{ item.unit }}" data-cost="{{ item.estimated_unit_cost_syp|default_if_none:'' }}">{{ item.name_ar }} · {{ item.get_unit_display }}{% if item.estimated_unit_cost_syp != None %} · {{ item.estimated_unit_cost_syp|floatformat:0 }}{% endif %}</option>{% endfor %}</select><div class="recipe-line__cost js-line-cost"></div></div>
+    <div class="recipe-field"><label>الكمية / وحدة منتج</label><input name="quantity_per_unit" class="js-quantity" type="number" min="0.001" step="0.001" value=""></div>
+    <div class="recipe-field"><label>الوحدة</label><select name="unit" class="js-unit">{% for value,label in units %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></div>
+    <div class="recipe-field"><label>الهدر %</label><input name="waste_factor_percent" class="js-waste" type="number" min="0" step="0.01" value="0"></div>
+    <div class="recipe-field"><label>الحالة</label><select name="is_active"><option value="1" selected>نشط</option><option value="0">موقوف</option></select></div>
+    <div class="recipe-field recipe-field--notes"><label>ملاحظات</label><input name="notes" value="" placeholder="اختياري"></div>
+    <div class="recipe-field"><label>الإجراء</label><select name="action"><option value="keep">احتفاظ</option><option value="delete">حذف</option></select></div>
+  </div>
+</template>
+<script>
+(function(){
+  const lines=document.getElementById('recipe-lines');
+  const template=document.getElementById('recipe-line-template');
+  const add=document.getElementById('add-recipe-line');
+  function refresh(row, syncUnit){
+    const item=row.querySelector('.js-inventory-item');
+    const qty=row.querySelector('.js-quantity');
+    const waste=row.querySelector('.js-waste');
+    const unit=row.querySelector('.js-unit');
+    const cost=row.querySelector('.js-line-cost');
+    if(!item||!qty||!waste||!unit||!cost)return;
+    const option=item.options[item.selectedIndex];
+    if(syncUnit && option && option.dataset.unit) unit.value=option.dataset.unit;
+    const base=Number(option&&option.dataset.cost||'');
+    const amount=Number(qty.value||0);
+    const wastePct=Number(waste.value||0);
+    cost.textContent=(base>=0 && amount>0 && option&&option.dataset.cost!=='') ? 'كلفة السطر التقريبية: '+Math.round(base*amount*(1+wastePct/100)) : '';
+  }
+  function bind(row){
+    const item=row.querySelector('.js-inventory-item');
+    const qty=row.querySelector('.js-quantity');
+    const waste=row.querySelector('.js-waste');
+    if(item)item.addEventListener('change',()=>refresh(row,true));
+    if(qty)qty.addEventListener('input',()=>refresh(row,false));
+    if(waste)waste.addEventListener('input',()=>refresh(row,false));
+    refresh(row,false);
+  }
+  lines.querySelectorAll('.recipe-line').forEach(bind);
+  add.addEventListener('click',function(){
+    const fragment=template.content.cloneNode(true);
+    const row=fragment.querySelector('.recipe-line');
+    lines.querySelector('.recipe-missing')?.remove();
+    lines.appendChild(fragment);
+    bind(row);
+    row.querySelector('.js-inventory-item')?.focus();
+  });
+})();
+</script>
+{% endblock %}
