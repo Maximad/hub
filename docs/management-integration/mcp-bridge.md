@@ -36,7 +36,8 @@ Authenticated MCP HTTP requests write metadata-only `IntegrationRequestLog` rows
 
 - container: `hub-management-mcp`
 - internal port: `8001`
-- host loopback: `127.0.0.1:8900`
+- host loopback: `127.0.0.1:8900` for operator diagnostics
+- shared external Docker network: `proxy` for the production Caddy route
 - ASGI app: `hub_mcp.app:app`
 
 The existing Django/Gunicorn application remains on `127.0.0.1:8899`.
@@ -81,23 +82,25 @@ The public MCP URL is intended to be:
 https://hubsweida.jwtalenthouse.com/mcp
 ```
 
-The host proxy must route `/mcp` to `127.0.0.1:8900` before the generic Hub route to `127.0.0.1:8899`.
+The production Caddy container already resolves the Hub application through the shared external `proxy` Docker network. The MCP sidecar therefore joins the same network and Caddy should proxy `/mcp` to the sidecar by Docker name, not to host loopback.
 
 Example Caddy shape (merge with the existing site block; do not replace unrelated routes):
 
 ```caddyfile
 hubsweida.jwtalenthouse.com {
+    encode gzip
+
     handle /mcp* {
-        reverse_proxy 127.0.0.1:8900
+        reverse_proxy hub-management-mcp:8001
     }
 
     handle {
-        reverse_proxy 127.0.0.1:8899
+        reverse_proxy hub-web:8000
     }
 }
 ```
 
-Preserve the existing production proxy configuration and only add the path-specific MCP route.
+Use `handle`, not `handle_path`, so the `/mcp` path is preserved for the MCP ASGI app. Preserve the existing production proxy configuration and only add the path-specific MCP route.
 
 ## Production activation order
 
