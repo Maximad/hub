@@ -104,6 +104,72 @@ def expire_internet_entitlement(entitlement, *, actor=None, reason='validity_exp
 
 
 @transaction.atomic
+def suspend_internet_entitlement(entitlement, *, actor=None, reason, effective_at=None):
+    """Suspend one provider entitlement without changing its originating sale.
+
+    This is the provider-safe operational pause. It settles active usage and
+    queues a disconnect, but deliberately leaves payments, revenue snapshots,
+    membership status, and remaining allowance untouched.
+    """
+    subscription_id = _lock_subscription_provenance(entitlement)
+    entitlement = InternetEntitlement.objects.select_for_update().get(pk=entitlement.pk)
+    if entitlement.subscription_id != subscription_id:
+        raise ValidationError('Internet entitlement subscription changed; retry the operation.')
+    if entitlement.status in {entitlement.Status.CANCELLED, entitlement.Status.EXPIRED}:
+        raise ValidationError('لا يمكن تعليق اشتراك إنترنت منتهٍ أو ملغى.')
+    if entitlement.status == entitlement.Status.SUSPENDED:
+        return entitlement
+    boundary = effective_at or timezone.now()
+    terminate_active_sessions(entitlement, reason=reason, at=boundary, actor=actor)
+    entitlement.status = entitlement.Status.SUSPENDED
+    entitlement.lifecycle_reason = reason[:200]
+    entitlement.save(update_fields=('status', 'lifecycle_reason', 'updated_at'))
+    _network(
+        entitlement,
+        InternetNetworkOperation.Operation.DISCONNECT,
+        reason,
+        f'entitlement:{entitlement.public_code}:disconnect:provider-suspend:{boundary.isoformat()}',
+    )
+    _audit(actor, 'internet.entitlement_suspended', entitlement_id=entitlement.pk,
+           reason=reason, boundary=boundary.isoformat())
+    return entitlement
+
+
+@transaction.atomic
+def resume_internet_entitlement(entitlement, *, actor=None, reason='provider_resume', effective_at=None):
+    """Resume a provider-suspended entitlement when its provenance is valid."""
+    subscription_id = _lock_subscription_provenance(entitlement)
+    subscription = None
+    if subscription_id:
+        from members.models import MembershipSubscription
+        subscription = MembershipSubscription.objects.select_for_update().get(pk=subscription_id)
+    entitlement = InternetEntitlement.objects.select_for_update().get(pk=entitlement.pk)
+    if entitlement.subscription_id != subscription_id:
+        raise ValidationError('Internet entitlement subscription changed; retry the operation.')
+    if entitlement.status != entitlement.Status.SUSPENDED:
+        return entitlement
+    at = effective_at or timezone.now()
+    if entitlement.valid_until is not None and entitlement.valid_until <= at:
+        raise ValidationError('انتهت صلاحية اشتراك الإنترنت ولا يمكن استئنافه.')
+    if subscription is not None and not subscription.is_active_at(at):
+        raise ValidationError('اشتراك العضوية المصدر غير فعال ولا يمكن استئناف الإنترنت.')
+    entitlement.status = (
+        entitlement.Status.ACTIVE if entitlement.activated_at else entitlement.Status.PENDING
+    )
+    entitlement.lifecycle_reason = ''
+    entitlement.save(update_fields=('status', 'lifecycle_reason', 'updated_at'))
+    _network(
+        entitlement,
+        InternetNetworkOperation.Operation.REFRESH,
+        reason,
+        f'entitlement:{entitlement.public_code}:refresh:provider-resume:{at.isoformat()}',
+    )
+    _audit(actor, 'internet.entitlement_resumed', entitlement_id=entitlement.pk,
+           reason=reason, resumed_at=at.isoformat())
+    return entitlement
+
+
+@transaction.atomic
 def freeze_membership(subscription, *, until=None, at=None, actor=None):
     from members.models import MembershipSubscription
     subscription = MembershipSubscription.objects.select_for_update().get(pk=subscription.pk)

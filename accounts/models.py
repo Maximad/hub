@@ -11,6 +11,7 @@ class User(AbstractUser):
         WAITER = 'waiter', 'نادل'
         KITCHEN = 'kitchen', 'مطبخ'
         BARTENDER = 'bartender', 'بار'
+        INTERNET_PROVIDER = 'internet_provider', 'مزوّد الإنترنت'
 
     class PreferredLanguage(models.TextChoices):
         ARABIC = 'ar', 'العربية'

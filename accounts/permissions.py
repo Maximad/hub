@@ -28,6 +28,19 @@ CAPABILITY_LABELS = {
     'partial_payment_approval': 'الموافقات الإدارية',
     'order_edit': 'تعديل الطلبات',
     'delivery_management': 'إدارة التوصيل',
+    'provider_dashboard': 'لوحة مزوّد الإنترنت',
+    'internet_view_members': 'عرض عملاء الإنترنت',
+    'internet_manage_members': 'إدارة عملاء الإنترنت',
+    'internet_view_sessions': 'عرض جلسات الإنترنت',
+    'internet_manage_sessions': 'إدارة جلسات الإنترنت',
+    'internet_view_subscriptions': 'عرض اشتراكات الإنترنت',
+    'internet_manage_subscriptions': 'إدارة اشتراكات الإنترنت',
+    'internet_view_packages': 'عرض باقات الإنترنت',
+    'internet_manage_packages': 'إدارة باقات الإنترنت',
+    'internet_view_network': 'عرض حالة شبكة الإنترنت',
+    'internet_manage_network': 'إدارة تشغيل شبكة الإنترنت',
+    'internet_view_reports': 'عرض تقارير الإنترنت',
+    'internet_manage_provider_settings': 'إدارة إعدادات مزوّد الإنترنت',
 }
 
 
@@ -59,6 +72,10 @@ def is_kitchen(user):
 
 def is_bartender(user):
     return _is_authenticated_active(user) and _role(user) == 'bartender'
+
+
+def is_internet_provider(user):
+    return _is_authenticated_active(user) and _role(user) == 'internet_provider'
 
 
 # Role defaults. These are the baseline policy only; callers should use the
@@ -142,6 +159,12 @@ def _default_delivery_management(user):
     return is_owner_or_admin(user) or is_cashier(user) or is_waiter(user)
 
 
+def _default_provider_capability(user):
+    # The provider role is intentionally isolated from the staff workspace. The
+    # InternetPartnerUser association applies the row-level commercial boundary.
+    return is_owner_or_admin(user) or is_internet_provider(user)
+
+
 CAPABILITY_CHECKS = {
     'staff_home': _default_staff_home,
     'orders': _default_orders,
@@ -162,6 +185,19 @@ CAPABILITY_CHECKS = {
     'partial_payment_approval': _default_partial_payment_approval,
     'order_edit': _default_order_edit,
     'delivery_management': _default_delivery_management,
+    'provider_dashboard': _default_provider_capability,
+    'internet_view_members': _default_provider_capability,
+    'internet_manage_members': _default_provider_capability,
+    'internet_view_sessions': _default_provider_capability,
+    'internet_manage_sessions': _default_provider_capability,
+    'internet_view_subscriptions': _default_provider_capability,
+    'internet_manage_subscriptions': _default_provider_capability,
+    'internet_view_packages': _default_provider_capability,
+    'internet_manage_packages': _default_provider_capability,
+    'internet_view_network': _default_provider_capability,
+    'internet_manage_network': _default_provider_capability,
+    'internet_view_reports': _default_provider_capability,
+    'internet_manage_provider_settings': _default_provider_capability,
 }
 
 

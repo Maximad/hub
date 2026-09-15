@@ -1,0 +1,34 @@
+{% extends "provider/base.html" %}
+{% block title %}لوحة مزوّد الإنترنت{% endblock %}
+{% block content %}
+<header class="provider-page-header">
+  <div><span class="provider-eyebrow">{{ provider_partner.name }}</span><h1>حالة الإنترنت الآن</h1><p>ملخص تشغيلي وتجاري خاص بعملاء هذا المزوّد فقط.</p></div>
+  {% if provider_caps.internet_view_reports %}<a class="hub-button" href="{% url 'internet_provider_reports' %}">التقرير المالي</a>{% endif %}
+</header>
+<section class="provider-grid provider-grid--stats">
+  <div class="provider-stat provider-stat--accent"><span>حصة المزوّد اليوم</span><strong>{{ revenue_today.partner }}</strong></div>
+  <div class="provider-stat"><span>جلسات فعالة</span><strong>{{ metrics.active_sessions }}</strong></div>
+  <div class="provider-stat"><span>اشتراكات فعالة</span><strong>{{ metrics.active_subscriptions }}</strong></div>
+  <div class="provider-stat"><span>عملاء مسجلون</span><strong>{{ metrics.customers }}</strong></div>
+  <div class="provider-stat"><span>دقائق مستخدمة اليوم</span><strong>{{ metrics.minutes_today }}</strong></div>
+  <div class="provider-stat"><span>أخطاء شبكة</span><strong>{{ metrics.network_errors }}</strong></div>
+</section>
+<section class="provider-grid provider-grid--two provider-section">
+  <article class="provider-card">
+    <h2>حالة التشغيل</h2>
+    <p class="provider-health{% if worker_fresh %} is-ok{% endif %}"><strong>عامل الإنترنت:</strong> {% if worker_fresh %}متصل الآن{% else %}غير متصل أو لم يرسل نبضة حديثة{% endif %}</p>
+    <p><strong>آخر فحص MikroTik:</strong> {% if operations_state.last_mikrotik_check_at %}{{ operations_state.last_mikrotik_check_at }} — {{ operations_state.last_mikrotik_check_ok|yesno:'ناجح,فشل' }}{% else %}لم يُجر بعد{% endif %}</p>
+    <p><strong>تنتهي خلال 3 أيام:</strong> {{ metrics.expiring_soon }}</p>
+    {% if provider_caps.internet_view_network %}<a href="{% url 'internet_provider_network' %}">فتح مركز الشبكة ←</a>{% endif %}
+  </article>
+  <article class="provider-card">
+    <h2>الإيراد اليوم</h2>
+    <div class="provider-meta"><div><small>الإجمالي</small><strong>{{ revenue_today.gross }}</strong></div><div><small>المزوّد</small><strong>{{ revenue_today.partner }}</strong></div><div><small>هَبّ</small><strong>{{ revenue_today.hub }}</strong></div></div>
+  </article>
+</section>
+<section class="provider-grid provider-grid--two provider-section">
+  <article class="provider-card"><h2>أحدث الجلسات</h2><div class="provider-table-wrap"><table class="provider-table"><thead><tr><th>العميل</th><th>البدء</th><th>الحالة</th></tr></thead><tbody>{% for session in recent_sessions %}<tr><td><a href="{% url 'internet_provider_session_detail' session.public_code %}">{% if session.member %}{{ session.member.name_ar }}{% else %}{{ session.display_guest_name|default:'زائر' }}{% endif %}</a></td><td>{{ session.effective_started_at }}</td><td><span class="provider-status provider-status--{{ session.status }}">{{ session.get_status_display }}</span></td></tr>{% empty %}<tr><td colspan="3" class="provider-empty">لا توجد جلسات.</td></tr>{% endfor %}</tbody></table></div></article>
+  <article class="provider-card"><h2>اشتراكات قريبة الانتهاء</h2><div class="provider-table-wrap"><table class="provider-table"><thead><tr><th>العميل</th><th>الباقة</th><th>الانتهاء</th></tr></thead><tbody>{% for entitlement in expiring_entitlements %}<tr><td><a href="{% url 'internet_provider_subscription_detail' entitlement.public_code %}">{% if entitlement.member %}{{ entitlement.member.name_ar }}{% else %}{{ entitlement.guest_name|default:'زائر' }}{% endif %}</a></td><td>{{ entitlement.package.name_ar|default:'ميزة عضوية' }}</td><td>{{ entitlement.valid_until|default:'—' }}</td></tr>{% empty %}<tr><td colspan="3" class="provider-empty">لا توجد اشتراكات قريبة الانتهاء.</td></tr>{% endfor %}</tbody></table></div></article>
+</section>
+<section class="provider-card provider-section"><h2>أحدث الاشتراكات</h2><div class="provider-table-wrap"><table class="provider-table"><thead><tr><th>العميل</th><th>الباقة</th><th>القسيمة</th><th>الحالة</th><th>الشبكة</th></tr></thead><tbody>{% for entitlement in recent_entitlements %}<tr><td><a href="{% url 'internet_provider_subscription_detail' entitlement.public_code %}">{% if entitlement.member %}{{ entitlement.member.name_ar }}{% else %}{{ entitlement.guest_name|default:'زائر' }}{% endif %}</a></td><td>{{ entitlement.package.name_ar|default:'ميزة عضوية' }}</td><td><code>{{ entitlement.access_code }}</code></td><td><span class="provider-status provider-status--{{ entitlement.effective_status }}">{{ entitlement.effective_status }}</span></td><td>{{ entitlement.get_network_status_display }}</td></tr>{% empty %}<tr><td colspan="5" class="provider-empty">لا توجد اشتراكات.</td></tr>{% endfor %}</tbody></table></div></section>
+{% endblock %}

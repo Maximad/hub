@@ -16,6 +16,15 @@ from accounts.permissions import (
 User = get_user_model()
 
 
+def _audit_user_change(actor, action, target, **details):
+    from core.models import ActivityLog
+    ActivityLog.objects.create(
+        actor=actor,
+        action=action,
+        details={'target_user_public_id': str(target.public_id), **details},
+    )
+
+
 def _last_active_admin_count():
     return User.objects.filter(is_active=True).filter(Q(is_superuser=True) | Q(role=User.Role.ADMIN)).count()
 
@@ -65,6 +74,11 @@ def staff_user_new(request):
     form = StaffUserCreateForm(request.POST or None, actor=request.user)
     if request.method == 'POST' and form.is_valid():
         user = form.save()
+        _audit_user_change(
+            request.user, 'accounts.user_created', user,
+            role=user.role,
+            internet_partner_assigned=(user.role == User.Role.INTERNET_PROVIDER),
+        )
         messages.success(request, f'تم إنشاء المستخدم {user.username}.')
         return redirect('staff_user_detail', user_id=user.pk)
     return render(request, 'staff/users/form.html', {'form': form, 'mode': 'create'})
@@ -93,6 +107,7 @@ def staff_user_detail(request, user_id):
 @require_staff_capability('users', ADMIN_ONLY_MESSAGE)
 def staff_user_edit(request, user_id):
     target = get_object_or_404(User, pk=user_id)
+    previous_role = target.role
     form = StaffUserEditForm(request.POST or None, instance=target, actor=request.user)
     if request.method == 'POST' and form.is_valid():
         if _would_remove_last_active_admin(
@@ -104,6 +119,12 @@ def staff_user_edit(request, user_id):
             form.add_error(None, 'لا يمكن تعطيل أو إزالة آخر مدير/مالك نشط.')
         else:
             user = form.save()
+            _audit_user_change(
+                request.user, 'accounts.user_changed', user,
+                previous_role=previous_role,
+                role=user.role,
+                internet_partner_assigned=(user.role == User.Role.INTERNET_PROVIDER),
+            )
             messages.success(request, 'تم تحديث بيانات المستخدم وصلاحياته.')
             return redirect('staff_user_detail', user_id=user.pk)
     return render(request, 'staff/users/form.html', {'form': form, 'mode': 'edit', 'target_user': target})
@@ -116,6 +137,7 @@ def staff_user_password(request, user_id):
     if request.method == 'POST' and form.is_valid():
         target.set_password(form.cleaned_data['new_password'])
         target.save(update_fields=['password'])
+        _audit_user_change(request.user, 'accounts.user_password_changed', target)
         messages.success(request, 'تم تعيين كلمة المرور الجديدة.')
         return redirect('staff_user_detail', user_id=target.pk)
     return render(request, 'staff/users/password.html', {'form': form, 'target_user': target})
@@ -134,5 +156,8 @@ def staff_user_toggle_active(request, user_id):
         return redirect('staff_user_detail', user_id=target.pk)
     target.is_active = new_active
     target.save(update_fields=['is_active'])
+    _audit_user_change(
+        request.user, 'accounts.user_activation_changed', target, is_active=new_active,
+    )
     messages.success(request, 'تم تفعيل المستخدم.' if new_active else 'تم تعطيل المستخدم.')
     return redirect('staff_user_detail', user_id=target.pk)

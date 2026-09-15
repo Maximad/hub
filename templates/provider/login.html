@@ -1,0 +1,16 @@
+{% extends "provider/base.html" %}
+{% block title %}دخول مزوّد الإنترنت{% endblock %}
+{% block content %}
+<section class="provider-card provider-login-card">
+  <span class="provider-eyebrow">بوابة تشغيل مستقلة</span>
+  <h1>دخول مزوّد الإنترنت</h1>
+  <p class="hub-text-muted">الوصول مخصص للحساب المرتبط بمزوّد الإنترنت في نظام هَبّ.</p>
+  <form method="post" class="hub-form hub-form-section">{% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    {{ form.non_field_errors }}
+    <label>اسم المستخدم{{ form.username }}{{ form.username.errors }}</label>
+    <label>كلمة المرور{{ form.password }}{{ form.password.errors }}</label>
+    <button class="hub-button hub-button-primary" type="submit">دخول</button>
+  </form>
+</section>
+{% endblock %}

@@ -27,6 +27,7 @@
   <link rel="stylesheet" href="{% static 'css/staff_pos_polish.css' %}">
   <link rel="stylesheet" href="{% static 'css/staff_internet_v2.css' %}">
   <link rel="stylesheet" href="{% static 'css/staff_ui_v2_contrast_fix.css' %}">
+  <link rel="stylesheet" href="{% static 'css/provider_portal.css' %}">
   {% include "includes/hub_theme.html" %}
   {% comment %}Legacy density choices map onto the semantic token layer.{% endcomment %}
   {% if system_settings %}<style>:root{
@@ -36,9 +37,13 @@
   }</style>{% endif %}
   <script src="{% static 'js/htmx.min.js' %}"></script>
 </head>
-<body class="hub-page {% block body_class %}{% endblock %}{% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %} hub-staff-ui{% endif %}{% if system_settings %} density-{{ system_settings.safe_ui_density }} button-scale-{{ system_settings.safe_button_padding_scale }} input-size-{{ system_settings.safe_input_size }} shadow-{{ system_settings.safe_card_shadow_level }}{% if system_settings.sticky_header_enabled %} hub-sticky-header{% endif %}{% endif %}">
-  {% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %}
+<body class="hub-page {% block body_class %}{% endblock %}{% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %} hub-staff-ui{% endif %}{% if request.path|slice:":10" == "/provider/" %} hub-provider-ui{% endif %}{% if system_settings %} density-{{ system_settings.safe_ui_density }} button-scale-{{ system_settings.safe_button_padding_scale }} input-size-{{ system_settings.safe_input_size }} shadow-{{ system_settings.safe_card_shadow_level }}{% if system_settings.sticky_header_enabled %} hub-sticky-header{% endif %}{% endif %}">
+  {% if request.user.is_authenticated and request.path|slice:":10" == "/provider/" and request.path != "/provider/login/" %}
+    {% include "includes/provider_shell_nav.html" %}
+  {% elif request.user.is_authenticated and request.path|slice:":7" == "/staff/" %}
     {% include "includes/staff_shell_nav.html" %}
+  {% elif request.path == "/provider/login/" %}
+    <header class="provider-login-header"><div class="hub-container"><strong>Hub Sweida</strong><span>بوابة مزوّد الإنترنت</span></div></header>
   {% else %}
     <header class="hub-header">
       <div class="hub-container">
