@@ -9,10 +9,10 @@ from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from core.models import (CashMovement, DailyClose, FinancialAccount, InternetAccessDevice, InternetBandwidthProfile, InternetEntitlement,
+from core.models import (CashMovement, Category, DailyClose, FinancialAccount, InternetAccessDevice, InternetBandwidthProfile, InternetEntitlement,
                          InternetNetworkOperation, InternetPackage, InternetPartner, InternetPartnerUser, InternetRevenueShare,
                          InternetRevenueShareAdjustment, InternetSession, InternetUsageLedger, Member, Order, Payment,
-                         PostingBatch, PostingCommand)
+                         PostingBatch, PostingCommand, Product)
 from core.services.internet_access import (create_entitlement, end_usage_session,
     create_commercial_sale, daily_minutes_remaining, daily_minutes_used,
     effectively_active_entitlements, get_default_internet_partner,
@@ -456,6 +456,28 @@ class InternetHttpWorkflowTests(TestCase):
         operation = InternetNetworkOperation.objects.get(
             entitlement=ent, operation=InternetNetworkOperation.Operation.PROVISION)
         self.assertEqual(operation.status, InternetNetworkOperation.Status.PENDING)
+
+    def test_sale_uses_package_binding_when_catalog_names_are_duplicated(self):
+        from internet.models import InternetCatalogBinding
+
+        binding = InternetCatalogBinding.objects.get(package=self.package)
+        Product.objects.create(
+            category=binding.product.category,
+            name_ar=self.package.name_ar,
+            price_syp=self.package.price_syp,
+            product_type=Product.ProductType.INTERNET,
+            item_type=Product.ItemType.SERVICE,
+            service_type=Product.ServiceType.INTERNET,
+        )
+
+        entitlement = create_commercial_sale(
+            self.package, payment_method=Payment.Method.CASH, actor=self.staff,
+            idempotency_key='duplicate-catalog-name',
+        )
+
+        self.assertEqual(entitlement.order.items.get().product_id, binding.product_id)
+        self.assertEqual(Order.objects.count(), 1)
+        self.assertEqual(Payment.objects.count(), 1)
 
     def test_cash_sale_posts_once_to_cashbox_and_daily_close(self):
         first = create_commercial_sale(

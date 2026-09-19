@@ -11,9 +11,9 @@ from django.db import transaction
 from django.db.models import F, Sum
 from django.utils import timezone
 
-from core.models import (ActivityLog, Category, InternetAccessDevice, InternetEntitlement,
+from core.models import (ActivityLog, InternetAccessDevice, InternetEntitlement,
                          InternetPackage, InternetPartner, InternetRevenueShare, InternetRevenueShareAdjustment,
-                         InternetSession, InternetUsageLedger, Order, OrderItem, Payment, Product)
+                         InternetSession, InternetUsageLedger, Order, OrderItem, Payment)
 
 
 def _business_date(at):
@@ -444,12 +444,11 @@ def create_commercial_sale(package, *, payment_method, member=None, guest_name='
             order = payment = None
             if not complimentary:
                 order = Order.objects.create(member=member, visit=visit, notes=f'Internet package: {package.name_ar}')
-                category, _ = Category.objects.get_or_create(name_ar='خدمات الإنترنت', defaults={'name_en': 'Internet services'})
-                product, _ = Product.objects.get_or_create(
-                    category=category, name_ar=package.name_ar, product_type=Product.ProductType.INTERNET,
-                    defaults={'price_syp': package.price_syp, 'item_type': Product.ItemType.SERVICE,
-                              'service_type': Product.ServiceType.INTERNET, 'visible_on_pos': False,
-                              'orderable_on_pos': False, 'visible_on_qr': False, 'requires_preparation': False})
+                # The package's catalog binding is its stable product identity.
+                # A name lookup is ambiguous when imported/legacy products share
+                # the same Arabic name, and can fail after the order is created.
+                from internet.catalog import ensure_package_catalog_product
+                product = ensure_package_catalog_product(package)
                 OrderItem.objects.create(order=order, product=product, quantity=1,
                     product_name_ar_snapshot=package.name_ar, unit_price_syp_snapshot=charged_price,
                     line_total_syp_snapshot=charged_price)
