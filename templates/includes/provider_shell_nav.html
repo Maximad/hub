@@ -1,0 +1,28 @@
+<header class="provider-app-header">
+  <div class="hub-container provider-app-header__inner">
+    <a class="provider-app-header__brand" href="{% url 'internet_provider_dashboard' %}">
+      <span class="provider-app-header__mark">هَبّ</span>
+      <span><strong>إدارة الإنترنت</strong><small>{{ provider_partner.name|default:'مزوّد الإنترنت' }}</small></span>
+    </a>
+    <nav class="provider-desktop-nav" aria-label="تنقل مزوّد الإنترنت">
+      <a{% if request.path == '/provider/' %} aria-current="page"{% endif %} href="{% url 'internet_provider_dashboard' %}">الرئيسية</a>
+      {% if provider_caps.internet_view_members %}<a{% if '/provider/members/' in request.path %} aria-current="page"{% endif %} href="{% url 'internet_provider_members' %}">العملاء</a>{% endif %}
+      {% if provider_caps.internet_view_subscriptions %}<a{% if '/provider/subscriptions/' in request.path %} aria-current="page"{% endif %} href="{% url 'internet_provider_subscriptions' %}">الاشتراكات</a>{% endif %}
+      {% if provider_caps.internet_view_sessions %}<a{% if '/provider/sessions/' in request.path %} aria-current="page"{% endif %} href="{% url 'internet_provider_sessions' %}">الجلسات</a>{% endif %}
+      {% if provider_caps.internet_view_packages %}<a{% if '/provider/packages/' in request.path %} aria-current="page"{% endif %} href="{% url 'internet_provider_packages' %}">الباقات</a>{% endif %}
+      {% if provider_caps.internet_view_network %}<a{% if '/provider/network/' in request.path %} aria-current="page"{% endif %} href="{% url 'internet_provider_network' %}">الشبكة</a>{% endif %}
+      {% if provider_caps.internet_view_reports %}<a{% if '/provider/reports' in request.path %} aria-current="page"{% endif %} href="{% url 'internet_provider_reports' %}">التقارير</a>{% endif %}
+    </nav>
+    <div class="provider-app-header__user">
+      <span><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>{{ request.user.get_role_display }}</small></span>
+      <form method="post" action="{% url 'internet_provider_logout' %}">{% csrf_token %}<button type="submit">خروج</button></form>
+    </div>
+  </div>
+</header>
+<nav class="provider-mobile-nav" aria-label="تنقل مزوّد الإنترنت على الهاتف">
+  <a{% if request.path == '/provider/' %} aria-current="page"{% endif %} href="{% url 'internet_provider_dashboard' %}"><span>⌂</span>الرئيسية</a>
+  {% if provider_caps.internet_view_members %}<a{% if '/provider/members/' in request.path %} aria-current="page"{% endif %} href="{% url 'internet_provider_members' %}"><span>◎</span>العملاء</a>{% endif %}
+  {% if provider_caps.internet_view_subscriptions %}<a{% if '/provider/subscriptions/' in request.path %} aria-current="page"{% endif %} href="{% url 'internet_provider_subscriptions' %}"><span>▣</span>الاشتراكات</a>{% endif %}
+  {% if provider_caps.internet_view_sessions %}<a{% if '/provider/sessions/' in request.path %} aria-current="page"{% endif %} href="{% url 'internet_provider_sessions' %}"><span>◷</span>الجلسات</a>{% endif %}
+  <a href="{% url 'internet_provider_settings' %}"><span>⋯</span>المزيد</a>
+</nav>

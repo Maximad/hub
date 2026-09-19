@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from accounts.forms import StaffUserEditForm
+from accounts.forms import StaffUserCreateForm, StaffUserEditForm
 from accounts.models import UserCapabilityOverride
 from accounts.permissions import get_staff_capabilities, user_has_capability
 
@@ -76,3 +76,43 @@ class StaffCapabilityTests(TestCase):
         form.save()
         self.assertTrue(user_has_capability(self.waiter, 'kitchen_board'))
         self.assertFalse(user_has_capability(self.waiter, 'reservations'))
+
+    def test_internet_provider_role_is_isolated_from_staff_and_has_provider_capabilities(self):
+        provider = get_user_model().objects.create_user(
+            username='cap-provider', password='pass', phone='+963100000004',
+            role='internet_provider',
+        )
+        self.assertTrue(user_has_capability(provider, 'provider_dashboard'))
+        self.assertTrue(user_has_capability(provider, 'internet_view_members'))
+        self.assertTrue(user_has_capability(provider, 'internet_manage_network'))
+        self.assertFalse(user_has_capability(provider, 'staff_home'))
+        self.assertFalse(user_has_capability(provider, 'finance'))
+        self.assertFalse(user_has_capability(provider, 'users'))
+
+    def test_create_form_requires_and_syncs_provider_association_without_admin_access(self):
+        from core.models import InternetPartner, InternetPartnerUser
+        partner = InternetPartner.objects.create(name='Form ISP', active=True)
+        form = StaffUserCreateForm(
+            data={
+                'username': 'form-provider',
+                'first_name': 'Provider',
+                'last_name': '',
+                'email': '',
+                'phone': '+963100000005',
+                'role': 'internet_provider',
+                'is_active': 'on',
+                'allow_django_admin_access': 'on',
+                'internet_partner': partner.pk,
+                'can_view_customer_phone': 'on',
+                'password': 'safe-test-password-8841',
+                'confirm_password': 'safe-test-password-8841',
+            },
+            actor=self.admin,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        provider = form.save()
+        association = InternetPartnerUser.objects.get(user=provider)
+        self.assertEqual(association.partner, partner)
+        self.assertTrue(association.can_view_customer_phone)
+        self.assertFalse(provider.is_staff)
+        self.assertFalse(provider.is_superuser)

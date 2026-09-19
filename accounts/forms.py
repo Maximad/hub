@@ -14,6 +14,9 @@ User = get_user_model()
 class StaffUserBaseForm(forms.ModelForm):
     allow_django_admin_access = forms.BooleanField(label='السماح بدخول Django admin (/admin/)', required=False)
     make_superuser = forms.BooleanField(label='جعله Superuser', required=False)
+    can_view_customer_phone = forms.BooleanField(
+        label='السماح بعرض أرقام هواتف عملاء الإنترنت', required=False,
+    )
 
     class Meta:
         model = User
@@ -38,6 +41,19 @@ class StaffUserBaseForm(forms.ModelForm):
         if self.instance and self.instance.pk:
             self.fields['allow_django_admin_access'].initial = self.instance.is_staff
             self.fields['make_superuser'].initial = self.instance.is_superuser
+        from core.models import InternetPartner, InternetPartnerUser
+        self.fields['internet_partner'] = forms.ModelChoiceField(
+            label='مزوّد الإنترنت المرتبط',
+            queryset=InternetPartner.objects.filter(active=True).order_by('name'),
+            required=False,
+            help_text='مطلوب فقط لدور مزوّد الإنترنت ويحدد البيانات التي يمكن للحساب رؤيتها.',
+            widget=forms.Select(attrs={'class': 'hub-input'}),
+        )
+        if self.instance and self.instance.pk:
+            association = InternetPartnerUser.objects.filter(user=self.instance).select_related('partner').first()
+            if association:
+                self.fields['internet_partner'].initial = association.partner
+                self.fields['can_view_customer_phone'].initial = association.can_view_customer_phone
         if not (actor and actor.is_superuser):
             self.fields.pop('make_superuser', None)
         if not is_owner_or_admin(actor):
@@ -55,6 +71,25 @@ class StaffUserBaseForm(forms.ModelForm):
             return phone
         return f'no-phone-{uuid.uuid4().hex[:12]}'
 
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get('role') == User.Role.INTERNET_PROVIDER and not cleaned.get('internet_partner'):
+            self.add_error('internet_partner', 'اختر مزوّد الإنترنت المرتبط بهذا الحساب.')
+        return cleaned
+
+    def _sync_provider_association(self, user):
+        from core.models import InternetPartnerUser
+        partner = self.cleaned_data.get('internet_partner')
+        if user.role != User.Role.INTERNET_PROVIDER or partner is None:
+            InternetPartnerUser.objects.filter(user=user).delete()
+            return
+        InternetPartnerUser.objects.filter(user=user).exclude(partner=partner).delete()
+        InternetPartnerUser.objects.update_or_create(
+            user=user,
+            partner=partner,
+            defaults={'can_view_customer_phone': bool(self.cleaned_data.get('can_view_customer_phone'))},
+        )
+
     def save(self, commit=True):
         user = super().save(commit=False)
         user.is_staff = bool(self.cleaned_data.get('allow_django_admin_access', False))
@@ -62,9 +97,15 @@ class StaffUserBaseForm(forms.ModelForm):
         if user.is_superuser:
             user.is_staff = True
             user.role = User.Role.ADMIN
+        elif user.role == User.Role.INTERNET_PROVIDER:
+            # Provider authentication has its own portal and must never imply
+            # access to Django admin.
+            user.is_staff = False
+            user.is_superuser = False
         if commit:
             user.save()
             self.save_m2m()
+            self._sync_provider_association(user)
         return user
 
 
@@ -88,12 +129,16 @@ class StaffUserCreateForm(StaffUserBaseForm):
     def save(self, commit=True):
         user = super().save(commit=False)
         user.set_password(self.cleaned_data['password'])
-        if user.role in {User.Role.CASHIER, User.Role.WAITER, User.Role.KITCHEN}:
+        if user.role in {
+            User.Role.CASHIER, User.Role.WAITER, User.Role.KITCHEN,
+            User.Role.BARTENDER, User.Role.INTERNET_PROVIDER,
+        }:
             user.is_staff = False
             user.is_superuser = False
         if commit:
             user.save()
             self.save_m2m()
+            self._sync_provider_association(user)
         return user
 
 

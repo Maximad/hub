@@ -616,7 +616,8 @@ class InternetHttpWorkflowTests(TestCase):
 
     def test_partner_cross_scope_and_expired_rendering(self):
         from django.contrib.auth import get_user_model
-        user = get_user_model().objects.create_user(username='partner', phone='0901', password='x')
+        user = get_user_model().objects.create_user(
+            username='partner', phone='0901', password='x', role='internet_provider')
         InternetPartnerUser.objects.create(partner=self.partner, user=user)
         own = create_entitlement(self.package)
         InternetEntitlement.objects.filter(pk=own.pk).update(valid_until=timezone.now() - timedelta(minutes=1))
@@ -635,7 +636,8 @@ class InternetHttpWorkflowTests(TestCase):
         paid_data = {**unpaid_data, 'payment_method': 'cash', 'idempotency_key': 'paid'}
         self.client.post(reverse('staff_internet_sale'), paid_data)
         from django.contrib.auth import get_user_model
-        user = get_user_model().objects.create_user(username='revenue-partner', phone='0902', password='x')
+        user = get_user_model().objects.create_user(
+            username='revenue-partner', phone='0902', password='x', role='internet_provider')
         InternetPartnerUser.objects.create(partner=self.partner, user=user)
         self.client.force_login(user)
         response = self.client.get(reverse('internet_partner_dashboard'))
@@ -668,7 +670,7 @@ class PartnerDashboardDateRangeTests(TestCase):
             price_syp=2000, access_mode='timed_session',
             session_minutes_limit=60, partner=self.partner)
         self.user = get_user_model().objects.create_user(
-            username='date-partner', phone='0903', password='x')
+            username='date-partner', phone='0903', password='x', role='internet_provider')
         InternetPartnerUser.objects.create(partner=self.partner, user=self.user)
         self.client.force_login(self.user)
         self.url = reverse('internet_partner_dashboard')
