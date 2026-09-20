@@ -116,6 +116,7 @@
       {% if staff_caps.reservations %}<a href="{% url 'staff_reservations' %}">الحجوزات</a>{% endif %}
       {% if staff_caps.events %}<a href="{% url 'staff_events' %}">الفعاليات</a>{% endif %}
       {% if workspace_caps.internet_billing %}<a href="{% url 'staff_members' %}">الأعضاء</a>{% endif %}
+      {% if workspace_caps.internet_billing %}<a href="{% url 'staff_internet' %}">الإنترنت والجلسات</a>{% endif %}
       {% if workspace_caps.inventory %}<a href="{% url 'staff_inventory_home' %}">المخزون</a>{% endif %}
       {% if workspace_caps.finance %}<a href="{% url 'staff_finance_home' %}">المالية</a>{% endif %}
       {% if workspace_caps.reports %}<a href="{% url 'staff_reports_home' %}">التقارير</a>{% endif %}

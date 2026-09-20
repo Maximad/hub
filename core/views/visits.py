@@ -110,6 +110,7 @@ def current_visit(request):
         'table_entry_url': table_entry_url,
         'active_internet_session': active_internet_session,
         'internet_self_service_enabled': internet_enabled,
+        'focus_internet': internet_enabled and request.GET.get('focus') == 'internet',
     }
     if internet_enabled:
         context.update(_internet_context(visit, visit.member, credential))

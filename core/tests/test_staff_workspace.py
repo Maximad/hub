@@ -185,6 +185,20 @@ class StaffWorkspaceTests(TestCase):
         self.assertNotContains(response, '>المالية</a>', html=False)
         self.assertNotContains(response, '>التقارير</a>', html=False)
 
+    def test_internet_tab_is_visible_to_staff_with_internet_capability(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse('staff_home'))
+        internet_url = reverse('staff_internet')
+
+        self.assertContains(response, f'href="{internet_url}">الإنترنت</a>')
+        self.assertContains(response, f'href="{internet_url}">الإنترنت والجلسات</a>')
+        self.assertEqual(self.client.get(internet_url).status_code, 200)
+
+        self.client.force_login(self.waiter)
+        waiter_home = self.client.get(reverse('staff_home'))
+        self.assertNotContains(waiter_home, f'href="{internet_url}">الإنترنت</a>')
+        self.assertNotContains(waiter_home, f'href="{internet_url}">الإنترنت والجلسات</a>')
+
     def test_kitchen_workspace_hides_customer_and_cashier_actions(self):
         self.client.force_login(self.kitchen)
         response = self.client.get(reverse('staff_home'))

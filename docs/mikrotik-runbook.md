@@ -24,6 +24,26 @@ encrypts per-entitlement HotSpot credentials at rest; rotation requires a
 separate controlled re-encryption procedure. Map each Hub bandwidth profile's
 optional `router_profile_name`, or configure `MIKROTIK_DEFAULT_PROFILE`.
 
+## Customer portal before Internet login
+
+The open SSID must let unauthenticated devices resolve and reach the Hub HTTPS
+hostname (currently `hubsweida.jwtalenthouse.com`) through the HotSpot
+walled garden. Permit the Hub host for `/wifi/`, `/menu/`, table menu and order
+routes, `/static/`, and any Hub-hosted `/media/` used by the menu; the router
+may authorize the host as a whole rather than individual paths. Keep the
+existing HotSpot login origin reachable so the one-tap relay can POST its
+credentials. Do not grant general Internet access by opening unrelated hosts.
+One-tap login also requires a working HTTPS HotSpot login servlet configured as
+`MIKROTIK_HOTSPOT_LOGIN_URL`; an HTTP-only CHAP login cannot use this relay.
+
+From a freshly connected phone with no Internet authorization, verify both
+paths: (1) tap **افتح المنيو واطلب**, view product images, submit a real test
+order, and see its confirmation without starting Wi-Fi; (2) return to
+`/wifi/`, tap **اتصل مجاناً**, let the router authorize the device, and confirm
+the browser lands on the menu. Repeat on Android and iOS captive browsers.
+If `/wifi/` fails with `ERR_CONNECTION_CLOSED`, fix the DNS, TLS, reverse proxy
+and walled-garden reachability before evaluating the Django page.
+
 ## Rollout
 
 Deploy and migrate first with integration disabled:
