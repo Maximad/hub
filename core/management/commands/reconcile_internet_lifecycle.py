@@ -60,7 +60,7 @@ class Command(BaseCommand):
                 ended.save(update_fields=('lifecycle_end_reason', 'updated_at'))
                 if session.entitlement_id:
                     enqueue_network_operation(
-                        session.entitlement, InternetNetworkOperation.Operation.REFRESH,
+                        session.entitlement, InternetNetworkOperation.Operation.DEAUTHENTICATE,
                         reason='authorization_expired',
                         idempotency_key=f'internet-session:{session.pk}:authorization-expired')
                 else:

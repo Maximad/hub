@@ -6,11 +6,12 @@ between the VPS and router; never expose REST directly to the public Internet.
 
 ## Router-side boundary
 
-The provider creates a least-privilege REST service account, a Hub-specific
-HotSpot server, and pre-created user profiles. Hub may read system resources and
-profiles and may create/update Hub HotSpot users and remove only their active
-sessions. It must never change interfaces, bridges, DHCP, routes, firewall,
-provider users, or unrelated sessions. Hub users carry
+The provider creates a least-privilege REST service account and a Hub-specific
+HotSpot server once. From the staff Internet settings page, Hub can then create
+or repair the two explicitly configured user profiles and the exact Hub portal
+walled-garden rule. It may also create/update Hub HotSpot users and remove only
+their active sessions. It must never change interfaces, bridges, DHCP, routes,
+firewall, provider users, or unrelated sessions. Hub users carry
 `hub-entitlement:<entitlement_id>`; a collision without that exact tag is refused.
 
 ## Configuration and TLS
@@ -23,23 +24,26 @@ Store the Basic Auth password and the independently generated Fernet
 encrypts per-entitlement HotSpot credentials at rest; rotation requires a
 separate controlled re-encryption procedure. Map each Hub bandwidth profile's
 optional `router_profile_name`, or configure `MIKROTIK_DEFAULT_PROFILE`.
+Set `MIKROTIK_PORTAL_HOST` to the public Hub hostname. The staff action
+**فحص ومزامنة إعدادات البوابة** is idempotent and records a secret-free audit.
 
 ## Customer portal before Internet login
 
-The open SSID must let unauthenticated devices resolve and reach the Hub HTTPS
-hostname (currently `hubsweida.jwtalenthouse.com`) through the HotSpot
-walled garden. Permit the Hub host for `/wifi/`, `/menu/`, table menu and order
-routes, `/static/`, and any Hub-hosted `/media/` used by the menu; the router
-may authorize the host as a whole rather than individual paths. Keep the
-existing HotSpot login origin reachable so the one-tap relay can POST its
-credentials. Do not grant general Internet access by opening unrelated hosts.
+The open SSID lets unauthenticated devices reach only the Hub HTTPS hostname
+(currently `hubsweida.jwtalenthouse.com`) through the HotSpot walled garden.
+The Hub hostname covers `/wifi/`, `/menu/`, table menu and order routes,
+`/static/`, and Hub-hosted `/media/`. The staff synchronization action maintains
+this exact host rule; it does not grant general Internet access. Keep the existing
+HotSpot login origin reachable so the one-tap relay can POST its credentials.
 One-tap login also requires a working HTTPS HotSpot login servlet configured as
 `MIKROTIK_HOTSPOT_LOGIN_URL`; an HTTP-only CHAP login cannot use this relay.
 
-From a freshly connected phone with no Internet authorization, verify both
+Before testing customers, open **Staff → Internet → Settings** and run
+**فحص ومزامنة إعدادات البوابة**. Then, from a freshly connected phone with no
+Internet authorization, verify both
 paths: (1) tap **افتح المنيو واطلب**, view product images, submit a real test
-order, and see its confirmation without starting Wi-Fi; (2) return to
-`/wifi/`, tap **اتصل مجاناً**, let the router authorize the device, and confirm
+order, and see its confirmation without starting Internet; (2) return to
+`/wifi/`, enter the venue PIN, let the router authorize the device, and confirm
 the browser lands on the menu. Repeat on Android and iOS captive browsers.
 If `/wifi/` fails with `ERR_CONNECTION_CLOSED`, fix the DNS, TLS, reverse proxy
 and walled-garden reachability before evaluating the Django page.

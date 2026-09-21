@@ -1884,6 +1884,7 @@ class InternetNetworkOperation(TimeStampedModel):
     class Operation(models.TextChoices):
         PROVISION = 'provision', 'Provision'
         REFRESH = 'refresh', 'Refresh'
+        DEAUTHENTICATE = 'deauthenticate', 'Deauthenticate active sessions'
         DISCONNECT = 'disconnect', 'Disconnect'
         EXPIRE = 'expire', 'Expire'
 

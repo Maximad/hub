@@ -29,8 +29,11 @@
     <section class="wifi-plan wifi-plan--fast wifi-plan--active">
       <div class="wifi-plan__top"><span class="wifi-plan__badge">جلسة مفعّلة</span><span>إنترنت سريع</span></div>
       <h2>جلسة الإنترنت السريع مفعّلة</h2>
-      <p>جلسة الإنترنت مفعّلة لهذا الجهاز. إذا لم يعمل الاتصال، افتح جلستك للمحاولة مجدداً.</p>
-      <a class="hub-button hub-button-primary wifi-plan__primary" href="{% url 'current_visit' %}#internet">عرض الاتصال</a>
+      <p>جلسة الإنترنت مفعّلة لهذا الجهاز. يمكنك العودة مباشرة إلى رصيد الإنترنت الأساسي المتبقي.</p>
+      <div class="wifi-plan__actions">
+        <a class="hub-button hub-button-primary" href="{% url 'current_visit' %}#internet">عرض الاتصال</a>
+        <form method="post" action="{% url 'visit_internet_session_stop' active_fast_wifi_session.public_code %}">{% csrf_token %}<button class="hub-button" type="submit">إيقاف السريع والعودة للأساسي</button></form>
+      </div>
     </section>
     {% elif active_guest_wifi_session %}
     <section class="wifi-plan wifi-plan--basic wifi-plan--active">

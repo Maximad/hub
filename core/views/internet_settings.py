@@ -18,6 +18,10 @@ from core.services.internet_operations import (
     requeue_failed_network_operation,
     run_readonly_mikrotik_healthcheck,
 )
+from core.services.mikrotik_portal_policy import (
+    desired_portal_policy,
+    sync_portal_policy,
+)
 from core.services.internet_readiness import (
     internet_readiness_report,
     mikrotik_enablement_preflight,
@@ -101,6 +105,44 @@ def _handle_operations_action(request):
         else:
             messages.success(request, 'أعيدت العملية إلى قائمة الانتظار. سيلتقطها عامل الإنترنت تلقائياً.')
         return True
+    if action == 'sync_mikrotik_portal_policy':
+        try:
+            report = sync_portal_policy()
+        except Exception as exc:
+            message = (
+                next(iter(exc.messages), 'تعذر مزامنة سياسة بوابة الشبكة.')
+                if isinstance(exc, ValidationError)
+                else 'تعذر مزامنة سياسة بوابة الشبكة. راجع اتصال MikroTik وصلاحيات حساب الخدمة.'
+            )
+            ActivityLog.objects.create(
+                actor=request.user,
+                action='internet.mikrotik_portal_policy_sync_failed',
+                details={'error_type': type(exc).__name__},
+            )
+            messages.error(request, message)
+        else:
+            ActivityLog.objects.create(
+                actor=request.user,
+                action='internet.mikrotik_portal_policy_synced',
+                details={
+                    'ready': report['ready'],
+                    'changes': report['changes'],
+                    'checks': [
+                        {'code': item['code'], 'ok': item['ok']}
+                        for item in report['checks']
+                    ],
+                },
+            )
+            if report['ready']:
+                changed = len(report['changes'])
+                messages.success(
+                    request,
+                    f'بوابة الشبكة جاهزة. أصلح هَبّ {changed} إعداداً.'
+                    if changed else 'بوابة الشبكة جاهزة ولا تحتاج إلى تغييرات.',
+                )
+            else:
+                messages.warning(request, 'اكتملت المزامنة لكن بقي فحص غير ناجح؛ راجع النتيجة أدناه.')
+        return True
     return False
 
 
@@ -145,6 +187,22 @@ def internet_settings(request):
     readiness = internet_readiness_report()
     preflight = mikrotik_enablement_preflight()
     state = preflight['state']
+    try:
+        portal_policy = desired_portal_policy()
+        portal_policy_error = ''
+    except ValidationError as exc:
+        portal_policy = None
+        portal_policy_error = next(iter(exc.messages), 'إعداد سياسة البوابة غير مكتمل.')
+    last_portal_policy_sync = (
+        ActivityLog.objects.filter(
+            action__in=(
+                'internet.mikrotik_portal_policy_synced',
+                'internet.mikrotik_portal_policy_sync_failed',
+            ),
+        )
+        .order_by('-created_at', '-pk')
+        .first()
+    )
 
     entitlement_counts = {
         status: InternetNetworkOperation.objects.filter(status=status).count()
@@ -205,6 +263,9 @@ def internet_settings(request):
         'preflight': preflight,
         'operations_state': state,
         'worker_fresh': worker_is_fresh(state),
+        'portal_policy': portal_policy,
+        'portal_policy_error': portal_policy_error,
+        'last_portal_policy_sync': last_portal_policy_sync,
         'entitlement_counts': entitlement_counts,
         'session_counts': session_counts,
         'entitlement_operations': entitlement_operations,

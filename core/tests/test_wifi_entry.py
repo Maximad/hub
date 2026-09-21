@@ -4,7 +4,16 @@ from urllib.parse import urlsplit
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from core.models import HubVisit, HubVisitBrowserCredential, Room, SystemSetting, TableArea
+from core.models import (
+    Category,
+    HubVisit,
+    HubVisitBrowserCredential,
+    InternetSession,
+    Product,
+    Room,
+    SystemSetting,
+    TableArea,
+)
 from core.settings_helpers import get_system_settings
 from locations.models import TableAreaSettings
 from internet.models import GuestWifiPolicy
@@ -153,3 +162,60 @@ class WifiEntryTests(TestCase):
         menu = self.client.get(reverse('menu_public'))
         self.assertEqual(menu.status_code, 200)
         self.assertEqual(HubVisit.objects.count(), 0)
+
+    def test_stopping_fast_restores_remaining_basic_allowance(self):
+        category = Category.objects.create(name_ar='خدمات')
+        internet_product = Product.objects.create(
+            category=category,
+            name_ar='إنترنت حسب الوقت',
+            price_syp=0,
+            product_type=Product.ProductType.INTERNET,
+            item_type=Product.ItemType.SERVICE,
+            service_type=Product.ServiceType.INTERNET,
+            requires_preparation=False,
+            visible_on_qr=False,
+            orderable_on_qr=False,
+            visible_on_pos=False,
+            orderable_on_pos=False,
+            not_discountable=True,
+            track_margin=False,
+        )
+        SystemSetting.objects.create(
+            customer_visits_enabled=True,
+            customer_internet_self_service_enabled=True,
+            internet_metered_enabled=True,
+            default_rate_per_hour_syp=600,
+            default_minimum_minutes=1,
+            default_rounding_increment_minutes=1,
+            auto_create_order_for_metered_sessions=True,
+            internet_service_product=internet_product,
+        )
+        get_system_settings.cache_clear()
+        policy = GuestWifiPolicy.objects.get(key='default')
+        policy.enabled = True
+        policy.require_venue_code = False
+        policy.save(update_fields=['enabled', 'require_venue_code', 'updated_at'])
+
+        basic_start = self.client.post(reverse('wifi_entry'), {
+            'wifi_action': 'start_guest_wifi',
+        })
+        self.assertEqual(basic_start.status_code, 302)
+        first_basic = InternetSession.objects.get(billing_mode=InternetSession.BillingMode.FREE)
+
+        fast_start = self.client.post(reverse('visit_internet_start'), {'mode': 'metered'})
+        self.assertEqual(fast_start.status_code, 302)
+        first_basic.refresh_from_db()
+        self.assertEqual(first_basic.status, InternetSession.Status.ENDED)
+        fast = InternetSession.objects.get(billing_mode=InternetSession.BillingMode.OPEN_METERED)
+
+        stopped = self.client.post(reverse(
+            'visit_internet_session_stop', kwargs={'public_code': fast.public_code},
+        ))
+
+        self.assertEqual(stopped.status_code, 302)
+        self.assertEqual(stopped['Location'], reverse('wifi_entry'))
+        fast.refresh_from_db()
+        self.assertEqual(fast.status, InternetSession.Status.BILLED)
+        active = InternetSession.objects.get(status=InternetSession.Status.ACTIVE)
+        self.assertEqual(active.billing_mode, InternetSession.BillingMode.FREE)
+        self.assertNotEqual(active.pk, first_basic.pk)
