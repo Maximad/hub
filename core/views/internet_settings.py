@@ -18,15 +18,12 @@ from core.services.internet_operations import (
     requeue_failed_network_operation,
     run_readonly_mikrotik_healthcheck,
 )
-from core.services.mikrotik_portal_policy import (
-    desired_portal_policy,
-    sync_portal_policy,
-)
 from core.services.internet_readiness import (
     internet_readiness_report,
     mikrotik_enablement_preflight,
     worker_is_fresh,
 )
+from core.services.mikrotik_portal_policy import configured_router_mappings
 from internet.guest_wifi import current_venue_code
 from internet.models import GuestWifiPolicy, InternetSessionNetworkOperation, WifiNetwork
 
@@ -49,15 +46,15 @@ class PartnerForm(forms.ModelForm):
 
 
 class ProfileForm(forms.ModelForm):
+    """Django-side profile metadata and RouterOS-name mapping only."""
+
     class Meta:
         model = InternetBandwidthProfile
-        fields = ('code', 'name', 'download_limit_kbps', 'upload_limit_kbps', 'router_profile_name', 'is_active')
+        fields = ('code', 'name', 'router_profile_name', 'is_active')
         labels = {
             'code': 'الرمز الداخلي',
-            'name': 'اسم ملف السرعة',
-            'download_limit_kbps': 'سرعة التنزيل (Kbps)',
-            'upload_limit_kbps': 'سرعة الرفع (Kbps)',
-            'router_profile_name': 'اسم الملف في RouterOS',
+            'name': 'اسم ملف الاتصال',
+            'router_profile_name': 'اسم الملف الموجود في RouterOS',
             'is_active': 'ملف فعّال',
         }
 
@@ -138,42 +135,15 @@ def _handle_operations_action(request):
             messages.success(request, 'أعيدت العملية إلى قائمة الانتظار. سيلتقطها عامل الإنترنت تلقائياً.')
         return True
     if action == 'sync_mikrotik_portal_policy':
-        try:
-            report = sync_portal_policy()
-        except Exception as exc:
-            message = (
-                next(iter(exc.messages), 'تعذر مزامنة سياسة بوابة الشبكة.')
-                if isinstance(exc, ValidationError)
-                else 'تعذر مزامنة سياسة بوابة الشبكة. راجع اتصال MikroTik وصلاحيات حساب الخدمة.'
-            )
-            ActivityLog.objects.create(
-                actor=request.user,
-                action='internet.mikrotik_portal_policy_sync_failed',
-                details={'error_type': type(exc).__name__},
-            )
-            messages.error(request, message)
-        else:
-            ActivityLog.objects.create(
-                actor=request.user,
-                action='internet.mikrotik_portal_policy_synced',
-                details={
-                    'ready': report['ready'],
-                    'changes': report['changes'],
-                    'checks': [
-                        {'code': item['code'], 'ok': item['ok']}
-                        for item in report['checks']
-                    ],
-                },
-            )
-            if report['ready']:
-                changed = len(report['changes'])
-                messages.success(
-                    request,
-                    f'بوابة الشبكة جاهزة. أصلح هَبّ {changed} إعداداً.'
-                    if changed else 'بوابة الشبكة جاهزة ولا تحتاج إلى تغييرات.',
-                )
-            else:
-                messages.warning(request, 'اكتملت المزامنة لكن بقي فحص غير ناجح؛ راجع النتيجة أدناه.')
+        ActivityLog.objects.create(
+            actor=request.user,
+            action='internet.mikrotik_portal_policy_sync_rejected',
+            details={'reason': 'router_configuration_is_provider_managed'},
+        )
+        messages.error(
+            request,
+            'تم إيقاف مزامنة إعدادات الراوتر من هَبّ. إعداد MikroTik ثابت ويُدار خارج Django.',
+        )
         return True
     return False
 
@@ -220,21 +190,11 @@ def internet_settings(request):
     preflight = mikrotik_enablement_preflight()
     state = preflight['state']
     try:
-        portal_policy = desired_portal_policy()
-        portal_policy_error = ''
+        router_mappings = configured_router_mappings()
+        router_mapping_error = ''
     except ValidationError as exc:
-        portal_policy = None
-        portal_policy_error = next(iter(exc.messages), 'إعداد سياسة البوابة غير مكتمل.')
-    last_portal_policy_sync = (
-        ActivityLog.objects.filter(
-            action__in=(
-                'internet.mikrotik_portal_policy_synced',
-                'internet.mikrotik_portal_policy_sync_failed',
-            ),
-        )
-        .order_by('-created_at', '-pk')
-        .first()
-    )
+        router_mappings = None
+        router_mapping_error = next(iter(exc.messages), 'ربط ملفات RouterOS غير مكتمل.')
 
     entitlement_counts = {
         status: InternetNetworkOperation.objects.filter(status=status).count()
@@ -307,9 +267,8 @@ def internet_settings(request):
         'preflight': preflight,
         'operations_state': state,
         'worker_fresh': worker_is_fresh(state),
-        'portal_policy': portal_policy,
-        'portal_policy_error': portal_policy_error,
-        'last_portal_policy_sync': last_portal_policy_sync,
+        'router_mappings': router_mappings,
+        'router_mapping_error': router_mapping_error,
         'entitlement_counts': entitlement_counts,
         'session_counts': session_counts,
         'entitlement_operations': entitlement_operations,
@@ -345,8 +304,12 @@ def internet_profile_save(request, profile_id=None):
     form = ProfileForm(request.POST, instance=profile)
     if form.is_valid():
         profile = form.save()
-        ActivityLog.objects.create(actor=request.user, action='internet.bandwidth_profile_changed', details={'profile_id': profile.pk, 'fields_changed': form.changed_data})
-        messages.success(request, 'تم حفظ ملف السرعة.')
+        ActivityLog.objects.create(
+            actor=request.user,
+            action='internet.bandwidth_profile_changed',
+            details={'profile_id': profile.pk, 'fields_changed': form.changed_data},
+        )
+        messages.success(request, 'تم حفظ ملف الاتصال وربطه المحلي. لا يغيّر هذا إعدادات RouterOS.')
     else:
         messages.error(request, '; '.join(sum(form.errors.values(), [])))
     return redirect('staff_internet_settings')
