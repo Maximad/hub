@@ -196,6 +196,11 @@ class WifiEntryTests(TestCase):
 
         self.assertEqual(started.status_code, 302)
         self.assertEqual(started['Location'], reverse('wifi_entry') + '?mode=internet')
+        session = InternetSession.objects.get(status=InternetSession.Status.ACTIVE)
+        session.network_provider = InternetSession.NetworkProvider.MIKROTIK
+        session.network_status = NOT_PROVISIONED
+        session.save(update_fields=['network_provider', 'network_status', 'updated_at'])
+
         page = self.client.get(started['Location'])
         self.assertContains(page, 'قيد التجهيز')
         self.assertContains(page, 'الشبكة لم تؤكد الجاهزية بعد')
