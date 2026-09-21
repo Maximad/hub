@@ -52,51 +52,60 @@ class RouterOSClient:
         except (ValueError, json.JSONDecodeError) as exc:
             raise MikroTikConnectionError('أعاد MikroTik استجابة غير صالحة.') from exc
 
-    def system_resource(self): return self._call('GET', 'system/resource')
+    def system_resource(self):
+        return self._call('GET', 'system/resource')
 
     def find_hotspot_user(self, name):
-        rows = self._call('GET', 'ip/hotspot/user?' + parse.urlencode({'.proplist': '.id,name,comment,disabled', 'name': name}))
+        rows = self._call(
+            'GET',
+            'ip/hotspot/user?' + parse.urlencode({
+                '.proplist': '.id,name,comment,disabled',
+                'name': name,
+            }),
+        )
         return rows[0] if rows else None
 
-    def create_hotspot_user(self, values): return self._call('PUT', 'ip/hotspot/user', values)
+    def create_hotspot_user(self, values):
+        return self._call('PUT', 'ip/hotspot/user', values)
+
     def update_hotspot_user(self, remote_id, values):
-        return self._call('PATCH', f'ip/hotspot/user/{parse.quote(remote_id, safe="*")}', values)
+        return self._call(
+            'PATCH',
+            f'ip/hotspot/user/{parse.quote(remote_id, safe="*")}',
+            values,
+        )
+
     def find_profile(self, name):
-        rows = self._call('GET', 'ip/hotspot/user/profile?' + parse.urlencode({
-            '.proplist': '.id,name,rate-limit,shared-users,comment,disabled',
-            'name': name,
-        }))
-        return rows[0] if rows else None
-    def create_profile(self, values):
-        return self._call('PUT', 'ip/hotspot/user/profile', values)
-    def update_profile(self, remote_id, values):
-        return self._call(
-            'PATCH',
-            f'ip/hotspot/user/profile/{parse.quote(remote_id, safe="*")}',
-            values,
+        rows = self._call(
+            'GET',
+            'ip/hotspot/user/profile?' + parse.urlencode({
+                '.proplist': '.id,name,rate-limit,shared-users,comment,disabled',
+                'name': name,
+            }),
         )
+        return rows[0] if rows else None
+
     def find_hotspot_server(self, name):
-        rows = self._call('GET', 'ip/hotspot?' + parse.urlencode({
-            '.proplist': '.id,name,profile,disabled,invalid',
-            'name': name,
-        }))
-        return rows[0] if rows else None
-    def find_walled_garden(self, *, server, dst_host):
-        rows = self._call('GET', 'ip/hotspot/walled-garden?' + parse.urlencode({
-            '.proplist': '.id,server,dst-host,action,disabled,comment',
-            'server': server,
-            'dst-host': dst_host,
-        }))
-        return rows[0] if rows else None
-    def create_walled_garden(self, values):
-        return self._call('PUT', 'ip/hotspot/walled-garden', values)
-    def update_walled_garden(self, remote_id, values):
-        return self._call(
-            'PATCH',
-            f'ip/hotspot/walled-garden/{parse.quote(remote_id, safe="*")}',
-            values,
+        rows = self._call(
+            'GET',
+            'ip/hotspot?' + parse.urlencode({
+                '.proplist': '.id,name,profile,disabled,invalid',
+                'name': name,
+            }),
         )
+        return rows[0] if rows else None
+
     def active_sessions(self, name):
-        return self._call('GET', 'ip/hotspot/active?' + parse.urlencode({'.proplist': '.id,user', 'user': name}))
+        return self._call(
+            'GET',
+            'ip/hotspot/active?' + parse.urlencode({
+                '.proplist': '.id,user',
+                'user': name,
+            }),
+        )
+
     def remove_active(self, remote_id):
-        return self._call('DELETE', f'ip/hotspot/active/{parse.quote(remote_id, safe="*")}')
+        return self._call(
+            'DELETE',
+            f'ip/hotspot/active/{parse.quote(remote_id, safe="*")}',
+        )
