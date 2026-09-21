@@ -1,82 +1,130 @@
 # MikroTik HotSpot runbook
 
-Hub supports **RouterOS v7 HTTPS REST** only. Keep `MIKROTIK_ENABLED=false` until
-the provider has prepared dedicated Hub resources. Prefer a private tunnel
-between the VPS and router; never expose REST directly to the public Internet.
+Hub uses an existing RouterOS v7 HotSpot through HTTPS REST. The current router
+setup is a fixed external dependency. Django may inspect the configured resources
+and perform normal customer-session operations, but it must not configure or
+repair the router.
+
+## Current fixed resources
+
+The current Hub mappings are:
+
+- basic Internet → `hub-slow`
+- fast Internet → `hub-full`
+- HotSpot server → `hub-hotspot`
+
+These names refer to resources already configured on MikroTik. Do not rewrite
+their rate limits, comments, shared-user limits, enabled state, or other RouterOS
+properties from Hub Suite.
 
 ## Router-side boundary
 
-The provider creates a least-privilege REST service account and a Hub-specific
-HotSpot server once. From the staff Internet settings page, Hub can then create
-or repair the two explicitly configured user profiles and the exact Hub portal
-walled-garden rule. It may also create/update Hub HotSpot users and remove only
-their active sessions. It must never change interfaces, bridges, DHCP, routes,
-firewall, provider users, or unrelated sessions. Hub users carry
-`hub-entitlement:<entitlement_id>`; a collision without that exact tag is refused.
+Django may:
+
+- read basic RouterOS health/resource information;
+- look up the configured HotSpot server and mapped user profiles;
+- create/update Hub HotSpot users when provisioning customer access;
+- remove only the active HotSpot sessions that belong to Hub-managed access.
+
+Django must not:
+
+- create/update HotSpot user profiles;
+- create/update walled-garden rules;
+- change interfaces, bridges, DHCP, DNS, routes, NAT, firewall, queues,
+  certificates, HotSpot server settings, router accounts, permissions, or firmware;
+- run router-writing setup during migrations, startup, deployment, readiness
+  checks, settings saves, or tests.
+
+Hub users continue to carry the existing Hub ownership marker used by the
+session integration. Router configuration and customer-session operations are
+separate concerns.
+
+## Django profile records
+
+`InternetBandwidthProfile` remains the application-side record used by packages,
+sessions and policies. Its `router_profile_name` maps a Django profile to an
+existing RouterOS profile.
+
+Historical `download_limit_kbps` and `upload_limit_kbps` values are descriptive
+application metadata only. They are not desired RouterOS configuration and must
+not be pushed to the router or compared with RouterOS rate limits to decide
+whether a mapping is usable.
+
+A read-only mapping diagnostic may confirm that:
+
+- `hub-hotspot` exists and is usable;
+- the mapped profile name exists and is enabled.
+
+It must not require rate/comment/shared-user equality and must not require a
+Hub-managed walled-garden rule.
 
 ## Configuration and TLS
 
-Copy the `MIKROTIK_*` variables from `.env.example`. `MIKROTIK_BASE_URL` is an
-HTTPS origin (an existing `/rest` suffix is accepted). TLS verification defaults
-on. Set `MIKROTIK_CA_FILE` to the mounted private-CA bundle when applicable.
-Store the Basic Auth password and the independently generated Fernet
-`MIKROTIK_CREDENTIAL_KEY` only in the deployment secret store. The latter
-encrypts per-entitlement HotSpot credentials at rest; rotation requires a
-separate controlled re-encryption procedure. Map each Hub bandwidth profile's
-optional `router_profile_name`, or configure `MIKROTIK_DEFAULT_PROFILE`.
-Set `MIKROTIK_PORTAL_HOST` to the public Hub hostname. The staff action
-**فحص ومزامنة إعدادات البوابة** is idempotent and records a secret-free audit.
+Copy the required `MIKROTIK_*` connection/session variables from `.env.example`.
+`MIKROTIK_BASE_URL` is an HTTPS origin and TLS verification should remain
+enabled. Secrets and the Fernet `MIKROTIK_CREDENTIAL_KEY` stay in deployment
+secrets and must never be rendered in staff pages or logs.
+
+A successful read-only check proves only that the configured read operation
+succeeded. It does not prove broader write permissions and must not be presented
+as such.
+
+If a RouterOS operation fails, report the application step and a safe error
+category. Do not expose credentials, Authorization headers, raw RouterOS
+responses, or infer that broader service-account permissions are required
+without verified evidence.
 
 ## Customer portal before Internet login
 
-The open SSID lets unauthenticated devices reach only the Hub HTTPS hostname
-(currently `hubsweida.jwtalenthouse.com`) through the HotSpot walled garden.
-The Hub hostname covers `/wifi/`, `/menu/`, table menu and order routes,
-`/static/`, and Hub-hosted `/media/`. The staff synchronization action maintains
-this exact host rule; it does not grant general Internet access. Keep the existing
-HotSpot login origin reachable so the one-tap relay can POST its credentials.
-One-tap login also requires a working HTTPS HotSpot login servlet configured as
-`MIKROTIK_HOTSPOT_LOGIN_URL`; an HTTP-only CHAP login cannot use this relay.
+The customer flow is owned by Django, but reachability before HotSpot
+authorization still depends on the unchanged network configuration.
 
-Before testing customers, open **Staff → Internet → Settings** and run
-**فحص ومزامنة إعدادات البوابة**. Then, from a freshly connected phone with no
-Internet authorization, verify both
-paths: (1) tap **افتح المنيو واطلب**, view product images, submit a real test
-order, and see its confirmation without starting Internet; (2) return to
-`/wifi/`, enter the venue PIN, let the router authorize the device, and confirm
-the browser lands on the menu. Repeat on Android and iOS captive browsers.
-If `/wifi/` fails with `ERR_CONNECTION_CLOSED`, fix the DNS, TLS, reverse proxy
-and walled-garden reachability before evaluating the Django page.
+Hub Suite may provide `/wifi/`, `/menu/`, ordering and the existing login relay.
+Django cannot make an unreachable pre-login hostname reachable by itself. If a
+designated-device flow test shows that the Hub hostname is unreachable before
+login, record it as an external network limitation. Do not silently add router
+configuration work to an application deployment.
 
-## Rollout
+## Application deployment
 
-Deploy and migrate first with integration disabled:
+The Django deployment has no router synchronization step.
 
-```sh
-MIKROTIK_ENABLED=false python manage.py migrate
-MIKROTIK_ENABLED=false python manage.py check
-MIKROTIK_ENABLED=false python manage.py mikrotik_healthcheck
-```
+Normal application rollout remains:
 
-After private connectivity, certificates, account, server and profiles exist:
+1. create/verify the application/database backup required by the main deployment
+   runbook;
+2. deploy the reviewed Django code;
+3. run migrations;
+4. collect static files;
+5. restart the application;
+6. run Django/system smoke tests;
+7. optionally run the read-only MikroTik health check;
+8. test customer flows on a designated device against the unchanged network.
 
-```sh
-python manage.py mikrotik_healthcheck
-python manage.py mikrotik_canary <ENTITLEMENT_ID>
-python manage.py mikrotik_canary <ENTITLEMENT_ID> --execute
-```
+Never run profile synchronization, walled-garden synchronization, speed setup, or
+other RouterOS configuration as part of deploy, startup, migrations or readiness
+checks.
 
-The first canary is read-only; `--execute` is mandatory and affects one
-entitlement. To roll back immediately, set `MIKROTIK_ENABLED=false`, restart the
-application, and continue with the Manual backend. Disabling Hub does not mutate
-the router.
+## Session operations
+
+Normal service operations remain supported through the existing integration:
+customer access provisioning, selecting an existing mapped profile, and session
+termination.
+
+These operations must run only when the customer/session workflow requires them.
+They must never be executed merely to inspect settings or prove readiness.
 
 ## Troubleshooting
 
-Configuration errors indicate missing HTTPS URL, credentials, HotSpot server,
-profile, CA, or encryption key. Authentication errors require the provider to
-check only the dedicated service account. Connection errors require checking the
-private tunnel, DNS, firewall reachability and certificate chain. Provisioning
-errors preserve sales/payment state and put only network state into error. Never
-paste Authorization headers, cookies, secrets, or full RouterOS responses into
-logs or tickets.
+Keep these states separate:
+
+- Django configuration completeness;
+- last successful read-only router connection check;
+- Internet worker freshness;
+- provisioning/termination operation failures.
+
+Display timestamps and unknown/stale states where appropriate. A failure in one
+state must not be rewritten as a claim about another state.
+
+If the staff page receives an old/direct request for the retired portal-sync
+action, Django must reject it without making any RouterOS configuration call.
