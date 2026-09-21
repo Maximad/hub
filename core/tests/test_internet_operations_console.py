@@ -6,8 +6,9 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from core.models import InternetSession
+from core.models import ActivityLog, InternetSession
 from core.services.internet_readiness import mikrotik_enablement_preflight
+from core.services.mikrotik import MikroTikAuthenticationError
 from internet.models import (
     InternetOperationsState,
     InternetSessionNetworkOperation,
@@ -59,14 +60,41 @@ class InternetOperationsConsoleTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'تشغيل وإعدادات الإنترنت')
-        self.assertContains(response, 'جاهزية MikroTik')
+        self.assertContains(response, 'اتصال MikroTik للقراءة')
+        self.assertContains(response, 'متطلبات تشغيل تكامل Django')
         self.assertContains(response, 'طوابير عمليات الشبكة')
         self.assertContains(response, 'شركاء الإنترنت')
         self.assertContains(response, 'التشخيص المتقدم')
         self.assertContains(response, 'المزوّد وملفات الاتصال والشبكات')
         self.assertContains(response, 'اسم المزوّد')
+        self.assertContains(response, 'لا يثبت صلاحية إنشاء أو تعديل أي مورد على الراوتر')
         self.assertNotContains(response, 'do-not-render-this-password')
         self.assertNotContains(response, 'do-not-render-this-key')
+
+    def test_router_read_worker_and_operation_states_are_independent(self):
+        now = timezone.now()
+        InternetOperationsState.objects.create(
+            key='default',
+            last_worker_seen_at=now - timedelta(minutes=2),
+            last_mikrotik_check_at=now,
+            last_mikrotik_check_ok=True,
+            last_mikrotik_check_message='اتصال MikroTik للقراءة فقط ناجح.',
+        )
+        ActivityLog.objects.create(
+            actor=self.user,
+            action='internet.mikrotik_readonly_healthcheck',
+            details={'ok': True, 'category': 'ok', 'step': 'system_resource_read'},
+        )
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        status = response.context['operations_status']
+        self.assertEqual(status['router']['code'], 'ok')
+        self.assertEqual(status['router']['label'], 'ناجح حديثاً')
+        self.assertIsNotNone(status['router']['last_success_at'])
+        self.assertEqual(status['worker']['code'], 'stale')
+        self.assertEqual(status['operations']['code'], 'ok')
 
     def test_failed_session_operation_can_be_requeued_without_network_io(self):
         session = self.make_session()
@@ -95,6 +123,27 @@ class InternetOperationsConsoleTests(TestCase):
         self.assertEqual(job.attempt_count, 2)
         self.assertEqual(job.last_error, 'temporary safe failure')
 
+    def test_failed_operation_renders_safe_category_not_raw_router_text(self):
+        session = self.make_session()
+        InternetSessionNetworkOperation.objects.create(
+            session=session,
+            operation=InternetSessionNetworkOperation.Operation.PROVISION,
+            status=InternetSessionNetworkOperation.Status.FAILED,
+            idempotency_key='console-safe-error',
+            attempt_count=1,
+            last_attempt_at=timezone.now(),
+            last_error='RAW-ROUTER-RESPONSE credential denied 403 internal-detail',
+        )
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'تعذر إكمال العملية باستخدام حساب الخدمة الحالي.')
+        self.assertNotContains(response, 'RAW-ROUTER-RESPONSE')
+        self.assertNotContains(response, 'internal-detail')
+        self.assertEqual(response.context['operations_status']['operations']['code'], 'failed')
+        self.assertIsNotNone(response.context['operations_status']['operations']['latest_failure'])
+
     def test_readonly_healthcheck_is_allowed_before_mikrotik_enablement(self):
         state = InternetOperationsState.objects.create(
             key='default',
@@ -114,6 +163,33 @@ class InternetOperationsConsoleTests(TestCase):
         self.assertTrue(state.last_mikrotik_check_ok)
         self.assertIsNotNone(state.last_mikrotik_check_at)
         self.assertNotIn('do-not-render-this-password', state.last_mikrotik_check_message)
+        log = ActivityLog.objects.filter(action='internet.mikrotik_readonly_healthcheck').latest('created_at')
+        self.assertEqual(log.details['category'], 'ok')
+        self.assertEqual(log.details['step'], 'system_resource_read')
+
+    def test_readonly_healthcheck_categorizes_auth_failure_without_permission_diagnosis(self):
+        state = InternetOperationsState.objects.create(key='default')
+        raw_error = 'RAW permission detail credential=secret-value'
+        with patch(
+            'core.services.internet_operations.RouterOSClient.system_resource',
+            side_effect=MikroTikAuthenticationError(raw_error),
+        ):
+            response = self.client.post(self.url, {
+                'operation_action': 'mikrotik_healthcheck',
+            })
+
+        self.assertEqual(response.status_code, 302)
+        state.refresh_from_db()
+        self.assertFalse(state.last_mikrotik_check_ok)
+        self.assertEqual(
+            state.last_mikrotik_check_message,
+            'تعذر التحقق من قراءة MikroTik باستخدام حساب الخدمة الحالي.',
+        )
+        self.assertNotIn('RAW', state.last_mikrotik_check_message)
+        self.assertNotIn('permission', state.last_mikrotik_check_message.lower())
+        log = ActivityLog.objects.filter(action='internet.mikrotik_readonly_healthcheck').latest('created_at')
+        self.assertEqual(log.details['category'], 'authentication')
+        self.assertEqual(log.details['step'], 'system_resource_read')
 
     def test_preflight_requires_fresh_worker_and_fresh_successful_router_check(self):
         state = InternetOperationsState.objects.create(

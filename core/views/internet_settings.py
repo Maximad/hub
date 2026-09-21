@@ -3,6 +3,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from accounts.permissions import require_staff_capability
@@ -20,7 +21,9 @@ from core.services.internet_operations import (
 )
 from core.services.internet_readiness import (
     internet_readiness_report,
+    mikrotik_check_is_fresh,
     mikrotik_enablement_preflight,
+    mikrotik_static_configured,
     worker_is_fresh,
 )
 from core.services.mikrotik_portal_policy import configured_router_mappings
@@ -70,6 +73,106 @@ def _speed_label(kbps):
     if kbps >= 1000 and kbps % 1000 == 0:
         return f'{kbps // 1000} Mbps'
     return f'{kbps} Kbps'
+
+
+def _safe_operation_error(value):
+    """Collapse stored network errors into operator-safe categories for the UI."""
+    text = (value or '').replace('\r', ' ').replace('\n', ' ').strip()
+    if not text:
+        return '—'
+    lowered = text.lower()
+    if any(marker in lowered for marker in ('tls', 'certificate', 'شهادة', 'timeout', 'connection', 'اتصال')):
+        return 'تعذر الاتصال بالشبكة أو التحقق من TLS.'
+    if any(marker in lowered for marker in ('authentication', 'authorization', 'credential', 'اعتماد', '401', '403')):
+        return 'تعذر إكمال العملية باستخدام حساب الخدمة الحالي.'
+    if any(marker in lowered for marker in ('profile', 'routeros', 'hotspot', 'ملف', 'مورد')):
+        return 'تعذر استخدام مورد الشبكة المطلوب لهذه العملية.'
+    return 'فشلت عملية الشبكة؛ راجع نوع العملية ووقت الفشل قبل إعادة المحاولة.'
+
+
+def _latest_failed_operation():
+    entitlement = InternetNetworkOperation.objects.filter(
+        status=InternetNetworkOperation.Status.FAILED,
+    ).order_by('-updated_at').first()
+    session = InternetSessionNetworkOperation.objects.filter(
+        status=InternetSessionNetworkOperation.Status.FAILED,
+    ).order_by('-updated_at').first()
+    candidates = []
+    if entitlement:
+        candidates.append(('entitlement', entitlement))
+    if session:
+        candidates.append(('session', session))
+    if not candidates:
+        return None
+    kind, operation = max(candidates, key=lambda item: item[1].updated_at)
+    return {
+        'kind': kind,
+        'id': operation.pk,
+        'step': operation.get_operation_display(),
+        'at': operation.updated_at,
+        'message': _safe_operation_error(operation.last_error),
+    }
+
+
+def _operations_status_context(*, state, router_mappings, router_mapping_error, failed_total, pending_total, at=None):
+    """Keep independent application, router-read, worker and operation states."""
+    now = at or timezone.now()
+    runtime_configured = mikrotik_static_configured()
+    mappings_configured = bool(router_mappings)
+    config_ok = runtime_configured and mappings_configured
+    django_config = {
+        'code': 'ready' if config_ok else 'incomplete',
+        'label': 'مكتمل' if config_ok else 'ناقص',
+        'runtime_configured': runtime_configured,
+        'mappings_configured': mappings_configured,
+        'enabled': bool(settings.MIKROTIK_ENABLED),
+        'detail': '' if config_ok else (router_mapping_error or 'إعدادات تكامل Django غير مكتملة.'),
+    }
+
+    check_at = state.last_mikrotik_check_at if state else None
+    check_ok = state.last_mikrotik_check_ok if state else None
+    check_fresh = mikrotik_check_is_fresh(state, at=now)
+    if not check_at or check_ok is None:
+        router = {'code': 'unknown', 'label': 'غير معروف', 'detail': 'لم يُسجّل فحص قراءة بعد.'}
+    elif check_ok is True and check_fresh:
+        router = {'code': 'ok', 'label': 'ناجح حديثاً', 'detail': state.last_mikrotik_check_message or ''}
+    elif check_ok is True:
+        router = {'code': 'stale', 'label': 'آخر نجاح قديم', 'detail': state.last_mikrotik_check_message or ''}
+    else:
+        router = {'code': 'failed', 'label': 'فشل آخر فحص', 'detail': state.last_mikrotik_check_message or ''}
+    router['last_check_at'] = check_at
+    last_success = ActivityLog.objects.filter(
+        action='internet.mikrotik_readonly_healthcheck',
+        details__ok=True,
+    ).order_by('-created_at').first()
+    router['last_success_at'] = last_success.created_at if last_success else None
+
+    heartbeat = state.last_worker_seen_at if state else None
+    if not heartbeat:
+        worker = {'code': 'unknown', 'label': 'غير معروف', 'detail': 'لا توجد نبضة عامل مسجلة.'}
+    elif worker_is_fresh(state, at=now):
+        worker = {'code': 'ok', 'label': 'يعمل', 'detail': 'النبضة حديثة.'}
+    else:
+        worker = {'code': 'stale', 'label': 'متأخر', 'detail': 'آخر نبضة أقدم من نافذة الجاهزية.'}
+    worker['last_seen_at'] = heartbeat
+    worker['last_lifecycle_at'] = state.last_lifecycle_at if state else None
+
+    if failed_total:
+        operations = {'code': 'failed', 'label': f'{failed_total} فاشلة'}
+    elif pending_total:
+        operations = {'code': 'pending', 'label': f'{pending_total} قيد التنفيذ'}
+    else:
+        operations = {'code': 'ok', 'label': 'سليمة'}
+    operations['failed_total'] = failed_total
+    operations['pending_total'] = pending_total
+    operations['latest_failure'] = _latest_failed_operation()
+
+    return {
+        'django_config': django_config,
+        'router': router,
+        'worker': worker,
+        'operations': operations,
+    }
 
 
 class GuestWifiPolicyForm(forms.ModelForm):
@@ -214,6 +317,8 @@ def internet_settings(request):
             'session', 'session__member', 'session__visit',
         ).order_by('-updated_at')[:30]
     )
+    for operation in entitlement_operations + session_operations:
+        operation.safe_error = _safe_operation_error(operation.last_error)
 
     active_session_rows = []
     sessions = (
@@ -239,6 +344,13 @@ def internet_settings(request):
         + session_counts.get('pending', 0)
         + session_counts.get('processing', 0)
     )
+    operations_status = _operations_status_context(
+        state=state,
+        router_mappings=router_mappings,
+        router_mapping_error=router_mapping_error,
+        failed_total=failed_total,
+        pending_total=pending_total,
+    )
 
     context = {
         'partners': InternetPartner.objects.order_by('-is_default', 'name'),
@@ -249,7 +361,7 @@ def internet_settings(request):
         'partner_overrides': packages.filter(partner__isnull=False).count(),
         'percent_overrides': packages.filter(partner_share_percent__isnull=False).count(),
         'mikrotik_enabled': settings.MIKROTIK_ENABLED,
-        'mikrotik_configured': bool(settings.MIKROTIK_BASE_URL and settings.MIKROTIK_HOTSPOT_SERVER),
+        'mikrotik_configured': mikrotik_static_configured(),
         'network_backends': WifiNetwork.objects.values_list('network_backend', flat=True).distinct(),
         'pending_network_operations': pending_total,
         'failed_network_operations': failed_total,
@@ -266,6 +378,7 @@ def internet_settings(request):
         'readiness': readiness,
         'preflight': preflight,
         'operations_state': state,
+        'operations_status': operations_status,
         'worker_fresh': worker_is_fresh(state),
         'router_mappings': router_mappings,
         'router_mapping_error': router_mapping_error,
@@ -275,7 +388,11 @@ def internet_settings(request):
         'session_operations': session_operations,
         'active_session_rows': active_session_rows,
         'advanced_diagnostics_open': bool(
-            failed_total or not worker_is_fresh(state) or readiness.get('status') == 'FAIL'
+            failed_total
+            or operations_status['worker']['code'] != 'ok'
+            or operations_status['router']['code'] in {'failed', 'stale'}
+            or operations_status['django_config']['code'] != 'ready'
+            or readiness.get('status') == 'FAIL'
         ),
     }
     return render(request, 'staff/internet_settings.html', context)

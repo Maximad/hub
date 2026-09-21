@@ -6,31 +6,44 @@
   <div>
     <p class="internet-policy-panel__eyebrow">الإنترنت والعمل</p>
     <h1 class="hub-section-title">تشغيل وإعدادات الإنترنت</h1>
-    <p class="hub-text-muted">الإعدادات اليومية أولاً، والتشخيص التقني عند الحاجة. لا تعرض الصفحة كلمات مرور أو مفاتيح.</p>
+    <p class="hub-text-muted">إعداد Django، اتصال القراءة، العامل وعمليات الشبكة تظهر كحالات مستقلة. لا تعرض الصفحة كلمات مرور أو مفاتيح ولا تدير إعدادات الراوتر.</p>
   </div>
   <a class="hub-button" href="{% url 'staff_internet' %}">العودة إلى الإنترنت</a>
 </section>
 
 <nav class="internet-settings-nav" aria-label="أقسام إعدادات الإنترنت">
   <a href="#basic-wifi-policy">اتصال الزبائن</a>
-  <a href="#network-control">الشبكة والربط</a>
+  <a href="#network-control">حالة الربط</a>
   <a href="#commercial-settings">المزوّد وملفات الاتصال</a>
   <a href="#advanced-diagnostics">التشخيص المتقدم</a>
 </nav>
 
-<section class="hub-section hub-summary-cards internet-settings-summary">
-  <div class="hub-summary-card"><span>النظام</span><strong class="metric">{% if readiness.status == 'PASS' %}جاهز{% elif readiness.status == 'WARN' %}يحتاج مراجعة{% else %}غير جاهز{% endif %}</strong></div>
-  <div class="hub-summary-card"><span>عامل الإنترنت</span><strong class="metric">{% if worker_fresh %}يعمل{% else %}متأخر{% endif %}</strong></div>
-  <div class="hub-summary-card"><span>اتصال MikroTik</span><strong class="metric">{% if preflight.ready %}جاهز{% else %}غير مكتمل{% endif %}</strong></div>
+<section class="hub-section hub-summary-cards internet-settings-summary" aria-label="حالة تشغيل الإنترنت">
+  <div class="hub-summary-card">
+    <span>إعداد Django</span><strong class="metric">{{ operations_status.django_config.label }}</strong>
+    <small>{% if operations_status.django_config.enabled %}التكامل مفعّل{% else %}التكامل معطّل{% endif %}</small>
+  </div>
+  <div class="hub-summary-card">
+    <span>اتصال القراءة</span><strong class="metric">{{ operations_status.router.label }}</strong>
+    <small>{% if operations_status.router.last_check_at %}آخر فحص: {{ operations_status.router.last_check_at }}{% else %}لا يوجد فحص محفوظ{% endif %}</small>
+  </div>
+  <div class="hub-summary-card">
+    <span>عامل الإنترنت</span><strong class="metric">{{ operations_status.worker.label }}</strong>
+    <small>{% if operations_status.worker.last_seen_at %}آخر نبضة: {{ operations_status.worker.last_seen_at }}{% else %}لا توجد نبضة محفوظة{% endif %}</small>
+  </div>
+  <div class="hub-summary-card">
+    <span>عمليات الشبكة</span><strong class="metric">{{ operations_status.operations.label }}</strong>
+    <small>{% if operations_status.operations.latest_failure %}آخر فشل: {{ operations_status.operations.latest_failure.at }}{% elif pending_network_operations %}هناك عمليات قيد التنفيذ{% else %}لا توجد أعطال معلقة{% endif %}</small>
+  </div>
   <div class="hub-summary-card"><span>الإنترنت الأساسي</span><strong class="metric">{% if guest_wifi_policy.enabled %}مفعّل{% else %}متوقف{% endif %}</strong></div>
-  <div class="hub-summary-card"><span>عمليات تحتاج انتباهاً</span><strong class="metric">{{ failed_network_operations }}</strong></div>
 </section>
 
 <section class="internet-settings-alerts" aria-label="تنبيهات التشغيل">
   {% if not guest_wifi_policy.enabled %}<div class="hub-alert hub-alert-warning"><strong>الاتصال الأساسي متوقف.</strong> لن يحصل الزائر على الإنترنت المجاني حتى تفعّله وتحفظ السياسة.</div>{% endif %}
-  {% if not router_mappings %}<div class="hub-alert hub-alert-danger"><strong>ربط ملفات RouterOS غير مكتمل.</strong> {{ router_mapping_error }} هذا ربط داخل Django فقط ولا يغيّر إعدادات الراوتر.</div>{% endif %}
-  {% if failed_network_operations %}<div class="hub-alert hub-alert-danger"><strong>{{ failed_network_operations }} عملية شبكة فاشلة.</strong> افتح التشخيص المتقدم لمراجعتها أو إعادتها للمحاولة.</div>{% endif %}
-  {% if not worker_fresh %}<div class="hub-alert hub-alert-warning"><strong>عامل الإنترنت متوقف أو متأخر.</strong> قد لا تُنفّذ تغييرات الجلسات والباقات تلقائياً.</div>{% endif %}
+  {% if operations_status.django_config.code != 'ready' %}<div class="hub-alert hub-alert-danger"><strong>إعداد تكامل Django غير مكتمل.</strong> {{ operations_status.django_config.detail }} هذا لا يعني وجود خلل في إعداد MikroTik نفسه.</div>{% endif %}
+  {% if operations_status.router.code == 'failed' %}<div class="hub-alert hub-alert-danger"><strong>فشل آخر فحص قراءة من MikroTik.</strong> {{ operations_status.router.detail }}</div>{% elif operations_status.router.code == 'stale' %}<div class="hub-alert hub-alert-warning"><strong>آخر فحص قراءة ناجح أصبح قديماً.</strong> شغّل فحص القراءة فقط إذا احتجت حالة أحدث.</div>{% endif %}
+  {% if failed_network_operations %}<div class="hub-alert hub-alert-danger"><strong>{{ failed_network_operations }} عملية شبكة فاشلة.</strong> افتح التشخيص المتقدم لمراجعة الخطوة والوقت أو إعادة المحاولة.</div>{% endif %}
+  {% if operations_status.worker.code != 'ok' %}<div class="hub-alert hub-alert-warning"><strong>عامل الإنترنت {{ operations_status.worker.label }}.</strong> {{ operations_status.worker.detail }}</div>{% endif %}
 </section>
 
 <section class="hub-section hub-card internet-policy-panel" id="basic-wifi-policy">
@@ -64,12 +77,16 @@
 </section>
 
 <section class="hub-section hub-card" id="network-control">
-  <div class="internet-settings-section-head"><div><p class="internet-policy-panel__eyebrow">الشبكة والربط</p><h2 class="hub-section-title">تحقق للقراءة فقط</h2></div><span class="hub-badge {% if router_mappings %}hub-badge-success{% else %}hub-badge-danger{% endif %}">{% if router_mappings %}الربط المحلي مكتمل{% else %}الربط غير مكتمل{% endif %}</span></div>
+  <div class="internet-settings-section-head"><div><p class="internet-policy-panel__eyebrow">حالة الربط</p><h2 class="hub-section-title">اتصال قراءة فقط</h2></div><span class="hub-badge {% if operations_status.router.code == 'ok' %}hub-badge-success{% elif operations_status.router.code == 'failed' %}hub-badge-danger{% else %}hub-badge-warning{% endif %}">{{ operations_status.router.label }}</span></div>
   <div class="internet-settings-action-grid">
     <article class="internet-settings-action-card">
-      <h3>فحص الاتصال</h3><p>قراءة آمنة لحالة MikroTik، من دون إنشاء مستخدمين أو تعديل الشبكة.</p>
-      <form method="post" action="{% url 'staff_internet_settings' %}">{% csrf_token %}<input type="hidden" name="operation_action" value="mikrotik_healthcheck"><button class="hub-button" type="submit">فحص MikroTik الآن</button></form>
-      <small>{% if operations_state.last_mikrotik_check_at %}آخر فحص: {{ operations_state.last_mikrotik_check_at }} — {% if operations_state.last_mikrotik_check_ok %}ناجح{% else %}فشل{% endif %}{% else %}لم يُجر فحص محفوظ بعد.{% endif %}</small>
+      <h3>فحص الاتصال</h3><p>يقرأ <code>system/resource</code> فقط. النجاح يثبت نجاح هذه القراءة ولا يختبر صلاحيات الكتابة أو تعديل الملفات أو إعدادات الراوتر.</p>
+      <form method="post" action="{% url 'staff_internet_settings' %}">{% csrf_token %}<input type="hidden" name="operation_action" value="mikrotik_healthcheck"><button class="hub-button" type="submit">فحص القراءة الآن</button></form>
+      <ul class="internet-settings-compact-list">
+        <li>آخر فحص: {{ operations_status.router.last_check_at|default:'غير معروف' }}</li>
+        <li>آخر قراءة ناجحة: {{ operations_status.router.last_success_at|default:'غير معروفة' }}</li>
+        <li>النتيجة: {{ operations_status.router.label }}</li>
+      </ul>
     </article>
     <article class="internet-settings-action-card">
       <h3>الربط مع الملفات الموجودة</h3>
@@ -96,21 +113,23 @@
       <details class="internet-settings-nested"><summary>إضافة ملف اتصال</summary><form class="internet-settings-form-grid" method="post" action="{% url 'staff_internet_profile_new' %}">{% csrf_token %}{% for field in profile_form %}<label><span>{{ field.label }}</span>{{ field }}</label>{% endfor %}<button class="hub-button" type="submit">إنشاء الملف</button></form></details>
     </section>
     <section><h2 class="hub-section-title">شبكات Wi‑Fi</h2><div class="hub-table-wrap"><table class="hub-table"><tr><th>الاسم</th><th>اسم الشبكة (SSID)</th><th>النوع</th><th>الحالة</th><th>طريقة الربط</th><th>ملف الاتصال</th><th>تظهر في QR</th></tr>{% for n in networks %}<tr><td>{{ n.name_ar }}</td><td><bdi>{{ n.ssid }}</bdi></td><td>{{ n.get_network_type_display }}</td><td>{{ n.is_active|yesno:'فعّالة,متوقفة' }}</td><td>{{ n.get_network_backend_display }}</td><td>{{ n.bandwidth_profile|default:'غير مربوط' }}</td><td>{{ n.visible_on_qr|yesno:'نعم,لا' }}</td></tr>{% empty %}<tr><td colspan="7">لا توجد شبكات مسجلة.</td></tr>{% endfor %}</table></div><p class="hub-text-muted">طريقة الربط تصف سجل الشبكة في هَبّ؛ وقد تختلف عن حالة تكامل MikroTik العامة. كلمات المرور لا تعرض هنا.</p></section>
-    <section class="internet-settings-meta-grid"><div><h3>الإعدادات التجارية</h3><p>باقات ترث المزوّد الافتراضي: {{ inherited_packages }}</p><p>باقات بمزوّد صريح: {{ partner_overrides }}</p><p>باقات بنسبة خاصة: {{ percent_overrides }}</p></div><div><h3>بيئة MikroTik</h3><p>التكامل: {{ mikrotik_enabled|yesno:'مفعّل,معطّل' }}</p><p>الحد الأدنى من الإعداد: {{ mikrotik_configured|yesno:'موجود,غير مكتمل' }}</p><p>طرق الربط المسجلة: {{ network_backends|join:', ' }}</p></div></section>
+    <section class="internet-settings-meta-grid"><div><h3>الإعدادات التجارية</h3><p>باقات ترث المزوّد الافتراضي: {{ inherited_packages }}</p><p>باقات بمزوّد صريح: {{ partner_overrides }}</p><p>باقات بنسبة خاصة: {{ percent_overrides }}</p></div><div><h3>بيئة MikroTik في Django</h3><p>التكامل: {{ mikrotik_enabled|yesno:'مفعّل,معطّل' }}</p><p>إعداد الاتصال الآمن: {{ mikrotik_configured|yesno:'مكتمل,غير مكتمل' }}</p><p>طرق الربط المسجلة: {{ network_backends|join:', ' }}</p></div></section>
   </div>
 </details>
 
 <details class="hub-section hub-card internet-settings-disclosure" id="advanced-diagnostics" {% if advanced_diagnostics_open %}open{% endif %}>
-  <summary><span><strong>التشخيص المتقدم</strong><small>الجاهزية، العامل، طوابير التنفيذ والسجلات النشطة</small></span><span>{% if failed_network_operations %}{{ failed_network_operations }} فاشلة{% else %}فتح{% endif %}</span></summary>
+  <summary><span><strong>التشخيص المتقدم</strong><small>إعداد التطبيق، اتصال القراءة، العامل، طوابير التنفيذ وسجلات هَبّ</small></span><span>{% if failed_network_operations %}{{ failed_network_operations }} فاشلة{% else %}فتح{% endif %}</span></summary>
   <div class="internet-settings-disclosure__body">
-    <section><h2 class="hub-section-title">جاهزية MikroTik</h2><div class="hub-table-wrap"><table class="hub-table"><tr><th>الفحص</th><th>الحالة</th><th>التفصيل</th></tr>{% for check in preflight.checks %}<tr><td>{{ check.label }}</td><td>{% if check.ok %}<span class="hub-badge hub-badge-success">جاهز</span>{% else %}<span class="hub-badge hub-badge-danger">غير جاهز</span>{% endif %}</td><td>{{ check.detail|default:'—' }}</td></tr>{% endfor %}</table></div></section>
-    <section><h2 class="hub-section-title">عامل الإنترنت</h2><div class="internet-settings-meta-grid"><div><span>آخر نبضة</span><strong>{{ operations_state.last_worker_seen_at|default:'—' }}</strong></div><div><span>آخر دورة تشغيل</span><strong>{{ operations_state.last_lifecycle_at|default:'—' }}</strong></div><div><span>حالة آخر دورة</span><strong>{{ operations_state.last_worker_summary.lifecycle|default:'—' }}</strong></div></div>{% if operations_state.last_worker_error %}<p class="hub-alert hub-alert-warning">{{ operations_state.last_worker_error }}</p>{% endif %}</section>
+    <section><h2 class="hub-section-title">متطلبات تشغيل تكامل Django</h2><p class="hub-text-muted">هذه قائمة تحقق للتطبيق والعامل والاتصال المقروء. لا تختبر ولا تستنتج صلاحيات الكتابة على RouterOS.</p><div class="hub-table-wrap"><table class="hub-table"><tr><th>الفحص</th><th>الحالة</th><th>التفصيل</th></tr>{% for check in preflight.checks %}<tr><td>{{ check.label }}</td><td>{% if check.ok %}<span class="hub-badge hub-badge-success">مكتمل</span>{% else %}<span class="hub-badge hub-badge-danger">ناقص</span>{% endif %}</td><td>{{ check.detail|default:'—' }}</td></tr>{% endfor %}</table></div></section>
+    <section><h2 class="hub-section-title">اتصال MikroTik للقراءة</h2><div class="internet-settings-meta-grid"><div><span>آخر فحص</span><strong>{{ operations_status.router.last_check_at|default:'غير معروف' }}</strong></div><div><span>آخر نجاح</span><strong>{{ operations_status.router.last_success_at|default:'غير معروف' }}</strong></div><div><span>حالة آخر فحص</span><strong>{{ operations_status.router.label }}</strong></div></div><p class="hub-text-muted">نجاح القراءة يعني أن طلب القراءة نجح فقط؛ لا يثبت صلاحية إنشاء أو تعديل أي مورد على الراوتر.</p></section>
+    <section><h2 class="hub-section-title">عامل الإنترنت</h2><div class="internet-settings-meta-grid"><div><span>الحالة</span><strong>{{ operations_status.worker.label }}</strong></div><div><span>آخر نبضة</span><strong>{{ operations_status.worker.last_seen_at|default:'غير معروف' }}</strong></div><div><span>آخر دورة تشغيل</span><strong>{{ operations_status.worker.last_lifecycle_at|default:'غير معروف' }}</strong></div></div>{% if operations_state.last_worker_error %}<p class="hub-alert hub-alert-warning">سُجّل خطأ في آخر دورة للعامل. راجع سجل الخدمة إذا احتجت التفاصيل التقنية؛ لا تعرض الصفحة النص الخام هنا.</p>{% endif %}</section>
     <section><h2 class="hub-section-title">جاهزية النظام</h2>{% if readiness.findings %}<div class="hub-table-wrap"><table class="hub-table"><tr><th>الأهمية</th><th>الكود</th><th>الوصف</th></tr>{% for finding in readiness.findings %}<tr><td>{{ finding.severity }}</td><td><code>{{ finding.code }}</code></td><td>{{ finding.message }}</td></tr>{% endfor %}</table></div>{% else %}<p class="hub-alert hub-alert-success">لا توجد ملاحظات جاهزية.</p>{% endif %}</section>
     <section><h2 class="hub-section-title">طوابير عمليات الشبكة</h2><div class="hub-summary-cards"><div class="hub-summary-card"><span>الباقات المعلقة</span><strong>{{ entitlement_counts.pending|default:0 }}</strong></div><div class="hub-summary-card"><span>الباقات الفاشلة</span><strong>{{ entitlement_counts.failed|default:0 }}</strong></div><div class="hub-summary-card"><span>الجلسات المعلقة</span><strong>{{ session_counts.pending|default:0 }}</strong></div><div class="hub-summary-card"><span>الجلسات الفاشلة</span><strong>{{ session_counts.failed|default:0 }}</strong></div></div>
-      <h3>عمليات الباقات الأخيرة</h3><div class="hub-table-wrap"><table class="hub-table"><tr><th>#</th><th>الصلاحية</th><th>العملية</th><th>الحالة</th><th>المحاولات</th><th>الخطأ</th><th></th></tr>{% for op in entitlement_operations %}<tr><td>{{ op.id }}</td><td><code>{{ op.entitlement.access_code }}</code></td><td>{{ op.get_operation_display }}</td><td>{{ op.get_status_display }}</td><td>{{ op.attempt_count }}</td><td>{{ op.last_error|default:'—' }}</td><td>{% if op.status == 'failed' %}<form method="post" action="{% url 'staff_internet_settings' %}">{% csrf_token %}<input type="hidden" name="operation_action" value="retry_network_operation"><input type="hidden" name="operation_kind" value="entitlement"><input type="hidden" name="operation_id" value="{{ op.id }}"><button class="hub-button" type="submit">إعادة المحاولة</button></form>{% endif %}</td></tr>{% empty %}<tr><td colspan="7">لا توجد عمليات.</td></tr>{% endfor %}</table></div>
-      <h3>عمليات الجلسات الأخيرة</h3><div class="hub-table-wrap"><table class="hub-table"><tr><th>#</th><th>الجلسة</th><th>العملية</th><th>الحالة</th><th>المحاولات</th><th>الخطأ</th><th></th></tr>{% for op in session_operations %}<tr><td>{{ op.id }}</td><td><a href="{% url 'staff_internet_session' op.session_id %}">جلسة {{ op.session_id }}</a></td><td>{{ op.get_operation_display }}</td><td>{{ op.get_status_display }}</td><td>{{ op.attempt_count }}</td><td>{{ op.last_error|default:'—' }}</td><td>{% if op.status == 'failed' %}<form method="post" action="{% url 'staff_internet_settings' %}">{% csrf_token %}<input type="hidden" name="operation_action" value="retry_network_operation"><input type="hidden" name="operation_kind" value="session"><input type="hidden" name="operation_id" value="{{ op.id }}"><button class="hub-button" type="submit">إعادة المحاولة</button></form>{% endif %}</td></tr>{% empty %}<tr><td colspan="7">لا توجد عمليات.</td></tr>{% endfor %}</table></div>
+      {% if operations_status.operations.latest_failure %}<div class="hub-alert hub-alert-warning"><strong>آخر فشل:</strong> {{ operations_status.operations.latest_failure.step }} — {{ operations_status.operations.latest_failure.at }}. {{ operations_status.operations.latest_failure.message }}</div>{% endif %}
+      <h3>عمليات الباقات الأخيرة</h3><div class="hub-table-wrap"><table class="hub-table"><tr><th>#</th><th>الصلاحية</th><th>الخطوة</th><th>الحالة</th><th>المحاولات</th><th>آخر محاولة</th><th>التفصيل الآمن</th><th></th></tr>{% for op in entitlement_operations %}<tr><td>{{ op.id }}</td><td><code>{{ op.entitlement.access_code }}</code></td><td>{{ op.get_operation_display }}</td><td>{{ op.get_status_display }}</td><td>{{ op.attempt_count }}</td><td>{{ op.last_attempt_at|default:op.updated_at }}</td><td>{{ op.safe_error }}</td><td>{% if op.status == 'failed' %}<form method="post" action="{% url 'staff_internet_settings' %}">{% csrf_token %}<input type="hidden" name="operation_action" value="retry_network_operation"><input type="hidden" name="operation_kind" value="entitlement"><input type="hidden" name="operation_id" value="{{ op.id }}"><button class="hub-button" type="submit">إعادة المحاولة</button></form>{% endif %}</td></tr>{% empty %}<tr><td colspan="8">لا توجد عمليات.</td></tr>{% endfor %}</table></div>
+      <h3>عمليات الجلسات الأخيرة</h3><div class="hub-table-wrap"><table class="hub-table"><tr><th>#</th><th>الجلسة</th><th>الخطوة</th><th>الحالة</th><th>المحاولات</th><th>آخر محاولة</th><th>التفصيل الآمن</th><th></th></tr>{% for op in session_operations %}<tr><td>{{ op.id }}</td><td><a href="{% url 'staff_internet_session' op.session_id %}">جلسة {{ op.session_id }}</a></td><td>{{ op.get_operation_display }}</td><td>{{ op.get_status_display }}</td><td>{{ op.attempt_count }}</td><td>{{ op.last_attempt_at|default:op.updated_at }}</td><td>{{ op.safe_error }}</td><td>{% if op.status == 'failed' %}<form method="post" action="{% url 'staff_internet_settings' %}">{% csrf_token %}<input type="hidden" name="operation_action" value="retry_network_operation"><input type="hidden" name="operation_kind" value="session"><input type="hidden" name="operation_id" value="{{ op.id }}"><button class="hub-button" type="submit">إعادة المحاولة</button></form>{% endif %}</td></tr>{% empty %}<tr><td colspan="8">لا توجد عمليات.</td></tr>{% endfor %}</table></div>
     </section>
-    <section><h2 class="hub-section-title">الجلسات المسجلة كفعّالة في هَبّ</h2><p class="hub-text-muted">هذه سجلات هَبّ التشغيلية، وليست بالضرورة قائمة لحظية بالأجهزة المتصلة الآن.</p><div class="hub-table-wrap"><table class="hub-table"><tr><th>الجلسة</th><th>العميل</th><th>المزوّد الشبكي</th><th>حالة الشبكة</th><th>آخر مزامنة</th><th>آخر خطأ</th></tr>{% for row in active_session_rows %}{% with s=row.session n=row.network_state %}<tr><td><a href="{% url 'staff_internet_session' s.id %}">#{{ s.id }}</a></td><td>{% if s.member %}{{ s.member.name_ar }}{% else %}{{ s.display_guest_name|default:'زائر' }}{% endif %}</td><td>{{ s.get_network_provider_display }}</td><td>{{ s.get_network_status_display }}</td><td>{{ n.last_network_sync_at|default:'—' }}</td><td>{{ n.last_network_error|default:'—' }}</td></tr>{% endwith %}{% empty %}<tr><td colspan="6">لا توجد جلسات فعّالة.</td></tr>{% endfor %}</table></div></section>
+    <section><h2 class="hub-section-title">الجلسات المسجلة كفعّالة في هَبّ</h2><p class="hub-text-muted">هذه سجلات هَبّ التشغيلية، وليست بالضرورة قائمة لحظية بالأجهزة المتصلة الآن.</p><div class="hub-table-wrap"><table class="hub-table"><tr><th>الجلسة</th><th>العميل</th><th>المزوّد الشبكي</th><th>حالة الشبكة</th><th>آخر مزامنة</th><th>آخر خطأ</th></tr>{% for row in active_session_rows %}{% with s=row.session n=row.network_state %}<tr><td><a href="{% url 'staff_internet_session' s.id %}">#{{ s.id }}</a></td><td>{% if s.member %}{{ s.member.name_ar }}{% else %}{{ s.display_guest_name|default:'زائر' }}{% endif %}</td><td>{{ s.get_network_provider_display }}</td><td>{{ s.get_network_status_display }}</td><td>{{ n.last_network_sync_at|default:'—' }}</td><td>{% if n.last_network_error %}موجود — راجع عملية الشبكة المرتبطة{% else %}—{% endif %}</td></tr>{% endwith %}{% empty %}<tr><td colspan="6">لا توجد جلسات فعّالة.</td></tr>{% endfor %}</table></div></section>
   </div>
 </details>
 {% endblock %}
