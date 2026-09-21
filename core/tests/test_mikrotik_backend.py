@@ -1,9 +1,5 @@
-from datetime import timedelta
-from unittest.mock import patch
-
 from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
-from django.utils import timezone
 
 from core.models import InternetBandwidthProfile, InternetEntitlement, InternetPackage
 from core.services.internet_access import create_entitlement
@@ -64,13 +60,7 @@ class MikroTikBackendTests(TestCase):
     def test_plan_uses_tighter_authoritative_daily_allowance(self):
         self.entitlement.daily_minutes_limit = 20
         self.entitlement.save(update_fields=['daily_minutes_limit'])
-        # Daily access is correctly bounded by local midnight. Freeze this assertion
-        # at a future local noon so it tests the 20-minute policy, not the wall clock.
-        at = (timezone.localtime(timezone.now()).replace(
-            hour=12, minute=0, second=0, microsecond=0,
-        ) + timedelta(days=1))
-        with patch('core.services.internet_access.timezone.now', return_value=at):
-            self.assertEqual(self.backend.plan(self.entitlement)['limit-uptime'], '0:20:00')
+        self.assertEqual(self.backend.plan(self.entitlement)['limit-uptime'], '0:20:00')
 
     def test_collision_refused_and_commercial_state_preserved(self):
         name = self.backend.username(self.entitlement)
@@ -117,3 +107,7 @@ class BackendSelectionTests(TestCase):
     def test_explicit_mikrotik_fails_closed_when_disabled(self):
         with self.assertRaises(MikroTikConfigurationError):
             get_network_backend('mikrotik')
+
+    def test_unknown_backend_is_rejected(self):
+        with self.assertRaises(ValidationError):
+            get_network_backend('unknown')
