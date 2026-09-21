@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}إنترنت الإدارة والفريق{% endblock %}
+{% block body_class %}staff-internet-v2{% endblock %}
+{% block content %}
+<section class="hub-section">
+  <div class="hub-toolbar" style="justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
+    <div>
+      <p class="hub-badge hub-badge-info">وصول داخلي مجاني</p>
+      <h1 class="hub-section-title">إنترنت الإدارة والفريق</h1>
+      <p class="hub-text-muted">منح خاصة مرتبطة بعضو هَبّ وتستخدم ملفات الاتصال الموجودة. لا تنشئ طلباً أو دفعة أو حصة مزوّد، ولا تظهر كباقة للبيع للزبائن.</p>
+    </div>
+    <a class="hub-button" href="{% url 'staff_internet' %}">العودة إلى الإنترنت</a>
+  </div>
+</section>
+
+<section class="hub-section hub-summary-cards">
+  <div class="hub-summary-card"><span>المنح القائمة</span><strong class="metric">{{ internal_active_count }}</strong><small>إدارة + فريق</small></div>
+  <div class="hub-summary-card"><span>الفصل التجاري</span><strong class="metric">مجاني</strong><small>لا Order ولا Payment ولا Revenue Share</small></div>
+  <div class="hub-summary-card"><span>الشبكة</span><strong class="metric">الجلسات فقط</strong><small>لا تعديل لإعدادات RouterOS</small></div>
+</section>
+
+<section class="hub-section hub-card">
+  <h2 class="hub-section-title">منح وصول داخلي</h2>
+  <p class="hub-text-muted">اختر العضو ونوع المنحة والحدود. يجب إلغاء المنحة القائمة قبل منح وصول داخلي جديد للعضو نفسه.</p>
+  <form method="post" action="{% url 'staff_internet_sale' %}" class="hub-form hub-grid hub-grid-2">
+    {% csrf_token %}<input type="hidden" name="internet_action" value="internal_grant">
+    {% for field in internal_access_form %}
+      <label>{{ field.label }}{{ field }}{% if field.errors %}<small class="hub-text-danger">{{ field.errors|join:', ' }}</small>{% endif %}</label>
+    {% endfor %}
+    <div class="hub-card" style="grid-column:1/-1;">
+      <strong>كيف تُقرأ الحدود؟</strong>
+      <p class="hub-text-muted">«غير محدود» يعني غير محدود بالدقائق فقط ضمن مدة الصلاحية وحدود الأجهزة. «رصيد دقائق» يحتاج إجمالي دقائق. حد الجلسة والحد اليومي اختياريان ويضيّقان الوصول عند ضبطهما.</p>
+    </div>
+    <button class="hub-button hub-button-primary" type="submit">منح الوصول</button>
+  </form>
+</section>
+
+<section class="hub-section hub-card">
+  <h2 class="hub-section-title">المنح الداخلية الأخيرة</h2>
+  <p class="hub-text-muted">هذه سجلات وصول في هَبّ، وليست دليلاً لحظياً على أن الجهاز متصل الآن. الإلغاء ينهي الجلسات الفعالة ويضع طلب الفصل في طابور الشبكة العادي.</p>
+  <div class="hub-table-wrap"><table class="hub-table">
+    <tr><th>العضو</th><th>النوع</th><th>الحالة</th><th>الوصول</th><th>الصلاحية</th><th>الدقائق</th><th>ملف الاتصال</th><th>الأجهزة</th><th>منح في</th><th></th></tr>
+    {% for e in internal_grants %}
+    <tr>
+      <td>{{ e.member.name_ar }}<br><small>{{ e.member.phone }}</small></td>
+      <td>{{ e.internal_kind_label }}</td>
+      <td>{{ e.get_status_display }}</td>
+      <td>{{ e.get_access_mode_display }}</td>
+      <td>{{ e.valid_until|default:'—' }}</td>
+      <td>{% if e.total_minutes_allowed != None %}{{ e.minutes_remaining }} / {{ e.total_minutes_allowed }}{% else %}غير محدود{% endif %}{% if e.daily_minutes_limit %}<br><small>يومي {{ e.daily_minutes_limit }}</small>{% endif %}</td>
+      <td><code>{{ e.bandwidth_profile_code|default:'—' }}</code></td>
+      <td>{{ e.max_concurrent_devices }} متزامن / {{ e.max_registered_devices }} مسجل</td>
+      <td>{{ e.created_at }}</td>
+      <td>{% if e.status == 'active' or e.status == 'pending' or e.status == 'suspended' %}<form method="post" action="{% url 'staff_internet_sale' %}" onsubmit="return confirm('إلغاء الوصول الداخلي لهذا العضو؟');">{% csrf_token %}<input type="hidden" name="internet_action" value="internal_revoke"><input type="hidden" name="entitlement_id" value="{{ e.pk }}"><button class="hub-button" type="submit">إلغاء الوصول</button></form>{% else %}—{% endif %}</td>
+    </tr>
+    {% empty %}<tr><td colspan="10">لا توجد منح داخلية بعد.</td></tr>{% endfor %}
+  </table></div>
+</section>
+{% endblock %}
