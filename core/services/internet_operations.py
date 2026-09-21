@@ -5,18 +5,29 @@ from django.utils import timezone
 
 from core.models import ActivityLog, InternetNetworkOperation
 from core.services.internet_readiness import get_operations_state
-from core.services.mikrotik import RouterOSClient
+from core.services.mikrotik import (
+    MikroTikAuthenticationError,
+    MikroTikConfigurationError,
+    MikroTikConnectionError,
+    MikroTikProvisioningError,
+    RouterOSClient,
+)
 from internet.models import InternetSessionNetworkOperation
 
 
-def _safe_error(exc):
-    text = str(exc).replace('\r', ' ').replace('\n', ' ')
-    lowered = text.lower()
-    if any(marker in lowered for marker in (
-        'password', 'authorization', 'credential', 'mikrotik_password', 'secret',
-    )):
-        return 'تعذر الاتصال؛ حُجبت التفاصيل الحساسة.'
-    return text[:500]
+def _readonly_health_failure(exc):
+    """Return a stable, secret-free category and message for a read-only probe."""
+    if isinstance(exc, MikroTikConfigurationError):
+        return 'configuration', 'إعدادات اتصال MikroTik في التطبيق غير مكتملة.'
+    if isinstance(exc, MikroTikAuthenticationError):
+        return 'authentication', 'تعذر التحقق من قراءة MikroTik باستخدام حساب الخدمة الحالي.'
+    if isinstance(exc, MikroTikConnectionError):
+        return 'connection', 'تعذر الوصول إلى MikroTik أو التحقق من اتصال TLS.'
+    if isinstance(exc, MikroTikProvisioningError):
+        return 'router_response', 'تعذر إكمال فحص القراءة بسبب استجابة غير متوقعة من RouterOS.'
+    if isinstance(exc, ValidationError):
+        return 'invalid_response', 'تعذر اعتماد نتيجة فحص القراءة لأن الاستجابة غير صالحة.'
+    return 'unknown', 'تعذر إكمال فحص القراءة لسبب غير معروف.'
 
 
 def _operation_model(kind):
@@ -55,13 +66,14 @@ def requeue_failed_network_operation(*, kind, operation_id, actor=None):
 
 
 def run_readonly_mikrotik_healthcheck(*, actor=None):
-    """Probe RouterOS system/resource directly; never mutates router state.
+    """Probe RouterOS system/resource directly without mutating router state.
 
-    This preflight is intentionally allowed while MIKROTIK_ENABLED is false so the
-    router can be verified before production provisioning is enabled.
+    A successful probe proves only that this read succeeded. It does not test or
+    infer write permissions, profile management rights, or router configuration.
     """
     now = timezone.now()
     state = get_operations_state(create=True)
+    category = 'ok'
     try:
         client = RouterOSClient(
             base_url=getattr(settings, 'MIKROTIK_BASE_URL', ''),
@@ -74,12 +86,12 @@ def run_readonly_mikrotik_healthcheck(*, actor=None):
         )
         resource = client.system_resource()
         if not isinstance(resource, dict):
-            raise ValidationError('استجابة MikroTik غير صالحة.')
+            raise ValidationError('Invalid RouterOS system/resource response.')
         ok = True
         message = 'اتصال MikroTik للقراءة فقط ناجح.'
-    except Exception as exc:  # UI/health boundary: fail closed and persist only sanitized text
+    except Exception as exc:  # UI/health boundary: persist only categorized safe text
         ok = False
-        message = _safe_error(exc)
+        category, message = _readonly_health_failure(exc)
 
     state.last_mikrotik_check_at = now
     state.last_mikrotik_check_ok = ok
@@ -91,6 +103,10 @@ def run_readonly_mikrotik_healthcheck(*, actor=None):
     ActivityLog.objects.create(
         actor=actor,
         action='internet.mikrotik_readonly_healthcheck',
-        details={'ok': ok},
+        details={
+            'ok': ok,
+            'category': category,
+            'step': 'system_resource_read',
+        },
     )
     return ok, message
