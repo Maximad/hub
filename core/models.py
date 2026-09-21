@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 44335)
-Total output lines: 2870
-
 import hashlib
 import re
 import secrets
@@ -1022,7 +1019,836 @@ class Purchase(TimeStampedModel):
         CASHBOX='cashbox','الصندوق'; OWNER='owner','المالك'; BANK='bank','البنك'; EXTERNAL='external','خارجي'; UNPAID='unpaid','غير مدفوع'
     business_date = models.DateField('تاريخ العمل')
     vendor = models.ForeignKey('vendors.Vendor', on_delete=models.SET_NULL, null=True, blank=True, related_name='purchases', verbose_name='المورد')
-    supplier_name = models.CharField('المورد', max_…14335 tokens truncated…total',
+    supplier_name = models.CharField('المورد', max_length=160, blank=True)
+    invoice_number = models.CharField('رقم الفاتورة', max_length=80, blank=True)
+    invoice_date = models.DateField('تاريخ الفاتورة', null=True, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
+    payment_method = models.CharField('طريقة الدفع', max_length=30, choices=PaymentMethod.choices, default=PaymentMethod.CREDIT)
+    paid_from = models.CharField('مدفوع من', max_length=20, choices=PaidFrom.choices, default=PaidFrom.UNPAID)
+    subtotal_syp = models.DecimalField(max_digits=14, decimal_places=2, default=0, validators=[MinValueValidator(0)])
+    discount_syp = models.DecimalField(max_digits=14, decimal_places=2, default=0, validators=[MinValueValidator(0)])
+    total_syp = models.DecimalField(max_digits=14, decimal_places=2, default=0, validators=[MinValueValidator(0)])
+    related_expense = models.ForeignKey(Expense, on_delete=models.SET_NULL, null=True, blank=True, related_name='inventory_purchases')
+    receipt_media = models.ForeignKey('catalog.MediaAsset', on_delete=models.SET_NULL, null=True, blank=True, related_name='purchase_receipts', verbose_name='إيصال')
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_purchases')
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_purchases')
+    received_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='received_purchases')
+    received_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancellation_reason = models.TextField('سبب الإلغاء', blank=True)
+    class Meta:
+        ordering=['-business_date','-created_at']; verbose_name='عملية شراء'; verbose_name_plural='المشتريات'
+        permissions = [('receive_purchase','Can receive purchase')]
+    @property
+    def amount_paid_syp(self):
+        return self.payments.filter(reversed_at__isnull=True).aggregate(total=models.Sum('amount_syp'))['total'] or Decimal('0')
+    @property
+    def remaining_syp(self): return max(self.total_syp - self.amount_paid_syp, 0)
+    @property
+    def supplier_label(self): return str(self.vendor) if self.vendor_id else (self.supplier_name or '—')
+    def recalculate_totals(self):
+        self.subtotal_syp = sum((i.line_total_syp for i in self.items.all()), 0)
+        self.total_syp = max(self.subtotal_syp - self.discount_syp, 0)
+        return self.total_syp
+    def clean(self):
+        if self.discount_syp and self.subtotal_syp and self.discount_syp > self.subtotal_syp: raise ValidationError({'discount_syp':'الخصم لا يجوز أن يجعل مجموع الشراء سالباً.'})
+        if self.status == self.Status.CANCELLED and not (self.cancellation_reason or '').strip(): raise ValidationError({'cancellation_reason':'سبب إلغاء الشراء مطلوب.'})
+    def __str__(self): return f'{self.business_date} — {self.supplier_label} — {self.total_syp} ل.س'
+
+class PurchaseItem(TimeStampedModel):
+    purchase = models.ForeignKey(Purchase, on_delete=models.CASCADE, related_name='items')
+    inventory_item = models.ForeignKey(InventoryItem, on_delete=models.PROTECT, related_name='purchase_items', verbose_name='مادة مخزون')
+    quantity = models.DecimalField(max_digits=12, decimal_places=3, validators=[MinValueValidator(0.001)])
+    unit = models.CharField('وحدة القياس', max_length=20, choices=InventoryItem.Unit.choices)
+    unit_cost_syp = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
+    line_total_syp = models.DecimalField(max_digits=14, decimal_places=2, default=0, validators=[MinValueValidator(0)])
+    notes = models.TextField(blank=True)
+    class Meta:
+        verbose_name='بند شراء'; verbose_name_plural='بنود الشراء'
+        constraints = [models.CheckConstraint(condition=Q(quantity__gt=0), name='purchase_item_quantity_positive', violation_error_message='كمية بند الشراء يجب أن تكون موجبة.')]
+    def save(self,*args,**kwargs):
+        self.line_total_syp = self.quantity * self.unit_cost_syp
+        super().save(*args,**kwargs)
+    def __str__(self): return f'{self.inventory_item} × {self.quantity}'
+
+
+class OperationsImportReceipt(TimeStampedModel):
+    """Stable identity for a purchase created by the operations workbook importer.
+
+    Purchase has no external-reference/metadata field.  Keeping importer identity
+    here avoids assigning business meaning to invoice numbers or free-form notes.
+    """
+    import_key = models.CharField(max_length=160, unique=True)
+    kind = models.CharField(max_length=40, default='purchase')
+    intent = models.JSONField(default=dict)
+    purchase = models.OneToOneField(
+        Purchase, on_delete=models.PROTECT, related_name='operations_import_receipt',
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+
+class PurchaseReceipt(TimeStampedModel):
+    purchase = models.ForeignKey(Purchase, on_delete=models.PROTECT, related_name='receipts')
+    business_date = models.DateField()
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='purchase_receipts')
+    idempotency_key = models.CharField(max_length=160, unique=True)
+    reversed_at = models.DateTimeField(null=True, blank=True)
+    reversed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='reversed_purchase_receipts')
+    reversal_reason = models.TextField(blank=True)
+
+class PurchaseReceiptLine(TimeStampedModel):
+    receipt = models.ForeignKey(PurchaseReceipt, on_delete=models.PROTECT, related_name='lines')
+    purchase_item = models.ForeignKey(PurchaseItem, on_delete=models.PROTECT, related_name='receipt_lines')
+    received_quantity = models.DecimalField(max_digits=12, decimal_places=3, validators=[MinValueValidator(Decimal('0.001'))])
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['receipt', 'purchase_item'], name='unique_purchase_item_per_receipt')]
+
+class PurchasePayment(TimeStampedModel):
+    purchase = models.ForeignKey(Purchase, on_delete=models.PROTECT, related_name='payments')
+    amount_syp = models.DecimalField(max_digits=14, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
+    source_account = models.ForeignKey('FinancialAccount', on_delete=models.PROTECT, related_name='purchase_payments')
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='purchase_payments')
+    approver = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_purchase_payments')
+    business_date = models.DateField()
+    idempotency_key = models.CharField(max_length=160, unique=True)
+    posting_batch = models.OneToOneField('PostingBatch', on_delete=models.PROTECT, related_name='purchase_payment')
+    reversed_at = models.DateTimeField(null=True, blank=True)
+    reversal_batch = models.OneToOneField('PostingBatch', on_delete=models.PROTECT, null=True, blank=True, related_name='reversed_purchase_payment')
+
+class PurchaseReturn(TimeStampedModel):
+    purchase = models.ForeignKey(Purchase, on_delete=models.PROTECT, related_name='returns')
+    business_date = models.DateField()
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='purchase_returns')
+    idempotency_key = models.CharField(max_length=160, unique=True)
+    reason = models.TextField()
+    reversed_at = models.DateTimeField(null=True, blank=True)
+
+class PurchaseReturnLine(TimeStampedModel):
+    purchase_return = models.ForeignKey(PurchaseReturn, on_delete=models.PROTECT, related_name='lines')
+    receipt_line = models.ForeignKey(PurchaseReceiptLine, on_delete=models.PROTECT, null=True, blank=True, related_name='return_lines')
+    purchase_item = models.ForeignKey(PurchaseItem, on_delete=models.PROTECT, related_name='return_lines')
+    returned_quantity = models.DecimalField(max_digits=12, decimal_places=3, validators=[MinValueValidator(Decimal('0.001'))])
+
+class StockMovement(TimeStampedModel):
+    class MovementType(models.TextChoices):
+        PURCHASE_RECEIVED='purchase_received','استلام شراء'; MANUAL_ADJUSTMENT='manual_adjustment','تعديل يدوي'; WASTE='waste','هدر'; INTERNAL_USE='internal_use','استخدام داخلي'; RETURN_TO_VENDOR='return_to_vendor','إرجاع للمورد'; CORRECTION='correction','تصحيح'; OPENING_BALANCE='opening_balance','رصيد افتتاحي'; SALE_DEDUCTION='sale_deduction','خصم بيع'; PRODUCTION_CONSUMPTION='production_consumption','استهلاك تحضير'; PRODUCTION_OUTPUT='production_output','إنتاج تحضير'; SALE_RETURN='sale_return','إرجاع خصم بيع'; OTHER='other','أخرى'
+    class Direction(models.TextChoices): IN='in','إدخال'; OUT='out','إخراج'
+    inventory_item = models.ForeignKey(InventoryItem, on_delete=models.PROTECT, related_name='stock_movements', verbose_name='مادة مخزون')
+    business_date = models.DateField('تاريخ العمل')
+    movement_type = models.CharField(max_length=30, choices=MovementType.choices)
+    direction = models.CharField(max_length=5, choices=Direction.choices)
+    quantity = models.DecimalField(max_digits=12, decimal_places=3, validators=[MinValueValidator(0.001)])
+    unit = models.CharField('وحدة القياس', max_length=20, choices=InventoryItem.Unit.choices)
+    unit_cost_syp = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
+    total_value_syp = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
+    related_purchase = models.ForeignKey(Purchase, on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
+    related_purchase_item = models.ForeignKey(PurchaseItem, on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
+    purchase_receipt_line = models.OneToOneField(PurchaseReceiptLine, on_delete=models.PROTECT, null=True, blank=True, related_name='stock_movement')
+    purchase_return_line = models.OneToOneField(PurchaseReturnLine, on_delete=models.PROTECT, null=True, blank=True, related_name='stock_movement')
+    related_expense = models.ForeignKey(Expense, on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
+    related_order = models.ForeignKey(Order, on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
+    related_order_item = models.ForeignKey('OrderItem', on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
+    product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
+    related_batch = models.ForeignKey('ProductionBatch', on_delete=models.SET_NULL, null=True, blank=True, related_name='stock_movements')
+    reason = models.TextField('سبب الحركة', blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_stock_movements')
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_stock_movements')
+    is_cancelled = models.BooleanField(default=False)
+    cancellation_reason = models.TextField('سبب الإلغاء', blank=True)
+    class Meta:
+        ordering=['-business_date','-created_at']; verbose_name='حركة مخزون'; verbose_name_plural='حركات المخزون'
+        constraints = [
+            models.CheckConstraint(condition=Q(quantity__gt=0), name='stock_movement_quantity_positive', violation_error_message='كمية حركة المخزون يجب أن تكون موجبة.'),
+            models.CheckConstraint(condition=Q(direction__in=['in', 'out']), name='stock_movement_direction_valid', violation_error_message='اتجاه حركة المخزون غير صالح.'),
+            models.CheckConstraint(condition=Q(is_cancelled=False, cancellation_reason='') | Q(is_cancelled=True, cancellation_reason__gt=''), name='stock_movement_cancel_fields_consistent', violation_error_message='حقول إلغاء حركة المخزون غير متناسقة.'),
+        ]
+    def clean(self):
+        if self.movement_type in {self.MovementType.WASTE,self.MovementType.CORRECTION} and not (self.reason or '').strip(): raise ValidationError({'reason':'سبب الحركة مطلوب للهدر أو التصحيح.'})
+        if self.direction == self.Direction.OUT and self.inventory_item_id and self.quantity and self.inventory_item.current_quantity < self.quantity and not self.is_cancelled: raise ValidationError({'quantity':'لا يمكن إخراج كمية أكبر من المخزون الحالي.'})
+    def apply_to_stock(self):
+        if self.is_cancelled: return
+        item=self.inventory_item
+        item.current_quantity = item.current_quantity + self.quantity if self.direction == self.Direction.IN else item.current_quantity - self.quantity
+        item.full_clean(); item.save(update_fields=['current_quantity','updated_at'])
+    def __str__(self): return f'{self.get_movement_type_display()} — {self.inventory_item} — {self.quantity}'
+
+class ProductRecipeItem(TimeStampedModel):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='recipe_items', verbose_name='وصفة المنتج')
+    inventory_item = models.ForeignKey(InventoryItem, on_delete=models.PROTECT, related_name='recipe_items', verbose_name='مادة مستخدمة')
+    quantity_per_unit = models.DecimalField('الكمية لكل وحدة', max_digits=12, decimal_places=3, validators=[MinValueValidator(0.001)])
+    unit = models.CharField('وحدة القياس', max_length=20, choices=InventoryItem.Unit.choices)
+    waste_factor_percent = models.DecimalField('نسبة الهدر', max_digits=6, decimal_places=2, default=0, validators=[MinValueValidator(0)])
+    is_active = models.BooleanField('نشط', default=True)
+    notes = models.TextField('ملاحظات الوصفة', blank=True)
+    class Meta: verbose_name='وصفة المنتج'; verbose_name_plural='وصفات المنتجات'; unique_together=(('product','inventory_item','unit'),)
+    def clean(self):
+        if self.quantity_per_unit is not None and self.quantity_per_unit <= 0: raise ValidationError({'quantity_per_unit':'الكمية لكل وحدة يجب أن تكون أكبر من صفر.'})
+        if self.waste_factor_percent is not None and self.waste_factor_percent < 0: raise ValidationError({'waste_factor_percent':'نسبة الهدر يجب ألا تكون سالبة.'})
+    def line_cost(self):
+        if self.inventory_item.estimated_unit_cost_syp is None: return None
+        base = self.quantity_per_unit * self.inventory_item.estimated_unit_cost_syp
+        return base * (Decimal('1') + (self.waste_factor_percent or 0) / Decimal('100'))
+    def __str__(self): return f'{self.product} — {self.inventory_item}'
+
+
+class ProductionBatch(TimeStampedModel):
+    class BatchType(models.TextChoices):
+        PREPARED_FOOD='prepared_food','طعام محضر'; DRINK_BASE='drink_base','أساس مشروب'; SAUCE='sauce','صلصة'; MIX='mix','خلطة'; PREP_COMPONENT='prep_component','مكوّن تحضير'; OTHER='other','أخرى'
+    class Unit(models.TextChoices):
+        PORTION='portion','حصة'; PIECE='piece','قطعة'; TRAY='tray','صينية'; LITER='liter','لتر'; ML='ml','مل'; KG='kg','كغ'; G='g','غ'; OTHER='other','أخرى'
+    class Status(models.TextChoices):
+        PLANNED='planned','مخططة'; IN_PROGRESS='in_progress','قيد التحضير'; COMPLETED='completed','مكتملة'; CANCELLED='cancelled','ألغيت'
+    product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True, related_name='production_batches', verbose_name='المنتج')
+    batch_name_ar = models.CharField('دفعة تحضير', max_length=180)
+    batch_name_en = models.CharField(max_length=180, blank=True)
+    business_date = models.DateField('تاريخ العمل')
+    batch_type = models.CharField(max_length=30, choices=BatchType.choices, default=BatchType.PREPARED_FOOD)
+    planned_quantity = models.DecimalField('الكمية المخططة', max_digits=12, decimal_places=3, default=0, validators=[MinValueValidator(0)])
+    produced_quantity = models.DecimalField('الكمية المنتجة', max_digits=12, decimal_places=3, default=0, validators=[MinValueValidator(0)])
+    unit = models.CharField('الوحدة', max_length=20, choices=Unit.choices, default=Unit.PORTION)
+    estimated_unit_cost_syp = models.DecimalField('الكلفة التقديرية للوحدة', max_digits=12, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
+    total_estimated_cost_syp = models.DecimalField('الكلفة التقديرية الكلية', max_digits=14, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PLANNED)
+    prepared_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='prepared_batches')
+    completed_at = models.DateTimeField(null=True, blank=True)
+    cancellation_reason = models.TextField('سبب الإلغاء', blank=True)
+    output_inventory_item = models.ForeignKey(InventoryItem, on_delete=models.SET_NULL, null=True, blank=True, related_name='output_batches', verbose_name='مادة مخزون ناتجة')
+    output_quantity = models.DecimalField('كمية الناتج', max_digits=12, decimal_places=3, default=0, validators=[MinValueValidator(0)])
+    output_unit = models.CharField('وحدة الناتج', max_length=20, choices=InventoryItem.Unit.choices, blank=True)
+    notes = models.TextField(blank=True)
+    class Meta: ordering=['-business_date','-created_at']; verbose_name='دفعة تحضير'; verbose_name_plural='دفعات التحضير'
+    def clean(self):
+        if self.status == self.Status.CANCELLED and not (self.cancellation_reason or '').strip(): raise ValidationError({'cancellation_reason':'سبب الإلغاء مطلوب.'})
+    def __str__(self): return self.batch_name_ar or self.batch_name_en or f'Batch {self.pk}'
+
+class ProductionBatchIngredient(TimeStampedModel):
+    batch = models.ForeignKey(ProductionBatch, on_delete=models.CASCADE, related_name='ingredients')
+    inventory_item = models.ForeignKey(InventoryItem, on_delete=models.PROTECT, related_name='batch_ingredients', verbose_name='مكوّن')
+    planned_quantity = models.DecimalField('الكمية المخططة', max_digits=12, decimal_places=3, default=0, validators=[MinValueValidator(0)])
+    actual_quantity = models.DecimalField('الكمية الفعلية', max_digits=12, decimal_places=3, default=0, validators=[MinValueValidator(0)])
+    unit = models.CharField('وحدة القياس', max_length=20, choices=InventoryItem.Unit.choices)
+    estimated_unit_cost_syp_snapshot = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
+    estimated_line_cost_syp_snapshot = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
+    notes = models.TextField(blank=True)
+    class Meta: verbose_name='مكوّن دفعة تحضير'; verbose_name_plural='مكوّنات دفعات التحضير'
+    def save(self,*args,**kwargs):
+        if self.inventory_item_id and self.estimated_unit_cost_syp_snapshot is None: self.estimated_unit_cost_syp_snapshot = self.inventory_item.estimated_unit_cost_syp
+        if self.estimated_unit_cost_syp_snapshot is not None: self.estimated_line_cost_syp_snapshot = self.actual_quantity * self.estimated_unit_cost_syp_snapshot
+        super().save(*args,**kwargs)
+    def __str__(self): return f'{self.batch} — {self.inventory_item}'
+
+
+class DailyClose(TimeStampedModel):
+    class Status(models.TextChoices):
+        OPEN='open','مفتوح'; CLOSED='closed','مغلق'; REOPENED='reopened','أعيد فتحه'
+    account = models.ForeignKey('FinancialAccount', on_delete=models.PROTECT, null=True, blank=True,
+                                related_name='period_closes', verbose_name='الحساب المالي')
+    business_date = models.DateField(verbose_name='تاريخ العمل')
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.CLOSED)
+    opening_cash_syp = models.IntegerField(default=0, verbose_name='النقد الافتتاحي')
+    cash_sales_syp = models.PositiveIntegerField(default=0, verbose_name='مبيعات نقدية')
+    non_cash_sales_syp = models.PositiveIntegerField(default=0, verbose_name='مبيعات غير نقدية')
+    total_payments_syp = models.PositiveIntegerField(default=0, verbose_name='إجمالي الدفعات')
+    unpaid_orders_syp = models.PositiveIntegerField(default=0, verbose_name='غير مدفوع')
+    partial_payments_syp = models.PositiveIntegerField(default=0, verbose_name='مدفوع جزئياً')
+    discounts_syp = models.PositiveIntegerField(default=0, verbose_name='الخصومات')
+    cancelled_orders_syp = models.PositiveIntegerField(default=0, verbose_name='قيمة الطلبات الملغاة')
+    refunds_or_reversals_syp = models.PositiveIntegerField(default=0, verbose_name='المسترد/المعكوس')
+    expected_cash_syp = models.IntegerField(default=0, verbose_name='النقد المتوقع')
+    actual_cash_counted_syp = models.PositiveIntegerField(default=0, verbose_name='النقد الفعلي')
+    cash_difference_syp = models.IntegerField(default=0, verbose_name='الفرق')
+    notes = models.TextField(blank=True)
+    closed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='daily_closes')
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_daily_closes')
+    closed_at = models.DateTimeField(null=True, blank=True)
+    is_finalized = models.BooleanField(default=True)
+    reopened_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='reopened_daily_closes')
+    reopened_at = models.DateTimeField(null=True, blank=True)
+    reopen_reason = models.TextField(blank=True)
+    close_snapshot = models.JSONField(default=dict, blank=True, editable=False)
+
+    class Meta:
+        permissions = [('view_finance_dashboard','Can view finance dashboard'), ('close_business_day','Can close business day'), ('reopen_business_day','Can reopen business day')]
+        constraints = [models.UniqueConstraint(fields=['account', 'business_date'], condition=Q(is_finalized=True), name='unique_active_close_per_account_date')]
+
+    def __str__(self):
+        return f'إغلاق اليوم {self.business_date}'
+
+
+class DailyCloseRevision(TimeStampedModel):
+    daily_close = models.ForeignKey(DailyClose, on_delete=models.CASCADE, related_name='revisions')
+    revision_type = models.CharField(max_length=30)
+    snapshot = models.JSONField(default=dict, blank=True)
+    reason = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='daily_close_revisions')
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.daily_close.business_date} — {self.revision_type}'
+
+    def save(self, *args, **kwargs):
+        if self.pk and type(self).objects.filter(pk=self.pk).exists():
+            raise ValidationError('Daily-close snapshots are immutable; append a revision instead.')
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError('Daily-close snapshots are immutable and cannot be deleted.')
+
+
+class PostingCommand(TimeStampedModel):
+    """Durable idempotency receipt for a financially meaningful command."""
+    key = models.CharField(max_length=160, unique=True)
+    command = models.CharField(max_length=80)
+    source_type = models.CharField(max_length=80, blank=True)
+    source_id = models.CharField(max_length=80, blank=True)
+    result_type = models.CharField(max_length=80, blank=True)
+    result_id = models.CharField(max_length=80, blank=True)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    channel = models.CharField(max_length=40, blank=True)
+    request_metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+
+class PostingReconciliationFailure(TimeStampedModel):
+    """Records a discovered write which bypassed the posting service."""
+    record_type = models.CharField(max_length=80)
+    record_id = models.CharField(max_length=80)
+    reason = models.TextField()
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['record_type', 'record_id'], name='unique_posting_bypass_failure')]
+
+
+class FinanceReconciliationState(TimeStampedModel):
+    """Durable cursor for an explicitly requested reconciliation backfill."""
+    operation = models.CharField(max_length=80)
+    record_type = models.CharField(max_length=80)
+    record_id = models.CharField(max_length=80)
+    status = models.CharField(max_length=20, default='completed')
+    details = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(
+            fields=['operation', 'record_type', 'record_id'], name='unique_finance_reconciliation_step')]
+
+
+class FinanceReviewItem(TimeStampedModel):
+    """Persistent human review queue; reconciliation never guesses identities."""
+    issue_code = models.CharField(max_length=80)
+    record_type = models.CharField(max_length=80)
+    record_id = models.CharField(max_length=80)
+    reason = models.TextField()
+    details = models.JSONField(default=dict, blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(
+            fields=['issue_code', 'record_type', 'record_id'], name='unique_open_finance_review_item')]
+
+
+class FinancialAccount(TimeStampedModel):
+    """Stable-code ledger account; display names are deliberately not identifiers."""
+
+    class AccountType(models.TextChoices):
+        ASSET = 'asset', 'Asset'
+        LIABILITY = 'liability', 'Liability'
+        EQUITY = 'equity', 'Equity'
+        REVENUE = 'revenue', 'Revenue'
+        EXPENSE = 'expense', 'Expense'
+        CLEARING = 'clearing', 'Clearing'
+
+    class NegativeBalancePolicy(models.TextChoices):
+        ALLOW = 'allow', 'Allow'
+        WARN = 'warn', 'Warn'
+        FORBID = 'forbid', 'Forbid'
+
+    code = models.CharField(max_length=80, unique=True)
+    name_ar = models.CharField(max_length=160)
+    name_en = models.CharField(max_length=160, blank=True)
+    account_type = models.CharField(max_length=20, choices=AccountType.choices)
+    scope = models.CharField(max_length=80, blank=True)
+    business_unit = models.CharField(max_length=80, blank=True)
+    is_active = models.BooleanField(default=False)
+    currency = models.CharField(max_length=3, default='SYP')
+    negative_balance_policy = models.CharField(
+        max_length=10, choices=NegativeBalancePolicy.choices, default=NegativeBalancePolicy.FORBID
+    )
+
+    class Meta:
+        ordering = ['code']
+
+    def __str__(self):
+        code = self.code or str(self.pk or '')
+        name = self.name_ar or self.name_en or 'حساب مالي'
+        return f'{code} — {name}' if code else str(name)
+
+
+class PostingBatch(TimeStampedModel):
+    class Status(models.TextChoices):
+        DRAFT = 'draft', 'Draft'
+        PENDING = 'pending', 'Pending approval'
+        POSTED = 'posted', 'Posted'
+        REVERSED = 'reversed', 'Reversed'
+        CANCELLED = 'cancelled', 'Cancelled'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    operation_type = models.CharField(max_length=80)
+    source_content_type = models.ForeignKey(ContentType, on_delete=models.PROTECT, null=True, blank=True)
+    source_object_id = models.CharField(max_length=80, null=True, blank=True)
+    source = GenericForeignKey('source_content_type', 'source_object_id')
+    business_date = models.DateField()
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.DRAFT)
+    idempotency_key = models.CharField(max_length=160, unique=True)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='posting_batches')
+    approver = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_posting_batches')
+    posted_at = models.DateTimeField(null=True, blank=True)
+    reversed_at = models.DateTimeField(null=True, blank=True)
+    reversal_of = models.ForeignKey('self', on_delete=models.PROTECT, null=True, blank=True, related_name='reversals')
+    reason = models.TextField(blank=True)
+    channel = models.CharField(max_length=40, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        constraints = [
+            models.CheckConstraint(
+                condition=(Q(source_content_type__isnull=True, source_object_id__isnull=True) |
+                           Q(source_content_type__isnull=False, source_object_id__isnull=False)),
+                name='posting_source_complete_or_empty',
+            ),
+            models.CheckConstraint(
+                condition=(Q(status='posted', posted_at__isnull=False, reversed_at__isnull=True) |
+                           Q(status='reversed', posted_at__isnull=False, reversed_at__isnull=False) |
+                           Q(status__in=['draft', 'pending', 'cancelled'], posted_at__isnull=True, reversed_at__isnull=True)),
+                name='posting_batch_valid_state_times',
+            ),
+            models.CheckConstraint(
+                condition=Q(reversal_of__isnull=True) | Q(status='posted'),
+                name='posting_reversal_is_posted',
+            ),
+            models.UniqueConstraint(
+                fields=['source_content_type', 'source_object_id', 'operation_type'],
+                condition=Q(status__in=['pending', 'posted']),
+                name='unique_active_posting_per_source',
+            ),
+            models.UniqueConstraint(fields=['reversal_of'], condition=Q(reversal_of__isnull=False), name='unique_reversal_per_posting_batch', violation_error_message='تم إنشاء عكس لهذا القيد مسبقاً.'),
+        ]
+
+    def is_balanced(self):
+        totals = self.entries.aggregate(debits=models.Sum('debit'), credits=models.Sum('credit'))
+        return (totals['debits'] or Decimal('0')) == (totals['credits'] or Decimal('0'))
+
+    def clean(self):
+        super().clean()
+        if self.status in {self.Status.POSTED, self.Status.REVERSED} and self.pk and not self.is_balanced():
+            raise ValidationError({'status': 'يجب أن يتساوى مجموع المدين والدائن قبل ترحيل القيد.'})
+
+
+class PostingEntry(TimeStampedModel):
+    class EntryRole(models.TextChoices):
+        PRINCIPAL = 'principal', 'Principal'
+        TAX = 'tax', 'Tax'
+        FEE = 'fee', 'Fee'
+        DISCOUNT = 'discount', 'Discount'
+        ROUNDING = 'rounding', 'Rounding'
+        CLEARING = 'clearing', 'Clearing'
+        OTHER = 'other', 'Other'
+
+    batch = models.ForeignKey(PostingBatch, on_delete=models.PROTECT, related_name='entries')
+    account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, related_name='entries')
+    debit = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
+    credit = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
+    entry_role = models.CharField(max_length=20, choices=EntryRole.choices, default=EntryRole.PRINCIPAL)
+    description = models.CharField(max_length=240, blank=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=(Q(debit__gt=0, credit__isnull=True) | Q(credit__gt=0, debit__isnull=True)),
+                name='posting_entry_one_positive_side',
+            ),
+        ]
+
+    @property
+    def signed_amount(self):
+        return (self.debit or Decimal('0')) - (self.credit or Decimal('0'))
+
+
+class Transfer(TimeStampedModel):
+    class State(models.TextChoices):
+        DRAFT = 'draft', 'Draft'
+        POSTED = 'posted', 'Posted'
+        REVERSED = 'reversed', 'Reversed'
+        CANCELLED = 'cancelled', 'Cancelled'
+
+    source_account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, related_name='outgoing_transfers')
+    destination_account = models.ForeignKey(FinancialAccount, on_delete=models.PROTECT, related_name='incoming_transfers')
+    amount = models.DecimalField(max_digits=20, decimal_places=2)
+    state = models.CharField(max_length=12, choices=State.choices, default=State.DRAFT)
+    business_date = models.DateField()
+    reason = models.TextField(blank=True)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name='created_transfers')
+    approver = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name='approved_transfers')
+    posting_batch = models.OneToOneField(PostingBatch, on_delete=models.PROTECT, null=True, blank=True, related_name='transfer')
+    reversal_batch = models.OneToOneField(PostingBatch, on_delete=models.PROTECT, null=True, blank=True, related_name='reversed_transfer')
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(condition=Q(amount__gt=0), name='transfer_amount_positive'),
+            models.CheckConstraint(condition=~Q(source_account=models.F('destination_account')), name='transfer_accounts_distinct'),
+            models.CheckConstraint(
+                condition=(Q(state__in=['posted', 'reversed'], posting_batch__isnull=False) |
+                           Q(state__in=['draft', 'cancelled'], posting_batch__isnull=True)),
+                name='transfer_valid_state_batch',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.source_account_id and not self.source_account.is_active:
+            raise ValidationError({'source_account': 'يجب أن يكون حساب المصدر فعالاً.'})
+        if self.destination_account_id and not self.destination_account.is_active:
+            raise ValidationError({'destination_account': 'يجب أن يكون حساب الوجهة فعالاً.'})
+        if not (self.reason or '').strip():
+            raise ValidationError({'reason': 'سبب التحويل مطلوب.'})
+
+
+class AuditEvent(models.Model):
+    """Append-only audit record for financial and operational corrections."""
+    created_at = models.DateTimeField(auto_now_add=True)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_events')
+    approver = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_audit_events')
+    action = models.CharField(max_length=120)
+    source_content_type = models.ForeignKey(ContentType, on_delete=models.PROTECT, null=True, blank=True)
+    source_object_id = models.CharField(max_length=80, blank=True)
+    source = GenericForeignKey('source_content_type', 'source_object_id')
+    before_snapshot = models.JSONField(default=dict, blank=True)
+    after_snapshot = models.JSONField(default=dict, blank=True)
+    request_key = models.CharField(max_length=160, blank=True, db_index=True)
+    channel = models.CharField(max_length=40, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True)
+    reversal_of = models.ForeignKey('self', on_delete=models.PROTECT, null=True, blank=True, related_name='reversal_events')
+    correction_of = models.ForeignKey('self', on_delete=models.PROTECT, null=True, blank=True, related_name='correction_events')
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['reversal_of'], condition=Q(reversal_of__isnull=False), name='unique_reversal_per_audit_event', violation_error_message='تم تسجيل عكس لهذا الحدث مسبقاً.')]
+
+    def save(self, *args, **kwargs):
+        if self.pk and type(self).objects.filter(pk=self.pk).exists():
+            raise ValidationError('Audit events are immutable; append a correction or reversal instead.')
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError('Audit events are immutable and cannot be deleted.')
+
+
+class ExchangeRate(TimeStampedModel):
+    """Append-only published rate, expressed as new SYP for one foreign unit."""
+    base_currency = models.CharField(max_length=8, default='SYP_NEW', editable=False)
+    foreign_currency = models.CharField(max_length=8, default='USD')
+    rate_to_base = models.DecimalField(max_digits=20, decimal_places=8)
+    effective_date = models.DateField(db_index=True)
+    source = models.CharField(max_length=200, blank=True)
+    note = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+                                   related_name='created_exchange_rates')
+    superseded_by = models.OneToOneField('self', on_delete=models.PROTECT, null=True, blank=True,
+                                        related_name='supersedes')
+
+    class Meta:
+        ordering = ['-effective_date', '-created_at']
+        permissions = [
+            ('view_exchange_rates', 'Can view exchange rates'),
+            ('create_today_exchange_rate', "Can create today's exchange rate"),
+            ('correct_exchange_rate', 'Can supersede an exchange rate'),
+            ('use_stale_exchange_rate', 'Can use a stale exchange rate'),
+            ('approve_high_risk_amount', 'Can approve high-risk amounts'),
+            ('perform_currency_conversion', 'Can perform currency conversions'),
+            ('view_usd_balances', 'Can view USD balances'),
+        ]
+        constraints = [models.CheckConstraint(condition=Q(rate_to_base__gte=1), name='exchange_rate_not_reciprocal')]
+
+    def clean(self):
+        if self.base_currency != 'SYP_NEW' or self.foreign_currency != 'USD':
+            raise ValidationError('الاتجاه المدعوم هو: 1 USD = ___ ل.س جديدة.')
+        if self.rate_to_base is None or self.rate_to_base < 1:
+            raise ValidationError({'rate_to_base': 'أدخل عدد الليرات الجديدة لكل دولار؛ السعر الصفري أو المقلوب غير مقبول.'})
+        if self.pk and type(self).objects.filter(pk=self.pk).exists():
+            old = type(self).objects.get(pk=self.pk)
+            immutable = ('rate_to_base', 'effective_date', 'source', 'note', 'foreign_currency')
+            if any(getattr(old, f) != getattr(self, f) for f in immutable):
+                raise ValidationError('سجل السعر تاريخي وغير قابل للتعديل؛ أنشئ تصحيحاً يسجّل كسجل جديد.')
+
+    def __str__(self):
+        return f'1 USD = {self.rate_to_base.normalize()} ل.س جديدة ({self.effective_date})'
+
+
+class CurrencyEntrySnapshot(TimeStampedModel):
+    """Immutable currency facts attached to any source transaction without another posting."""
+    source_content_type = models.ForeignKey(ContentType, on_delete=models.PROTECT)
+    source_object_id = models.CharField(max_length=80)
+    source = GenericForeignKey('source_content_type', 'source_object_id')
+    operation = models.CharField(max_length=60)
+    field_name = models.CharField(max_length=80)
+    transaction_currency = models.CharField(max_length=8, default='SYP_NEW')
+    settlement_currency = models.CharField(max_length=8, default='SYP_NEW')
+    original_amount = models.DecimalField(max_digits=20, decimal_places=2)
+    exchange_rate_to_base = models.DecimalField(max_digits=20, decimal_places=8, default=1)
+    base_amount_syp = models.DecimalField(max_digits=20, decimal_places=2)
+    exchange_rate_record = models.ForeignKey(ExchangeRate, on_delete=models.PROTECT, null=True, blank=True)
+    rate_effective_date = models.DateField(null=True, blank=True)
+    rate_source_snapshot = models.CharField(max_length=200, blank=True)
+    rate_selected_automatically = models.BooleanField(default=True)
+    confirmed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+                                     related_name='confirmed_currency_entries')
+    risk_level = models.CharField(max_length=32, default='normal')
+    risk_reason_codes = models.JSONField(default=list, blank=True)
+    suggested_amount = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
+    equivalent_old_syp = models.DecimalField(max_digits=22, decimal_places=2, null=True, blank=True)
+    thresholds_applied = models.JSONField(default=dict, blank=True)
+    acknowledged = models.BooleanField(default=False)
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+                                    related_name='approved_currency_entries')
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['source_content_type', 'source_object_id', 'operation', 'field_name'],
+                                                name='one_currency_snapshot_per_source_field')]
+
+    def save(self, *args, **kwargs):
+        if self.pk and type(self).objects.filter(pk=self.pk).exists():
+            raise ValidationError('لقطة العملة غير قابلة للتعديل.')
+        return super().save(*args, **kwargs)
+
+
+class Member(TimeStampedModel, PublicCodeModel):
+    name_ar = models.CharField(max_length=120)
+    name_en = models.CharField(max_length=120, blank=True)
+    phone = models.CharField(max_length=30, unique=True)
+    balance_syp = models.IntegerField(default=0)
+    default_plan = models.ForeignKey('members.MembershipPlan', on_delete=models.SET_NULL, null=True, blank=True)
+
+    def __str__(self):
+        name = _arabic_first(self, 'name_ar', 'name_en', fallback=self.phone)
+        return f'{name} — {self.phone}' if self.phone else name
+
+
+class InternetPackage(TimeStampedModel, PublicCodeModel):
+    class AccessMode(models.TextChoices):
+        TIMED_SESSION = 'timed_session', 'جلسة محددة الوقت'
+        VALIDITY_PASS = 'validity_pass', 'بطاقة صلاحية'
+        ALLOWANCE = 'allowance', 'رصيد دقائق'
+        UNLIMITED = 'unlimited', 'غير محدود'
+        MEMBERSHIP_CREDIT = 'membership_credit', 'رصيد العضوية'
+
+    class ActivationPolicy(models.TextChoices):
+        ON_PURCHASE = 'on_purchase', 'عند الشراء'
+        ON_FIRST_USE = 'on_first_use', 'عند أول استخدام'
+        MANUAL = 'manual', 'يدوي'
+
+    class ValidityUnit(models.TextChoices):
+        MINUTES = 'minutes', 'دقيقة'
+        DAYS = 'days', 'يوم'
+        WEEKS = 'weeks', 'أسبوع'
+        MONTHS = 'months', 'شهر'
+
+    name_ar = models.CharField(max_length=120)
+    name_en = models.CharField(max_length=120, blank=True)
+    description_ar = models.TextField(blank=True)
+    description_en = models.TextField(blank=True)
+    duration_minutes = models.PositiveIntegerField(default=0)
+    price_syp = models.PositiveIntegerField()
+    code = models.SlugField(max_length=50, unique=True, null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.IntegerField(default=0)
+    access_mode = models.CharField(max_length=24, choices=AccessMode.choices, default=AccessMode.TIMED_SESSION)
+    activation_policy = models.CharField(max_length=24, choices=ActivationPolicy.choices, default=ActivationPolicy.ON_PURCHASE)
+    validity_value = models.PositiveIntegerField(null=True, blank=True)
+    validity_unit = models.CharField(max_length=12, choices=ValidityUnit.choices, blank=True)
+    session_minutes_limit = models.PositiveIntegerField(null=True, blank=True)
+    total_minutes_limit = models.PositiveIntegerField(null=True, blank=True)
+    daily_minutes_limit = models.PositiveIntegerField(null=True, blank=True)
+    bandwidth_profile = models.ForeignKey('InternetBandwidthProfile', on_delete=models.PROTECT, null=True, blank=True, related_name='packages')
+    max_concurrent_devices = models.PositiveSmallIntegerField(default=1)
+    max_registered_devices = models.PositiveSmallIntegerField(default=1)
+    member_only = models.BooleanField(default=False)
+    guest_allowed = models.BooleanField(default=True)
+    visible_to_staff = models.BooleanField(default=True)
+    visible_to_customer = models.BooleanField(default=False)
+    partner = models.ForeignKey(
+        'InternetPartner', on_delete=models.PROTECT, null=True, blank=True, related_name='packages',
+        verbose_name='شريك إنترنت خاص بهذه الباقة (اختياري)',
+        help_text='ترك الحقل فارغاً يعني استخدام شريك الإنترنت الافتراضي.',
+    )
+    partner_share_percent = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        verbose_name='نسبة مشاركة خاصة بهذه الباقة (اختياري)',
+        help_text='ترك الحقل فارغاً يعني استخدام النسبة الافتراضية للشريك الفعلي.',
+    )
+    notes = models.TextField(blank=True)
+    backend_config = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(condition=models.Q(partner_share_percent__isnull=True) | (models.Q(partner_share_percent__gte=0) & models.Q(partner_share_percent__lte=100)), name='internet_package_share_percent_range'),
+        ]
+
+    def clean(self):
+        errors = {}
+        validity = bool(self.validity_value and self.validity_unit)
+        if bool(self.validity_value) != bool(self.validity_unit): errors['validity_value'] = 'يجب تحديد قيمة ووحدة الصلاحية معاً.'
+        if self.max_concurrent_devices < 1 or self.max_registered_devices < 1: errors['max_registered_devices'] = 'حد الأجهزة يجب أن يكون واحداً على الأقل.'
+        if self.max_concurrent_devices > self.max_registered_devices: errors['max_concurrent_devices'] = 'حد الأجهزة المتزامنة لا يتجاوز حد الأجهزة المسجلة.'
+        if self.member_only and self.guest_allowed: errors['guest_allowed'] = 'باقة الأعضاء فقط لا يمكن أن تسمح للزوار.'
+        if self.access_mode == self.AccessMode.TIMED_SESSION and not (self.session_minutes_limit or self.duration_minutes): errors['session_minutes_limit'] = 'حد دقائق الجلسة مطلوب.'
+        if self.access_mode in {self.AccessMode.VALIDITY_PASS, self.AccessMode.UNLIMITED} and not validity: errors['validity_value'] = 'الصلاحية مطلوبة.'
+        if self.access_mode == self.AccessMode.ALLOWANCE and not self.total_minutes_limit: errors['total_minutes_limit'] = 'إجمالي الدقائق مطلوب.'
+        if self.access_mode == self.AccessMode.UNLIMITED and self.total_minutes_limit: errors['total_minutes_limit'] = 'الباقة غير المحدودة لا تستخدم رصيد دقائق.'
+        if self.access_mode == self.AccessMode.MEMBERSHIP_CREDIT:
+            if not self.member_only or self.guest_allowed: errors['member_only'] = 'رصيد العضوية مخصص للأعضاء فقط.'
+            if self.total_minutes_limit: errors['total_minutes_limit'] = 'رصيد العضوية يأتي من الاشتراك، لا من الباقة.'
+        if self.daily_minutes_limit and self.total_minutes_limit and self.daily_minutes_limit > self.total_minutes_limit:
+            errors['daily_minutes_limit'] = 'الحد اليومي لا يمكن أن يتجاوز إجمالي الدقائق.'
+        if self.partner_id and not self.partner.active:
+            errors['partner'] = 'لا يمكن تعيين شريك غير فعّال لهذه الباقة.'
+        if (self.partner_share_percent is not None and not self.partner_id and
+                not InternetPartner.objects.filter(active=True, is_default=True).exists()):
+            errors['partner_share_percent'] = 'لا يمكن تحديد نسبة حصة دون شريك إنترنت فعّال.'
+        if self.bandwidth_profile_id and not self.bandwidth_profile.is_active:
+            errors['bandwidth_profile'] = 'لا يمكن استخدام ملف سرعة غير فعّال.'
+        if errors: raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        if self.access_mode == self.AccessMode.TIMED_SESSION and not self.session_minutes_limit and self.duration_minutes:
+            self.session_minutes_limit = self.duration_minutes
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return _arabic_first(self, 'name_ar', 'name_en', fallback=str(self.public_code)[:8])
+
+
+class InternetBandwidthProfile(TimeStampedModel):
+    code = models.SlugField(max_length=50, unique=True)
+    name = models.CharField(max_length=120)
+    download_limit_kbps = models.PositiveIntegerField(null=True, blank=True)
+    upload_limit_kbps = models.PositiveIntegerField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    router_profile_name = models.CharField(max_length=120, blank=True)
+    def __str__(self): return self.name
+
+
+class InternetPartner(TimeStampedModel):
+    name = models.CharField(max_length=120)
+    active = models.BooleanField(default=True)
+    is_default = models.BooleanField(default=False)
+    revenue_share_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0, validators=[MinValueValidator(0), MaxValueValidator(100)])
+    users = models.ManyToManyField(settings.AUTH_USER_MODEL, through='InternetPartnerUser', related_name='internet_partners')
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(condition=models.Q(revenue_share_percent__gte=0) & models.Q(revenue_share_percent__lte=100), name='internet_partner_share_percent_range'),
+            models.CheckConstraint(
+                condition=models.Q(is_default=False) | models.Q(active=True),
+                name='internet_partner_default_must_be_active',
+            ),
+            models.UniqueConstraint(
+                fields=('is_default',), condition=models.Q(is_default=True),
+                name='unique_default_internet_partner',
+            ),
+        ]
+
+    def clean(self):
+        if self.is_default and not self.active:
+            raise ValidationError({'is_default': 'يجب أن يكون شريك الإنترنت الافتراضي فعالاً.'})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self): return self.name
+
+
+class InternetPartnerUser(TimeStampedModel):
+    partner = models.ForeignKey(InternetPartner, on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    can_view_customer_phone = models.BooleanField(default=False)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['partner', 'user'], name='unique_internet_partner_user')]
+
+
+class InternetEntitlement(TimeStampedModel, PublicCodeModel):
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'بانتظار التفعيل'
+        ACTIVE = 'active', 'فعال'
+        EXPIRED = 'expired', 'منتهي'
+        CANCELLED = 'cancelled', 'ملغى'
+        SUSPENDED = 'suspended', 'معلّق'
+    class NetworkStatus(models.TextChoices):
+        NOT_PROVISIONED = 'not_provisioned', 'غير مجهز'
+        PROVISIONED = 'provisioned', 'مجهز'
+        DISCONNECTED = 'disconnected', 'مفصول'
+        PROVISION_ERROR = 'provision_error', 'خطأ تجهيز'
+
+    member = models.ForeignKey(Member, on_delete=models.PROTECT, null=True, blank=True, related_name='internet_entitlements')
+    visit = models.ForeignKey(HubVisit, on_delete=models.SET_NULL, null=True, blank=True, related_name='internet_entitlements')
+    guest_name = models.CharField(max_length=120, blank=True)
+    guest_phone = models.CharField(max_length=30, blank=True)
+    package = models.ForeignKey(InternetPackage, on_delete=models.PROTECT, null=True, blank=True, related_name='entitlements')
+    order = models.ForeignKey(Order, on_delete=models.SET_NULL, null=True, blank=True, related_name='internet_entitlements')
+    payment = models.ForeignKey(Payment, on_delete=models.SET_NULL, null=True, blank=True, related_name='internet_entitlements')
+    subscription = models.ForeignKey('members.MembershipSubscription', on_delete=models.PROTECT, null=True, blank=True, related_name='internet_entitlements')
+    source_benefit_rule_id = models.PositiveBigIntegerField(null=True, blank=True)
+    origin_type = models.CharField(max_length=30, default='direct_package')
+    idempotency_key = models.CharField(max_length=100, null=True, blank=True, unique=True)
+    sale_request_fingerprint = models.CharField(max_length=64, blank=True, editable=False)
+    access_code = models.CharField(max_length=12, unique=True, editable=False)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    access_mode = models.CharField(max_length=24, choices=InternetPackage.AccessMode.choices)
+    activation_policy = models.CharField(max_length=24, choices=InternetPackage.ActivationPolicy.choices)
+    activated_at = models.DateTimeField(null=True, blank=True)
+    valid_from = models.DateTimeField(null=True, blank=True)
+    valid_until = models.DateTimeField(null=True, blank=True)
+    validity_value = models.PositiveIntegerField(null=True, blank=True)
+    validity_unit = models.CharField(max_length=12, choices=InternetPackage.ValidityUnit.choices, blank=True)
+    session_minutes_limit = models.PositiveIntegerField(null=True, blank=True)
+    total_minutes_allowed = models.PositiveIntegerField(null=True, blank=True)
+    minutes_used = models.PositiveIntegerField(default=0)
+    daily_minutes_limit = models.PositiveIntegerField(null=True, blank=True)
+    bandwidth_profile_code = models.CharField(max_length=50, blank=True)
+    max_concurrent_devices = models.PositiveSmallIntegerField(default=1)
+    max_registered_devices = models.PositiveSmallIntegerField(default=1)
+    network_backend = models.CharField(max_length=30, default='manual')
+    network_status = models.CharField(max_length=30, choices=NetworkStatus.choices, default=NetworkStatus.NOT_PROVISIONED)
+    external_network_identifier = models.CharField(max_length=120, blank=True)
+    network_credential_encrypted = models.TextField(blank=True, editable=False)
+    last_network_sync_at = models.DateTimeField(null=True, blank=True)
+    last_network_error = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_internet_entitlements')
+    cancelled_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='cancelled_internet_entitlements')
+    cancellation_reason = models.TextField(blank=True)
+    lifecycle_reason = models.CharField(max_length=200, blank=True)
+    partner = models.ForeignKey(InternetPartner, on_delete=models.PROTECT, null=True, blank=True, related_name='entitlements')
+    partner_name_snapshot = models.CharField(max_length=120, blank=True)
+    partner_share_percent_snapshot = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    gross_amount_syp = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(condition=models.Q(gross_amount_syp__gte=0), name='internet_entitlement_gross_nonnegative'),
+            models.CheckConstraint(condition=models.Q(partner_share_percent_snapshot__isnull=True) | (models.Q(partner_share_percent_snapshot__gte=0) & models.Q(partner_share_percent_snapshot__lte=100)), name='internet_entitlement_share_percent_range'),
+            models.CheckConstraint(
+                condition=(models.Q(total_minutes_allowed__isnull=True)
+                           | models.Q(minutes_used__lte=models.F('total_minutes_allowed'))),
+                name='internet_minutes_used_within_total',
             ),
         ]
 
