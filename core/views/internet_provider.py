@@ -5,7 +5,7 @@ InternetPartnerUser before data is loaded; staff/POS/finance objects are never
 used as an implicit authorization boundary.
 """
 import csv
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 from functools import wraps
 
@@ -14,7 +14,7 @@ from django.contrib import messages
 from django.contrib.auth import login as auth_login, logout as auth_logout
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db.models import Prefetch, Q, Sum
+from django.db.models import Prefetch, Q
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -39,10 +39,10 @@ from core.models import (
     InternetRevenueShare,
     InternetRevenueShareAdjustment,
     InternetSession,
-    InternetUsageLedger,
     Member,
     Payment,
 )
+from core.internet_billing import calculate_session_duration_minutes
 from core.services.internet_access import daily_minutes_remaining, daily_minutes_used, end_usage_session
 from core.services.internet_lifecycle import resume_internet_entitlement, suspend_internet_entitlement
 from core.services.internet_operations import run_readonly_mikrotik_healthcheck
@@ -166,9 +166,50 @@ def _provider_entitlements(partner):
 
 
 def _provider_sessions(partner):
-    # Package-less sessions do not yet carry partner provenance and therefore
-    # fail closed instead of being guessed into an external provider's scope.
-    return InternetSession.objects.filter(entitlement__partner=partner)
+    """Return sessions the provider is operationally responsible for.
+
+    Entitlement-backed sessions retain their immutable partner provenance. The
+    active default provider also operates Hub's package-less MikroTik traffic
+    (complimentary/basic and metered guest sessions), so those rows belong in
+    its operational dashboard without exposing manual or another partner's
+    sessions.
+    """
+    scope = Q(entitlement__partner=partner)
+    if partner.is_default:
+        scope |= Q(entitlement__isnull=True, network_provider=InternetSession.NetworkProvider.MIKROTIK)
+    return InternetSession.objects.filter(scope)
+
+
+def _provider_members(partner):
+    scope = Q(internet_entitlements__partner=partner)
+    if partner.is_default:
+        scope |= Q(
+            internet_sessions__entitlement__isnull=True,
+            internet_sessions__network_provider=InternetSession.NetworkProvider.MIKROTIK,
+        )
+    return Member.objects.filter(scope).distinct()
+
+
+def _session_minutes_for_day(sessions, day, now):
+    zone = timezone.get_current_timezone()
+    day_start = timezone.make_aware(datetime.combine(day, time.min), zone)
+    day_end = day_start + timedelta(days=1)
+    total = 0
+    for session in sessions.filter(start_time__lt=day_end).filter(
+            Q(end_time__isnull=True) | Q(end_time__gte=day_start)):
+        started = max(session.effective_started_at, day_start)
+        ended = min(session.effective_ended_at or now, day_end)
+        if ended > started:
+            total += calculate_session_duration_minutes(started, ended)
+    return total
+
+
+def _speed_label(kbps):
+    if not kbps:
+        return 'غير محدد'
+    if kbps >= 1000 and kbps % 1000 == 0:
+        return f'{kbps // 1000} Mbps'
+    return f'{kbps} Kbps'
 
 
 def _date_range_form(request, *, default_days=0):
@@ -269,16 +310,17 @@ def internet_provider_dashboard(request):
     metrics = {
         'active_sessions': sessions.filter(status=InternetSession.Status.ACTIVE).count(),
         'active_subscriptions': active_entitlements.count(),
-        'customers': entitlements.exclude(member__isnull=True).values('member_id').distinct().count(),
+        'customers': _provider_members(partner).count(),
         'expiring_soon': active_entitlements.filter(
             valid_until__gt=now, valid_until__lte=now + timedelta(days=3),
         ).count(),
-        'minutes_today': InternetUsageLedger.objects.filter(
-            entitlement__partner=partner, business_date=today,
-        ).aggregate(total=Sum('minutes'))['total'] or 0,
-        'network_errors': entitlements.filter(
-            network_status=InternetEntitlement.NetworkStatus.PROVISION_ERROR,
-        ).count(),
+        'minutes_today': _session_minutes_for_day(sessions, today, now),
+        'network_errors': (
+            entitlements.filter(
+                network_status=InternetEntitlement.NetworkStatus.PROVISION_ERROR,
+            ).count()
+            + sessions.filter(network_status='provision_error').count()
+        ),
     }
     recent_sessions = sessions.select_related('member', 'package', 'entitlement').order_by('-start_time')[:8]
     expiring = active_entitlements.select_related('member', 'package').order_by('valid_until')[:8]
@@ -304,7 +346,7 @@ def internet_provider_members(request):
         queryset=_provider_entitlements(partner).select_related('package').order_by('-created_at'),
         to_attr='provider_entitlements',
     )
-    members = Member.objects.filter(internet_entitlements__partner=partner).distinct()
+    members = _provider_members(partner)
     if query:
         search = Q(name_ar__icontains=query) | Q(name_en__icontains=query)
         if request.internet_partner_association.can_view_customer_phone:
@@ -320,7 +362,7 @@ def internet_provider_members(request):
 def internet_provider_member_detail(request, public_code):
     partner = request.internet_partner_association.partner
     member = get_object_or_404(
-        Member.objects.filter(internet_entitlements__partner=partner).distinct(),
+        _provider_members(partner),
         public_code=public_code,
     )
     entitlements = _provider_entitlements(partner).filter(member=member).select_related(
@@ -513,10 +555,14 @@ def internet_provider_network(request):
         entitlement__partner=partner,
     ).select_related('entitlement', 'entitlement__member', 'entitlement__package').order_by('-updated_at')[:30]
     state = InternetOperationsState.objects.filter(key='default').first()
+    profiles = list(InternetBandwidthProfile.objects.filter(pk__in=profile_ids).order_by('name'))
+    for profile in profiles:
+        profile.download_display = _speed_label(profile.download_limit_kbps)
+        profile.upload_display = _speed_label(profile.upload_limit_kbps)
     return render(request, 'provider/network.html', _base_context(
         request,
         networks=networks,
-        profiles=InternetBandwidthProfile.objects.filter(pk__in=profile_ids).order_by('name'),
+        profiles=profiles,
         operations=entitlement_operations,
         operations_state=state,
         worker_fresh=worker_is_fresh(state),

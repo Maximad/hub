@@ -1,6 +1,9 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from accounts.models import UserCapabilityOverride
 from core.models import (
@@ -179,3 +182,57 @@ class InternetProviderPortalTests(TestCase):
         for url in urls:
             with self.subTest(url=url):
                 self.assertEqual(self.client.get(url).status_code, 200)
+
+    def test_default_provider_sees_package_less_mikrotik_operations(self):
+        operational_member = Member.objects.create(
+            name_ar='عميل اتصال أساسي', phone='0933333333',
+        )
+        session = InternetSession.objects.create(
+            member=operational_member,
+            start_time=timezone.now() - timedelta(minutes=12),
+            billing_mode=InternetSession.BillingMode.OPEN_METERED,
+            status=InternetSession.Status.ACTIVE,
+            network_provider=InternetSession.NetworkProvider.MIKROTIK,
+        )
+
+        sessions = self.client.get(reverse('internet_provider_sessions'))
+        members = self.client.get(reverse('internet_provider_members'))
+        dashboard = self.client.get(reverse('internet_provider_dashboard'))
+
+        self.assertContains(sessions, session.public_code)
+        self.assertContains(sessions, 'اتصال زائر')
+        self.assertContains(members, operational_member.name_ar)
+        self.assertContains(dashboard, operational_member.name_ar)
+
+    def test_unassigned_manual_and_other_provider_sessions_remain_hidden(self):
+        operational_member = Member.objects.create(
+            name_ar='عميل لا يجب عرضه', phone='0944444444',
+        )
+        manual = InternetSession.objects.create(
+            member=operational_member,
+            start_time=timezone.now(),
+            billing_mode=InternetSession.BillingMode.OPEN_METERED,
+            status=InternetSession.Status.ACTIVE,
+            network_provider=InternetSession.NetworkProvider.MANUAL,
+        )
+        other_provider = get_user_model().objects.create_user(
+            username='other-provider', phone='090-other-provider', password='x',
+            role='internet_provider',
+        )
+        InternetPartnerUser.objects.create(partner=self.other_partner, user=other_provider)
+
+        default_response = self.client.get(reverse('internet_provider_sessions'))
+        self.assertNotContains(default_response, manual.public_code)
+        self.client.force_login(other_provider)
+        other_response = self.client.get(reverse('internet_provider_sessions'))
+        self.assertNotContains(other_response, manual.public_code)
+
+        mikrotik = InternetSession.objects.create(
+            member=operational_member,
+            start_time=timezone.now(),
+            billing_mode=InternetSession.BillingMode.OPEN_METERED,
+            status=InternetSession.Status.ACTIVE,
+            network_provider=InternetSession.NetworkProvider.MIKROTIK,
+        )
+        other_response = self.client.get(reverse('internet_provider_sessions'))
+        self.assertNotContains(other_response, mikrotik.public_code)

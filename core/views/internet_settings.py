@@ -35,12 +35,44 @@ class PartnerForm(forms.ModelForm):
     class Meta:
         model = InternetPartner
         fields = ('name', 'revenue_share_percent', 'active', 'is_default')
+        labels = {
+            'name': 'اسم المزوّد',
+            'revenue_share_percent': 'نسبة حصة المزوّد',
+            'active': 'مزوّد فعّال',
+            'is_default': 'المزوّد الافتراضي',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs.setdefault('class', 'hub-input')
 
 
 class ProfileForm(forms.ModelForm):
     class Meta:
         model = InternetBandwidthProfile
         fields = ('code', 'name', 'download_limit_kbps', 'upload_limit_kbps', 'router_profile_name', 'is_active')
+        labels = {
+            'code': 'الرمز الداخلي',
+            'name': 'اسم ملف السرعة',
+            'download_limit_kbps': 'سرعة التنزيل (Kbps)',
+            'upload_limit_kbps': 'سرعة الرفع (Kbps)',
+            'router_profile_name': 'اسم الملف في RouterOS',
+            'is_active': 'ملف فعّال',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs.setdefault('class', 'hub-input')
+
+
+def _speed_label(kbps):
+    if not kbps:
+        return 'غير محددة'
+    if kbps >= 1000 and kbps % 1000 == 0:
+        return f'{kbps // 1000} Mbps'
+    return f'{kbps} Kbps'
 
 
 class GuestWifiPolicyForm(forms.ModelForm):
@@ -236,9 +268,21 @@ def internet_settings(request):
             network_state = None
         active_session_rows.append({'session': session, 'network_state': network_state})
 
+    profiles = list(InternetBandwidthProfile.objects.order_by('name'))
+    for profile in profiles:
+        profile.download_display = _speed_label(profile.download_limit_kbps)
+        profile.upload_display = _speed_label(profile.upload_limit_kbps)
+    failed_total = entitlement_counts.get('failed', 0) + session_counts.get('failed', 0)
+    pending_total = (
+        entitlement_counts.get('pending', 0)
+        + entitlement_counts.get('processing', 0)
+        + session_counts.get('pending', 0)
+        + session_counts.get('processing', 0)
+    )
+
     context = {
         'partners': InternetPartner.objects.order_by('-is_default', 'name'),
-        'profiles': InternetBandwidthProfile.objects.order_by('name'),
+        'profiles': profiles,
         'networks': WifiNetwork.objects.select_related('bandwidth_profile').order_by('name_ar'),
         'default_partner': InternetPartner.objects.filter(active=True, is_default=True).first(),
         'inherited_packages': packages.filter(partner__isnull=True).count(),
@@ -247,8 +291,8 @@ def internet_settings(request):
         'mikrotik_enabled': settings.MIKROTIK_ENABLED,
         'mikrotik_configured': bool(settings.MIKROTIK_BASE_URL and settings.MIKROTIK_HOTSPOT_SERVER),
         'network_backends': WifiNetwork.objects.values_list('network_backend', flat=True).distinct(),
-        'pending_network_operations': entitlement_counts.get('pending', 0) + entitlement_counts.get('processing', 0),
-        'failed_network_operations': entitlement_counts.get('failed', 0),
+        'pending_network_operations': pending_total,
+        'failed_network_operations': failed_total,
         'last_network_operation': entitlement_operations[0] if entitlement_operations else None,
         'partner_form': PartnerForm(),
         'profile_form': ProfileForm(),
@@ -271,6 +315,9 @@ def internet_settings(request):
         'entitlement_operations': entitlement_operations,
         'session_operations': session_operations,
         'active_session_rows': active_session_rows,
+        'advanced_diagnostics_open': bool(
+            failed_total or not worker_is_fresh(state) or readiness.get('status') == 'FAIL'
+        ),
     }
     return render(request, 'staff/internet_settings.html', context)
 

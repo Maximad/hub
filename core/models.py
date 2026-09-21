@@ -1862,6 +1862,10 @@ class InternetEntitlement(TimeStampedModel, PublicCodeModel):
         return self.Status.EXPIRED if self.status == self.Status.ACTIVE and self.valid_until and self.valid_until <= at else self.status
 
     @property
+    def effective_status_label(self):
+        return dict(self.Status.choices)[self.effective_status()]
+
+    @property
     def is_effectively_active(self):
         return self.effective_status() == self.Status.ACTIVE
 
