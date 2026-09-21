@@ -13,8 +13,8 @@
 
 <nav class="internet-settings-nav" aria-label="أقسام إعدادات الإنترنت">
   <a href="#basic-wifi-policy">اتصال الزبائن</a>
-  <a href="#network-control">الشبكة والبوابة</a>
-  <a href="#commercial-settings">المزوّد والسرعات</a>
+  <a href="#network-control">الشبكة والربط</a>
+  <a href="#commercial-settings">المزوّد وملفات الاتصال</a>
   <a href="#advanced-diagnostics">التشخيص المتقدم</a>
 </nav>
 
@@ -28,7 +28,7 @@
 
 <section class="internet-settings-alerts" aria-label="تنبيهات التشغيل">
   {% if not guest_wifi_policy.enabled %}<div class="hub-alert hub-alert-warning"><strong>الاتصال الأساسي متوقف.</strong> لن يحصل الزائر على الإنترنت المجاني حتى تفعّله وتحفظ السياسة.</div>{% endif %}
-  {% if not portal_policy %}<div class="hub-alert hub-alert-danger"><strong>إعداد بوابة الزبائن غير مكتمل.</strong> {{ portal_policy_error }} لن تتاح المزامنة قبل إصلاح هذا الإعداد.</div>{% endif %}
+  {% if not router_mappings %}<div class="hub-alert hub-alert-danger"><strong>ربط ملفات RouterOS غير مكتمل.</strong> {{ router_mapping_error }} هذا ربط داخل Django فقط ولا يغيّر إعدادات الراوتر.</div>{% endif %}
   {% if failed_network_operations %}<div class="hub-alert hub-alert-danger"><strong>{{ failed_network_operations }} عملية شبكة فاشلة.</strong> افتح التشخيص المتقدم لمراجعتها أو إعادتها للمحاولة.</div>{% endif %}
   {% if not worker_fresh %}<div class="hub-alert hub-alert-warning"><strong>عامل الإنترنت متوقف أو متأخر.</strong> قد لا تُنفّذ تغييرات الجلسات والباقات تلقائياً.</div>{% endif %}
 </section>
@@ -51,7 +51,7 @@
       <label class="internet-policy-switch">{{ guest_wifi_form.member_bypass_venue_code }}<span><strong>تجاوز الرمز للمشترك</strong><small>يتجاوز الرمز فقط؛ ولا يمنح سرعة أعلى تلقائياً.</small></span></label>
     </div>
     <div class="internet-policy-grid">
-      <label class="internet-policy-field"><span>{{ guest_wifi_form.bandwidth_profile.label }}</span>{{ guest_wifi_form.bandwidth_profile }}<small>السرعة التي تطبّق على الاتصال الأساسي.</small></label>
+      <label class="internet-policy-field"><span>{{ guest_wifi_form.bandwidth_profile.label }}</span>{{ guest_wifi_form.bandwidth_profile }}<small>ملف الاتصال الأساسي المرتبط بالملف الموجود مسبقاً في RouterOS.</small></label>
       <label class="internet-policy-field"><span>{{ guest_wifi_form.session_minutes.label }}</span>{{ guest_wifi_form.session_minutes }}<small>الرصيد الأولي للجهاز في يوم العمل.</small></label>
       <label class="internet-policy-field"><span>{{ guest_wifi_form.daily_complimentary_minutes.label }}</span>{{ guest_wifi_form.daily_complimentary_minutes }}<small>أقصى مجموع مجاني في اليوم.</small></label>
       <label class="internet-policy-field"><span>{{ guest_wifi_form.order_bonus_minutes.label }}</span>{{ guest_wifi_form.order_bonus_minutes }}<small>لا تتجاوز السقف اليومي.</small></label>
@@ -64,7 +64,7 @@
 </section>
 
 <section class="hub-section hub-card" id="network-control">
-  <div class="internet-settings-section-head"><div><p class="internet-policy-panel__eyebrow">الشبكة والبوابة</p><h2 class="hub-section-title">التحقق والمزامنة</h2></div><span class="hub-badge {% if portal_policy and preflight.ready %}hub-badge-success{% else %}hub-badge-danger{% endif %}">{% if portal_policy and preflight.ready %}جاهز للمزامنة{% else %}إعداد غير مكتمل{% endif %}</span></div>
+  <div class="internet-settings-section-head"><div><p class="internet-policy-panel__eyebrow">الشبكة والربط</p><h2 class="hub-section-title">تحقق للقراءة فقط</h2></div><span class="hub-badge {% if router_mappings %}hub-badge-success{% else %}hub-badge-danger{% endif %}">{% if router_mappings %}الربط المحلي مكتمل{% else %}الربط غير مكتمل{% endif %}</span></div>
   <div class="internet-settings-action-grid">
     <article class="internet-settings-action-card">
       <h3>فحص الاتصال</h3><p>قراءة آمنة لحالة MikroTik، من دون إنشاء مستخدمين أو تعديل الشبكة.</p>
@@ -72,20 +72,18 @@
       <small>{% if operations_state.last_mikrotik_check_at %}آخر فحص: {{ operations_state.last_mikrotik_check_at }} — {% if operations_state.last_mikrotik_check_ok %}ناجح{% else %}فشل{% endif %}{% else %}لم يُجر فحص محفوظ بعد.{% endif %}</small>
     </article>
     <article class="internet-settings-action-card">
-      <h3>مزامنة بوابة الزبائن</h3>
-      {% if portal_policy %}
-      <p>HotSpot: <bdi>{{ portal_policy.server }}</bdi><br>النطاق: <bdi>{{ portal_policy.portal_host }}</bdi></p>
-      <ul class="internet-settings-compact-list">{% for profile in portal_policy.profiles %}<li>{{ profile.name }}: <bdi>{{ profile.rate_limit }}</bdi></li>{% endfor %}</ul>
-      <form method="post" action="{% url 'staff_internet_settings' %}">{% csrf_token %}<input type="hidden" name="operation_action" value="sync_mikrotik_portal_policy"><button class="hub-button hub-button-primary" type="submit">فحص ومزامنة البوابة</button></form>
-      <small>قد تعدّل هذه العملية ملفي السرعة المحددين أعلاه؛ راجع القيم قبل التنفيذ.</small>
-      {% else %}<p class="hub-alert hub-alert-warning">{{ portal_policy_error }}</p><button class="hub-button" type="button" disabled>المزامنة غير متاحة</button>{% endif %}
+      <h3>الربط مع الملفات الموجودة</h3>
+      {% if router_mappings %}
+      <p>HotSpot: <bdi>{{ router_mappings.server }}</bdi></p>
+      <ul class="internet-settings-compact-list">{% for profile in router_mappings.profiles %}<li>{{ profile.label }}: <bdi>{{ profile.name }}</bdi></li>{% endfor %}</ul>
+      <small>هذه أسماء موارد موجودة مسبقاً في RouterOS. هَبّ يستخدمها للجلسات فقط ولا يغيّر سرعتها أو خصائصها أو قواعد البوابة.</small>
+      {% else %}<p class="hub-alert hub-alert-warning">{{ router_mapping_error }}</p>{% endif %}
     </article>
   </div>
-  {% if last_portal_policy_sync %}<p class="hub-text-muted">آخر محاولة مزامنة: {{ last_portal_policy_sync.created_at }} — {% if last_portal_policy_sync.action == 'internet.mikrotik_portal_policy_synced' %}اكتملت{% else %}فشلت{% endif %}</p>{% endif %}
 </section>
 
 <details class="hub-section hub-card internet-settings-disclosure" id="commercial-settings">
-  <summary><span><strong>المزوّد والسرعات والشبكات</strong><small>إعدادات لا تحتاج إلى تعديل يومي</small></span><span>فتح</span></summary>
+  <summary><span><strong>المزوّد وملفات الاتصال والشبكات</strong><small>إعدادات Django لا تعيد تهيئة الراوتر</small></span><span>فتح</span></summary>
   <div class="internet-settings-disclosure__body">
     <section>
       <h2 class="hub-section-title">شركاء الإنترنت</h2><p class="hub-text-muted">تغيير النسبة يؤثر على المبيعات والاستحقاقات الجديدة فقط.</p>
@@ -93,11 +91,11 @@
       <details class="internet-settings-nested"><summary>إضافة مزوّد جديد</summary><form class="internet-settings-form-grid" method="post" action="{% url 'staff_internet_partner_new' %}">{% csrf_token %}{% for field in partner_form %}<label><span>{{ field.label }}</span>{{ field }}</label>{% endfor %}<button class="hub-button" type="submit">إنشاء المزوّد</button></form></details>
     </section>
     <section>
-      <h2 class="hub-section-title">ملفات السرعة</h2><p class="hub-alert hub-alert-warning">القيم هنا قد تصبح القيم الفعلية في RouterOS عند مزامنة البوابة. تأكد منها قبل المزامنة.</p>
-      <div class="internet-settings-profile-grid">{% for p in profiles %}<form class="internet-settings-profile-card" method="post" action="{% url 'staff_internet_profile_edit' p.pk %}">{% csrf_token %}<div><strong>{{ p.name }}</strong><small>تنزيل {{ p.download_display }} · رفع {{ p.upload_display }}</small></div><label><span>الرمز الداخلي</span><input class="hub-input" name="code" value="{{ p.code }}"></label><label><span>الاسم</span><input class="hub-input" name="name" value="{{ p.name }}"></label><label><span>التنزيل (Kbps)</span><input class="hub-input" type="number" min="0" name="download_limit_kbps" value="{{ p.download_limit_kbps|default:'' }}"></label><label><span>الرفع (Kbps)</span><input class="hub-input" type="number" min="0" name="upload_limit_kbps" value="{{ p.upload_limit_kbps|default:'' }}"></label><label><span>ملف RouterOS</span><input class="hub-input" name="router_profile_name" value="{{ p.router_profile_name }}"></label><label class="internet-settings-check"><input type="checkbox" name="is_active" {% if p.is_active %}checked{% endif %}> فعّال</label><button class="hub-button" type="submit">حفظ ملف السرعة</button></form>{% endfor %}</div>
-      <details class="internet-settings-nested"><summary>إضافة ملف سرعة</summary><form class="internet-settings-form-grid" method="post" action="{% url 'staff_internet_profile_new' %}">{% csrf_token %}{% for field in profile_form %}<label><span>{{ field.label }}</span>{{ field }}</label>{% endfor %}<button class="hub-button" type="submit">إنشاء الملف</button></form></details>
+      <h2 class="hub-section-title">ملفات الاتصال</h2><p class="hub-alert hub-alert-warning">قيم السرعة المحلية أدناه وصفية فقط. لا تُرسل إلى RouterOS ولا تُستخدم لمقارنة إعداداته. يمكن تعديل الاسم والربط المحلي فقط.</p>
+      <div class="internet-settings-profile-grid">{% for p in profiles %}<form class="internet-settings-profile-card" method="post" action="{% url 'staff_internet_profile_edit' p.pk %}">{% csrf_token %}<div><strong>{{ p.name }}</strong><small>قيمة وصفية محفوظة: تنزيل {{ p.download_display }} · رفع {{ p.upload_display }}</small></div><label><span>الرمز الداخلي</span><input class="hub-input" name="code" value="{{ p.code }}"></label><label><span>الاسم</span><input class="hub-input" name="name" value="{{ p.name }}"></label><label><span>ملف RouterOS الموجود</span><input class="hub-input" name="router_profile_name" value="{{ p.router_profile_name }}"></label><label class="internet-settings-check"><input type="checkbox" name="is_active" {% if p.is_active %}checked{% endif %}> فعّال</label><button class="hub-button" type="submit">حفظ الربط</button></form>{% endfor %}</div>
+      <details class="internet-settings-nested"><summary>إضافة ملف اتصال</summary><form class="internet-settings-form-grid" method="post" action="{% url 'staff_internet_profile_new' %}">{% csrf_token %}{% for field in profile_form %}<label><span>{{ field.label }}</span>{{ field }}</label>{% endfor %}<button class="hub-button" type="submit">إنشاء الملف</button></form></details>
     </section>
-    <section><h2 class="hub-section-title">شبكات Wi‑Fi</h2><div class="hub-table-wrap"><table class="hub-table"><tr><th>الاسم</th><th>اسم الشبكة (SSID)</th><th>النوع</th><th>الحالة</th><th>طريقة الربط</th><th>ملف السرعة</th><th>تظهر في QR</th></tr>{% for n in networks %}<tr><td>{{ n.name_ar }}</td><td><bdi>{{ n.ssid }}</bdi></td><td>{{ n.get_network_type_display }}</td><td>{{ n.is_active|yesno:'فعّالة,متوقفة' }}</td><td>{{ n.get_network_backend_display }}</td><td>{{ n.bandwidth_profile|default:'غير مربوط' }}</td><td>{{ n.visible_on_qr|yesno:'نعم,لا' }}</td></tr>{% empty %}<tr><td colspan="7">لا توجد شبكات مسجلة.</td></tr>{% endfor %}</table></div><p class="hub-text-muted">طريقة الربط تصف سجل الشبكة في هَبّ؛ وقد تختلف عن حالة تكامل MikroTik العامة. كلمات المرور لا تعرض هنا.</p></section>
+    <section><h2 class="hub-section-title">شبكات Wi‑Fi</h2><div class="hub-table-wrap"><table class="hub-table"><tr><th>الاسم</th><th>اسم الشبكة (SSID)</th><th>النوع</th><th>الحالة</th><th>طريقة الربط</th><th>ملف الاتصال</th><th>تظهر في QR</th></tr>{% for n in networks %}<tr><td>{{ n.name_ar }}</td><td><bdi>{{ n.ssid }}</bdi></td><td>{{ n.get_network_type_display }}</td><td>{{ n.is_active|yesno:'فعّالة,متوقفة' }}</td><td>{{ n.get_network_backend_display }}</td><td>{{ n.bandwidth_profile|default:'غير مربوط' }}</td><td>{{ n.visible_on_qr|yesno:'نعم,لا' }}</td></tr>{% empty %}<tr><td colspan="7">لا توجد شبكات مسجلة.</td></tr>{% endfor %}</table></div><p class="hub-text-muted">طريقة الربط تصف سجل الشبكة في هَبّ؛ وقد تختلف عن حالة تكامل MikroTik العامة. كلمات المرور لا تعرض هنا.</p></section>
     <section class="internet-settings-meta-grid"><div><h3>الإعدادات التجارية</h3><p>باقات ترث المزوّد الافتراضي: {{ inherited_packages }}</p><p>باقات بمزوّد صريح: {{ partner_overrides }}</p><p>باقات بنسبة خاصة: {{ percent_overrides }}</p></div><div><h3>بيئة MikroTik</h3><p>التكامل: {{ mikrotik_enabled|yesno:'مفعّل,معطّل' }}</p><p>الحد الأدنى من الإعداد: {{ mikrotik_configured|yesno:'موجود,غير مكتمل' }}</p><p>طرق الربط المسجلة: {{ network_backends|join:', ' }}</p></div></section>
   </div>
 </details>
