@@ -62,6 +62,9 @@ class InternetOperationsConsoleTests(TestCase):
         self.assertContains(response, 'جاهزية MikroTik')
         self.assertContains(response, 'طوابير عمليات الشبكة')
         self.assertContains(response, 'شركاء الإنترنت')
+        self.assertContains(response, 'التشخيص المتقدم')
+        self.assertContains(response, 'المزوّد والسرعات والشبكات')
+        self.assertContains(response, 'اسم المزوّد')
         self.assertNotContains(response, 'do-not-render-this-password')
         self.assertNotContains(response, 'do-not-render-this-key')
 
