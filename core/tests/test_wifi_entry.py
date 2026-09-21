@@ -3,6 +3,7 @@ from urllib.parse import urlsplit
 
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from core.models import (
     Category,
@@ -16,7 +17,8 @@ from core.models import (
 )
 from core.settings_helpers import get_system_settings
 from locations.models import TableAreaSettings
-from internet.models import GuestWifiPolicy
+from internet.models import GuestWifiPolicy, InternetSessionBrowserBinding
+from internet.session_network_backends import NOT_PROVISIONED
 
 
 @override_settings(
@@ -37,6 +39,18 @@ class WifiEntryTests(TestCase):
     def tearDown(self):
         get_system_settings.cache_clear()
 
+    def enable_wifi_self_service(self, *, require_code=True):
+        SystemSetting.objects.create(
+            customer_visits_enabled=True,
+            customer_internet_self_service_enabled=True,
+        )
+        get_system_settings.cache_clear()
+        policy = GuestWifiPolicy.objects.get(key='default')
+        policy.enabled = True
+        policy.require_venue_code = require_code
+        policy.save(update_fields=['enabled', 'require_venue_code', 'updated_at'])
+        return policy
+
     def test_wifi_entry_is_public_no_store_and_does_not_leak_staff_description(self):
         response = self.client.get(reverse('wifi_entry'))
 
@@ -47,12 +61,38 @@ class WifiEntryTests(TestCase):
         self.assertNotContains(response, 'css/staff_workspace.css')
         self.assertContains(response, 'افتح المنيو واطلب')
         self.assertContains(response, 'href="{}"'.format(reverse('menu_public')))
+        self.assertContains(response, reverse('wifi_entry') + '?mode=internet')
         self.assertContains(response, 'رقم الطاولة')
         self.assertContains(response, reverse('member_account_login'))
         self.assertNotContains(response, self.access.staff_description)
         self.assertEqual(response['Cache-Control'], 'no-store, private, max-age=0')
         self.assertEqual(response['Pragma'], 'no-cache')
         self.assertIn('noindex', response['X-Robots-Tag'])
+
+    def test_initial_choice_does_not_start_or_render_internet_authorization_form(self):
+        self.enable_wifi_self_service(require_code=True)
+
+        response = self.client.get(reverse('wifi_entry'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'عرض خيارات الإنترنت')
+        self.assertContains(response, 'افتح المنيو واطلب')
+        self.assertNotContains(response, 'name="venue_code"')
+        self.assertNotContains(response, 'value="start_guest_wifi"')
+        self.assertEqual(HubVisit.objects.count(), 0)
+        self.assertEqual(InternetSession.objects.count(), 0)
+
+    def test_opening_internet_mode_is_read_only_until_customer_starts_access(self):
+        self.enable_wifi_self_service(require_code=True)
+
+        response = self.client.get(reverse('wifi_entry'), {'mode': 'internet'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'الإنترنت الأساسي')
+        self.assertContains(response, 'name="venue_code"')
+        self.assertContains(response, 'الرمز خاص بتفعيل الإنترنت الأساسي فقط')
+        self.assertEqual(HubVisit.objects.count(), 0)
+        self.assertEqual(InternetSession.objects.count(), 0)
 
     def test_wifi_entry_resolves_explicit_table_number_with_arabic_digits(self):
         response = self.client.get(reverse('wifi_entry'), {'table_number': '١١'})
@@ -128,15 +168,7 @@ class WifiEntryTests(TestCase):
     def test_one_tap_basic_connection_opens_menu_after_router_login(
         self, _prepare, _one_tap, build_payload,
     ):
-        SystemSetting.objects.create(
-            customer_visits_enabled=True,
-            customer_internet_self_service_enabled=True,
-        )
-        get_system_settings.cache_clear()
-        policy = GuestWifiPolicy.objects.get(key='default')
-        policy.enabled = True
-        policy.require_venue_code = False
-        policy.save(update_fields=['enabled', 'require_venue_code'])
+        self.enable_wifi_self_service(require_code=False)
         build_payload.return_value = {
             'login_url': 'https://wifi.test/login',
             'login_origin': 'https://wifi.test',
@@ -156,12 +188,64 @@ class WifiEntryTests(TestCase):
         self.assertEqual(urlsplit(destination).path, reverse('menu_public'))
         self.assertContains(response, 'لم يتم الاتصال؟ أعد المحاولة')
 
-    def test_menu_remains_available_without_starting_internet(self):
+    @patch('core.views.wifi.prepare_guest_wifi_session_network', return_value=False)
+    def test_failed_basic_network_authorization_is_not_presented_as_connected(self, _prepare):
+        self.enable_wifi_self_service(require_code=False)
+
+        started = self.client.post(reverse('wifi_entry'), {'wifi_action': 'start_guest_wifi'})
+
+        self.assertEqual(started.status_code, 302)
+        self.assertEqual(started['Location'], reverse('wifi_entry') + '?mode=internet')
+        session = InternetSession.objects.get(status=InternetSession.Status.ACTIVE)
+        session.network_provider = InternetSession.NetworkProvider.MIKROTIK
+        session.network_status = NOT_PROVISIONED
+        session.save(update_fields=['network_provider', 'network_status', 'updated_at'])
+
+        page = self.client.get(started['Location'])
+        self.assertContains(page, 'قيد التجهيز')
+        self.assertContains(page, 'الشبكة لم تؤكد الجاهزية بعد')
+        self.assertNotContains(page, 'أكدت الشبكة تجهيز الاتصال')
+
+    def test_pending_fast_session_is_not_presented_as_connected(self):
+        SystemSetting.objects.create(
+            customer_visits_enabled=True,
+            customer_internet_self_service_enabled=True,
+        )
+        get_system_settings.cache_clear()
+        opened = self.client.post(reverse('wifi_entry'), {'wifi_action': 'internet_options'})
+        self.assertEqual(opened.status_code, 302)
+        visit = HubVisit.objects.get()
+        credential = HubVisitBrowserCredential.objects.get(visit=visit)
+        now = timezone.now()
+        session = InternetSession.objects.create(
+            visit=visit,
+            started_at=now,
+            start_time=now,
+            billing_mode=InternetSession.BillingMode.OPEN_METERED,
+            status=InternetSession.Status.ACTIVE,
+            network_provider=InternetSession.NetworkProvider.MIKROTIK,
+            network_status=NOT_PROVISIONED,
+        )
+        InternetSessionBrowserBinding.objects.create(session=session, credential=credential)
+
+        response = self.client.get(reverse('wifi_entry'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'طلب الإنترنت السريع قيد التجهيز')
+        self.assertContains(response, 'لا تعرض الصفحة هذا كاتصال فعلي قبل التأكيد')
+        self.assertNotContains(response, 'الإنترنت السريع جاهز لهذا الجهاز')
+
+    def test_menu_remains_available_without_pin_or_starting_internet(self):
+        self.enable_wifi_self_service(require_code=True)
         landing = self.client.get(reverse('wifi_entry'))
         self.assertContains(landing, 'href="{}"'.format(reverse('menu_public')))
+        self.assertContains(landing, 'لا يلزم رمز المكان')
+
         menu = self.client.get(reverse('menu_public'))
+
         self.assertEqual(menu.status_code, 200)
         self.assertEqual(HubVisit.objects.count(), 0)
+        self.assertEqual(InternetSession.objects.count(), 0)
 
     def test_stopping_fast_restores_remaining_basic_allowance(self):
         category = Category.objects.create(name_ar='خدمات')

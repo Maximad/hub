@@ -27,6 +27,7 @@ from internet.guest_wifi import (
     prepare_guest_wifi_session_network,
     start_guest_wifi_session,
 )
+from internet.session_network_backends import PROVISIONED
 from members.services import resolve_member_from_request
 from members.benefits import resolve_internet_price
 
@@ -38,10 +39,22 @@ def _validation_message(error):
     return ' '.join(getattr(error, 'messages', [str(error)]))
 
 
+def _wifi_internet_path():
+    return reverse('wifi_entry') + '?mode=internet'
+
+
 def _menu_path(visit):
     if visit and visit.table_id:
         return reverse('menu_table', kwargs={'qr_token': visit.table.qr_token}) + '?view=menu'
     return reverse('menu_public')
+
+
+def _session_network_ready(session):
+    if not session:
+        return False
+    if session.network_provider != InternetSession.NetworkProvider.MIKROTIK:
+        return True
+    return session.network_status == PROVISIONED
 
 
 def _attach_member_to_visit(visit, member_context, *, source):
@@ -98,7 +111,7 @@ def _open_internet_options(request):
     """Open the existing Internet storefront for a visitor or member, table optional."""
     if not self_service_enabled(get_system_settings()):
         messages.error(request, 'خدمة الإنترنت الذاتية غير متاحة حالياً.')
-        return redirect('wifi_entry')
+        return redirect(_wifi_internet_path())
     try:
         _visit, _credential, raw_cookie, _member_context = _ensure_wifi_visit(
             request,
@@ -106,7 +119,7 @@ def _open_internet_options(request):
         )
     except ValidationError as exc:
         messages.error(request, _validation_message(exc))
-        return redirect('wifi_entry')
+        return redirect(_wifi_internet_path())
     response = redirect(reverse('current_visit') + '?focus=internet')
     return set_visit_cookie(response, raw_cookie) if raw_cookie else response
 
@@ -117,11 +130,11 @@ def _start_guest_wifi(request):
     policy = get_guest_wifi_policy()
     if not self_service_enabled(system_settings):
         messages.error(request, 'خدمة الإنترنت الذاتية غير متاحة حالياً.')
-        return redirect('wifi_entry')
+        return redirect(_wifi_internet_path())
     policy_error = guest_wifi_policy_error(policy)
     if policy_error:
         messages.error(request, policy_error)
-        return redirect('wifi_entry')
+        return redirect(_wifi_internet_path())
 
     try:
         visit, credential, raw_cookie, member_context = _ensure_wifi_visit(
@@ -130,7 +143,7 @@ def _start_guest_wifi(request):
         )
     except ValidationError as exc:
         messages.error(request, _validation_message(exc))
-        return redirect('wifi_entry')
+        return redirect(_wifi_internet_path())
 
     try:
         session, created = start_guest_wifi_session(
@@ -142,12 +155,12 @@ def _start_guest_wifi(request):
         )
     except ValidationError as exc:
         messages.error(request, _validation_message(exc))
-        response = redirect('wifi_entry')
+        response = redirect(_wifi_internet_path())
         return set_visit_cookie(response, raw_cookie) if raw_cookie else response
     except Exception:
         logger.exception('Guest Wi-Fi authorization failed')
         messages.error(request, 'تعذر بدء الإنترنت حالياً. يمكنك طلب المساعدة من الفريق.')
-        response = redirect('wifi_entry')
+        response = redirect(_wifi_internet_path())
         return set_visit_cookie(response, raw_cookie) if raw_cookie else response
 
     network_ready = prepare_guest_wifi_session_network(session)
@@ -157,7 +170,10 @@ def _start_guest_wifi(request):
             'تم تفعيل الإنترنت الأساسي.' if created else 'الإنترنت الأساسي ما يزال فعالاً على هذا الجهاز.',
         )
     else:
-        messages.warning(request, 'يجري تجهيز الاتصال. يمكنك المحاولة مجدداً بعد لحظات.')
+        messages.warning(
+            request,
+            'سُجل طلب الإنترنت الأساسي، لكن الشبكة لم تؤكد الجاهزية بعد. أعد المحاولة بعد لحظات.',
+        )
 
     if network_ready and one_tap_session_connect_configured(session):
         try:
@@ -169,16 +185,16 @@ def _start_guest_wifi(request):
             )
         except Exception:
             logger.exception('Guest Wi-Fi HotSpot relay failed for session_id=%s', session.pk)
-            messages.warning(request, 'تم تفعيل الجلسة، لكن تعذر الاتصال التلقائي بالشبكة.')
+            messages.warning(request, 'تم تجهيز الجلسة، لكن تعذر الاتصال التلقائي بالشبكة.')
 
-    response = redirect('wifi_entry')
+    response = redirect(_wifi_internet_path())
     return set_visit_cookie(response, raw_cookie) if raw_cookie else response
 
 
 def wifi_entry(request):
     """Render the stable Hub-owned captive landing page.
 
-    The SSID may be open, but Internet authorization is controlled here. RouterOS
+    Menu/order access is always independent from Internet authorization. RouterOS
     remains responsible for the physical HotSpot session; this page never accepts a
     router password or trusts a client-supplied MAC address.
     """
@@ -227,6 +243,7 @@ def wifi_entry(request):
         first_package.customer_price_syp = int(resolve_internet_price(
             internet_member, first_package,
         )[0])
+
     active_session = active_browser_session(credential) if credential else None
     active_guest_session = None
     active_fast_session = None
@@ -245,6 +262,12 @@ def wifi_entry(request):
         )
         basic_can_start = True
 
+    internet_panel_open = bool(
+        request.GET.get('mode') == 'internet'
+        or active_guest_session
+        or active_fast_session
+    )
+
     response = render(request, 'menu/wifi_entry.html', {
         'table_number_error': table_number_error,
         'table_number_value': raw_number,
@@ -252,6 +275,7 @@ def wifi_entry(request):
         'current_table': current_table,
         'current_table_url': current_table_url,
         'menu_url': menu_url,
+        'internet_panel_open': internet_panel_open,
         'came_from_free_access': request.GET.get('free') == '1' and bool(active_guest_session),
         'member_context': member_context,
         'internet_options_available': internet_options_available,
@@ -271,12 +295,8 @@ def wifi_entry(request):
         'guest_wifi_order_bonus_minutes': int(policy.order_bonus_minutes or 0),
         'active_guest_wifi_session': active_guest_session,
         'active_fast_wifi_session': active_fast_session,
-        'active_guest_wifi_network_ready': bool(
-            active_guest_session
-            and active_guest_session.network_status == InternetSession.NetworkStatus.PROVISIONED
-        ) if hasattr(InternetSession, 'NetworkStatus') else bool(
-            active_guest_session and active_guest_session.network_status == 'provisioned'
-        ),
+        'active_guest_wifi_network_ready': _session_network_ready(active_guest_session),
+        'active_fast_wifi_network_ready': _session_network_ready(active_fast_session),
     })
     response['Cache-Control'] = 'no-store, private, max-age=0'
     response['Pragma'] = 'no-cache'
