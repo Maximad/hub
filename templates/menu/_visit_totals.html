@@ -1,0 +1,2 @@
+{% load hub_numbers %}
+<section class="hub-card current-visit__totals" aria-label="الحساب"><h2>الحساب</h2><div><p><span>الإجمالي</span><strong>{{ visit.gross_syp|format_syp }}</strong></p><p><span>المدفوع</span><strong>{{ visit.paid_syp|format_syp }}</strong></p><p><span>المتبقي</span><strong>{{ visit.remaining_syp|format_syp }}</strong></p></div></section>

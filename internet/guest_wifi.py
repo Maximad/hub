@@ -400,6 +400,32 @@ def prepare_guest_wifi_session_network(session):
     return prepare_visit_metered_session_network(session)
 
 
+def restore_guest_wifi_after_fast(*, request, credential, member_context=None,
+                                  actor=None, at=None):
+    """Restore an already-authorized daily basic allowance after fast access ends.
+
+    A first-time basic grant still requires the venue PIN. This helper therefore
+    never bypasses presence proof: it only resumes remaining allowance, or a member
+    account that is explicitly allowed to bypass the code by venue policy.
+    """
+    at = at or timezone.now()
+    policy = get_guest_wifi_policy()
+    if guest_wifi_policy_error(policy):
+        return None, False
+    if guest_wifi_code_required(policy, member_context, credential, at):
+        return None, False
+    if not guest_wifi_grants_remaining(credential, policy, at):
+        return None, False
+    return start_guest_wifi_session(
+        request=request,
+        visit=credential.visit,
+        credential=credential,
+        member_context=member_context,
+        actor=actor,
+        at=at,
+    )
+
+
 @transaction.atomic
 def account_guest_wifi_session_usage(session, *, at=None):
     """Persist actual basic-Internet usage exactly once after a session ends."""

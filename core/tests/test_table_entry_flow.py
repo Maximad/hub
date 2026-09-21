@@ -258,7 +258,7 @@ class TableEntryFlowTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response['Location'], reverse('current_visit'))
+        self.assertEqual(response['Location'], reverse('wifi_entry'))
         session.refresh_from_db()
         self.assertEqual(session.status, InternetSession.Status.BILLED)
         self.assertEqual(session.billable_minutes, 75)

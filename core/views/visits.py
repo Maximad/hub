@@ -10,7 +10,15 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from core.models import ActivityLog, HubVisit, InternetEntitlement, InternetPackage, InternetSession, TableArea
+from core.models import (
+    ActivityLog,
+    HubVisit,
+    InternetEntitlement,
+    InternetNetworkOperation,
+    InternetPackage,
+    InternetSession,
+    TableArea,
+)
 from core.services.hotspot_connect import (
     build_hotspot_login_payload,
     build_session_hotspot_login_payload,
@@ -18,6 +26,7 @@ from core.services.hotspot_connect import (
     one_tap_session_connect_configured,
 )
 from core.services.internet_access import end_usage_session
+from core.services.network_operations import enqueue_network_operation, process_network_operation
 from core.services.visit_internet import (
     customer_packages,
     finalize_visit_metered_session,
@@ -38,6 +47,13 @@ from core.services.visits import issue_visit_credential, resolve_visit_credentia
 from core.settings_helpers import get_system_settings
 from members.benefits import resolve_internet_price
 from members.services import resolve_member_from_request
+from internet.guest_wifi import (
+    pause_guest_wifi_session,
+    prepare_guest_wifi_session_network,
+    restore_guest_wifi_after_fast,
+)
+from internet.models import GuestWifiGrant
+from internet.session_network_backends import DISCONNECTED
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +126,7 @@ def current_visit(request):
         'table_entry_url': table_entry_url,
         'active_internet_session': active_internet_session,
         'internet_self_service_enabled': internet_enabled,
+        'focus_internet': internet_enabled and request.GET.get('focus') == 'internet',
     }
     if internet_enabled:
         context.update(_internet_context(visit, visit.member, credential))
@@ -404,10 +421,23 @@ def visit_internet_session_stop(request, public_code):
         public_code=public_code,
         status=InternetSession.Status.ACTIVE,
     )
+    is_basic = GuestWifiGrant.objects.filter(session_id=session.pk).exists()
+    fast_network_cleared = True
     try:
-        if session.entitlement_id:
+        if is_basic:
+            ended = pause_guest_wifi_session(session, reason='customer_stopped_basic')
+            message = 'تم إيقاف الإنترنت الأساسي. يبقى رصيدك غير المستخدم متاحاً اليوم.'
+        elif session.entitlement_id:
             ended = end_usage_session(session)
             message = 'تم إيقاف استخدام الإنترنت. وقت الباقة المحددة غير المستخدم لا يُستعاد.'
+            operation = enqueue_network_operation(
+                session.entitlement,
+                InternetNetworkOperation.Operation.DEAUTHENTICATE,
+                reason='customer stopped fast Internet',
+                idempotency_key=f'internet-session:{session.pk}:customer-stop-deauthenticate',
+                process_after_commit=False,
+            )
+            fast_network_cleared = process_network_operation(operation)
         else:
             ended = finalize_visit_metered_session(session)
             if (
@@ -420,6 +450,9 @@ def visit_internet_session_stop(request, public_code):
                     f'تم إنهاء الإنترنت. أضيف {int(ended.payable_total_syp or 0)} ل.س '
                     'إلى حساب جلستك.'
                 )
+            if session.network_provider == InternetSession.NetworkProvider.MIKROTIK:
+                ended.refresh_from_db(fields=['network_status'])
+                fast_network_cleared = ended.network_status == DISCONNECTED
     except ValidationError as exc:
         messages.error(request, _error_text(exc))
         return redirect('current_visit')
@@ -429,4 +462,44 @@ def visit_internet_session_stop(request, public_code):
         'entitlement_id': ended.entitlement_id,
     })
     messages.success(request, message)
-    return redirect('current_visit')
+    if is_basic:
+        return redirect('wifi_entry')
+
+    if not fast_network_cleared:
+        messages.warning(
+            request,
+            'انتهت الجلسة في هَبّ، لكن الراوتر لم يؤكد قطع الاتصال بعد. سيعيد عامل الشبكة المحاولة تلقائياً.',
+        )
+        return redirect('wifi_entry')
+
+    try:
+        restored, _created = restore_guest_wifi_after_fast(
+            request=request,
+            credential=credential,
+            member_context=resolve_member_from_request(request),
+        )
+    except ValidationError as exc:
+        messages.warning(request, _error_text(exc))
+        restored = None
+    except Exception:
+        logger.exception('Basic Wi-Fi restore failed after fast session_id=%s', session.pk)
+        restored = None
+
+    if restored:
+        network_ready = prepare_guest_wifi_session_network(restored)
+        if network_ready and one_tap_session_connect_configured(restored):
+            messages.success(request, 'تمت إعادة الإنترنت الأساسي المتبقي لهذا الجهاز.')
+            try:
+                return _hotspot_relay_response(
+                    request,
+                    restored,
+                    destination_url=_absolute_destination(request, reverse('wifi_entry')),
+                )
+            except Exception:
+                logger.exception(
+                    'Basic HotSpot relay failed after fast session_id=%s', session.pk,
+                )
+        messages.warning(request, 'يجري تجهيز عودة الإنترنت الأساسي. أعد الاتصال من بوابة هَبّ.')
+    else:
+        messages.info(request, 'يمكنك إدخال رمز المكان لتفعيل الإنترنت الأساسي، أو متابعة الطلب من المنيو.')
+    return redirect('wifi_entry')

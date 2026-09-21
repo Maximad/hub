@@ -9,7 +9,7 @@ from django.urls import reverse
 from core.models import ActivityLog, HubVisit, InternetSession
 from core.services.hotspot_connect import one_tap_session_connect_configured
 from core.services.table_visit_access import resolve_table_number
-from core.services.visit_internet import self_service_enabled
+from core.services.visit_internet import customer_packages, metered_customer_error, self_service_enabled
 from core.services.visit_internet_devices import active_browser_session
 from core.services.visits import (
     issue_visit_credential,
@@ -24,11 +24,11 @@ from internet.guest_wifi import (
     guest_wifi_daily_minutes_remaining,
     guest_wifi_grants_remaining,
     guest_wifi_policy_error,
-    pending_order_bonus_minutes,
     prepare_guest_wifi_session_network,
     start_guest_wifi_session,
 )
 from members.services import resolve_member_from_request
+from members.benefits import resolve_internet_price
 
 
 logger = logging.getLogger(__name__)
@@ -38,8 +38,10 @@ def _validation_message(error):
     return ' '.join(getattr(error, 'messages', [str(error)]))
 
 
-def _wifi_destination(request):
-    return _absolute_destination(request, reverse('wifi_entry') + '?free=1')
+def _menu_path(visit):
+    if visit and visit.table_id:
+        return reverse('menu_table', kwargs={'qr_token': visit.table.qr_token}) + '?view=menu'
+    return reverse('menu_public')
 
 
 def _attach_member_to_visit(visit, member_context, *, source):
@@ -105,7 +107,7 @@ def _open_internet_options(request):
     except ValidationError as exc:
         messages.error(request, _validation_message(exc))
         return redirect('wifi_entry')
-    response = redirect('current_visit')
+    response = redirect(reverse('current_visit') + '?focus=internet')
     return set_visit_cookie(response, raw_cookie) if raw_cookie else response
 
 
@@ -162,7 +164,7 @@ def _start_guest_wifi(request):
             return _hotspot_relay_response(
                 request,
                 session,
-                destination_url=_wifi_destination(request),
+                destination_url=_absolute_destination(request, _menu_path(visit)),
                 raw_cookie=raw_cookie,
             )
         except Exception:
@@ -207,13 +209,24 @@ def wifi_entry(request):
             reverse('menu_table', kwargs={'qr_token': current_table.qr_token})
             + '?view=menu'
         )
+    menu_url = _menu_path(visit)
 
     member_context = resolve_member_from_request(request, touch=False)
+    internet_member = visit.member if visit and visit.member_id else (
+        member_context.member if member_context else None
+    )
     system_settings = get_system_settings()
     policy = get_guest_wifi_policy()
     guest_error = guest_wifi_policy_error(policy)
     guest_available = bool(not guest_error and self_service_enabled(system_settings))
     internet_options_available = self_service_enabled(system_settings)
+    metered_error = metered_customer_error(system_settings, internet_member) if internet_options_available else 'غير متاح'
+    packages = customer_packages(internet_member) if internet_options_available else []
+    first_package = packages[0] if packages else None
+    if first_package:
+        first_package.customer_price_syp = int(resolve_internet_price(
+            internet_member, first_package,
+        )[0])
     active_session = active_browser_session(credential) if credential else None
     active_guest_session = None
     active_fast_session = None
@@ -224,14 +237,12 @@ def wifi_entry(request):
 
     if credential:
         daily_remaining = guest_wifi_daily_minutes_remaining(credential, policy)
-        pending_bonus = pending_order_bonus_minutes(credential)
         basic_can_start = bool(guest_wifi_grants_remaining(credential, policy))
     else:
         daily_remaining = min(
             int(policy.session_minutes or 0),
             int(policy.daily_complimentary_minutes or 0),
         )
-        pending_bonus = 0
         basic_can_start = True
 
     response = render(request, 'menu/wifi_entry.html', {
@@ -240,9 +251,13 @@ def wifi_entry(request):
         'current_visit': visit,
         'current_table': current_table,
         'current_table_url': current_table_url,
-        'came_from_free_access': request.GET.get('free') == '1',
+        'menu_url': menu_url,
+        'came_from_free_access': request.GET.get('free') == '1' and bool(active_guest_session),
         'member_context': member_context,
         'internet_options_available': internet_options_available,
+        'internet_metered_available': not metered_error,
+        'internet_metered_rate_syp': int(system_settings.default_rate_per_hour_syp or 0),
+        'first_internet_package': first_package,
         'guest_wifi_available': guest_available,
         'guest_wifi_unavailable_reason': guest_error or '',
         'guest_wifi_code_required': (
@@ -250,13 +265,10 @@ def wifi_entry(request):
             if guest_available else False
         ),
         'guest_wifi_initial_minutes': int(policy.session_minutes or 0),
-        'guest_wifi_daily_cap_minutes': int(policy.daily_complimentary_minutes or 0),
         'guest_wifi_daily_minutes_remaining': daily_remaining,
         'guest_wifi_can_start': basic_can_start,
         'guest_wifi_order_bonus_enabled': bool(policy.order_bonus_enabled),
         'guest_wifi_order_bonus_minutes': int(policy.order_bonus_minutes or 0),
-        'guest_wifi_qualifying_order_minimum_syp': int(policy.qualifying_order_minimum_syp or 0),
-        'guest_wifi_pending_bonus_minutes': pending_bonus,
         'active_guest_wifi_session': active_guest_session,
         'active_fast_wifi_session': active_fast_session,
         'active_guest_wifi_network_ready': bool(

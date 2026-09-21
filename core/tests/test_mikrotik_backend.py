@@ -76,6 +76,16 @@ class MikroTikBackendTests(TestCase):
         self.backend.disconnect_access(self.entitlement); self.backend.disconnect_access(self.entitlement)
         self.assertEqual(self.client.sessions, [{'.id': '*b', 'user': 'other'}])
 
+    def test_deauthenticate_drops_login_without_disabling_entitlement_user(self):
+        self.backend.provision_access(self.entitlement)
+        name = self.backend.username(self.entitlement)
+        self.client.sessions = [{'.id': '*a', 'user': name}, {'.id': '*b', 'user': 'other'}]
+
+        self.backend.deauthenticate_access(self.entitlement)
+
+        self.assertEqual(self.client.sessions, [{'.id': '*b', 'user': 'other'}])
+        self.assertEqual(self.client.users[name].get('disabled', 'false'), 'false')
+
     def test_expired_and_cancelled_are_rejected_before_router_lookup(self):
         for status in (InternetEntitlement.Status.EXPIRED, InternetEntitlement.Status.CANCELLED):
             self.entitlement.status = status; self.entitlement.save(update_fields=['status'])

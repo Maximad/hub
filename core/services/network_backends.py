@@ -39,6 +39,10 @@ class ManualNetworkBackend:
         entitlement.last_network_sync_at = timezone.now()
         entitlement.save(update_fields=['last_network_sync_at', 'updated_at'])
         return entitlement
+    def deauthenticate_access(self, entitlement):
+        entitlement.last_network_sync_at = timezone.now()
+        entitlement.save(update_fields=['last_network_sync_at', 'updated_at'])
+        return entitlement
     def expire_access(self, entitlement): return self.disconnect_access(entitlement)
     def test_connection(self): return True
 
@@ -171,6 +175,23 @@ class MikroTikNetworkBackend:
         if entitlement.effective_status() in {entitlement.Status.EXPIRED, entitlement.Status.CANCELLED}:
             return self.disconnect_access(entitlement)
         return self.provision_access(entitlement)
+
+    def deauthenticate_access(self, entitlement):
+        """Drop current logins while preserving the reusable entitlement identity."""
+        try:
+            username = self.username(entitlement)
+            for session in self.client.active_sessions(username):
+                if session.get('user') == username:
+                    self.client.remove_active(session['.id'])
+        except MikroTikError as exc:
+            self._record_failure(entitlement, exc)
+            raise
+        entitlement.last_network_error = ''
+        entitlement.last_network_sync_at = timezone.now()
+        entitlement.save(update_fields=[
+            'last_network_error', 'last_network_sync_at', 'updated_at',
+        ])
+        return entitlement
 
     def disconnect_access(self, entitlement):
         try:

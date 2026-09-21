@@ -128,6 +128,28 @@
   {% else %}<p>لم يجر فحص اتصال محفوظ بعد.</p>{% endif %}
 </section>
 
+<section class="hub-section hub-card" id="managed-hotspot-policy">
+  <h2 class="hub-section-title">إدارة بوابة الزبائن من هَبّ</h2>
+  <p class="hub-text-muted">يضمن هَبّ وصول الزائر إلى البوابة والمنيو قبل إدخال الرمز، ويضبط ملفي السرعة فقط. لا يغيّر الواجهات أو DHCP أو المسارات أو قواعد الشبكات الأخرى.</p>
+  {% if portal_policy %}
+  <div class="hub-summary-cards">
+    <div class="hub-summary-card"><span>HotSpot</span><strong>{{ portal_policy.server }}</strong></div>
+    <div class="hub-summary-card"><span>بوابة ما قبل الاتصال</span><strong>{{ portal_policy.portal_host }}</strong></div>
+    {% for profile in portal_policy.profiles %}<div class="hub-summary-card"><span>{{ profile.name }}</span><strong>{{ profile.rate_limit }}</strong></div>{% endfor %}
+  </div>
+  <form method="post" action="{% url 'staff_internet_settings' %}">{% csrf_token %}
+    <input type="hidden" name="operation_action" value="sync_mikrotik_portal_policy">
+    <button class="hub-button hub-button-primary" type="submit">فحص ومزامنة إعدادات البوابة</button>
+  </form>
+  <p class="hub-text-muted">العملية آمنة للتكرار: تنشئ أو تصلح نطاق بوابة هَبّ وملفي السرعة المحددين فقط.</p>
+  {% else %}
+  <p class="hub-alert hub-alert-warning">{{ portal_policy_error }}</p>
+  {% endif %}
+  {% if last_portal_policy_sync %}
+  <p>آخر محاولة: {{ last_portal_policy_sync.created_at }} — {% if last_portal_policy_sync.action == 'internet.mikrotik_portal_policy_synced' %}<strong>اكتملت</strong>{% else %}<strong>فشلت</strong>{% endif %}</p>
+  {% endif %}
+</section>
+
 <section class="hub-section hub-card">
   <h2 class="hub-section-title">عامل الإنترنت</h2>
   <p>آخر نبضة: {{ operations_state.last_worker_seen_at|default:'—' }}</p>

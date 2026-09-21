@@ -5,8 +5,8 @@
 {% visit_pin visit as join_pin %}
 <main class="menu-public customer-space" dir="rtl" data-customer-space data-has-visit="true" data-menu-url="{{ menu_url }}" data-visit-url="{% url 'current_visit' %}">
   <nav class="hub-card" aria-label="تنقل الزبون" style="display:flex;gap:.5rem;position:sticky;top:.5rem;z-index:20;"><a class="hub-button hub-button-secondary" href="{{ menu_url }}" style="flex:1;text-align:center;">المنيو</a><span class="hub-button hub-button-primary" aria-current="page" style="flex:1;text-align:center;">جلستي</span></nav>
-  <header class="hub-card current-visit__header"><div><p class="menu-public__brand">جلستي</p><h1 class="hub-section-title">{% if visit.table %}{{ visit.table.display_name }}{% else %}جلسة هَبّ{% endif %}</h1><p>{% if visit.table and visit.table.room_display_name %}{{ visit.table.room_display_name }}{% else %}إنترنت · طلبات · خدمات{% endif %}</p></div><a class="hub-button hub-button-primary" href="{{ menu_url }}">+ أضف طلباً</a></header>
-  <section class="hub-card current-visit__totals" aria-label="الحساب"><h2>الحساب</h2><div><p><span>الإجمالي</span><strong>{{ visit.gross_syp|format_syp }}</strong></p><p><span>المدفوع</span><strong>{{ visit.paid_syp|format_syp }}</strong></p><p><span>المتبقي</span><strong>{{ visit.remaining_syp|format_syp }}</strong></p></div></section>
+  <header class="hub-card current-visit__header"><div><p class="menu-public__brand">{% if focus_internet %}خيارات الإنترنت{% else %}جلستي{% endif %}</p><h1 class="hub-section-title">{% if focus_internet %}اختر اتصالك{% elif visit.table %}{{ visit.table.display_name }}{% else %}جلسة هَبّ{% endif %}</h1><p>{% if focus_internet %}اطّلع على السعر ثم ابدأ من هذا الجهاز.{% elif visit.table and visit.table.room_display_name %}{{ visit.table.room_display_name }}{% else %}إنترنت · طلبات · خدمات{% endif %}</p></div><a class="hub-button hub-button-primary" href="{{ menu_url }}">+ أضف طلباً</a></header>
+  {% if not focus_internet %}{% include 'menu/_visit_totals.html' %}{% endif %}
 
   {% if internet_self_service_enabled %}
   <section class="hub-card" id="internet" aria-label="إنترنت هذا الجهاز">
@@ -32,6 +32,7 @@
   </section>
   {% endif %}
 
+  {% if focus_internet %}{% include 'menu/_visit_totals.html' %}{% endif %}
   <section class="hub-card" id="customer-orders"><div class="menu-section-heading"><span aria-hidden="true"></span><h2>طلباتي</h2></div><div class="current-visit__orders">{% for order in orders %}<article class="current-visit__order"><div><h3>طلب <span class="hub-order-number">{{ order.display_number }}</span></h3><span class="hub-badge {% if order.status == 'ready' %}hub-badge-success{% else %}hub-badge-info{% endif %}">{{ order.get_status_display }}</span></div><div><strong class="hub-money">{{ order.total_syp|format_syp }}</strong>{% if order.remaining_syp > 0 %}<small>متبقي {{ order.remaining_syp|format_syp }}</small>{% else %}<small>مدفوع</small>{% endif %}</div></article>{% empty %}<p>لا توجد طلبات بعد.</p>{% endfor %}</div><a class="hub-button hub-button-primary" href="{{ menu_url }}">+ أضف طلباً من المنيو</a></section>
   {% if join_pin and visit.table %}<section class="hub-card" aria-label="إضافة جهاز إلى الحساب"><small>لإضافة هاتف أو لابتوب آخر إلى نفس الحساب</small><strong style="display:block;font-size:1.65rem;letter-spacing:.18em;margin:.4rem 0;">{{ join_pin }}</strong><p>على الجهاز الآخر اختر رقم هذه الطاولة ثم «الانضمام إلى حساب موجود» وأدخل هذا الرمز.</p></section>{% endif %}
   {% if visit.member %}<aside class="hub-card customer-space-service-card"><span class="hub-badge hub-badge-info">حساب هَبّ مرتبط</span><strong>{{ visit.member.name_ar }}</strong>{% if visit.member.phone %}<small>{{ visit.member.phone }}</small>{% endif %}</aside>{% endif %}
