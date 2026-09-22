@@ -30,6 +30,7 @@ class InternalAccessGrantForm(forms.Form):
     staff_user = forms.ModelChoiceField(
         label='الموظف',
         queryset=get_user_model().objects.none(),
+        empty_label='اختر الموظف',
         widget=forms.Select(attrs={'class': 'hub-input'}),
     )
     grant_kind = forms.ChoiceField(
@@ -93,6 +94,7 @@ class InternalAccessGrantForm(forms.Form):
         self.fields['bandwidth_profile'].queryset = InternetBandwidthProfile.objects.filter(
             is_active=True,
         ).order_by('name')
+        self.fields['bandwidth_profile'].empty_label = None
 
     def clean(self):
         cleaned = super().clean()
