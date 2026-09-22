@@ -4,9 +4,11 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from operations.services import open_business_day
+from core.models import NotificationRecipient
+from operations.models import BusinessDayTask, StaffDailyCodeReceipt
+from operations.opening import set_staff_roster
+from operations.services import issue_daily_code, open_business_day
 from operations.tasks import create_manual_task, set_task_status
-from operations.models import BusinessDayTask
 
 
 @override_settings(
@@ -21,6 +23,10 @@ class OperationsUxTests(TestCase):
         self.admin = User.objects.create_superuser(
             username='ops-ux-admin', password='pass',
             email='ops-ux@example.com', phone='+963955299901',
+        )
+        self.extra_staff = User.objects.create_user(
+            username='ops-ux-extra', password='pass', phone='+963955299902',
+            role=User.Role.WAITER,
         )
         self.day = open_business_day(
             actor=self.admin,
@@ -57,3 +63,32 @@ class OperationsUxTests(TestCase):
         response = self.client.get(reverse('staff_close_day'))
         self.assertContains(response, 'css/operations_ux.css')
         self.assertContains(response, 'js/operations_ux.js')
+
+    def test_daily_code_delivery_and_receipts_follow_final_roster(self):
+        self.assertTrue(StaffDailyCodeReceipt.objects.filter(
+            business_day=self.day, user=self.extra_staff,
+        ).exists())
+
+        with self.captureOnCommitCallbacks(execute=True):
+            set_staff_roster(
+                self.day,
+                actor=self.admin,
+                user_ids=[str(self.admin.pk)],
+            )
+
+        self.assertEqual(
+            set(StaffDailyCodeReceipt.objects.filter(business_day=self.day).values_list('user_id', flat=True)),
+            {self.admin.pk},
+        )
+        self.assertFalse(NotificationRecipient.objects.filter(
+            notification_event__title_ar=f'رمز الفريق ليوم {self.day.business_date} جاهز',
+            user=self.extra_staff,
+        ).exists())
+
+        with self.captureOnCommitCallbacks(execute=True):
+            issue_daily_code(self.day, actor=self.admin)
+
+        self.assertEqual(
+            set(StaffDailyCodeReceipt.objects.filter(business_day=self.day).values_list('user_id', flat=True)),
+            {self.admin.pk},
+        )
