@@ -1,6 +1,5 @@
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db.models import Sum
 
 from core.models import DailyClose, InternetSession, NotificationEvent, NotificationLog, NotificationRecipient, Order, Payment
 from django.utils import timezone
@@ -28,10 +27,14 @@ def business_day_metrics(day):
     paid_total = sum(_paid_amount(order) for order in completed_orders)
     discounts = sum(int(order.discount_syp or 0) for order in completed_orders)
     cancelled = sum(1 for order in orders if order.status == Order.Status.CANCELLED)
-    internet_revenue = InternetSession.objects.filter(
+    internet_sessions = InternetSession.objects.filter(
         started_at__gte=start,
         started_at__lt=end,
-    ).aggregate(total=Sum('payable_total_syp'))['total'] or 0
+    ).only('manual_total_syp', 'calculated_total_syp')
+    # payable_total_syp is intentionally a model property because a manual
+    # override wins over the calculated amount. Sum that effective value in
+    # Python instead of pretending it is a database column.
+    internet_revenue = sum(int(session.payable_total_syp or 0) for session in internet_sessions)
     closes = DailyClose.objects.filter(
         business_date=day.business_date,
         status=DailyClose.Status.CLOSED,
@@ -47,7 +50,7 @@ def business_day_metrics(day):
         'paid_total_syp': paid_total,
         'discounts_syp': discounts,
         'cancelled_orders_count': cancelled,
-        'internet_revenue_syp': int(internet_revenue or 0),
+        'internet_revenue_syp': internet_revenue,
         'cash_difference_syp': cash_difference,
         'handover_open_count': handover_open,
     }
