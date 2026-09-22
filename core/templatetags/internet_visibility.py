@@ -4,7 +4,6 @@ from django.utils import timezone
 
 from core.models import (
     ActivityLog,
-    InternetEntitlement,
     InternetNetworkOperation,
     InternetSession,
 )
@@ -21,6 +20,16 @@ def _provider_session_scope(partner):
         scope |= Q(
             entitlement__isnull=True,
             network_provider=InternetSession.NetworkProvider.MIKROTIK,
+        )
+    return scope
+
+
+def _provider_session_operation_scope(partner):
+    scope = Q(session__entitlement__partner=partner)
+    if partner.is_default:
+        scope |= Q(
+            session__entitlement__isnull=True,
+            session__network_provider=InternetSession.NetworkProvider.MIKROTIK,
         )
     return scope
 
@@ -86,10 +95,11 @@ def _operation_summary(entitlement_operations, session_operations):
 
 @register.simple_tag
 def provider_network_visibility(partner, operations_state=None):
-    """Provider-scoped, secret-free operational truth for the network page.
+    """Return provider-scoped, secret-free operational truth for the network page.
 
-    This deliberately distinguishes Hub session records from network-ready records.
-    It never claims that either count equals currently connected RouterOS devices.
+    Hub session rows, network-ready rows, and currently connected devices are
+    deliberately different concepts. This helper never treats a stored session as
+    proof that a device is currently online.
     """
     now = timezone.now()
     sessions = InternetSession.objects.filter(_provider_session_scope(partner))
@@ -99,10 +109,11 @@ def provider_network_visibility(partner, operations_state=None):
     pending_total = 0
     failed_total = 0
     for session in active_sessions.select_related('entitlement'):
-        if session.entitlement_id:
-            network_status = session.entitlement.network_status
-        else:
-            network_status = session.network_status
+        network_status = (
+            session.entitlement.network_status
+            if session.entitlement_id
+            else session.network_status
+        )
         if network_status == 'provisioned':
             ready_total += 1
         elif network_status in {'provision_error', 'failed'}:
@@ -114,7 +125,7 @@ def provider_network_visibility(partner, operations_state=None):
         entitlement__partner=partner,
     )
     session_operations = InternetSessionNetworkOperation.objects.filter(
-        _provider_session_scope(partner),
+        _provider_session_operation_scope(partner),
     ).select_related('session', 'session__member', 'session__entitlement')
     operations = _operation_summary(entitlement_operations, session_operations)
 
