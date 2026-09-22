@@ -76,11 +76,11 @@ class Migration(migrations.Migration):
                 ('business_day', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='code_receipts', to='operations.businessday')),
                 ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='daily_code_receipts', to=settings.AUTH_USER_MODEL)),
             ],
-            options={'ordering': ['user__username']},
+            options={'ordering': ['user_id']},
         ),
         migrations.AddConstraint(
             model_name='businessday',
-            constraint=models.CheckConstraint(condition=models.Q(('cutoff_hour__gte', 0), ('cutoff_hour__lte', 23)), name='business_day_cutoff_hour_range'),
+            constraint=models.CheckConstraint(condition=models.Q(cutoff_hour__gte=0, cutoff_hour__lte=23), name='business_day_cutoff_hour_range'),
         ),
         migrations.AddConstraint(
             model_name='businessdayexception',
