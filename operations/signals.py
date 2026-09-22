@@ -20,7 +20,10 @@ def seed_business_day_opening_checklist(sender, instance, created, **kwargs):
     if not created:
         return
     from .opening import seed_opening_checklist
+    from .tasks import sync_business_day_tasks
+
     seed_opening_checklist(instance)
+    sync_business_day_tasks(instance)
 
 
 @receiver(post_save, sender=StaffDailyCodeReceipt, dispatch_uid='operations.mark_roster_checkin_from_daily_code')
