@@ -164,6 +164,97 @@ class HandoverNote(models.Model):
         return self.message[:80]
 
 
+class OperationalTaskTemplate(models.Model):
+    class Priority(models.TextChoices):
+        NORMAL = 'normal', 'عادية'
+        HIGH = 'high', 'مهمة'
+
+    title_ar = models.CharField(max_length=240)
+    details = models.TextField(blank=True)
+    weekdays = models.JSONField(default=list, blank=True, help_text='0=Monday ... 6=Sunday; empty means every day')
+    due_time = models.TimeField(null=True, blank=True)
+    priority = models.CharField(max_length=12, choices=Priority.choices, default=Priority.NORMAL)
+    responsibility_role = models.CharField(max_length=40, blank=True)
+    is_required = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    active_from = models.DateField(null=True, blank=True)
+    active_until = models.DateField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='created_operational_task_templates',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['title_ar', 'pk']
+
+    def __str__(self):
+        return self.title_ar
+
+
+class BusinessDayTask(models.Model):
+    class Kind(models.TextChoices):
+        RECURRING = 'recurring', 'مهمة دورية'
+        EVENT = 'event', 'تحضير فعالية'
+        RESERVATION = 'reservation', 'تحضير حجز'
+        INVENTORY = 'inventory', 'مخزون/شراء'
+        MANUAL = 'manual', 'مهمة يدوية'
+
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'مفتوحة'
+        DONE = 'done', 'تمت'
+        WAIVED = 'waived', 'أُغلقت بسبب مسجّل'
+
+    business_day = models.ForeignKey(BusinessDay, on_delete=models.CASCADE, related_name='tasks')
+    fingerprint = models.CharField(max_length=180)
+    kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.MANUAL)
+    title_ar = models.CharField(max_length=240)
+    details = models.TextField(blank=True)
+    priority = models.CharField(max_length=12, choices=OperationalTaskTemplate.Priority.choices, default=OperationalTaskTemplate.Priority.NORMAL)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    due_at = models.DateTimeField(null=True, blank=True)
+    is_required = models.BooleanField(default=False)
+    responsibility_role = models.CharField(max_length=40, blank=True)
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='assigned_business_day_tasks',
+    )
+    task_template = models.ForeignKey(
+        OperationalTaskTemplate, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='generated_tasks',
+    )
+    source_type = models.CharField(max_length=40, blank=True)
+    source_id = models.CharField(max_length=80, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='created_business_day_tasks',
+    )
+    completed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='completed_business_day_tasks',
+    )
+    completed_at = models.DateTimeField(null=True, blank=True)
+    completion_note = models.TextField(blank=True)
+    last_reminded_at = models.DateTimeField(null=True, blank=True)
+    reminder_count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['status', 'due_at', '-priority', 'created_at']
+        constraints = [
+            models.UniqueConstraint(fields=['business_day', 'fingerprint'], name='unique_business_day_task_fingerprint'),
+        ]
+        indexes = [
+            models.Index(fields=['business_day', 'status', 'due_at'], name='business_day_task_due_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.business_day.business_date} — {self.title_ar}'
+
+
 class StaffDailyCodeReceipt(models.Model):
     business_day = models.ForeignKey(BusinessDay, on_delete=models.CASCADE, related_name='code_receipts')
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='daily_code_receipts')
