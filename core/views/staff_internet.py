@@ -28,8 +28,9 @@ from core.views_legacy import (
 
 class StaffUserChoiceField(forms.ModelChoiceField):
     def label_from_instance(self, obj):
-        name = obj.get_full_name() or obj.username
-        return f'{name} — {obj.get_role_display()} — {obj.phone}'
+        full_name = (obj.get_full_name() or '').strip()
+        identity = f'{full_name} (@{obj.username})' if full_name else f'@{obj.username}'
+        return f'{identity} — {obj.get_role_display()} — {obj.phone}'
 
 
 class InternalAccessGrantForm(forms.Form):
