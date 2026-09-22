@@ -1,14 +1,12 @@
-from datetime import timedelta
 from io import StringIO
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import TestCase, override_settings
-from django.utils import timezone
 
 from core.models import DailyClose, FinancialAccount, NotificationEvent
 from operations.insights import detect_anomalies, send_owner_digest
-from operations.models import BusinessDay, BusinessDayChecklistItem, HandoverNote
+from operations.models import BusinessDayChecklistItem, HandoverNote
 from operations.opening import (
     acknowledge_handover,
     create_handover_note,
@@ -118,6 +116,7 @@ class OpeningHandoverTests(TestCase):
 
     def test_plaintext_daily_code_is_scrubbed_before_notification_persistence(self):
         day = open_business_day(actor=self.owner)
+        day.refresh_from_db()
         code = reveal_daily_code(day, user=self.owner)
         event = NotificationEvent.objects.filter(title_ar__startswith='رمز الفريق ليوم').latest('created_at')
         self.assertNotIn(code, event.message_ar)
