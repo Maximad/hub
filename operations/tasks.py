@@ -17,6 +17,9 @@ from .opening import _notify_users
 from .services import business_day_bounds
 
 
+AUTO_WAIVE_NOTE = 'أُغلقت تلقائياً بعد زوال سبب المهمة من النظام.'
+
+
 def _audit(actor, action, **details):
     ActivityLog.objects.create(
         actor=actor if getattr(actor, 'is_authenticated', False) else None,
@@ -56,6 +59,12 @@ def _upsert_generated_task(day, *, fingerprint, defaults):
         fingerprint=fingerprint,
         defaults=defaults,
     )
+    if not created and task.status == BusinessDayTask.Status.WAIVED and task.completion_note == AUTO_WAIVE_NOTE:
+        task.status = BusinessDayTask.Status.PENDING
+        task.completion_note = ''
+        task.completed_at = None
+        task.completed_by = None
+        task.save(update_fields=['status', 'completion_note', 'completed_at', 'completed_by', 'updated_at'])
     if not created and task.status == BusinessDayTask.Status.PENDING:
         changed = []
         for field in (
@@ -228,7 +237,7 @@ def sync_business_day_tasks(day, *, actor=None):
     if auto_waived:
         stale.update(
             status=BusinessDayTask.Status.WAIVED,
-            completion_note='أُغلقت تلقائياً بعد زوال سبب المهمة من النظام.',
+            completion_note=AUTO_WAIVE_NOTE,
             completed_at=timezone.now(),
             completed_by=actor if getattr(actor, 'is_authenticated', False) else None,
             updated_at=timezone.now(),
