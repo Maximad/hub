@@ -1,0 +1,95 @@
+/* Final action-first polish for Business Day, daily tasks and internal staff Internet. */
+.hub-staff-ui .staff-operations-polish,
+.hub-staff-ui.staff-business-day,
+.hub-staff-ui.staff-operational-tasks { --ops-accent-soft: color-mix(in srgb, var(--hub-brand, var(--hub-primary)) 8%, #fff); }
+
+.hub-staff-ui .operations-page-head__row { justify-content: space-between; align-items: flex-start; gap: 1rem; }
+.hub-staff-ui .operations-page-head__row > div:first-child { max-width: 72ch; }
+.hub-staff-ui .operations-page-actions { margin: 0; }
+.hub-staff-ui .operations-summary-cards { margin-block-end: 1rem; }
+.hub-staff-ui .operations-summary-card--attention { border-color: color-mix(in srgb, #b26b20 38%, var(--staff-soft-border)); background: color-mix(in srgb, #fff3df 55%, #fff); }
+
+.hub-staff-ui .operations-section-head { display:flex; align-items:flex-start; justify-content:space-between; gap:.75rem; flex-wrap:wrap; margin-block-end:.85rem; }
+.hub-staff-ui .operations-section-head .hub-section-title { margin:0; padding:0; border:0; }
+.hub-staff-ui .operations-help { padding:.7rem .8rem; border-radius:12px; background:var(--hub-surface-alternate, #f7f4ee); color:var(--hub-text-muted, var(--hub-muted)); }
+.hub-staff-ui .operations-primary-action { min-width: 11rem; }
+.hub-staff-ui .operations-danger-action { border-color: color-mix(in srgb, #a33 35%, var(--staff-soft-border)); color:#8d2f2f; background:#fff; }
+
+.hub-staff-ui .operations-task-list { display:grid; gap:.65rem; }
+.hub-staff-ui .operations-task { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:1rem; padding:.85rem; border:1px solid var(--staff-soft-border); border-radius:14px; background:var(--hub-surface-main,#fff); }
+.hub-staff-ui .operations-task.is-overdue { border-inline-start:4px solid #b66a1e; }
+.hub-staff-ui .operations-task.is-done { opacity:.76; background:color-mix(in srgb, #eaf7ef 48%, #fff); }
+.hub-staff-ui .operations-task.is-waived { opacity:.72; }
+.hub-staff-ui .operations-task h3 { margin:.35rem 0 .25rem; font-size:1.05rem; }
+.hub-staff-ui .operations-task p { margin:.2rem 0; }
+.hub-staff-ui .operations-task__meta,
+.hub-staff-ui .operations-task__facts,
+.hub-staff-ui .operations-task__source-links { display:flex; gap:.4rem .75rem; flex-wrap:wrap; align-items:center; }
+.hub-staff-ui .operations-task__facts { margin-top:.5rem; color:var(--hub-text-muted,var(--hub-muted)); font-size:.82rem; }
+.hub-staff-ui .operations-task__source-links { margin-top:.5rem; font-size:.84rem; }
+.hub-staff-ui .operations-task__note { margin-top:.5rem !important; padding:.45rem .6rem; border-radius:9px; background:var(--hub-surface-alternate,#f7f4ee); }
+.hub-staff-ui .operations-task__actions { min-width:10rem; display:flex; flex-direction:column; align-items:stretch; justify-content:center; gap:.45rem; }
+.hub-staff-ui .operations-task__actions form { margin:0; max-width:none !important; }
+.hub-staff-ui .operations-task__actions button { width:100%; }
+.hub-staff-ui .operations-task__done { font-weight:850; }
+
+.hub-staff-ui details.operations-mini-disclosure,
+.hub-staff-ui details.operations-disclosure { border:0; }
+.hub-staff-ui details.operations-mini-disclosure > summary { cursor:pointer; color:var(--hub-text-muted,var(--hub-muted)); font-size:.8rem; text-align:center; list-style:none; }
+.hub-staff-ui details.operations-mini-disclosure > summary::-webkit-details-marker,
+.hub-staff-ui details.operations-disclosure > summary::-webkit-details-marker { display:none; }
+.hub-staff-ui details.operations-mini-disclosure[open] { padding:.5rem; border:1px solid var(--staff-soft-border); border-radius:10px; background:var(--hub-surface-alternate,#f7f4ee); }
+.hub-staff-ui details.operations-mini-disclosure .hub-form { margin-top:.45rem; max-width:18rem !important; }
+
+.hub-staff-ui details.operations-disclosure { padding:0; overflow:hidden; }
+.hub-staff-ui details.operations-disclosure > summary { cursor:pointer; display:flex; align-items:center; justify-content:space-between; padding:.9rem 1rem; list-style:none; }
+.hub-staff-ui details.operations-disclosure > summary span { display:grid; gap:.15rem; }
+.hub-staff-ui details.operations-disclosure > summary small { color:var(--hub-text-muted,var(--hub-muted)); font-weight:500; }
+.hub-staff-ui details.operations-disclosure > summary::after { content:'+'; font-size:1.35rem; font-weight:500; }
+.hub-staff-ui details.operations-disclosure[open] > summary::after { content:'−'; }
+.hub-staff-ui details.operations-disclosure[open] > summary { border-block-end:1px solid var(--staff-soft-border); }
+.hub-staff-ui .operations-collapsible-form { padding:1rem; max-width:none !important; }
+.hub-staff-ui .operations-full { grid-column:1/-1; }
+.hub-staff-ui .operations-check { display:flex !important; flex-direction:row !important; align-items:center; gap:.5rem !important; }
+.hub-staff-ui .operations-weekdays { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:.5rem .9rem; padding:.7rem; border:1px solid var(--staff-soft-border); border-radius:11px; }
+.hub-staff-ui .operations-weekdays legend { padding-inline:.35rem; font-weight:750; }
+.hub-staff-ui .operations-weekdays label { display:flex; flex-direction:row !important; align-items:center; gap:.3rem !important; }
+
+.hub-staff-ui .operations-empty-state { min-height:9rem; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.45rem; text-align:center; color:var(--hub-text-muted,var(--hub-muted)); }
+.hub-staff-ui .operations-empty-state strong { color:var(--hub-text,var(--hub-text-main)); font-size:1.05rem; }
+
+.hub-staff-ui .operations-field-group { margin:0 0 .85rem; padding:.8rem; border:1px solid var(--staff-soft-border); border-radius:13px; }
+.hub-staff-ui .operations-field-group legend { padding-inline:.4rem; font-weight:850; }
+.hub-staff-ui .internal-access-form { max-width:100% !important; }
+
+/* Business Day local navigation is injected by operations_ux.js. */
+.hub-staff-ui .business-day-local-nav { position:sticky; inset-block-start:0; z-index:18; display:flex; gap:.35rem; overflow-x:auto; margin:0 0 .9rem; padding:.45rem; border:1px solid var(--staff-soft-border); border-radius:13px; background:color-mix(in srgb, var(--hub-surface-main,#fff) 94%, transparent); backdrop-filter:blur(8px); }
+.hub-staff-ui .business-day-local-nav a { flex:0 0 auto; padding:.4rem .65rem; border-radius:999px; font-size:.82rem; font-weight:750; white-space:nowrap; }
+.hub-staff-ui .business-day-local-nav a:hover { background:var(--ops-accent-soft); }
+
+/* Convert roster checkboxes into easy touch targets. */
+.hub-staff-ui.staff-business-day form input[name="staff_user_ids"] { width:1.15rem; height:1.15rem; }
+.hub-staff-ui.staff-business-day form input[name="staff_user_ids"]:checked { accent-color:var(--hub-brand,var(--hub-primary)); }
+.hub-staff-ui.staff-business-day form label:has(input[name="staff_user_ids"]) { min-height:48px; padding:.55rem .65rem; border:1px solid var(--staff-soft-border); border-radius:11px; background:#fff; }
+.hub-staff-ui.staff-business-day form label:has(input[name="staff_user_ids"]:checked) { border-color:color-mix(in srgb, var(--hub-brand,var(--hub-primary)) 35%, var(--staff-soft-border)); background:var(--ops-accent-soft); }
+
+/* Direct checklist actions generated from the existing backend form. */
+.hub-staff-ui .operations-checklist-actions { display:flex; gap:.35rem; flex-wrap:wrap; align-items:center; }
+.hub-staff-ui .operations-checklist-actions button { min-height:34px; padding:.35rem .55rem; }
+.hub-staff-ui .operations-checklist-waive { width:100%; margin-top:.4rem; }
+.hub-staff-ui .operations-checklist-waive summary { cursor:pointer; color:var(--hub-text-muted,var(--hub-muted)); font-size:.78rem; }
+.hub-staff-ui .operations-checklist-waive .hub-form { margin-top:.4rem; max-width:18rem !important; }
+
+.hub-staff-ui .operations-handover-toggle { margin-block:.5rem .75rem; }
+.hub-staff-ui .operations-handover-form.is-collapsed { display:none !important; }
+
+@media (max-width: 720px) {
+  .hub-staff-ui .operations-task { grid-template-columns:1fr; }
+  .hub-staff-ui .operations-task__actions { min-width:0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .hub-staff-ui .operations-task__actions details { grid-column:1/-1; }
+  .hub-staff-ui .operations-page-head__row { align-items:stretch; }
+  .hub-staff-ui .operations-page-actions { width:100%; }
+  .hub-staff-ui .operations-page-actions > * { flex:1 1 auto; }
+  .hub-staff-ui .business-day-local-nav { inset-block-start:0; margin-inline:-.15rem; }
+  .hub-staff-ui .operations-data-table { min-width:760px; }
+}
