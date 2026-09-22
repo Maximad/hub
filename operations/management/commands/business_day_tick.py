@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils import timezone
@@ -49,7 +51,12 @@ class Command(BaseCommand):
             )
             return
 
-        code_reminders = send_daily_code_reminders(active)
+        reminder_minutes = int(getattr(settings, 'BUSINESS_DAY_CODE_REMINDER_MINUTES', 120))
+        reminder_due = (
+            not active.code_issued_at
+            or timezone.now() >= active.code_issued_at + timedelta(minutes=max(reminder_minutes, 1))
+        )
+        code_reminders = send_daily_code_reminders(active) if reminder_due else 0
         opening_reminder = maybe_send_opening_reminder(active)
         self.stdout.write(
             f'business_day={active.business_date} code_reminders={code_reminders} '
