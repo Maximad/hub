@@ -153,7 +153,9 @@ def provider_network_visibility(partner, operations_state=None):
 
     check_at = operations_state.last_mikrotik_check_at if operations_state else None
     check_ok = operations_state.last_mikrotik_check_ok if operations_state else None
-    check_fresh = mikrotik_check_is_fresh(operations_state, at=now)
+    check_fresh = bool(
+        operations_state and mikrotik_check_is_fresh(operations_state, at=now)
+    )
     if not check_at or check_ok is None:
         router = {'code': 'unknown', 'label': 'غير معروف'}
     elif check_ok and check_fresh:
