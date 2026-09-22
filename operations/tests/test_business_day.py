@@ -53,7 +53,9 @@ class BusinessDayTests(TestCase):
         )
 
     def _open(self):
-        return open_business_day(actor=self.admin)
+        day = open_business_day(actor=self.admin)
+        day.refresh_from_db()
+        return day
 
     def test_open_day_issues_encrypted_code_and_notifies_staff_only(self):
         day = self._open()
