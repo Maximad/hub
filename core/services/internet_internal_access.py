@@ -1,11 +1,12 @@
 """Private owner/team Internet grants built on the existing entitlement engine.
 
-These grants are operational access, not sales. They intentionally create no Order,
-Payment, InternetPackage, partner revenue share, or customer-catalog entry. Network
-work uses the normal entitlement provisioning queue and never changes RouterOS
-configuration.
+These grants are operational access, not sales. New grants are assigned to Hub staff
+user accounts, not public Member rows. Historical member-based grants remain valid
+and revocable for backwards compatibility. Network work uses the normal entitlement
+provisioning queue and never changes RouterOS configuration.
 """
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -62,18 +63,34 @@ def _validate_grant_values(*, access_mode, validity_value, validity_unit,
         raise ValidationError('حد الأجهزة المتزامنة لا يمكن أن يتجاوز الأجهزة المسجلة.')
 
 
+def _staff_label(user):
+    return (user.get_full_name() or user.username or user.phone or '').strip()
+
+
+def _validate_staff_user(user):
+    User = get_user_model()
+    provider_role = getattr(User.Role, 'INTERNET_PROVIDER', 'internet_provider')
+    if not user or not user.is_active or getattr(user, 'role', '') == provider_role:
+        raise ValidationError('اختر حساب موظف فعّالاً من فريق هَبّ.')
+    if not user.phone:
+        raise ValidationError('حساب الموظف يحتاج رقم هاتف قبل منحه وصول الإنترنت الداخلي.')
+
+
 @transaction.atomic
-def grant_internal_access(*, member, grant_kind, bandwidth_profile, access_mode,
+def grant_internal_access(*, staff_user=None, member=None, grant_kind, bandwidth_profile, access_mode,
                           validity_value, validity_unit, session_minutes_limit=None,
                           total_minutes_allowed=None, daily_minutes_limit=None,
                           max_concurrent_devices=1, max_registered_devices=1,
                           actor=None, at=None):
-    """Grant private complimentary Internet to an existing Hub member."""
+    """Grant private complimentary Internet to a Hub staff user.
+
+    ``member`` remains supported for legacy callers while old grants are phased out.
+    The staff UI never offers public Member rows for new internal grants.
+    """
     origin = GRANT_KIND_TO_ORIGIN.get(grant_kind)
     if not origin:
         raise ValidationError('نوع المنحة الداخلية غير صالح.')
 
-    member = Member.objects.select_for_update().get(pk=member.pk)
     profile = InternetBandwidthProfile.objects.select_for_update().get(pk=bandwidth_profile.pk)
     if not profile.is_active:
         raise ValidationError('ملف الاتصال المختار غير فعّال.')
@@ -87,23 +104,52 @@ def grant_internal_access(*, member, grant_kind, bandwidth_profile, access_mode,
         max_registered_devices=max_registered_devices,
     )
 
-    overlapping = internal_grants().select_for_update().filter(
-        member=member,
-        status__in=(
-            InternetEntitlement.Status.PENDING,
-            InternetEntitlement.Status.ACTIVE,
-            InternetEntitlement.Status.SUSPENDED,
-        ),
-    ).exists()
+    staff_user_id = None
+    member_obj = None
+    guest_name = ''
+    guest_phone = ''
+    if staff_user is not None:
+        User = get_user_model()
+        staff_user = User.objects.select_for_update().get(pk=staff_user.pk)
+        _validate_staff_user(staff_user)
+        staff_user_id = staff_user.pk
+        guest_name = _staff_label(staff_user)
+        guest_phone = staff_user.phone
+        overlapping = internal_grants().select_for_update().filter(
+            member__isnull=True,
+            guest_phone=staff_user.phone,
+            status__in=(
+                InternetEntitlement.Status.PENDING,
+                InternetEntitlement.Status.ACTIVE,
+                InternetEntitlement.Status.SUSPENDED,
+            ),
+        ).exists()
+        identity_error = 'يوجد بالفعل وصول داخلي قائم لهذا الموظف. ألغِ المنحة الحالية أولاً.'
+    elif member is not None:
+        member_obj = Member.objects.select_for_update().get(pk=member.pk)
+        overlapping = internal_grants().select_for_update().filter(
+            member=member_obj,
+            status__in=(
+                InternetEntitlement.Status.PENDING,
+                InternetEntitlement.Status.ACTIVE,
+                InternetEntitlement.Status.SUSPENDED,
+            ),
+        ).exists()
+        identity_error = 'يوجد بالفعل وصول داخلي قائم لهذا العضو. ألغِ المنحة الحالية أولاً.'
+    else:
+        raise ValidationError('حساب الموظف مطلوب للمنحة الداخلية.')
+
     if overlapping:
-        raise ValidationError('يوجد بالفعل وصول داخلي قائم لهذا العضو. ألغِ المنحة الحالية أولاً.')
+        raise ValidationError(identity_error)
 
     now = at or timezone.now()
     valid_until = validity_end(now, int(validity_value), validity_unit)
     network_backend = 'mikrotik' if settings.MIKROTIK_ENABLED else 'manual'
     entitlement = InternetEntitlement.objects.create(
         package=None,
-        member=member,
+        member=member_obj,
+        guest_name=guest_name,
+        guest_phone=guest_phone,
         visit=None,
         order=None,
         payment=None,
@@ -136,7 +182,8 @@ def grant_internal_access(*, member, grant_kind, bandwidth_profile, access_mode,
         action='internet.internal_access_granted',
         details={
             'entitlement_id': entitlement.pk,
-            'member_id': member.pk,
+            'staff_user_id': staff_user_id,
+            'member_id': member_obj.pk if member_obj else None,
             'grant_kind': grant_kind,
             'bandwidth_profile_code': profile.code,
             'access_mode': access_mode,
@@ -175,6 +222,7 @@ def revoke_internal_access(entitlement, *, actor=None):
         details={
             'entitlement_id': entitlement.pk,
             'member_id': entitlement.member_id,
+            'staff_phone_snapshot': entitlement.guest_phone if not entitlement.member_id else '',
             'origin_type': entitlement.origin_type,
         },
     )
