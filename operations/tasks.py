@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import F
+from django.db.models import F, Q
 from django.utils import timezone
 
 from core.models import ActivityLog, InventoryItem
@@ -203,7 +203,7 @@ def sync_business_day_tasks(day, *, actor=None):
                 'title_ar': f'مراجعة المواد المنخفضة في المخزون ({len(low_items)})',
                 'details': '؛ '.join(labels[:20]),
                 'priority': OperationalTaskTemplate.Priority.HIGH,
-                'due_at': _local_due(day, timezone.datetime.strptime('12:00', '%H:%M').time()),
+                'due_at': _local_due(day, datetime.strptime('12:00', '%H:%M').time()),
                 'is_required': False,
                 'responsibility_role': '',
                 'source_type': 'InventoryItem',
@@ -377,7 +377,7 @@ def send_overdue_task_reminders(day, *, actor=None, min_interval_minutes=None):
             _notify_users(
                 recipients,
                 title=f'مهمة تشغيلية متأخرة: {task.title_ar}',
-                message='تجاوزت المهمة وقتها المحدد وما زالت مفتوحة. راجع صفحة اليوم التشغيلي.',
+                message='تجاوزت المهمة وقتها المحدد وما زالت مفتوحة. راجع صفحة المهام التشغيلية.',
                 actor=actor,
             )
             task.last_reminded_at = now
