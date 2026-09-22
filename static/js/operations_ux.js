@@ -146,11 +146,28 @@
     });
   }
 
+  function enhanceOperationsHome() {
+    if (window.location.pathname !== '/staff/') return;
+    const nav = q('#staff-more .staff-workspace__secondary-links');
+    if (!nav) return;
+    const shellLinks = qa('.staff-shell-nav__inner a');
+    [['يوم العمل', 'يوم العمل'], ['مهام اليوم', 'مهام اليوم']].forEach(([shellText, label]) => {
+      if (qa('a', nav).some((link) => link.textContent.trim() === label)) return;
+      const source = shellLinks.find((link) => link.textContent.trim() === shellText);
+      if (!source) return;
+      const link = document.createElement('a');
+      link.href = source.href;
+      link.textContent = label;
+      nav.prepend(link);
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     enhanceInternalInternet();
     enhanceBusinessDayNavigation();
     enhanceChecklistForms();
     enhanceHandoverForm();
     replaceCheckinLanguage();
+    enhanceOperationsHome();
   });
 })();
