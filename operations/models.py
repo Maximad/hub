@@ -14,12 +14,18 @@ class BusinessDay(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.OPEN)
     cutoff_hour = models.PositiveSmallIntegerField(default=4, verbose_name='ساعة نهاية يوم العمل')
     opened_at = models.DateTimeField(null=True, blank=True)
+    opening_completed_at = models.DateTimeField(null=True, blank=True)
+    opening_last_reminded_at = models.DateTimeField(null=True, blank=True)
     closing_started_at = models.DateTimeField(null=True, blank=True)
     closed_at = models.DateTimeField(null=True, blank=True)
     reopened_at = models.DateTimeField(null=True, blank=True)
     opened_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='opened_business_days',
+    )
+    opening_completed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='completed_business_day_openings',
     )
     closed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
@@ -57,6 +63,107 @@ class BusinessDay(models.Model):
         return f'{self.business_date} — {self.get_status_display()}'
 
 
+class BusinessDayStaffAssignment(models.Model):
+    business_day = models.ForeignKey(BusinessDay, on_delete=models.CASCADE, related_name='staff_assignments')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='business_day_assignments')
+    role_snapshot = models.CharField(max_length=40, blank=True)
+    note = models.CharField(max_length=240, blank=True)
+    assigned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='assigned_business_day_staff',
+    )
+    assigned_at = models.DateTimeField(auto_now_add=True)
+    checked_in_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['user_id']
+        constraints = [
+            models.UniqueConstraint(fields=['business_day', 'user'], name='unique_business_day_staff_assignment'),
+        ]
+
+    def __str__(self):
+        return f'{self.business_day.business_date} — {self.user}'
+
+
+class BusinessDayChecklistItem(models.Model):
+    class Stage(models.TextChoices):
+        OPENING = 'opening', 'الافتتاح'
+
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'بانتظار التأكيد'
+        DONE = 'done', 'تم'
+        WAIVED = 'waived', 'تم التجاوز بسبب مسجّل'
+
+    business_day = models.ForeignKey(BusinessDay, on_delete=models.CASCADE, related_name='checklist_items')
+    stage = models.CharField(max_length=20, choices=Stage.choices, default=Stage.OPENING)
+    code = models.CharField(max_length=80)
+    label_ar = models.CharField(max_length=240)
+    is_required = models.BooleanField(default=True)
+    sort_order = models.PositiveSmallIntegerField(default=0)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    note = models.TextField(blank=True)
+    completed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='completed_business_day_checklist_items',
+    )
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['stage', 'sort_order', 'pk']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['business_day', 'stage', 'code'], name='unique_business_day_checklist_code'
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.business_day.business_date} — {self.label_ar}'
+
+
+class HandoverNote(models.Model):
+    class Priority(models.TextChoices):
+        NORMAL = 'normal', 'عادية'
+        HIGH = 'high', 'مهمة'
+
+    class Status(models.TextChoices):
+        OPEN = 'open', 'تحتاج متابعة'
+        ACKNOWLEDGED = 'acknowledged', 'تم الاطلاع'
+        RESOLVED = 'resolved', 'تم الحل'
+
+    business_day = models.ForeignKey(BusinessDay, on_delete=models.CASCADE, related_name='handover_notes')
+    message = models.TextField()
+    priority = models.CharField(max_length=12, choices=Priority.choices, default=Priority.NORMAL)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.OPEN)
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='assigned_handover_notes',
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='created_handover_notes',
+    )
+    acknowledged_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='acknowledged_handover_notes',
+    )
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='resolved_handover_notes',
+    )
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['status', '-priority', '-created_at']
+
+    def __str__(self):
+        return self.message[:80]
+
+
 class StaffDailyCodeReceipt(models.Model):
     business_day = models.ForeignKey(BusinessDay, on_delete=models.CASCADE, related_name='code_receipts')
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='daily_code_receipts')
@@ -65,6 +172,8 @@ class StaffDailyCodeReceipt(models.Model):
     viewed_at = models.DateTimeField(null=True, blank=True)
     first_used_at = models.DateTimeField(null=True, blank=True)
     last_used_at = models.DateTimeField(null=True, blank=True)
+    last_reminded_at = models.DateTimeField(null=True, blank=True)
+    reminder_count = models.PositiveIntegerField(default=0)
     use_count = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
