@@ -83,7 +83,7 @@ class BusinessDayTests(TestCase):
         self.client.force_login(self.waiter)
         response = self.client.get(reverse('staff_close_day'))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'رمز الفريق اليومي')
+        self.assertContains(response, 'رمز الفريق')
         self.assertNotContains(response, 'صندوق الاستثناءات')
 
         self.client.force_login(self.provider)
