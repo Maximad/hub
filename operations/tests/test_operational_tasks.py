@@ -160,6 +160,46 @@ class OperationalTaskTests(TestCase):
         task.refresh_from_db()
         self.assertEqual(task.status, BusinessDayTask.Status.WAIVED)
 
+    def test_auto_waived_generated_task_reopens_if_source_returns(self):
+        event = Event.objects.create(
+            title_ar='فعالية تعود بعد الإلغاء',
+            starts_at=self.aware(self.business_date, 20),
+            status=Event.Status.PUBLISHED,
+        )
+        day = open_business_day(actor=self.admin, business_date=self.business_date)
+        task = day.tasks.get(fingerprint=f'event:{event.pk}:prep')
+        event.status = Event.Status.CANCELLED
+        event.save(update_fields=['status', 'updated_at'])
+        sync_business_day_tasks(day, actor=self.admin)
+        task.refresh_from_db()
+        self.assertEqual(task.status, BusinessDayTask.Status.WAIVED)
+
+        event.status = Event.Status.PUBLISHED
+        event.save(update_fields=['status', 'updated_at'])
+        sync_business_day_tasks(day, actor=self.admin)
+        task.refresh_from_db()
+        self.assertEqual(task.status, BusinessDayTask.Status.PENDING)
+        self.assertEqual(task.completion_note, '')
+
+    def test_staff_completed_generated_task_is_not_reopened_by_sync(self):
+        event = Event.objects.create(
+            title_ar='فعالية تم تحضيرها',
+            starts_at=self.aware(self.business_date, 21),
+            status=Event.Status.PUBLISHED,
+        )
+        day = open_business_day(actor=self.admin, business_date=self.business_date)
+        task = day.tasks.get(fingerprint=f'event:{event.pk}:prep')
+        set_task_status(task, actor=self.admin, status=BusinessDayTask.Status.DONE, note='تم التحضير')
+        event.status = Event.Status.CANCELLED
+        event.save(update_fields=['status', 'updated_at'])
+        sync_business_day_tasks(day, actor=self.admin)
+        event.status = Event.Status.PUBLISHED
+        event.save(update_fields=['status', 'updated_at'])
+        sync_business_day_tasks(day, actor=self.admin)
+        task.refresh_from_db()
+        self.assertEqual(task.status, BusinessDayTask.Status.DONE)
+        self.assertEqual(task.completion_note, 'تم التحضير')
+
     def test_manual_task_waiver_requires_reason(self):
         day = open_business_day(actor=self.admin, business_date=self.business_date)
         task = create_manual_task(day, actor=self.admin, title='اختبار مهمة')
