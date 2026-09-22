@@ -70,7 +70,7 @@ class StaffDailyCodeReceipt(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['user__username']
+        ordering = ['user_id']
         constraints = [
             models.UniqueConstraint(
                 fields=['business_day', 'user'],
