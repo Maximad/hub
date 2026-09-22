@@ -25,6 +25,7 @@
       form.dataset.enhancedChecklist = '1';
 
       const row = form.closest('tr');
+      const itemText = row && row.children[0] ? row.children[0].textContent.trim() : '';
       const statusText = row && row.children[1] ? row.children[1].textContent.trim() : '';
       const isPending = statusText.includes('بانتظار');
       const note = q('input[name="checklist_note"]', form);
@@ -35,6 +36,17 @@
 
       const actions = document.createElement('div');
       actions.className = 'operations-checklist-actions';
+
+      // The roster checklist row is authoritative from Team Today and must not
+      // expose a manual reopen/waive action that the backend rejects.
+      if (itemText.includes('تأكيد فريق العمل الموجود اليوم')) {
+        const hint = document.createElement('small');
+        hint.textContent = 'يُحدّث من فريق اليوم';
+        actions.appendChild(hint);
+        form.appendChild(actions);
+        return;
+      }
+
       if (isPending) {
         const done = document.createElement('button');
         done.type = 'submit';
@@ -77,8 +89,7 @@
   }
 
   function enhanceBusinessDayNavigation() {
-    const codeInput = q('input[name="daily_code"]');
-    if (!codeInput) return;
+    if (window.location.pathname !== '/staff/close-day/') return;
     document.body.classList.add('staff-business-day');
     if (q('.business-day-local-nav')) return;
 
