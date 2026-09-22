@@ -1,12 +1,13 @@
 """Internet sessions and Wi‑Fi management views for staff workflows."""
 from django import forms
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
-from core.models import InternetBandwidthProfile, InternetEntitlement, InternetPackage, Member
+from core.models import InternetBandwidthProfile, InternetEntitlement, InternetPackage
 from core.services.internet_internal_access import (
     INTERNAL_ORIGINS,
     grant_internal_access,
@@ -25,10 +26,16 @@ from core.views_legacy import (
 )
 
 
+class StaffUserChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, obj):
+        name = obj.get_full_name() or obj.username
+        return f'{name} — {obj.get_role_display()} — {obj.phone}'
+
+
 class InternalAccessGrantForm(forms.Form):
-    member = forms.ModelChoiceField(
-        label='العضو',
-        queryset=Member.objects.none(),
+    staff_user = StaffUserChoiceField(
+        label='الموظف',
+        queryset=get_user_model().objects.none(),
         widget=forms.Select(attrs={'class': 'hub-input'}),
     )
     grant_kind = forms.ChoiceField(
@@ -83,7 +90,11 @@ class InternalAccessGrantForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['member'].queryset = Member.objects.order_by('name_ar', 'phone')
+        User = get_user_model()
+        provider_role = getattr(User.Role, 'INTERNET_PROVIDER', 'internet_provider')
+        self.fields['staff_user'].queryset = User.objects.filter(is_active=True).exclude(
+            role=provider_role,
+        ).order_by('first_name', 'last_name', 'username')
         self.fields['bandwidth_profile'].queryset = InternetBandwidthProfile.objects.filter(
             is_active=True,
         ).order_by('name')
@@ -111,9 +122,35 @@ def _internal_access_page(request, form=None):
     grants = list(
         internal_grants().select_related('member').order_by('-created_at')[:60]
     )
+    User = get_user_model()
+    staff_by_phone = {
+        user.phone: user
+        for user in User.objects.filter(
+            is_active=True,
+            phone__in=[g.guest_phone for g in grants if g.guest_phone and not g.member_id],
+        )
+    }
     for entitlement in grants:
         entitlement.internal_kind_label = (
             'الإدارة' if entitlement.origin_type == 'internal_owner_grant' else 'الفريق'
+        )
+        entitlement.staff_user = (
+            staff_by_phone.get(entitlement.guest_phone) if not entitlement.member_id else None
+        )
+        entitlement.internal_identity_name = (
+            str(entitlement.staff_user)
+            if entitlement.staff_user
+            else (entitlement.member.name_ar if entitlement.member_id else entitlement.guest_name or 'حساب موظف سابق')
+        )
+        entitlement.internal_identity_phone = (
+            entitlement.staff_user.phone if entitlement.staff_user else (
+                entitlement.member.phone if entitlement.member_id else entitlement.guest_phone
+            )
+        )
+        entitlement.internal_identity_role = (
+            entitlement.staff_user.get_role_display() if entitlement.staff_user else (
+                'منحة قديمة مرتبطة بعضو' if entitlement.member_id else '—'
+            )
         )
     active_count = sum(
         1 for entitlement in grants
@@ -154,7 +191,7 @@ def staff_internet_sale(request):
         except ValidationError as exc:
             messages.error(request, ' '.join(exc.messages))
             return _internal_access_page(request, form=form)
-        messages.success(request, 'تم منح الوصول الداخلي دون إنشاء بيع أو دفعة.')
+        messages.success(request, 'تم منح الوصول الداخلي لحساب الموظف دون إنشاء بيع أو دفعة.')
         return redirect(_internal_access_url())
 
     if action == 'internal_revoke':
