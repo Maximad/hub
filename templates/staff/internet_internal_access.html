@@ -1,59 +1,65 @@
 {% extends "base.html" %}
 {% block title %}إنترنت الإدارة والفريق{% endblock %}
-{% block body_class %}staff-internet-v2{% endblock %}
+{% block body_class %}staff-internet-v2 staff-operations-polish{% endblock %}
 {% block content %}
-<section class="hub-section">
-  <div class="hub-toolbar" style="justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
+<section class="hub-section operations-page-head">
+  <div class="hub-toolbar operations-page-head__row">
     <div>
       <p class="hub-badge hub-badge-info">وصول داخلي مجاني</p>
       <h1 class="hub-section-title">إنترنت الإدارة والفريق</h1>
-      <p class="hub-text-muted">منح خاصة مرتبطة بعضو هَبّ وتستخدم ملفات الاتصال الموجودة. لا تنشئ طلباً أو دفعة أو حصة مزوّد، ولا تظهر كباقة للبيع للزبائن.</p>
+      <p class="hub-text-muted">وصول خاص لحسابات موظفي هَبّ الفعّالة. لا يستخدم دليل الأعضاء العام، ولا ينشئ طلباً أو دفعة أو حصة مزوّد.</p>
     </div>
     <a class="hub-button" href="{% url 'staff_internet' %}">العودة إلى الإنترنت</a>
   </div>
 </section>
 
-<section class="hub-section hub-summary-cards">
+<section class="hub-section hub-summary-cards operations-summary-cards">
   <div class="hub-summary-card"><span>المنح القائمة</span><strong class="metric">{{ internal_active_count }}</strong><small>إدارة + فريق</small></div>
-  <div class="hub-summary-card"><span>الفصل التجاري</span><strong class="metric">مجاني</strong><small>لا Order ولا Payment ولا Revenue Share</small></div>
-  <div class="hub-summary-card"><span>الشبكة</span><strong class="metric">الجلسات فقط</strong><small>لا تعديل لإعدادات RouterOS</small></div>
+  <div class="hub-summary-card"><span>الفصل التجاري</span><strong class="metric">مجاني</strong><small>لا طلب ولا دفعة ولا حصة مزوّد</small></div>
+  <div class="hub-summary-card"><span>الشبكة</span><strong class="metric">وصول فقط</strong><small>لا تعديل لإعدادات RouterOS</small></div>
 </section>
 
-<section class="hub-section hub-card">
-  <h2 class="hub-section-title">منح وصول داخلي</h2>
-  <p class="hub-text-muted">اختر العضو ونوع المنحة والحدود. يجب إلغاء المنحة القائمة قبل منح وصول داخلي جديد للعضو نفسه.</p>
-  <form method="post" action="{% url 'staff_internet_sale' %}" class="hub-form hub-grid hub-grid-2">
+<section class="hub-section hub-card operations-action-card">
+  <div class="operations-section-head"><div><h2 class="hub-section-title">منح وصول لموظف</h2><p class="hub-text-muted">اختر حساب الموظف، ثم نوع الوصول والمدة. يجب إلغاء المنحة القائمة قبل إنشاء منحة جديدة للحساب نفسه.</p></div></div>
+  <form method="post" action="{% url 'staff_internet_sale' %}" class="hub-form internal-access-form">
     {% csrf_token %}<input type="hidden" name="internet_action" value="internal_grant">
-    {% for field in internal_access_form %}
-      <label>{{ field.label }}{{ field }}{% if field.errors %}<small class="hub-text-danger">{{ field.errors|join:', ' }}</small>{% endif %}</label>
-    {% endfor %}
-    <div class="hub-card" style="grid-column:1/-1;">
-      <strong>كيف تُقرأ الحدود؟</strong>
-      <p class="hub-text-muted">«غير محدود» يعني غير محدود بالدقائق فقط ضمن مدة الصلاحية وحدود الأجهزة. «رصيد دقائق» يحتاج إجمالي دقائق. حد الجلسة والحد اليومي اختياريان ويضيّقان الوصول عند ضبطهما.</p>
-    </div>
-    <button class="hub-button hub-button-primary" type="submit">منح الوصول</button>
+    <fieldset class="operations-field-group"><legend>لمن؟</legend><div class="hub-grid hub-grid-2">
+      <label>{{ internal_access_form.staff_user.label }}{{ internal_access_form.staff_user }}{% if internal_access_form.staff_user.errors %}<small class="hub-text-danger">{{ internal_access_form.staff_user.errors|join:', ' }}</small>{% endif %}</label>
+      <label>{{ internal_access_form.grant_kind.label }}{{ internal_access_form.grant_kind }}{% if internal_access_form.grant_kind.errors %}<small class="hub-text-danger">{{ internal_access_form.grant_kind.errors|join:', ' }}</small>{% endif %}</label>
+    </div></fieldset>
+    <fieldset class="operations-field-group"><legend>الوصول</legend><div class="hub-grid hub-grid-2">
+      <label>{{ internal_access_form.bandwidth_profile.label }}{{ internal_access_form.bandwidth_profile }}{% if internal_access_form.bandwidth_profile.errors %}<small class="hub-text-danger">{{ internal_access_form.bandwidth_profile.errors|join:', ' }}</small>{% endif %}</label>
+      <label>{{ internal_access_form.access_mode.label }}{{ internal_access_form.access_mode }}{% if internal_access_form.access_mode.errors %}<small class="hub-text-danger">{{ internal_access_form.access_mode.errors|join:', ' }}</small>{% endif %}</label>
+    </div></fieldset>
+    <fieldset class="operations-field-group"><legend>المدة والحدود</legend><div class="hub-grid hub-grid-2">
+      <label>{{ internal_access_form.validity_value.label }}{{ internal_access_form.validity_value }}</label>
+      <label>{{ internal_access_form.validity_unit.label }}{{ internal_access_form.validity_unit }}</label>
+      <label>{{ internal_access_form.session_minutes_limit.label }} <small>اختياري</small>{{ internal_access_form.session_minutes_limit }}</label>
+      <label data-allowance-only>{{ internal_access_form.total_minutes_allowed.label }}{{ internal_access_form.total_minutes_allowed }}{% if internal_access_form.total_minutes_allowed.errors %}<small class="hub-text-danger">{{ internal_access_form.total_minutes_allowed.errors|join:', ' }}</small>{% endif %}</label>
+      <label>{{ internal_access_form.daily_minutes_limit.label }} <small>اختياري</small>{{ internal_access_form.daily_minutes_limit }}</label>
+      <label>{{ internal_access_form.max_concurrent_devices.label }}{{ internal_access_form.max_concurrent_devices }}</label>
+      <label>{{ internal_access_form.max_registered_devices.label }}{{ internal_access_form.max_registered_devices }}</label>
+    </div></fieldset>
+    <p class="operations-help"><strong>غير محدود</strong> يعني غير محدود بالدقائق فقط ضمن الصلاحية وحدود الأجهزة. <strong>رصيد دقائق</strong> يحتاج إجمالي دقائق؛ حد الجلسة والحد اليومي اختياريان.</p>
+    <button class="hub-button hub-button-primary operations-primary-action" type="submit">منح الوصول</button>
   </form>
 </section>
 
 <section class="hub-section hub-card">
-  <h2 class="hub-section-title">المنح الداخلية الأخيرة</h2>
-  <p class="hub-text-muted">هذه سجلات وصول في هَبّ، وليست دليلاً لحظياً على أن الجهاز متصل الآن. الإلغاء ينهي الجلسات الفعالة ويضع طلب الفصل في طابور الشبكة العادي.</p>
-  <div class="hub-table-wrap"><table class="hub-table">
-    <tr><th>العضو</th><th>النوع</th><th>الحالة</th><th>الوصول</th><th>الصلاحية</th><th>الدقائق</th><th>ملف الاتصال</th><th>الأجهزة</th><th>منح في</th><th></th></tr>
-    {% for e in internal_grants %}
-    <tr>
-      <td>{{ e.member.name_ar }}<br><small>{{ e.member.phone }}</small></td>
-      <td>{{ e.internal_kind_label }}</td>
-      <td>{{ e.get_status_display }}</td>
+  <div class="operations-section-head"><div><h2 class="hub-section-title">المنح الداخلية</h2><p class="hub-text-muted">سجلات وصول هَبّ، وليست عدّاداً لحظياً للأجهزة المتصلة. المنح القديمة المرتبطة بعضو تبقى ظاهرة فقط للتوافق والتاريخ.</p></div></div>
+  <div class="hub-table-wrap"><table class="hub-table operations-data-table">
+    <tr><th>الموظف</th><th>النوع</th><th>الحالة</th><th>الوصول</th><th>الصلاحية</th><th>الدقائق</th><th>ملف الاتصال</th><th>الأجهزة</th><th></th></tr>
+    {% for e in internal_grants %}<tr>
+      <td><strong>{{ e.internal_identity_name }}</strong><br><small>{{ e.internal_identity_role }}{% if e.internal_identity_phone %} · {{ e.internal_identity_phone }}{% endif %}</small></td>
+      <td><span class="hub-badge">{{ e.internal_kind_label }}</span></td>
+      <td><span class="hub-badge">{{ e.get_status_display }}</span></td>
       <td>{{ e.get_access_mode_display }}</td>
-      <td>{{ e.valid_until|default:'—' }}</td>
+      <td>{% if e.valid_until %}{{ e.valid_until|date:"Y-m-d H:i" }}{% else %}—{% endif %}</td>
       <td>{% if e.total_minutes_allowed != None %}{{ e.minutes_remaining }} / {{ e.total_minutes_allowed }}{% else %}غير محدود{% endif %}{% if e.daily_minutes_limit %}<br><small>يومي {{ e.daily_minutes_limit }}</small>{% endif %}</td>
       <td><code>{{ e.bandwidth_profile_code|default:'—' }}</code></td>
-      <td>{{ e.max_concurrent_devices }} متزامن / {{ e.max_registered_devices }} مسجل</td>
-      <td>{{ e.created_at }}</td>
-      <td>{% if e.status == 'active' or e.status == 'pending' or e.status == 'suspended' %}<form method="post" action="{% url 'staff_internet_sale' %}" onsubmit="return confirm('إلغاء الوصول الداخلي لهذا العضو؟');">{% csrf_token %}<input type="hidden" name="internet_action" value="internal_revoke"><input type="hidden" name="entitlement_id" value="{{ e.pk }}"><button class="hub-button" type="submit">إلغاء الوصول</button></form>{% else %}—{% endif %}</td>
-    </tr>
-    {% empty %}<tr><td colspan="10">لا توجد منح داخلية بعد.</td></tr>{% endfor %}
+      <td>{{ e.max_concurrent_devices }} متزامن<br><small>{{ e.max_registered_devices }} مسجل</small></td>
+      <td>{% if e.status == 'active' or e.status == 'pending' or e.status == 'suspended' %}<form method="post" action="{% url 'staff_internet_sale' %}" onsubmit="return confirm('إلغاء الوصول الداخلي لهذا الموظف؟');">{% csrf_token %}<input type="hidden" name="internet_action" value="internal_revoke"><input type="hidden" name="entitlement_id" value="{{ e.pk }}"><button class="hub-button operations-danger-action" type="submit">إلغاء</button></form>{% else %}—{% endif %}</td>
+    </tr>{% empty %}<tr><td colspan="9"><div class="operations-empty-state"><strong>لا توجد منح داخلية بعد</strong><span>اختر موظفاً من الأعلى لإنشاء أول وصول داخلي.</span></div></td></tr>{% endfor %}
   </table></div>
 </section>
 {% endblock %}
