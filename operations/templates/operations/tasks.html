@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}المهام التشغيلية{% endblock %}
+{% block body_class %}staff-operational-tasks{% endblock %}
+{% block content %}
+<section class="hub-section">
+  <div class="hub-toolbar" style="justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
+    <div>
+      <p class="hub-badge hub-badge-info">تشغيل اليوم</p>
+      <h1 class="hub-section-title">المهام التشغيلية</h1>
+      <p class="hub-text-muted">مهام دورية وتحضير فعاليات وحجوزات ومراجعة مخزون. هذه الصفحة لا تغيّر الحجوزات أو الفعاليات أو كميات المخزون أو المشتريات تلقائياً.</p>
+    </div>
+    <a class="hub-button" href="{% url 'staff_close_day' %}">اليوم التشغيلي</a>
+  </div>
+</section>
+
+{% if not business_day %}
+<section class="hub-section hub-card">
+  <h2 class="hub-section-title">لا يوجد يوم تشغيلي مفتوح</h2>
+  <p class="hub-text-muted">افتح يوم العمل أولاً من صفحة اليوم التشغيلي حتى يتم إنشاء مهام هذا اليوم.</p>
+  <a class="hub-button hub-button-primary" href="{% url 'staff_close_day' %}">فتح اليوم التشغيلي</a>
+</section>
+{% else %}
+<section class="hub-section hub-summary-cards">
+  <div class="hub-summary-card"><span>تاريخ العمل</span><strong class="metric">{{ business_day.business_date }}</strong><small>{{ business_day.get_status_display }}</small></div>
+  <div class="hub-summary-card"><span>مفتوحة</span><strong class="metric">{{ task_counts.pending }}</strong></div>
+  <div class="hub-summary-card"><span>متأخرة</span><strong class="metric">{{ task_counts.overdue }}</strong></div>
+  <div class="hub-summary-card"><span>منجزة</span><strong class="metric">{{ task_counts.done }}</strong></div>
+</section>
+
+{% if can_manage_tasks and business_day.status != 'closed' %}
+<section class="hub-section hub-card">
+  <div class="hub-toolbar" style="justify-content:space-between;gap:1rem;flex-wrap:wrap;">
+    <div><h2 class="hub-section-title">تحديث المهام من النظام</h2><p class="hub-text-muted">يقرأ الفعاليات المنشورة، الحجوزات المؤكدة، المواد المنخفضة والروتينات الدورية. المزامنة آمنة للتكرار ولا تنشئ نسخة ثانية من المهمة نفسها.</p></div>
+    <form method="post">{% csrf_token %}<input type="hidden" name="task_action" value="sync"><button class="hub-button" type="submit">مزامنة الآن</button></form>
+  </div>
+</section>
+
+<section class="hub-section hub-card">
+  <h2 class="hub-section-title">إضافة مهمة اليوم</h2>
+  <form method="post" class="hub-form hub-grid hub-grid-2">
+    {% csrf_token %}<input type="hidden" name="task_action" value="manual_add">
+    <label style="grid-column:1/-1;">العنوان<input name="title_ar" required placeholder="مثال: تجهيز الطاولات للفرقة الساعة 19:00"></label>
+    <label style="grid-column:1/-1;">تفاصيل<textarea name="details"></textarea></label>
+    <label>موعد التنفيذ<input type="datetime-local" name="due_at"></label>
+    <label>المسؤول<select name="assigned_to"><option value="">غير معيّن</option>{% for staff_user in staff_options %}<option value="{{ staff_user.pk }}">{{ staff_user }} — {{ staff_user.get_role_display }}</option>{% endfor %}</select></label>
+    <label>الأهمية<select name="priority"><option value="normal">عادية</option><option value="high">مهمة</option></select></label>
+    <label style="display:flex;align-items:center;gap:.5rem;"><input type="checkbox" name="is_required" value="1"> مطلوبة ضمن يوم العمل</label>
+    <button class="hub-button hub-button-primary" type="submit">إضافة المهمة</button>
+  </form>
+</section>
+{% endif %}
+
+<section class="hub-section hub-card">
+  <div class="hub-toolbar" style="justify-content:space-between;gap:1rem;flex-wrap:wrap;">
+    <div><h2 class="hub-section-title">مهام اليوم</h2><p class="hub-text-muted">المهام المتأخرة تبقى مفتوحة حتى التنفيذ أو الإغلاق بسبب مسجّل.</p></div>
+  </div>
+  <div class="hub-table-wrap"><table class="hub-table">
+    <tr><th>المهمة</th><th>المصدر</th><th>الوقت</th><th>المسؤول</th><th>الحالة</th><th>الإجراء</th></tr>
+    {% for task in tasks %}
+    <tr>
+      <td>
+        <strong>{{ task.title_ar }}</strong>
+        {% if task.priority == 'high' %}<span class="hub-badge hub-badge-warning">مهمة</span>{% endif %}
+        {% if task.is_required %}<span class="hub-badge">مطلوبة</span>{% endif %}
+        {% if task.details %}<br><small>{{ task.details }}</small>{% endif %}
+        {% if task.completion_note %}<br><small>ملاحظة الإغلاق: {{ task.completion_note }}</small>{% endif %}
+      </td>
+      <td>
+        {{ task.get_kind_display }}
+        {% if task.source_type == 'Event' %}<br><a href="{% url 'staff_event_detail' task.source_id %}">فتح الفعالية</a>{% endif %}
+        {% if task.source_type == 'Reservation' %}<br><a href="{% url 'staff_reservation_detail' task.source_id %}">فتح الحجز</a>{% endif %}
+        {% if task.kind == 'inventory' %}<br><a href="{% url 'staff_inventory_low_stock' %}">المخزون المنخفض</a>{% endif %}
+      </td>
+      <td>{% if task.due_at %}{{ task.due_at }}{% if task.status == 'pending' and task.due_at < now %}<br><span class="hub-badge hub-badge-warning">متأخرة</span>{% endif %}{% else %}—{% endif %}</td>
+      <td>
+        {{ task.assigned_to|default:'—' }}{% if task.responsibility_role %}<br><small>الدور: {{ task.responsibility_role }}</small>{% endif %}
+        {% if can_manage_tasks and business_day.status != 'closed' %}
+        <form method="post" class="hub-form" style="margin-top:.4rem;min-width:12rem;">{% csrf_token %}<input type="hidden" name="task_action" value="assign"><input type="hidden" name="task_id" value="{{ task.pk }}"><select name="assigned_to"><option value="">غير معيّن</option>{% for staff_user in staff_options %}<option value="{{ staff_user.pk }}" {% if task.assigned_to_id == staff_user.pk %}selected{% endif %}>{{ staff_user }}</option>{% endfor %}</select><button class="hub-button" type="submit">تعيين</button></form>
+        {% endif %}
+      </td>
+      <td>{{ task.get_status_display }}{% if task.completed_by %}<br><small>{{ task.completed_by }} — {{ task.completed_at }}</small>{% endif %}</td>
+      <td>
+        {% if business_day.status != 'closed' %}
+        {% if can_manage_tasks or task.assigned_to_id == request.user.pk or task.responsibility_role == request.user.role %}
+        <form method="post" class="hub-form" style="min-width:15rem;">{% csrf_token %}<input type="hidden" name="task_action" value="status"><input type="hidden" name="task_id" value="{{ task.pk }}"><select name="status"><option value="done">تمت</option><option value="pending">إعادة للفتح</option><option value="waived">إغلاق بسبب</option></select><input name="completion_note" placeholder="سبب عند الإغلاق دون تنفيذ"><button class="hub-button" type="submit">حفظ</button></form>
+        {% else %}—{% endif %}
+        {% else %}—{% endif %}
+      </td>
+    </tr>
+    {% empty %}<tr><td colspan="6">لا توجد مهام لهذا اليوم بعد.</td></tr>{% endfor %}
+  </table></div>
+</section>
+
+{% if can_manage_tasks %}
+<section class="hub-section hub-card">
+  <h2 class="hub-section-title">الروتينات الدورية</h2>
+  <p class="hub-text-muted">أنشئ روتيناً مرة واحدة ليظهر تلقائياً في أيام العمل المناسبة. ترك الأيام فارغة يعني كل يوم.</p>
+  {% if business_day.status != 'closed' %}
+  <form method="post" class="hub-form hub-grid hub-grid-2">
+    {% csrf_token %}<input type="hidden" name="task_action" value="template_add">
+    <label style="grid-column:1/-1;">العنوان<input name="title_ar" required placeholder="مثال: فحص برادات البار"></label>
+    <label style="grid-column:1/-1;">تفاصيل<textarea name="details"></textarea></label>
+    <label>وقت الاستحقاق<input type="time" name="due_time"></label>
+    <label>الدور المسؤول<select name="responsibility_role"><option value="">غير محدد</option>{% for value,label in role_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+    <label>الأهمية<select name="priority"><option value="normal">عادية</option><option value="high">مهمة</option></select></label>
+    <label style="display:flex;align-items:center;gap:.5rem;"><input type="checkbox" name="is_required" value="1"> مهمة مطلوبة</label>
+    <fieldset style="grid-column:1/-1;"><legend>أيام التكرار</legend><div class="hub-toolbar" style="gap:.75rem;flex-wrap:wrap;">{% for value,label in weekday_choices %}<label style="display:flex;align-items:center;gap:.35rem;"><input type="checkbox" name="weekdays" value="{{ value }}"> {{ label }}</label>{% endfor %}</div></fieldset>
+    <button class="hub-button hub-button-primary" type="submit">إضافة روتين دوري</button>
+  </form>
+  {% endif %}
+
+  <div class="hub-table-wrap" style="margin-top:1rem;"><table class="hub-table"><tr><th>الروتين</th><th>الأيام</th><th>الوقت</th><th>الدور</th><th>الحالة</th><th>إجراء</th></tr>
+    {% for template in task_templates %}<tr><td>{{ template.title_ar }}{% if template.details %}<br><small>{{ template.details }}</small>{% endif %}</td><td>{% if template.weekdays %}{{ template.weekdays }}{% else %}كل يوم{% endif %}</td><td>{{ template.due_time|default:'—' }}</td><td>{{ template.responsibility_role|default:'—' }}</td><td>{% if template.is_active %}فعال{% else %}موقوف{% endif %}</td><td>{% if business_day.status != 'closed' %}<form method="post">{% csrf_token %}<input type="hidden" name="task_action" value="template_toggle"><input type="hidden" name="template_id" value="{{ template.pk }}"><button class="hub-button" type="submit">{% if template.is_active %}إيقاف{% else %}تفعيل{% endif %}</button></form>{% else %}—{% endif %}</td></tr>{% empty %}<tr><td colspan="6">لا توجد روتينات دورية.</td></tr>{% endfor %}
+  </table></div>
+</section>
+{% endif %}
+{% endif %}
+{% endblock %}

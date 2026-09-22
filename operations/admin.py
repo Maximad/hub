@@ -5,7 +5,9 @@ from .models import (
     BusinessDayChecklistItem,
     BusinessDayException,
     BusinessDayStaffAssignment,
+    BusinessDayTask,
     HandoverNote,
+    OperationalTaskTemplate,
     StaffDailyCodeReceipt,
 )
 
@@ -39,6 +41,27 @@ class HandoverNoteAdmin(admin.ModelAdmin):
     list_display = ('business_day', 'priority', 'status', 'assigned_to', 'created_by', 'created_at', 'resolved_at')
     list_filter = ('priority', 'status', 'business_day')
     search_fields = ('message', 'assigned_to__username')
+
+
+@admin.register(OperationalTaskTemplate)
+class OperationalTaskTemplateAdmin(admin.ModelAdmin):
+    list_display = (
+        'title_ar', 'due_time', 'priority', 'responsibility_role',
+        'is_required', 'is_active', 'active_from', 'active_until',
+    )
+    list_filter = ('priority', 'is_required', 'is_active', 'responsibility_role')
+    search_fields = ('title_ar', 'details')
+
+
+@admin.register(BusinessDayTask)
+class BusinessDayTaskAdmin(admin.ModelAdmin):
+    list_display = (
+        'business_day', 'kind', 'title_ar', 'priority', 'status', 'due_at',
+        'assigned_to', 'responsibility_role', 'is_required', 'reminder_count',
+    )
+    list_filter = ('business_day', 'kind', 'priority', 'status', 'is_required', 'responsibility_role')
+    search_fields = ('title_ar', 'details', 'fingerprint', 'source_type', 'source_id')
+    readonly_fields = ('fingerprint', 'metadata', 'last_reminded_at', 'reminder_count')
 
 
 @admin.register(BusinessDayException)

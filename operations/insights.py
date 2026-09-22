@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from core.models import DailyClose, InternetSession, NotificationEvent, NotificationLog, NotificationRecipient, Order, Payment
 from django.utils import timezone
 
-from .models import BusinessDayChecklistItem, HandoverNote, StaffDailyCodeReceipt
+from .models import BusinessDayChecklistItem, BusinessDayTask, HandoverNote, StaffDailyCodeReceipt
 from .services import business_day_bounds
 
 
@@ -31,9 +31,6 @@ def business_day_metrics(day):
         started_at__gte=start,
         started_at__lt=end,
     ).only('manual_total_syp', 'calculated_total_syp')
-    # payable_total_syp is intentionally a model property because a manual
-    # override wins over the calculated amount. Sum that effective value in
-    # Python instead of pretending it is a database column.
     internet_revenue = sum(int(session.payable_total_syp or 0) for session in internet_sessions)
     closes = DailyClose.objects.filter(
         business_date=day.business_date,
@@ -44,6 +41,11 @@ def business_day_metrics(day):
     handover_open = HandoverNote.objects.exclude(status=HandoverNote.Status.RESOLVED).filter(
         business_day__business_date__lte=day.business_date,
     ).count()
+    pending_tasks = BusinessDayTask.objects.filter(
+        business_day=day,
+        status=BusinessDayTask.Status.PENDING,
+    )
+    now = timezone.now()
     return {
         'orders_count': len(orders),
         'gross_sales_syp': gross_sales,
@@ -53,6 +55,9 @@ def business_day_metrics(day):
         'internet_revenue_syp': internet_revenue,
         'cash_difference_syp': cash_difference,
         'handover_open_count': handover_open,
+        'tasks_pending_count': pending_tasks.count(),
+        'tasks_overdue_count': pending_tasks.filter(due_at__isnull=False, due_at__lt=now).count(),
+        'tasks_required_pending_count': pending_tasks.filter(is_required=True).count(),
     }
 
 
@@ -130,6 +135,21 @@ def detect_anomalies(day):
             'title_ar': 'افتتاح اليوم لم يكتمل',
             'detail_ar': f'{pending_opening} بنود افتتاح مطلوبة بقيت بلا تأكيد.',
         })
+
+    if metrics['tasks_overdue_count']:
+        anomalies.append({
+            'code': 'operational_tasks_overdue',
+            'severity': 'warning',
+            'title_ar': 'مهام تشغيلية متأخرة',
+            'detail_ar': f'{metrics["tasks_overdue_count"]} مهمة تجاوزت موعدها وما زالت مفتوحة.',
+        })
+    if metrics['tasks_required_pending_count']:
+        anomalies.append({
+            'code': 'required_tasks_pending',
+            'severity': 'info',
+            'title_ar': 'مهام مطلوبة ما زالت مفتوحة',
+            'detail_ar': f'{metrics["tasks_required_pending_count"]} مهمة مطلوبة لم تُغلق بعد.',
+        })
     return anomalies
 
 
@@ -149,7 +169,8 @@ def send_owner_digest(day, *, actor=None):
         f'{metrics["orders_count"]} طلب — '
         f'إنترنت {metrics["internet_revenue_syp"]} ل.س. — '
         f'فرق النقد {metrics["cash_difference_syp"]} ل.س. — '
-        f'الإلغاءات {metrics["cancelled_orders_count"]}. '
+        f'الإلغاءات {metrics["cancelled_orders_count"]} — '
+        f'المهام المفتوحة {metrics["tasks_pending_count"]} منها {metrics["tasks_overdue_count"]} متأخرة. '
         f'{anomaly_text}'
     )
     event = NotificationEvent.objects.create(
