@@ -5,9 +5,9 @@
 <section class="hub-section">
   <div class="hub-toolbar" style="justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
     <div>
-      <p class="hub-badge hub-badge-info">فتح → تشغيل → إغلاق</p>
+      <p class="hub-badge hub-badge-info">فتح → تشغيل → تسليم → إغلاق</p>
       <h1 class="hub-section-title">اليوم التشغيلي</h1>
-      <p class="hub-text-muted">تنسيق نهاية يوم هَبّ فوق الإغلاق المالي القائم. لا يغيّر هذا النظام منطق القيود أو إغلاق الحسابات المالية.</p>
+      <p class="hub-text-muted">مساحة تشغيل واحدة لافتتاح اليوم، فريق العمل، التسليم، الاستثناءات والإغلاق. الإغلاق المالي يبقى منفصلاً ومحكوماً بنظام الحسابات الحالي.</p>
     </div>
     {% if can_manage_business_day %}<a class="hub-button" href="{% url 'staff_daily_closes' %}">الإغلاقات المالية</a>{% endif %}
   </div>
@@ -15,96 +15,122 @@
 
 {% if not business_day %}
 <section class="hub-section hub-card">
-  <h2 class="hub-section-title">لا يوجد يوم تشغيلي مفتوح</h2>
+  <h2 class="hub-section-title">فتح يوم العمل</h2>
   <p>تاريخ العمل الحالي حسب ساعة القطع: <strong>{{ business_date_today }}</strong></p>
   {% if can_manage_business_day %}
-  <form method="post">{% csrf_token %}<input type="hidden" name="business_day_action" value="open"><button class="hub-button hub-button-primary" type="submit">فتح يوم العمل وإصدار رمز الفريق</button></form>
+  <form method="post" class="hub-form">
+    {% csrf_token %}<input type="hidden" name="business_day_action" value="open">
+    <fieldset><legend>من يعمل اليوم؟</legend>
+      <div class="hub-grid hub-grid-2">
+      {% for staff_user in staff_options %}
+        <label style="display:flex;align-items:center;gap:.5rem;"><input type="checkbox" name="staff_user_ids" value="{{ staff_user.pk }}" {% if staff_user.pk == request.user.pk %}checked{% endif %}> {{ staff_user }} — {{ staff_user.get_role_display }}</label>
+      {% empty %}<p>لا توجد حسابات موظفين فعالة.</p>{% endfor %}
+      </div>
+    </fieldset>
+    <button class="hub-button hub-button-primary" type="submit">فتح اليوم وإصدار رمز الفريق</button>
+  </form>
   {% else %}<p class="hub-text-muted">يجب أن يفتح المدير أو الكاشير يوم العمل أولاً.</p>{% endif %}
 </section>
 {% else %}
 <section class="hub-section hub-summary-cards">
   <div class="hub-summary-card"><span>تاريخ العمل</span><strong class="metric">{{ business_day.business_date }}</strong><small>القطع {{ business_day.cutoff_hour }}:00</small></div>
   <div class="hub-summary-card"><span>الحالة</span><strong class="metric">{{ business_day.get_status_display }}</strong><small>{% if business_day.closing_started_at %}بدأ الإغلاق {{ business_day.closing_started_at }}{% else %}فُتح {{ business_day.opened_at }}{% endif %}</small></div>
+  <div class="hub-summary-card"><span>الافتتاح</span><strong class="metric">{% if business_day.opening_completed_at %}مكتمل{% else %}غير مكتمل{% endif %}</strong><small>{% if business_day.opening_completed_at %}{{ business_day.opening_completed_at }}{% else %}راجع القائمة أدناه{% endif %}</small></div>
+  <div class="hub-summary-card"><span>فريق اليوم</span><strong class="metric">{{ staff_assignments|length }}</strong><small>موظفون معيّنون</small></div>
   <div class="hub-summary-card"><span>رمز الفريق</span><strong class="metric">الإصدار {{ business_day.code_version }}</strong><small>{% if business_day.code_issued_at %}صادر {{ business_day.code_issued_at }}{% else %}غير صادر{% endif %}</small></div>
 </section>
 
 <section class="hub-section hub-card">
   <div class="hub-toolbar" style="justify-content:space-between;gap:1rem;flex-wrap:wrap;">
-    <div><h2 class="hub-section-title">رمز الفريق اليومي</h2><p class="hub-text-muted">الرمز مشترك لهذا اليوم فقط. يصل داخل مركز إشعارات هَبّ ولا يُرسل إلى شاشة القفل.</p></div>
-    {% if business_day.status != 'closed' %}
-    <form method="post">{% csrf_token %}<input type="hidden" name="business_day_action" value="reveal_code"><button class="hub-button" type="submit">إظهار الرمز</button></form>
-    {% endif %}
+    <div><h2 class="hub-section-title">رمز الفريق اليومي</h2><p class="hub-text-muted">الإشعار يخبر الموظف أن الرمز جاهز فقط. الرمز نفسه لا يُحفظ في سجل الإشعارات، ويظهر هنا بعد تسجيل الدخول.</p></div>
+    {% if business_day.status != 'closed' %}<form method="post">{% csrf_token %}<input type="hidden" name="business_day_action" value="reveal_code"><button class="hub-button" type="submit">إظهار الرمز</button></form>{% endif %}
   </div>
   {% if revealed_code %}<div class="hub-card" style="text-align:center;margin-block:1rem;"><small>رمز اليوم</small><div style="font-size:2.5rem;letter-spacing:.35rem;font-weight:700;direction:ltr;">{{ revealed_code }}</div></div>{% endif %}
   {% if business_day.status != 'closed' %}
   <form method="post" class="hub-form" style="max-width:32rem;">{% csrf_token %}<input type="hidden" name="business_day_action" value="verify_code"><label>تأكيد استلام/استخدام الرمز<input type="text" name="daily_code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" required></label><button class="hub-button" type="submit">تحقق</button></form>
   {% endif %}
-  {% if can_manage_business_day and business_day.status != 'closed' %}<form method="post" style="margin-top:1rem;" onsubmit="return confirm('تغيير رمز اليوم الآن؟ سيتوقف الرمز السابق فوراً.');">{% csrf_token %}<input type="hidden" name="business_day_action" value="rotate_code"><button class="hub-button" type="submit">تغيير الرمز وإعادة إرساله</button></form>{% endif %}
+  {% if can_manage_business_day and business_day.status != 'closed' %}
+  <div class="hub-toolbar" style="gap:.75rem;flex-wrap:wrap;margin-top:1rem;">
+    <form method="post" onsubmit="return confirm('تغيير رمز اليوم الآن؟ سيتوقف الرمز السابق فوراً.');">{% csrf_token %}<input type="hidden" name="business_day_action" value="rotate_code"><button class="hub-button" type="submit">تغيير الرمز</button></form>
+    <form method="post">{% csrf_token %}<input type="hidden" name="business_day_action" value="send_code_reminders"><button class="hub-button" type="submit">تذكير من لم يؤكد الرمز</button></form>
+  </div>
+  {% endif %}
 </section>
 
 {% if can_manage_business_day %}
 <section class="hub-section hub-card">
-  <div class="hub-toolbar" style="justify-content:space-between;gap:1rem;flex-wrap:wrap;">
-    <div><h2 class="hub-section-title">فحص الإغلاق</h2><p class="hub-text-muted">المانع يجب حله قبل الإغلاق النهائي. التحذير يمكن حله أو ترحيله بسبب مسجّل.</p></div>
-    {% if business_day.status != 'closed' %}<form method="post">{% csrf_token %}<input type="hidden" name="business_day_action" value="refresh"><button class="hub-button" type="submit">تحديث الفحص</button></form>{% endif %}
-  </div>
-  {% if reconciliation %}
-  <div class="hub-summary-cards">
-    <div class="hub-summary-card"><span>مانع</span><strong class="metric">{{ reconciliation.blocker_count }}</strong><small>يجب الحل</small></div>
-    <div class="hub-summary-card"><span>تحذير</span><strong class="metric">{{ reconciliation.warning_count }}</strong><small>حل أو ترحيل</small></div>
-    <div class="hub-summary-card"><span>جلسات إنترنت مفتوحة</span><strong class="metric">{{ reconciliation.active_sessions_count }}</strong><small>سجلات هَبّ الفعالة</small></div>
-    <div class="hub-summary-card"><span>زيارات مفتوحة</span><strong class="metric">{{ reconciliation.open_visits_count }}</strong><small>قبل نهاية اليوم</small></div>
-    <div class="hub-summary-card"><span>مناوبات مفتوحة</span><strong class="metric">{{ reconciliation.open_shifts_count }}</strong><small>تحتاج إغلاق/عد</small></div>
-    <div class="hub-summary-card"><span>طلبات اليوم</span><strong class="metric">{{ reconciliation.orders_count }}</strong><small>ضمن نافذة العمل</small></div>
-  </div>
-  {% endif %}
-
+  <h2 class="hub-section-title">فريق اليوم</h2>
+  <p class="hub-text-muted">اختيار تشغيلي لليوم، وليس سجل دوام أو رواتب. استخدام رمز اليوم يسجل إشارة check-in بسيطة للموظف المعيّن.</p>
   {% if business_day.status != 'closed' %}
-  <div class="hub-toolbar" style="gap:.75rem;flex-wrap:wrap;margin-top:1rem;">
-    {% if business_day.status == 'open' or business_day.status == 'reopened' %}<form method="post">{% csrf_token %}<input type="hidden" name="business_day_action" value="start_closing"><button class="hub-button hub-button-primary" type="submit">بدء وضع الإغلاق</button></form>{% endif %}
-    <form method="post" onsubmit="return confirm('إنهاء جميع جلسات الإنترنت المفتوحة حتى نهاية يوم العمل؟ الجلسات المدفوعة ستدخل مسار الفوترة الطبيعي.');">{% csrf_token %}<input type="hidden" name="business_day_action" value="close_sessions"><button class="hub-button" type="submit">إنهاء جلسات الإنترنت المفتوحة</button></form>
-    <form method="post" onsubmit="return confirm('إغلاق الزيارات الآمنة فقط؟ لن تُغلق زيارة فيها جلسة إنترنت أو طلب غير منتهٍ/غير مدفوع.');">{% csrf_token %}<input type="hidden" name="business_day_action" value="close_safe_visits"><button class="hub-button" type="submit">إغلاق الزيارات الآمنة</button></form>
-  </div>
+  <form method="post" class="hub-form">
+    {% csrf_token %}<input type="hidden" name="business_day_action" value="staff_roster">
+    <div class="hub-grid hub-grid-2">
+      {% for staff_user in staff_options %}<label style="display:flex;align-items:center;gap:.5rem;"><input type="checkbox" name="staff_user_ids" value="{{ staff_user.pk }}" {% if staff_user.pk in assigned_staff_ids %}checked{% endif %}> {{ staff_user }} — {{ staff_user.get_role_display }}</label>{% endfor %}
+    </div>
+    <button class="hub-button" type="submit">حفظ فريق اليوم</button>
+  </form>
   {% endif %}
+  <div class="hub-table-wrap" style="margin-top:1rem;"><table class="hub-table"><tr><th>الموظف</th><th>الدور</th><th>أضيف</th><th>check-in بالرمز</th></tr>{% for assignment in staff_assignments %}<tr><td>{{ assignment.user }}</td><td>{{ assignment.user.get_role_display }}</td><td>{{ assignment.assigned_at }}</td><td>{{ assignment.checked_in_at|default:'—' }}</td></tr>{% empty %}<tr><td colspan="4">لم يتم تثبيت فريق اليوم.</td></tr>{% endfor %}</table></div>
 </section>
 
 <section class="hub-section hub-card">
-  <h2 class="hub-section-title">صندوق الاستثناءات</h2>
-  <div class="hub-table-wrap"><table class="hub-table">
-    <tr><th>الفئة</th><th>الأهمية</th><th>المشكلة</th><th>الحالة</th><th>الإجراء</th></tr>
-    {% for item in business_day_exceptions %}
-    <tr>
-      <td>{{ item.get_category_display }}</td>
-      <td>{{ item.get_severity_display }}</td>
-      <td>{{ item.title_ar }}{% if item.resolution_note %}<br><small>{{ item.resolution_note }}</small>{% endif %}</td>
-      <td>{{ item.get_status_display }}</td>
-      <td>{% if item.status == 'open' and item.severity != 'blocker' and business_day.status != 'closed' %}<form method="post" class="hub-form" style="min-width:15rem;">{% csrf_token %}<input type="hidden" name="business_day_action" value="carry_forward"><input type="hidden" name="exception_id" value="{{ item.pk }}"><input type="text" name="carry_note" placeholder="سبب الترحيل" required><button class="hub-button" type="submit">ترحيل</button></form>{% else %}—{% endif %}</td>
-    </tr>
-    {% empty %}<tr><td colspan="5">لا توجد استثناءات مسجلة بعد. استخدم «تحديث الفحص» في وضع الإغلاق.</td></tr>{% endfor %}
-  </table></div>
-</section>
-
-<section class="hub-section hub-card">
-  <h2 class="hub-section-title">استلام رمز اليوم</h2>
-  <div class="hub-table-wrap"><table class="hub-table"><tr><th>الموظف</th><th>الدور</th><th>أُبلغ</th><th>شاهد</th><th>آخر استخدام</th><th>مرات الاستخدام</th></tr>{% for receipt in code_receipts %}<tr><td>{{ receipt.user }}</td><td>{{ receipt.user.get_role_display }}</td><td>{{ receipt.notified_at|default:'—' }}</td><td>{{ receipt.viewed_at|default:'—' }}</td><td>{{ receipt.last_used_at|default:'—' }}</td><td>{{ receipt.use_count }}</td></tr>{% empty %}<tr><td colspan="6">لا توجد سجلات استلام.</td></tr>{% endfor %}</table></div>
-</section>
-
-{% if business_day.status == 'closing' or business_day.status == 'reopened' %}
-<section class="hub-section hub-card">
-  <h2 class="hub-section-title">الإغلاق النهائي</h2>
-  <p class="hub-text-muted">الإغلاق النهائي يفشل إذا بقي طلب/جلسة مدفوعة/مناوبة/إغلاق مالي مانع. التحذيرات غير المانعة يمكن ترحيلها بسبب مسجّل.</p>
-  <form method="post" onsubmit="return confirm('إغلاق يوم العمل نهائياً؟ سيتوقف رمز الفريق الحالي.');">{% csrf_token %}<input type="hidden" name="business_day_action" value="finalize"><button class="hub-button hub-button-primary" type="submit">إغلاق اليوم التشغيلي</button></form>
+  <h2 class="hub-section-title">قائمة افتتاح اليوم</h2>
+  <p class="hub-text-muted">هذه تأكيدات تشغيلية؛ لا تستبدل العد المالي أو فحص الإنترنت المتخصص أو سجلات المخزون.</p>
+  <div class="hub-table-wrap"><table class="hub-table"><tr><th>البند</th><th>الحالة</th><th>بواسطة</th><th>ملاحظة</th><th>تحديث</th></tr>
+  {% for item in opening_checklist_items %}
+    <tr><td>{{ item.label_ar }}{% if item.is_required %}<br><small>مطلوب</small>{% endif %}</td><td>{{ item.get_status_display }}</td><td>{{ item.completed_by|default:'—' }}</td><td>{{ item.note|default:'—' }}</td><td>
+      {% if business_day.status != 'closed' and item.code != 'staff_roster' %}
+      <form method="post" class="hub-form" style="min-width:16rem;">{% csrf_token %}<input type="hidden" name="business_day_action" value="checklist"><input type="hidden" name="checklist_item_id" value="{{ item.pk }}"><select name="checklist_status"><option value="done">تم</option><option value="pending">إعادة للانتظار</option><option value="waived">تجاوز بسبب</option></select><input type="text" name="checklist_note" placeholder="ملاحظة/سبب عند الحاجة"><button class="hub-button" type="submit">حفظ</button></form>
+      {% else %}يُحدّث من فريق اليوم{% endif %}
+    </td></tr>
+  {% empty %}<tr><td colspan="5">لا توجد بنود افتتاح.</td></tr>{% endfor %}</table></div>
 </section>
 {% endif %}
 
-{% if business_day.status == 'closed' and can_reopen_business_day %}
-<section class="hub-section hub-card"><h2 class="hub-section-title">إعادة فتح اليوم</h2><p class="hub-text-muted">للإدارة فقط. يجب تسجيل سبب واضح، وسيصدر رمز فريق جديد.</p><form method="post" class="hub-form" onsubmit="return confirm('إعادة فتح هذا اليوم؟');">{% csrf_token %}<input type="hidden" name="business_day_action" value="reopen"><label>السبب<textarea name="reopen_reason" required></textarea></label><button class="hub-button" type="submit">إعادة فتح</button></form></section>
-{% endif %}
+<section class="hub-section hub-card">
+  <h2 class="hub-section-title">التسليم بين المناوبات والأيام</h2>
+  <p class="hub-text-muted">ملاحظات تشغيلية تبقى ظاهرة حتى الاطلاع عليها أو حلها، حتى لو كانت من يوم سابق.</p>
+  {% if business_day.status != 'closed' %}
+  <form method="post" class="hub-form hub-grid hub-grid-2">
+    {% csrf_token %}<input type="hidden" name="business_day_action" value="handover_add">
+    <label style="grid-column:1/-1;">الملاحظة<textarea name="handover_message" required placeholder="مثال: ماكينة الإسبريسو تحتاج فحصاً صباحاً، أو حجز مهم يجب متابعته."></textarea></label>
+    <label>الأهمية<select name="handover_priority"><option value="normal">عادية</option><option value="high">مهمة</option></select></label>
+    <label>مسؤول محدد (اختياري)<select name="assigned_to"><option value="">فريق اليوم</option>{% for staff_user in staff_options %}<option value="{{ staff_user.pk }}">{{ staff_user }}</option>{% endfor %}</select></label>
+    <button class="hub-button" type="submit">إضافة ملاحظة تسليم</button>
+  </form>
+  {% endif %}
+  <div class="hub-table-wrap" style="margin-top:1rem;"><table class="hub-table"><tr><th>من يوم</th><th>الأهمية</th><th>الملاحظة</th><th>المسؤول</th><th>الحالة</th><th>إجراء</th></tr>{% for note in handover_notes %}<tr><td>{{ note.business_day.business_date }}</td><td>{{ note.get_priority_display }}</td><td>{{ note.message }}</td><td>{{ note.assigned_to|default:'الفريق' }}</td><td>{{ note.get_status_display }}</td><td><div class="hub-toolbar" style="gap:.4rem;flex-wrap:wrap;">{% if note.status == 'open' %}<form method="post">{% csrf_token %}<input type="hidden" name="business_day_action" value="handover_ack"><input type="hidden" name="handover_id" value="{{ note.pk }}"><button class="hub-button" type="submit">اطلعت</button></form>{% endif %}{% if can_manage_business_day %}<form method="post">{% csrf_token %}<input type="hidden" name="business_day_action" value="handover_resolve"><input type="hidden" name="handover_id" value="{{ note.pk }}"><button class="hub-button" type="submit">تم الحل</button></form>{% endif %}</div></td></tr>{% empty %}<tr><td colspan="6">لا توجد ملاحظات تسليم مفتوحة.</td></tr>{% endfor %}</table></div>
+</section>
+
+{% if can_manage_business_day %}
+{% if business_day_metrics %}
+<section class="hub-section hub-card">
+  <h2 class="hub-section-title">ملخص تشغيلي حي</h2>
+  <div class="hub-summary-cards"><div class="hub-summary-card"><span>مبيعات اليوم</span><strong class="metric">{{ business_day_metrics.gross_sales_syp }}</strong><small>ل.س.</small></div><div class="hub-summary-card"><span>الطلبات</span><strong class="metric">{{ business_day_metrics.orders_count }}</strong></div><div class="hub-summary-card"><span>دخل الإنترنت</span><strong class="metric">{{ business_day_metrics.internet_revenue_syp }}</strong><small>ل.س.</small></div><div class="hub-summary-card"><span>الخصومات</span><strong class="metric">{{ business_day_metrics.discounts_syp }}</strong><small>ل.س.</small></div><div class="hub-summary-card"><span>الإلغاءات</span><strong class="metric">{{ business_day_metrics.cancelled_orders_count }}</strong></div><div class="hub-summary-card"><span>فرق الصناديق</span><strong class="metric">{{ business_day_metrics.cash_difference_syp }}</strong><small>ل.س.</small></div></div>
+</section>
 {% endif %}
 
 <section class="hub-section hub-card">
-  <h2 class="hub-section-title">آخر الأيام التشغيلية</h2>
-  <div class="hub-table-wrap"><table class="hub-table"><tr><th>التاريخ</th><th>الحالة</th><th>فتح بواسطة</th><th>أغلق بواسطة</th><th>الإغلاق</th></tr>{% for row in recent_business_days %}<tr><td>{{ row.business_date }}</td><td>{{ row.get_status_display }}</td><td>{{ row.opened_by|default:'—' }}</td><td>{{ row.closed_by|default:'—' }}</td><td>{{ row.closed_at|default:'—' }}</td></tr>{% empty %}<tr><td colspan="5">لا توجد أيام مسجلة بعد.</td></tr>{% endfor %}</table></div>
+  <h2 class="hub-section-title">مؤشرات تحتاج انتباهاً</h2>
+  <p class="hub-text-muted">قواعد بسيطة قابلة للتفسير، وليست قرارات آلية. الهدف إظهار ما يستحق المراجعة.</p>
+  <div class="hub-table-wrap"><table class="hub-table"><tr><th>المؤشر</th><th>التفصيل</th></tr>{% for anomaly in business_day_anomalies %}<tr><td>{{ anomaly.title_ar }}</td><td>{{ anomaly.detail_ar }}</td></tr>{% empty %}<tr><td colspan="2">لا توجد مؤشرات غير اعتيادية حسب القواعد الحالية.</td></tr>{% endfor %}</table></div>
 </section>
+
+<section class="hub-section hub-card">
+  <div class="hub-toolbar" style="justify-content:space-between;gap:1rem;flex-wrap:wrap;"><div><h2 class="hub-section-title">فحص الإغلاق</h2><p class="hub-text-muted">المانع يجب حله قبل الإغلاق النهائي. التحذير يمكن حله أو ترحيله بسبب مسجّل.</p></div>{% if business_day.status != 'closed' %}<form method="post">{% csrf_token %}<input type="hidden" name="business_day_action" value="refresh"><button class="hub-button" type="submit">تحديث الفحص</button></form>{% endif %}</div>
+  {% if reconciliation %}<div class="hub-summary-cards"><div class="hub-summary-card"><span>مانع</span><strong class="metric">{{ reconciliation.blocker_count }}</strong><small>يجب الحل</small></div><div class="hub-summary-card"><span>تحذير</span><strong class="metric">{{ reconciliation.warning_count }}</strong><small>حل أو ترحيل</small></div><div class="hub-summary-card"><span>جلسات إنترنت</span><strong class="metric">{{ reconciliation.active_sessions_count }}</strong></div><div class="hub-summary-card"><span>زيارات مفتوحة</span><strong class="metric">{{ reconciliation.open_visits_count }}</strong></div><div class="hub-summary-card"><span>مناوبات مفتوحة</span><strong class="metric">{{ reconciliation.open_shifts_count }}</strong></div><div class="hub-summary-card"><span>طلبات اليوم</span><strong class="metric">{{ reconciliation.orders_count }}</strong></div></div>{% endif %}
+  {% if business_day.status != 'closed' %}<div class="hub-toolbar" style="gap:.75rem;flex-wrap:wrap;margin-top:1rem;">{% if business_day.status == 'open' or business_day.status == 'reopened' %}<form method="post">{% csrf_token %}<input type="hidden" name="business_day_action" value="start_closing"><button class="hub-button hub-button-primary" type="submit">بدء وضع الإغلاق</button></form>{% endif %}<form method="post" onsubmit="return confirm('إنهاء جميع جلسات الإنترنت المفتوحة حتى نهاية يوم العمل؟ الجلسات المدفوعة ستدخل مسار الفوترة الطبيعي.');">{% csrf_token %}<input type="hidden" name="business_day_action" value="close_sessions"><button class="hub-button" type="submit">إنهاء جلسات الإنترنت</button></form><form method="post" onsubmit="return confirm('إغلاق الزيارات الآمنة فقط؟');">{% csrf_token %}<input type="hidden" name="business_day_action" value="close_safe_visits"><button class="hub-button" type="submit">إغلاق الزيارات الآمنة</button></form></div>{% endif %}
+</section>
+
+<section class="hub-section hub-card"><h2 class="hub-section-title">صندوق الاستثناءات</h2><div class="hub-table-wrap"><table class="hub-table"><tr><th>الفئة</th><th>الأهمية</th><th>المشكلة</th><th>الحالة</th><th>الإجراء</th></tr>{% for item in business_day_exceptions %}<tr><td>{{ item.get_category_display }}</td><td>{{ item.get_severity_display }}</td><td>{{ item.title_ar }}{% if item.resolution_note %}<br><small>{{ item.resolution_note }}</small>{% endif %}</td><td>{{ item.get_status_display }}</td><td>{% if item.status == 'open' and item.severity != 'blocker' and business_day.status != 'closed' %}<form method="post" class="hub-form" style="min-width:15rem;">{% csrf_token %}<input type="hidden" name="business_day_action" value="carry_forward"><input type="hidden" name="exception_id" value="{{ item.pk }}"><input type="text" name="carry_note" placeholder="سبب الترحيل" required><button class="hub-button" type="submit">ترحيل</button></form>{% else %}—{% endif %}</td></tr>{% empty %}<tr><td colspan="5">لا توجد استثناءات مسجلة بعد.</td></tr>{% endfor %}</table></div></section>
+
+<section class="hub-section hub-card"><h2 class="hub-section-title">استلام رمز اليوم</h2><div class="hub-table-wrap"><table class="hub-table"><tr><th>الموظف</th><th>الدور</th><th>أُبلغ</th><th>شاهد</th><th>آخر تذكير</th><th>التذكيرات</th><th>آخر استخدام</th><th>الاستخدام</th></tr>{% for receipt in code_receipts %}<tr><td>{{ receipt.user }}</td><td>{{ receipt.user.get_role_display }}</td><td>{{ receipt.notified_at|default:'—' }}</td><td>{{ receipt.viewed_at|default:'—' }}</td><td>{{ receipt.last_reminded_at|default:'—' }}</td><td>{{ receipt.reminder_count }}</td><td>{{ receipt.last_used_at|default:'—' }}</td><td>{{ receipt.use_count }}</td></tr>{% empty %}<tr><td colspan="8">لا توجد سجلات استلام.</td></tr>{% endfor %}</table></div></section>
+
+{% if business_day.status == 'closing' or business_day.status == 'reopened' %}<section class="hub-section hub-card"><h2 class="hub-section-title">الإغلاق النهائي</h2><p class="hub-text-muted">الإغلاق النهائي يفشل إذا بقي طلب/جلسة مدفوعة/مناوبة/إغلاق مالي مانع. بعد النجاح يرسل هَبّ ملخص اليوم إلى حسابات الإدارة العليا.</p><form method="post" onsubmit="return confirm('إغلاق يوم العمل نهائياً؟ سيتوقف رمز الفريق الحالي.');">{% csrf_token %}<input type="hidden" name="business_day_action" value="finalize"><button class="hub-button hub-button-primary" type="submit">إغلاق اليوم التشغيلي</button></form></section>{% endif %}
+
+{% if business_day.status == 'closed' and can_reopen_business_day %}<section class="hub-section hub-card"><h2 class="hub-section-title">إعادة فتح اليوم</h2><p class="hub-text-muted">للإدارة فقط. يجب تسجيل سبب واضح، وسيصدر رمز فريق جديد.</p><form method="post" class="hub-form" onsubmit="return confirm('إعادة فتح هذا اليوم؟');">{% csrf_token %}<input type="hidden" name="business_day_action" value="reopen"><label>السبب<textarea name="reopen_reason" required></textarea></label><button class="hub-button" type="submit">إعادة فتح</button></form></section>{% endif %}
+{% endif %}
+
+<section class="hub-section hub-card"><h2 class="hub-section-title">آخر الأيام التشغيلية</h2><div class="hub-table-wrap"><table class="hub-table"><tr><th>التاريخ</th><th>الحالة</th><th>فتح بواسطة</th><th>الافتتاح</th><th>أغلق بواسطة</th><th>الإغلاق</th></tr>{% for row in recent_business_days %}<tr><td>{{ row.business_date }}</td><td>{{ row.get_status_display }}</td><td>{{ row.opened_by|default:'—' }}</td><td>{{ row.opening_completed_at|default:'—' }}</td><td>{{ row.closed_by|default:'—' }}</td><td>{{ row.closed_at|default:'—' }}</td></tr>{% empty %}<tr><td colspan="6">لا توجد أيام مسجلة بعد.</td></tr>{% endfor %}</table></div></section>
 {% endif %}
 {% endblock %}
