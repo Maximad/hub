@@ -1,4 +1,7 @@
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
@@ -76,8 +79,8 @@ class InternetLaunchContractTests(TestCase):
         self.assertEqual(Order.objects.count(), 0)
         self.assertEqual(Payment.objects.count(), 0)
 
-    @override_settings(MIKROTIK_ENABLED=False)
-    def test_basic_pin_allowance_and_order_bonus_remain_bounded(self):
+    @patch('core.views.wifi.prepare_guest_wifi_session_network', return_value=False)
+    def test_basic_pin_allowance_and_order_bonus_remain_bounded(self, _prepare_network):
         policy = self._enable_self_service(require_code=True)
 
         bad = self.client.post(reverse('wifi_entry'), {
@@ -88,11 +91,10 @@ class InternetLaunchContractTests(TestCase):
         self.assertEqual(InternetSession.objects.count(), 0)
         self.assertFalse(GuestWifiDailyAllowance.objects.filter(initial_minutes_granted__gt=0).exists())
 
-        with self.settings(MIKROTIK_ENABLED=False):
-            good = self.client.post(reverse('wifi_entry'), {
-                'wifi_action': 'start_guest_wifi',
-                'venue_code': current_venue_code(policy),
-            })
+        good = self.client.post(reverse('wifi_entry'), {
+            'wifi_action': 'start_guest_wifi',
+            'venue_code': current_venue_code(policy),
+        })
         self.assertEqual(good.status_code, 302)
         session = InternetSession.objects.get(status=InternetSession.Status.ACTIVE)
         self.assertEqual(session.billing_mode, InternetSession.BillingMode.FREE)
@@ -147,7 +149,7 @@ class InternetLaunchContractTests(TestCase):
         )
         first = start_usage_session(entitlement, device_mac='AA:BB:CC:DD:EE:01')
         self.assertEqual(first.status, InternetSession.Status.ACTIVE)
-        with self.assertRaisesMessage(Exception, 'تم بلوغ حد الأجهزة المتزامنة'):
+        with self.assertRaisesMessage(ValidationError, 'تم بلوغ حد الأجهزة المتزامنة'):
             start_usage_session(entitlement, device_mac='AA:BB:CC:DD:EE:02')
 
         self.assertEqual(entitlement.gross_amount_syp, 0)
