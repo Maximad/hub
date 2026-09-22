@@ -12,7 +12,6 @@ from core.models import (
     HubVisit,
     InternetSession,
     NotificationEvent,
-    NotificationRecipient,
     Order,
     Shift,
 )
@@ -73,7 +72,8 @@ class BusinessDayTests(TestCase):
         event = NotificationEvent.objects.get(title_ar__startswith='رمز الفريق ليوم')
         recipients = set(event.recipients.values_list('user__username', flat=True))
         self.assertEqual(recipients, {'day-admin', 'day-cashier', 'day-waiter'})
-        self.assertIn(code, event.message_ar)
+        self.assertNotIn(code, event.message_ar)
+        self.assertIn('افتح صفحة اليوم التشغيلي', event.message_ar)
         self.assertNotIn('day-provider', recipients)
 
     def test_regular_staff_can_view_daily_code_workspace_but_provider_cannot(self):
