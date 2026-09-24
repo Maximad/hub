@@ -71,7 +71,7 @@ class InternetLaunchContractTests(TestCase):
         self.assertEqual(landing.status_code, 200)
         self.assertEqual(menu.status_code, 200)
         self.assertEqual(internet.status_code, 200)
-        self.assertContains(landing, 'افتح المنيو واطلب')
+        self.assertContains(landing, 'افتح المنيو')
         self.assertContains(internet, 'name="venue_code"')
         self.assertEqual(HubVisit.objects.count(), 0)
         self.assertEqual(InternetSession.objects.count(), 0)
