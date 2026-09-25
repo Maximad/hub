@@ -3,127 +3,194 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0f5f57">
-  <title>إنترنت ومنيو هَبّ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f6f1e8">
+  <title>أهلاً بك في هَبّ</title>
   <link rel="icon" type="image/svg+xml" href="{% static 'img/favicon.svg' %}">
   <link rel="stylesheet" href="{% static 'css/hub.css' %}">
   <link rel="stylesheet" href="{% static 'css/internet_experience.css' %}">
   {% include "includes/hub_theme.html" %}
 </head>
-<body class="hub-page wifi-entry-page">
-<main class="hub-container">
-  {% if messages %}<div class="hub-messages">{% for message in messages %}<div class="hub-message hub-message-{{ message.tags|default:'info' }}" role="{% message_role message %}">{{ message }}</div>{% endfor %}</div>{% endif %}
-<section class="wifi-portal" dir="rtl">
-  <header class="wifi-portal__hero">
-    <div class="wifi-portal__mark" aria-hidden="true">هَبّ</div>
-    <div><p class="wifi-portal__eyebrow">إنترنت ومنيو هَبّ</p><h1>أهلاً بك في هَبّ</h1><p>اختر الإنترنت أو افتح المنيو مباشرة. الطلب لا يحتاج إلى رمز الإنترنت أو شراء اتصال.</p></div>
-  </header>
-
-  {% if came_from_free_access %}
-  <div class="hub-alert hub-alert-success" role="status">تمت العودة من بوابة الشبكة. إذا لم يعمل الإنترنت، استخدم «إعادة الاتصال» أو اطلب المساعدة.</div>
+<body class="hub-page wifi-entry-page{% if internet_panel_open %} wifi-entry-page--sheet-open{% endif %}">
+<main class="wifi-welcome">
+  {% if messages %}
+  <div class="hub-messages wifi-welcome__messages">
+    {% for message in messages %}<div class="hub-message hub-message-{{ message.tags|default:'info' }}" role="{% message_role message %}">{{ message }}</div>{% endfor %}
+  </div>
   {% endif %}
 
-  <div class="wifi-portal__choices">
-    {% if not internet_panel_open %}
-    <section class="wifi-plan wifi-plan--basic">
-      <div class="wifi-plan__top"><span class="wifi-plan__badge">إنترنت</span><span>أساسي أو سريع</span></div>
-      <h2>اتصل بالإنترنت</h2>
-      <p>افتح خيارات الاتصال. لن يبدأ أي رصيد أو احتساب بمجرد فتح الخيارات.</p>
-      <a class="hub-button hub-button-primary wifi-plan__primary" href="{% url 'wifi_entry' %}?mode=internet">عرض خيارات الإنترنت</a>
-    </section>
-    {% else %}
-      {% if active_fast_wifi_session %}
-      <section class="wifi-plan wifi-plan--fast wifi-plan--active">
-        <div class="wifi-plan__top"><span class="wifi-plan__badge">{% if active_fast_wifi_network_ready %}متصل{% else %}قيد التجهيز{% endif %}</span><span>إنترنت سريع</span></div>
-        {% if active_fast_wifi_network_ready %}
-          <h2>الإنترنت السريع جاهز لهذا الجهاز</h2>
-          <p>أكدت الشبكة تجهيز الجلسة. يمكنك عرض تفاصيلها أو إيقافها والعودة إلى رصيد الإنترنت الأساسي المتبقي.</p>
-        {% else %}
-          <h2>طلب الإنترنت السريع قيد التجهيز</h2>
-          <p>الجلسة مسجلة في هَبّ، لكن الشبكة لم تؤكد الجاهزية بعد. لا تعرض الصفحة هذا كاتصال فعلي قبل التأكيد.</p>
-        {% endif %}
-        <div class="wifi-plan__actions">
-          <a class="hub-button hub-button-primary" href="{% url 'current_visit' %}#internet">عرض حالة الاتصال</a>
-          <form method="post" action="{% url 'visit_internet_session_stop' active_fast_wifi_session.public_code %}">{% csrf_token %}<button class="hub-button" type="submit">إيقاف السريع والعودة للأساسي</button></form>
-        </div>
-      </section>
-      {% elif active_guest_wifi_session %}
-      <section class="wifi-plan wifi-plan--basic wifi-plan--active">
-        <div class="wifi-plan__top"><span class="wifi-plan__badge">{% if active_guest_wifi_network_ready %}متصل{% else %}قيد التجهيز{% endif %}</span><span>إنترنت أساسي</span></div>
-        <h2>{{ guest_wifi_daily_minutes_remaining }} دقيقة متاحة اليوم</h2>
-        {% if active_guest_wifi_network_ready %}
-          <p>أكدت الشبكة تجهيز الاتصال{% if active_guest_wifi_session.authorized_until %} حتى {{ active_guest_wifi_session.authorized_until|date:"H:i" }}{% endif %}. إذا لم يعمل الإنترنت، اضغط «إعادة الاتصال».</p>
-        {% else %}<p>الجلسة مسجلة في هَبّ، لكن الشبكة لم تؤكد الجاهزية بعد. أعد المحاولة بعد لحظات.</p>{% endif %}
-        <div class="wifi-plan__actions">
-          <form method="post" action="{% url 'wifi_entry' %}">{% csrf_token %}<input type="hidden" name="wifi_action" value="start_guest_wifi"><button class="hub-button" type="submit">إعادة الاتصال</button></form>
-          {% if internet_options_available %}<form method="post" action="{% url 'wifi_entry' %}">{% csrf_token %}<input type="hidden" name="wifi_action" value="internet_options"><button class="hub-button hub-button-primary" type="submit">إنترنت أسرع</button></form>{% endif %}
-        </div>
-      </section>
+  <section class="wifi-welcome__shell" dir="rtl">
+    <header class="wifi-welcome__brand" aria-label="هَبّ">
+      {% if brand_logo_url %}
+        <img src="{{ brand_logo_url }}" alt="هَبّ" class="wifi-welcome__logo">
       {% else %}
-      <section class="wifi-plan wifi-plan--basic">
-        <div class="wifi-plan__top"><span class="wifi-plan__badge">مجاني</span><span>اتصال أساسي</span></div>
-        <h2>الإنترنت الأساسي</h2>
-        {% if guest_wifi_available %}
-          <p>{{ guest_wifi_initial_minutes }} دقيقة للاستخدام الخفيف. لا تحتاج إلى حساب.</p>
-          {% if guest_wifi_order_bonus_enabled %}<p class="wifi-plan__bonus">الطلب المؤهل قد يضيف حتى {{ guest_wifi_order_bonus_minutes }} دقيقة.</p>{% endif %}
-          {% if guest_wifi_can_start %}
-          <form method="post" action="{% url 'wifi_entry' %}" class="wifi-basic-start">
-            {% csrf_token %}<input type="hidden" name="wifi_action" value="start_guest_wifi">
-            {% if guest_wifi_code_required %}
-              <label for="venue-code">رمز المكان المكوّن من 4 أرقام</label>
-              <input class="hub-input wifi-venue-code" id="venue-code" name="venue_code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9٠-٩۰-۹]{4}" maxlength="4" placeholder="••••" required>
-              <small>اطلب الرمز من فريق هَبّ. الرمز خاص بتفعيل الإنترنت الأساسي فقط ولا يلزم لفتح المنيو أو الطلب.</small>
-            {% endif %}
-            <button class="hub-button hub-button-primary wifi-plan__primary" type="submit">{% if guest_wifi_code_required %}فعّل الإنترنت الأساسي{% else %}اتصل مجاناً{% endif %}</button>
-          </form>
-          {% else %}<div class="hub-alert hub-alert-warning">انتهت دقائق الإنترنت المجانية لهذا الجهاز اليوم. يمكنك الطلب من المنيو أو اختيار الإنترنت السريع.</div>{% endif %}
-        {% else %}<p>{{ guest_wifi_unavailable_reason|default:'الاتصال الأساسي غير متاح حالياً.' }}</p>{% endif %}
-      </section>
+        <div class="wifi-welcome__wordmark" aria-label="هَبّ"><span>هَبّ</span><small>HUB</small></div>
       {% endif %}
+    </header>
+
+    <div class="wifi-welcome__hero{% if not wifi_portal_header_url %} wifi-welcome__hero--placeholder{% endif %}">
+      {% if wifi_portal_header_url %}
+        <img src="{{ wifi_portal_header_url }}" alt="{{ wifi_portal_header_alt|default:'هَبّ السويداء' }}">
+      {% else %}
+        <div class="wifi-welcome__hero-placeholder" aria-hidden="true"><span>هَبّ</span><small>مساحة للّقاء والعمل والثقافة</small></div>
+      {% endif %}
+      {% if can_customize_portal %}
+        <a class="wifi-welcome__hero-edit" href="{{ wifi_portal_media_admin_url }}" target="_blank" rel="noopener">⌁ تغيير صورة الهيدر</a>
+      {% endif %}
+    </div>
+
+    <div class="wifi-welcome__intro">
+      <h1>أهلاً بك</h1>
+      <span class="wifi-welcome__accent" aria-hidden="true"></span>
+      <p>اختر ما تريد بخطوة واحدة فقط</p>
+    </div>
+
+    {% if came_from_free_access %}
+      <div class="hub-alert hub-alert-success" role="status">تمت العودة من بوابة الشبكة. إذا لم يعمل الإنترنت، افتح الاتصال وأعد المحاولة.</div>
     {% endif %}
 
-    <section class="wifi-plan wifi-plan--order">
-      <div class="wifi-plan__top"><span class="wifi-plan__badge">المنيو</span><span>مستقل عن الإنترنت</span></div>
-      <h2>افتح المنيو واطلب</h2>
-      <p>يمكنك التصفح والطلب مباشرة. لا يلزم رمز المكان، ولا تفعيل الإنترنت الأساسي، ولا شراء الإنترنت السريع.</p>
-      <a class="hub-button hub-button-primary wifi-plan__primary" href="{{ menu_url }}">افتح المنيو واطلب</a>
-    </section>
-  </div>
+    <div class="wifi-welcome__choices" aria-label="اختر الخدمة">
+      <button class="wifi-choice wifi-choice--internet" type="button" data-wifi-internet-open aria-controls="wifi-internet-sheet" aria-expanded="{% if internet_panel_open %}true{% else %}false{% endif %}">
+        <span class="wifi-choice__icon" aria-hidden="true">⌁</span>
+        <span class="wifi-choice__copy"><strong>الاتصال بالإنترنت</strong><small>دخول سريع ومباشر</small></span>
+        <span class="wifi-choice__arrow" aria-hidden="true">‹</span>
+      </button>
 
-  {% if internet_panel_open and internet_options_available and not active_fast_wifi_session %}
-  <section class="wifi-plan wifi-plan--fast">
-    <div class="wifi-plan__top"><span class="wifi-plan__badge">اختياري</span><span>للعمل والاستخدام المكثّف</span></div>
-    <h2>إنترنت أسرع</h2>
-    {% if internet_metered_available %}<p>حسب الوقت: <strong>{{ internet_metered_rate_syp|format_syp }} ل.س / ساعة</strong>.</p>{% elif first_internet_package %}<p>{{ first_internet_package.name_ar }}: <strong>{{ first_internet_package.customer_price_syp|format_syp }} ل.س</strong>.</p>{% else %}<p>تصفح الخيارات والأسعار قبل التفعيل.</p>{% endif %}
-    <form method="post" action="{% url 'wifi_entry' %}">{% csrf_token %}<input type="hidden" name="wifi_action" value="internet_options"><button class="hub-button wifi-plan__primary" type="submit">عرض خيارات الإنترنت السريع</button></form>
+      <a class="wifi-choice wifi-choice--menu" href="{{ menu_url }}">
+        <span class="wifi-choice__icon" aria-hidden="true">⌂</span>
+        <span class="wifi-choice__copy"><strong>افتح المنيو</strong><small>التصفح والطلب بدون إنترنت</small></span>
+        <span class="wifi-choice__arrow" aria-hidden="true">‹</span>
+      </a>
+    </div>
+
+    <p class="wifi-welcome__note"><span aria-hidden="true">ⓘ</span> لا تحتاج إلى شراء إنترنت لفتح المنيو والطلب.</p>
   </section>
-  {% endif %}
+</main>
 
-  {% if internet_panel_open and not active_guest_wifi_session and not active_fast_wifi_session %}
-  <p><a class="hub-button" href="{% url 'wifi_entry' %}">العودة إلى الاختيار الرئيسي</a></p>
-  {% endif %}
+<div class="wifi-sheet-backdrop" data-wifi-sheet-backdrop {% if not internet_panel_open %}hidden{% endif %}></div>
+<section id="wifi-internet-sheet" class="wifi-sheet" role="dialog" aria-modal="true" aria-labelledby="wifi-sheet-title" {% if not internet_panel_open %}hidden{% endif %}>
+  <div class="wifi-sheet__handle" aria-hidden="true"></div>
+  <button class="wifi-sheet__close" type="button" data-wifi-sheet-close aria-label="إغلاق">×</button>
+  <div class="wifi-sheet__icon" aria-hidden="true">⌁</div>
 
-  <details class="wifi-more">
-    <summary>لديك حساب أو رقم طاولة؟</summary>
-    <div class="wifi-more__body">
-      {% if member_context %}
-        <div><strong>{{ member_context.member.name_ar }}</strong><p>الحساب معروف على هذا الجهاز.</p><a class="hub-button" href="{% url 'member_account_home' %}">فتح حسابي</a></div>
-      {% else %}
-        <div><strong>لديك حساب هَبّ؟</strong><p>تسجيل الدخول اختياري لاستخدام رصيدك أو مزاياك.</p><a class="hub-button" href="{% url 'member_account_login' %}?next={% url 'wifi_entry' %}">تسجيل الدخول</a></div>
-      {% endif %}
-      {% if current_visit and current_table %}
-        <div><strong>حسابك الحالي: {{ current_table.display_name }}</strong><p>هذا الجهاز مرتبط بهذه الطاولة.</p><a class="hub-button" href="{{ current_table_url }}">العودة إلى طاولتي</a></div>
-      {% endif %}
-      <form method="get" action="{% url 'wifi_entry' %}" class="wifi-table-entry">
-        <label for="wifi-table-number">رقم الطاولة</label>
-        <input class="hub-input" id="wifi-table-number" name="table_number" value="{{ table_number_value }}" inputmode="numeric" autocomplete="off" pattern="[0-9٠-٩۰-۹]{1,6}" placeholder="11" required>
-        <button class="hub-button" type="submit">دخول إلى طاولتي</button>
-        {% if table_number_error %}<div class="hub-alert hub-alert-danger" role="alert">{{ table_number_error }}</div>{% endif %}
+  {% if active_fast_wifi_session %}
+    <div class="wifi-sheet__heading">
+      <h2 id="wifi-sheet-title">{% if active_fast_wifi_network_ready %}الإنترنت السريع متصل{% else %}الاتصال قيد التجهيز{% endif %}</h2>
+      <p>{% if active_fast_wifi_network_ready %}أكدت الشبكة تجهيز الجلسة على هذا الجهاز.{% else %}طلبك مسجل، لكن الشبكة لم تؤكد الجاهزية بعد.{% endif %}</p>
+    </div>
+    <a class="wifi-sheet__primary" href="{% url 'current_visit' %}#internet"><span>عرض حالة الاتصال</span><span aria-hidden="true">‹</span></a>
+    <form method="post" action="{% url 'visit_internet_session_stop' active_fast_wifi_session.public_code %}">{% csrf_token %}<button class="wifi-sheet__secondary" type="submit">إيقاف السريع والعودة للأساسي</button></form>
+
+  {% elif active_guest_wifi_session %}
+    <div class="wifi-sheet__heading">
+      <h2 id="wifi-sheet-title">{% if active_guest_wifi_network_ready %}أنت متصل بالإنترنت{% else %}الاتصال قيد التجهيز{% endif %}</h2>
+      <p>{{ guest_wifi_daily_minutes_remaining }} دقيقة متاحة اليوم{% if active_guest_wifi_session.authorized_until %} · حتى {{ active_guest_wifi_session.authorized_until|date:"H:i" }}{% endif %}</p>
+    </div>
+    <form method="post" action="{% url 'wifi_entry' %}">
+      {% csrf_token %}<input type="hidden" name="wifi_action" value="start_guest_wifi">
+      <button class="wifi-sheet__primary" type="submit"><span>إعادة الاتصال</span><span aria-hidden="true">‹</span></button>
+    </form>
+    {% if internet_options_available %}
+    <form method="post" action="{% url 'wifi_entry' %}">{% csrf_token %}<input type="hidden" name="wifi_action" value="internet_options"><button class="wifi-sheet__secondary" type="submit">إنترنت أسرع</button></form>
+    {% endif %}
+
+  {% else %}
+    <div class="wifi-sheet__heading">
+      <h2 id="wifi-sheet-title">الاتصال بالإنترنت</h2>
+      <p>اختر أسرع طريقة مناسبة لك.</p>
+    </div>
+
+    {% if guest_wifi_available and guest_wifi_can_start and not guest_wifi_code_required %}
+      <form method="post" action="{% url 'wifi_entry' %}">
+        {% csrf_token %}<input type="hidden" name="wifi_action" value="start_guest_wifi">
+        <button class="wifi-sheet__primary" type="submit"><span>اتصال مباشر</span><span aria-hidden="true">‹</span></button>
+      </form>
+      <p class="wifi-sheet__primary-note">نقرة واحدة للإنترنت الأساسي · {{ guest_wifi_initial_minutes }} دقيقة عند الوصول.</p>
+    {% elif guest_wifi_available and guest_wifi_can_start %}
+      <button class="wifi-sheet__primary" type="button" data-wifi-code-open><span>الاتصال بالرمز اليومي</span><span aria-hidden="true">‹</span></button>
+      <p class="wifi-sheet__primary-note">إعداد هَبّ الحالي يطلب رمز المكان قبل أول اتصال.</p>
+    {% elif guest_wifi_available %}
+      <div class="hub-alert hub-alert-warning">انتهت دقائق الإنترنت المجانية لهذا الجهاز اليوم. يمكنك استخدام طريقة أخرى.</div>
+    {% else %}
+      <div class="hub-alert hub-alert-warning">{{ guest_wifi_unavailable_reason|default:'الاتصال الأساسي غير متاح حالياً.' }}</div>
+    {% endif %}
+
+    {% if guest_wifi_available and guest_wifi_can_start %}
+    <div class="wifi-sheet__code" data-wifi-code-panel {% if not guest_wifi_code_required %}hidden{% endif %}>
+      <form method="post" action="{% url 'wifi_entry' %}" class="wifi-sheet__code-form">
+        {% csrf_token %}<input type="hidden" name="wifi_action" value="start_guest_wifi">
+        <label for="venue-code">الرمز اليومي</label>
+        <input class="hub-input wifi-venue-code" id="venue-code" name="venue_code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9٠-٩۰-۹]{4}" maxlength="4" placeholder="••••" {% if guest_wifi_code_required %}required{% endif %}>
+        <button class="wifi-sheet__secondary wifi-sheet__secondary--strong" type="submit">استخدام الرمز والاتصال</button>
       </form>
     </div>
-  </details>
+    {% endif %}
+
+    <div class="wifi-sheet__divider"><span>أو</span></div>
+
+    {% if guest_wifi_available and guest_wifi_can_start and not guest_wifi_code_required %}
+      <button class="wifi-sheet__option" type="button" data-wifi-code-open><span>استخدام الرمز اليومي</span><span aria-hidden="true">‹</span></button>
+    {% endif %}
+
+    <details class="wifi-sheet__more" {% if table_number_error %}open{% endif %}>
+      <summary><span>طرق أخرى للدخول</span><span aria-hidden="true">‹</span></summary>
+      <div class="wifi-sheet__more-body">
+        {% if internet_options_available %}
+        <form method="post" action="{% url 'wifi_entry' %}">{% csrf_token %}<input type="hidden" name="wifi_action" value="internet_options"><button class="wifi-sheet__option" type="submit"><span>الإنترنت السريع وخيارات الدفع</span><span aria-hidden="true">‹</span></button></form>
+        {% endif %}
+        {% if member_context %}
+          <a class="wifi-sheet__option" href="{% url 'member_account_home' %}"><span>فتح حسابي — {{ member_context.member.name_ar }}</span><span aria-hidden="true">‹</span></a>
+        {% else %}
+          <a class="wifi-sheet__option" href="{% url 'member_account_login' %}?next={% url 'wifi_entry' %}"><span>تسجيل الدخول إلى حساب هَبّ</span><span aria-hidden="true">‹</span></a>
+        {% endif %}
+        {% if current_visit and current_table %}
+          <a class="wifi-sheet__option" href="{{ current_table_url }}"><span>العودة إلى {{ current_table.display_name }}</span><span aria-hidden="true">‹</span></a>
+        {% endif %}
+        <form method="get" action="{% url 'wifi_entry' %}" class="wifi-sheet__table-form">
+          <label for="wifi-table-number">رقم الطاولة</label>
+          <div><input class="hub-input" id="wifi-table-number" name="table_number" value="{{ table_number_value }}" inputmode="numeric" autocomplete="off" pattern="[0-9٠-٩۰-۹]{1,6}" placeholder="11" required><button class="hub-button" type="submit">دخول</button></div>
+          {% if table_number_error %}<div class="hub-alert hub-alert-danger" role="alert">{{ table_number_error }}</div>{% endif %}
+        </form>
+      </div>
+    </details>
+  {% endif %}
 </section>
-</main>
+
+<script>
+(function () {
+  const sheet = document.getElementById('wifi-internet-sheet');
+  const backdrop = document.querySelector('[data-wifi-sheet-backdrop]');
+  const openers = document.querySelectorAll('[data-wifi-internet-open]');
+  const closer = document.querySelector('[data-wifi-sheet-close]');
+  const codePanel = document.querySelector('[data-wifi-code-panel]');
+  const codeOpeners = document.querySelectorAll('[data-wifi-code-open]');
+
+  function openSheet() {
+    sheet.hidden = false;
+    backdrop.hidden = false;
+    document.body.classList.add('wifi-entry-page--sheet-open');
+    openers.forEach((el) => el.setAttribute('aria-expanded', 'true'));
+  }
+  function closeSheet() {
+    sheet.hidden = true;
+    backdrop.hidden = true;
+    document.body.classList.remove('wifi-entry-page--sheet-open');
+    openers.forEach((el) => el.setAttribute('aria-expanded', 'false'));
+  }
+  function openCode() {
+    if (!codePanel) return;
+    codePanel.hidden = false;
+    const input = codePanel.querySelector('input');
+    if (input) window.setTimeout(() => input.focus(), 50);
+  }
+
+  openers.forEach((el) => el.addEventListener('click', openSheet));
+  if (closer) closer.addEventListener('click', closeSheet);
+  if (backdrop) backdrop.addEventListener('click', closeSheet);
+  codeOpeners.forEach((el) => el.addEventListener('click', openCode));
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !sheet.hidden) closeSheet(); });
+  {% if internet_panel_open %}openSheet();{% endif %}
+})();
+</script>
 </body>
 </html>

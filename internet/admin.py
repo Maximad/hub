@@ -6,6 +6,7 @@ from .models import (
     GuestWifiGrant,
     GuestWifiOrderBonus,
     GuestWifiPolicy,
+    InternalStaffInternetGrant,
     WifiNetwork,
 )
 
@@ -50,6 +51,13 @@ class ReadOnlyInternetAuditAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+@admin.register(InternalStaffInternetGrant)
+class InternalStaffInternetGrantAdmin(ReadOnlyInternetAuditAdmin):
+    list_display = ('user', 'entitlement', 'created_at')
+    search_fields = ('user__username', 'user__first_name', 'user__last_name', 'user__phone')
+    readonly_fields = ('user', 'entitlement', 'created_at')
 
 
 @admin.register(GuestWifiDailyAllowance)

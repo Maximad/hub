@@ -1,12 +1,13 @@
 """Internet sessions and Wi‑Fi management views for staff workflows."""
 from django import forms
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
-from core.models import InternetBandwidthProfile, InternetEntitlement, InternetPackage, Member
+from core.models import InternetBandwidthProfile, InternetEntitlement, InternetPackage
 from core.services.internet_internal_access import (
     INTERNAL_ORIGINS,
     grant_internal_access,
@@ -26,15 +27,17 @@ from core.views_legacy import (
 
 
 class InternalAccessGrantForm(forms.Form):
-    member = forms.ModelChoiceField(
-        label='العضو',
-        queryset=Member.objects.none(),
+    staff_user = forms.ModelChoiceField(
+        label='الموظف',
+        queryset=get_user_model().objects.none(),
+        empty_label='اختر الموظف',
         widget=forms.Select(attrs={'class': 'hub-input'}),
     )
     grant_kind = forms.ChoiceField(
         label='نوع الوصول',
         choices=(('owner', 'الإدارة'), ('team', 'الفريق')),
-        widget=forms.Select(attrs={'class': 'hub-input'}),
+        initial='team',
+        widget=forms.RadioSelect,
     )
     bandwidth_profile = forms.ModelChoiceField(
         label='ملف الاتصال',
@@ -83,10 +86,15 @@ class InternalAccessGrantForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['member'].queryset = Member.objects.order_by('name_ar', 'phone')
+        User = get_user_model()
+        provider_role = getattr(User.Role, 'INTERNET_PROVIDER', 'internet_provider')
+        self.fields['staff_user'].queryset = User.objects.filter(is_active=True).exclude(
+            role=provider_role,
+        ).order_by('first_name', 'last_name', 'username')
         self.fields['bandwidth_profile'].queryset = InternetBandwidthProfile.objects.filter(
             is_active=True,
         ).order_by('name')
+        self.fields['bandwidth_profile'].empty_label = None
 
     def clean(self):
         cleaned = super().clean()
@@ -109,11 +117,22 @@ def _internal_access_url():
 
 def _internal_access_page(request, form=None):
     grants = list(
-        internal_grants().select_related('member').order_by('-created_at')[:60]
+        internal_grants().select_related(
+            'member', 'internal_staff_grant__user',
+        ).order_by('-created_at')[:60]
     )
     for entitlement in grants:
         entitlement.internal_kind_label = (
             'الإدارة' if entitlement.origin_type == 'internal_owner_grant' else 'الفريق'
+        )
+        staff_target = getattr(entitlement, 'internal_staff_grant', None)
+        entitlement.internal_staff_user = staff_target.user if staff_target else None
+        entitlement.internal_subject_label = (
+            str(staff_target.user) if staff_target else
+            (entitlement.member.name_ar if entitlement.member_id else 'منحة داخلية قديمة')
+        )
+        entitlement.internal_subject_role = (
+            staff_target.user.get_role_display() if staff_target else ''
         )
     active_count = sum(
         1 for entitlement in grants
@@ -154,7 +173,7 @@ def staff_internet_sale(request):
         except ValidationError as exc:
             messages.error(request, ' '.join(exc.messages))
             return _internal_access_page(request, form=form)
-        messages.success(request, 'تم منح الوصول الداخلي دون إنشاء بيع أو دفعة.')
+        messages.success(request, 'تم منح الوصول الداخلي للموظف دون إنشاء بيع أو دفعة.')
         return redirect(_internal_access_url())
 
     if action == 'internal_revoke':

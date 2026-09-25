@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
+from catalog.models import MediaAsset
 from core.models import ActivityLog, HubVisit, InternetSession
 from core.services.hotspot_connect import one_tap_session_connect_configured
 from core.services.table_visit_access import resolve_table_number
@@ -33,6 +34,7 @@ from members.benefits import resolve_internet_price
 
 
 logger = logging.getLogger(__name__)
+WIFI_PORTAL_HEADER_MEDIA_KEY = 'wifi_portal_header'
 
 
 def _validation_message(error):
@@ -57,6 +59,25 @@ def _session_network_ready(session):
     return session.network_status == PROVISIONED
 
 
+def _visual_media_url(media):
+    if not media or not getattr(media, 'is_active', False) or not getattr(media, 'is_visual_media', False):
+        return ''
+    return media.safe_url or ''
+
+
+def _portal_header_media():
+    """Use the newest active MediaAsset explicitly marked for the captive portal."""
+    return (
+        MediaAsset.objects.filter(
+            is_active=True,
+            media_type__in=[MediaAsset.MediaType.IMAGE, MediaAsset.MediaType.GIF],
+            title_en=WIFI_PORTAL_HEADER_MEDIA_KEY,
+        )
+        .order_by('-created_at', '-pk')
+        .first()
+    )
+
+
 def _attach_member_to_visit(visit, member_context, *, source):
     if not member_context:
         return visit
@@ -75,13 +96,7 @@ def _attach_member_to_visit(visit, member_context, *, source):
 
 
 def _ensure_wifi_visit(request, *, source='wifi_access'):
-    """Return a browser-bound Hub visit without requiring a table or membership.
-
-    Internet access source and customer identity are deliberately separate. A walk-in
-    visitor can therefore use commercial fast Internet without becoming a member,
-    while a recognised account can reuse the same visit and let existing entitlements
-    or benefit rules decide what access is included.
-    """
+    """Return a browser-bound Hub visit without requiring a table or membership."""
     member_context = resolve_member_from_request(request)
     credential = resolve_visit_credential(request)
     raw_cookie = None
@@ -194,9 +209,9 @@ def _start_guest_wifi(request):
 def wifi_entry(request):
     """Render the stable Hub-owned captive landing page.
 
-    Menu/order access is always independent from Internet authorization. RouterOS
-    remains responsible for the physical HotSpot session; this page never accepts a
-    router password or trusts a client-supplied MAC address.
+    The landing page deliberately presents only two primary choices: Internet or
+    menu. Opening the Internet sheet is read-only. RouterOS remains responsible for
+    the physical HotSpot session and this view never changes router configuration.
     """
     if request.method == 'POST':
         action = request.POST.get('wifi_action')
@@ -267,6 +282,12 @@ def wifi_entry(request):
         or active_guest_session
         or active_fast_session
     )
+    header_media = _portal_header_media()
+    brand_logo_media = getattr(system_settings, 'brand_logo_media', None)
+    can_customize_portal = bool(
+        request.user.is_authenticated
+        and (request.user.is_superuser or getattr(request.user, 'role', '') == 'admin')
+    )
 
     response = render(request, 'menu/wifi_entry.html', {
         'table_number_error': table_number_error,
@@ -297,6 +318,15 @@ def wifi_entry(request):
         'active_fast_wifi_session': active_fast_session,
         'active_guest_wifi_network_ready': _session_network_ready(active_guest_session),
         'active_fast_wifi_network_ready': _session_network_ready(active_fast_session),
+        'wifi_portal_header_url': _visual_media_url(header_media),
+        'wifi_portal_header_alt': header_media.display_alt_text if header_media else '',
+        'brand_logo_url': _visual_media_url(brand_logo_media),
+        'can_customize_portal': can_customize_portal,
+        'wifi_portal_media_admin_url': (
+            reverse('admin:catalog_mediaasset_add')
+            + '?title_ar=%D8%B5%D9%88%D8%B1%D8%A9+%D9%87%D9%8A%D8%AF%D8%B1+%D8%A8%D9%88%D8%A7%D8%A8%D8%A9+%D8%A7%D9%84%D8%B2%D9%88%D8%A7%D8%B1'
+            + '&title_en=wifi_portal_header&media_type=image'
+        ) if can_customize_portal else '',
     })
     response['Cache-Control'] = 'no-store, private, max-age=0'
     response['Pragma'] = 'no-cache'

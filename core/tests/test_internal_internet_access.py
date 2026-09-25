@@ -8,7 +8,6 @@ from django.utils import timezone
 
 from core.models import (
     ActivityLog,
-    HubVisit,
     InternetBandwidthProfile,
     InternetEntitlement,
     InternetNetworkOperation,
@@ -18,7 +17,6 @@ from core.models import (
     Member,
     Order,
     Payment,
-    SystemSetting,
 )
 from core.services.internet_access import start_usage_session
 from core.services.internet_internal_access import (
@@ -27,9 +25,8 @@ from core.services.internet_internal_access import (
     grant_internal_access,
     revoke_internal_access,
 )
-from core.services.visits import issue_visit_credential
-from core.settings_helpers import get_system_settings
-from core.views.internet_provider import _provider_entitlements, _provider_members, _provider_sessions
+from core.views.internet_provider import _provider_entitlements, _provider_sessions
+from internet.models import InternalStaffInternetGrant
 
 
 @override_settings(
@@ -39,15 +36,30 @@ from core.views.internet_provider import _provider_entitlements, _provider_membe
 )
 class InternalInternetAccessTests(TestCase):
     def setUp(self):
-        self.actor = get_user_model().objects.create_superuser(
+        User = get_user_model()
+        self.actor = User.objects.create_superuser(
             username='internal-internet-admin',
             password='pass',
             email='internal-internet@example.com',
             phone='+963900009001',
         )
-        self.member = Member.objects.create(
-            name_ar='عضو الفريق',
+        self.staff_user = User.objects.create_user(
+            username='salwa-staff',
+            first_name='سلوى',
+            last_name='السيد',
+            password='pass',
             phone='+963900009002',
+            role=User.Role.BARTENDER,
+        )
+        self.provider_user = User.objects.create_user(
+            username='provider-account',
+            password='pass',
+            phone='+963900009003',
+            role=User.Role.INTERNET_PROVIDER,
+        )
+        self.customer_member = Member.objects.create(
+            name_ar='عضو زبون مستقل',
+            phone='+963900009004',
         )
         self.profile = InternetBandwidthProfile.objects.create(
             code='fast',
@@ -56,12 +68,9 @@ class InternalInternetAccessTests(TestCase):
             is_active=True,
         )
 
-    def tearDown(self):
-        get_system_settings.cache_clear()
-
     def grant(self, **overrides):
         values = {
-            'member': self.member,
+            'staff_user': self.staff_user,
             'grant_kind': 'team',
             'bandwidth_profile': self.profile,
             'access_mode': 'allowance',
@@ -77,7 +86,7 @@ class InternalInternetAccessTests(TestCase):
         values.update(overrides)
         return grant_internal_access(**values)
 
-    def test_grant_is_private_complimentary_entitlement_not_sale(self):
+    def test_grant_targets_staff_user_and_is_not_a_sale(self):
         entitlement = self.grant()
 
         self.assertEqual(entitlement.origin_type, INTERNAL_TEAM_ORIGIN)
@@ -89,10 +98,13 @@ class InternalInternetAccessTests(TestCase):
         self.assertEqual(entitlement.max_registered_devices, 4)
         self.assertEqual(entitlement.network_backend, 'manual')
         self.assertEqual(entitlement.gross_amount_syp, 0)
+        self.assertIsNone(entitlement.member_id)
         self.assertIsNone(entitlement.package_id)
         self.assertIsNone(entitlement.order_id)
         self.assertIsNone(entitlement.payment_id)
         self.assertIsNone(entitlement.partner_id)
+        target = InternalStaffInternetGrant.objects.get(entitlement=entitlement)
+        self.assertEqual(target.user, self.staff_user)
         self.assertEqual(Order.objects.count(), 0)
         self.assertEqual(Payment.objects.count(), 0)
         self.assertEqual(InternetRevenueShare.objects.count(), 0)
@@ -102,6 +114,7 @@ class InternalInternetAccessTests(TestCase):
         ).exists())
         log = ActivityLog.objects.get(action='internet.internal_access_granted')
         self.assertEqual(log.details['grant_kind'], 'team')
+        self.assertEqual(log.details['staff_user_id'], self.staff_user.pk)
 
     def test_owner_grant_can_be_unlimited_with_validity_and_device_limits(self):
         entitlement = self.grant(
@@ -119,11 +132,15 @@ class InternalInternetAccessTests(TestCase):
         self.assertEqual(entitlement.max_registered_devices, 6)
         self.assertGreater(entitlement.valid_until, timezone.now() + timedelta(days=29))
 
-    def test_overlapping_internal_grant_requires_revocation_first(self):
+    def test_overlapping_internal_grant_requires_revocation_first_for_staff_user(self):
         self.grant()
 
-        with self.assertRaisesMessage(ValidationError, 'يوجد بالفعل وصول داخلي قائم لهذا العضو'):
+        with self.assertRaisesMessage(ValidationError, 'يوجد بالفعل وصول داخلي قائم لهذا الموظف'):
             self.grant(grant_kind='owner')
+
+    def test_internet_provider_account_cannot_receive_internal_staff_grant(self):
+        with self.assertRaisesMessage(ValidationError, 'حساب مزوّد الإنترنت'):
+            self.grant(staff_user=self.provider_user)
 
     def test_existing_entitlement_engine_enforces_concurrent_device_limit(self):
         entitlement = self.grant(max_concurrent_devices=1, max_registered_devices=2)
@@ -149,7 +166,8 @@ class InternalInternetAccessTests(TestCase):
         self.assertEqual(Order.objects.count(), 0)
         self.assertEqual(Payment.objects.count(), 0)
         self.assertEqual(InternetRevenueShare.objects.count(), 0)
-        self.assertTrue(ActivityLog.objects.filter(action='internet.internal_access_revoked').exists())
+        log = ActivityLog.objects.get(action='internet.internal_access_revoked')
+        self.assertEqual(log.details['staff_user_id'], self.staff_user.pk)
 
     def test_internal_entitlement_and_session_are_outside_provider_scope(self):
         partner = InternetPartner.objects.create(
@@ -160,9 +178,8 @@ class InternalInternetAccessTests(TestCase):
 
         self.assertFalse(_provider_entitlements(partner).filter(pk=entitlement.pk).exists())
         self.assertFalse(_provider_sessions(partner).filter(pk=session.pk).exists())
-        self.assertFalse(_provider_members(partner).filter(pk=self.member.pk).exists())
 
-    def test_staff_internal_access_page_grants_and_revokes_without_sale(self):
+    def test_staff_internal_access_page_uses_staff_users_not_members(self):
         self.client.force_login(self.actor)
         workspace = reverse('staff_internet_sale') + '?internal=1'
 
@@ -170,11 +187,14 @@ class InternalInternetAccessTests(TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertTemplateUsed(page, 'staff/internet_internal_access.html')
         self.assertContains(page, 'إنترنت الإدارة والفريق')
-        self.assertContains(page, 'لا تنشئ طلباً أو دفعة أو حصة مزوّد')
+        self.assertContains(page, 'الموظف')
+        self.assertContains(page, 'سلوى السيد')
+        self.assertNotContains(page, self.customer_member.name_ar)
+        self.assertNotContains(page, self.provider_user.username)
 
         response = self.client.post(reverse('staff_internet_sale'), {
             'internet_action': 'internal_grant',
-            'member': str(self.member.pk),
+            'staff_user': str(self.staff_user.pk),
             'grant_kind': 'team',
             'bandwidth_profile': str(self.profile.pk),
             'access_mode': 'allowance',
@@ -188,10 +208,16 @@ class InternalInternetAccessTests(TestCase):
         })
         self.assertRedirects(response, workspace)
         entitlement = InternetEntitlement.objects.get(origin_type=INTERNAL_TEAM_ORIGIN)
+        self.assertIsNone(entitlement.member_id)
+        self.assertEqual(entitlement.internal_staff_grant.user, self.staff_user)
         self.assertEqual(entitlement.gross_amount_syp, 0)
         self.assertEqual(Order.objects.count(), 0)
         self.assertEqual(Payment.objects.count(), 0)
         self.assertEqual(InternetRevenueShare.objects.count(), 0)
+
+        page = self.client.get(workspace)
+        self.assertContains(page, 'سلوى السيد')
+        self.assertContains(page, 'بار')
 
         revoked = self.client.post(reverse('staff_internet_sale'), {
             'internet_action': 'internal_revoke',
@@ -210,19 +236,15 @@ class InternalInternetAccessTests(TestCase):
         self.assertContains(response, 'إنترنت الإدارة والفريق')
         self.assertContains(response, reverse('staff_internet_sale') + '?internal=1')
 
-    def test_member_session_page_labels_internal_grant_as_team_not_metered_sale(self):
-        SystemSetting.objects.create(
-            customer_visits_enabled=True,
-            customer_internet_self_service_enabled=True,
-        )
-        get_system_settings.cache_clear()
+    def test_staff_grant_does_not_attach_to_unrelated_customer_member(self):
         entitlement = self.grant()
-        visit = HubVisit.objects.create(member=self.member)
-        _credential, raw_token = issue_visit_credential(visit)
-        self.client.cookies['hub_visit'] = raw_token
 
-        response = self.client.get(reverse('current_visit'))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'إنترنت الفريق')
-        self.assertNotContains(response, 'إنترنت الإدارة')
+        self.assertIsNone(entitlement.member_id)
+        self.assertEqual(Member.objects.count(), 1)
+        self.assertEqual(Member.objects.get(), self.customer_member)
+        self.assertFalse(
+            InternetEntitlement.objects.filter(
+                member=self.customer_member,
+                origin_type__in=(INTERNAL_OWNER_ORIGIN, INTERNAL_TEAM_ORIGIN),
+            ).exists()
+        )

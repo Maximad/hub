@@ -13,7 +13,6 @@ from core.models import (
     InternetPartner,
     InternetRevenueShare,
     InternetSession,
-    Member,
     Order,
     OrderItem,
     Payment,
@@ -24,9 +23,9 @@ from core.services.internet_access import start_usage_session
 from core.services.internet_internal_access import grant_internal_access, revoke_internal_access
 from core.services.mikrotik import RouterOSClient
 from core.settings_helpers import get_system_settings
-from core.views.internet_provider import _provider_entitlements, _provider_members, _provider_sessions
+from core.views.internet_provider import _provider_entitlements, _provider_sessions
 from internet.guest_wifi import current_venue_code, guest_wifi_daily_minutes_remaining
-from internet.models import GuestWifiDailyAllowance, GuestWifiPolicy
+from internet.models import GuestWifiDailyAllowance, GuestWifiPolicy, InternalStaffInternetGrant
 
 
 @override_settings(
@@ -72,7 +71,7 @@ class InternetLaunchContractTests(TestCase):
         self.assertEqual(landing.status_code, 200)
         self.assertEqual(menu.status_code, 200)
         self.assertEqual(internet.status_code, 200)
-        self.assertContains(landing, 'افتح المنيو واطلب')
+        self.assertContains(landing, 'افتح المنيو')
         self.assertContains(internet, 'name="venue_code"')
         self.assertEqual(HubVisit.objects.count(), 0)
         self.assertEqual(InternetSession.objects.count(), 0)
@@ -121,11 +120,19 @@ class InternetLaunchContractTests(TestCase):
         self.assertGreater(remaining_after, remaining_before)
         self.assertLessEqual(allowance.total_granted_minutes, policy.daily_complimentary_minutes)
 
-    def test_internal_access_is_complimentary_bounded_and_provider_private(self):
-        actor = get_user_model().objects.create_superuser(
+    def test_internal_access_is_complimentary_bounded_staff_only_and_provider_private(self):
+        User = get_user_model()
+        actor = User.objects.create_superuser(
             username='launch-admin', password='pass', email='launch@example.com', phone='+963900001234',
         )
-        member = Member.objects.create(name_ar='فريق هَبّ', phone='+963900005678')
+        staff_user = User.objects.create_user(
+            username='launch-staff',
+            first_name='موظف',
+            last_name='هَبّ',
+            password='pass',
+            phone='+963900005678',
+            role=User.Role.BARTENDER,
+        )
         profile = InternetBandwidthProfile.objects.create(
             code='launch-fast', name='Launch Fast', router_profile_name='hub-full', is_active=True,
         )
@@ -134,7 +141,7 @@ class InternetLaunchContractTests(TestCase):
         )
 
         entitlement = grant_internal_access(
-            member=member,
+            staff_user=staff_user,
             grant_kind='team',
             bandwidth_profile=profile,
             access_mode='allowance',
@@ -152,13 +159,14 @@ class InternetLaunchContractTests(TestCase):
         with self.assertRaisesMessage(ValidationError, 'تم بلوغ حد الأجهزة المتزامنة'):
             start_usage_session(entitlement, device_mac='AA:BB:CC:DD:EE:02')
 
+        self.assertIsNone(entitlement.member_id)
+        self.assertEqual(InternalStaffInternetGrant.objects.get(entitlement=entitlement).user, staff_user)
         self.assertEqual(entitlement.gross_amount_syp, 0)
         self.assertEqual(Order.objects.count(), 0)
         self.assertEqual(Payment.objects.count(), 0)
         self.assertEqual(InternetRevenueShare.objects.count(), 0)
         self.assertFalse(_provider_entitlements(partner).filter(pk=entitlement.pk).exists())
         self.assertFalse(_provider_sessions(partner).filter(pk=first.pk).exists())
-        self.assertFalse(_provider_members(partner).filter(pk=member.pk).exists())
 
         revoke_internal_access(entitlement, actor=actor)
         entitlement.refresh_from_db()

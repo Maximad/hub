@@ -1,10 +1,10 @@
-{% load hub_numbers %}
+{% load hub_numbers hub_time %}
 <section class="staff-visit-panel" dir="rtl" data-visit-operations-panel>
   <header class="staff-visit-panel__header">
     <div>
       <p class="staff-workspace__eyebrow">حساب الزبون</p>
       <h3>{% if visit.table %}{{ visit.table }}{% else %}جلسة {{ visit.display_number }}{% endif %}</h3>
-      <p class="staff-visit-panel__meta">{{ visit.get_status_display }} · آخر نشاط {{ visit.last_activity_at|timesince }} مضت</p>
+      <p class="staff-visit-panel__meta">{{ visit.get_status_display }} · آخر نشاط منذ {{ visit.last_activity_at|ar_since }}</p>
     </div>
     {% if visit.member %}
       <div class="staff-visit-panel__member">

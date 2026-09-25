@@ -124,7 +124,7 @@ class StaffWorkspaceTests(TestCase):
         self.assertTemplateUsed(response, 'staff/home.html')
         self.assertContains(response, '>العمليات</h2>', html=False)
         self.assertContains(response, 'الطلبات، الحساب، الدفع والإنترنت من مساحة واحدة.')
-        self.assertContains(response, 'الحسابات والطاولات المفتوحة')
+        self.assertContains(response, 'الحسابات النشطة اليوم')
         self.assertContains(response, self.table.name_ar)
         self.assertContains(response, self.order.display_number)
         self.assertContains(response, '+ طلب جديد')

@@ -1,11 +1,14 @@
 """Private owner/team Internet grants built on the existing entitlement engine.
 
 These grants are operational access, not sales. They intentionally create no Order,
-Payment, InternetPackage, partner revenue share, or customer-catalog entry. Network
-work uses the normal entitlement provisioning queue and never changes RouterOS
-configuration.
+Payment, InternetPackage, partner revenue share, or customer-catalog entry. New
+internal grants belong to actual Hub staff users through InternetStaffGrantTarget;
+legacy member-based internal grants remain readable/revocable for compatibility.
+Network work uses the normal entitlement provisioning queue and never changes
+RouterOS configuration.
 """
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -16,11 +19,11 @@ from core.models import (
     InternetEntitlement,
     InternetNetworkOperation,
     InternetPackage,
-    Member,
 )
 from core.services.internet_access import validity_end
 from core.services.internet_lifecycle import cancel_internet_entitlement
 from core.services.network_operations import enqueue_network_operation
+from internet.models import InternalStaffInternetGrant
 
 
 INTERNAL_OWNER_ORIGIN = 'internal_owner_grant'
@@ -62,18 +65,29 @@ def _validate_grant_values(*, access_mode, validity_value, validity_unit,
         raise ValidationError('حد الأجهزة المتزامنة لا يمكن أن يتجاوز الأجهزة المسجلة.')
 
 
+def _locked_staff_user(staff_user):
+    User = get_user_model()
+    user = User.objects.select_for_update().get(pk=staff_user.pk)
+    provider_role = getattr(User.Role, 'INTERNET_PROVIDER', 'internet_provider')
+    if not user.is_active:
+        raise ValidationError('الموظف المختار غير فعّال.')
+    if user.role == provider_role:
+        raise ValidationError('حساب مزوّد الإنترنت ليس موظفاً داخلياً قابلاً لهذه المنحة.')
+    return user
+
+
 @transaction.atomic
-def grant_internal_access(*, member, grant_kind, bandwidth_profile, access_mode,
+def grant_internal_access(*, staff_user, grant_kind, bandwidth_profile, access_mode,
                           validity_value, validity_unit, session_minutes_limit=None,
                           total_minutes_allowed=None, daily_minutes_limit=None,
                           max_concurrent_devices=1, max_registered_devices=1,
                           actor=None, at=None):
-    """Grant private complimentary Internet to an existing Hub member."""
+    """Grant private complimentary Internet to an active Hub staff user."""
     origin = GRANT_KIND_TO_ORIGIN.get(grant_kind)
     if not origin:
         raise ValidationError('نوع المنحة الداخلية غير صالح.')
 
-    member = Member.objects.select_for_update().get(pk=member.pk)
+    staff_user = _locked_staff_user(staff_user)
     profile = InternetBandwidthProfile.objects.select_for_update().get(pk=bandwidth_profile.pk)
     if not profile.is_active:
         raise ValidationError('ملف الاتصال المختار غير فعّال.')
@@ -87,23 +101,24 @@ def grant_internal_access(*, member, grant_kind, bandwidth_profile, access_mode,
         max_registered_devices=max_registered_devices,
     )
 
-    overlapping = internal_grants().select_for_update().filter(
-        member=member,
-        status__in=(
+    overlapping = InternalStaffInternetGrant.objects.select_for_update().filter(
+        user=staff_user,
+        entitlement__origin_type__in=INTERNAL_ORIGINS,
+        entitlement__status__in=(
             InternetEntitlement.Status.PENDING,
             InternetEntitlement.Status.ACTIVE,
             InternetEntitlement.Status.SUSPENDED,
         ),
     ).exists()
     if overlapping:
-        raise ValidationError('يوجد بالفعل وصول داخلي قائم لهذا العضو. ألغِ المنحة الحالية أولاً.')
+        raise ValidationError('يوجد بالفعل وصول داخلي قائم لهذا الموظف. ألغِ المنحة الحالية أولاً.')
 
     now = at or timezone.now()
     valid_until = validity_end(now, int(validity_value), validity_unit)
     network_backend = 'mikrotik' if settings.MIKROTIK_ENABLED else 'manual'
     entitlement = InternetEntitlement.objects.create(
         package=None,
-        member=member,
+        member=None,
         visit=None,
         order=None,
         payment=None,
@@ -131,12 +146,13 @@ def grant_internal_access(*, member, grant_kind, bandwidth_profile, access_mode,
         created_by=actor,
         status=InternetEntitlement.Status.ACTIVE,
     )
+    InternalStaffInternetGrant.objects.create(entitlement=entitlement, user=staff_user)
     ActivityLog.objects.create(
         actor=actor,
         action='internet.internal_access_granted',
         details={
             'entitlement_id': entitlement.pk,
-            'member_id': member.pk,
+            'staff_user_id': staff_user.pk,
             'grant_kind': grant_kind,
             'bandwidth_profile_code': profile.code,
             'access_mode': access_mode,
@@ -164,6 +180,7 @@ def revoke_internal_access(entitlement, *, actor=None):
         InternetEntitlement.Status.EXPIRED,
     }:
         return entitlement
+    staff_target = InternalStaffInternetGrant.objects.filter(entitlement=entitlement).first()
     entitlement = cancel_internet_entitlement(
         entitlement,
         actor=actor,
@@ -174,7 +191,8 @@ def revoke_internal_access(entitlement, *, actor=None):
         action='internet.internal_access_revoked',
         details={
             'entitlement_id': entitlement.pk,
-            'member_id': entitlement.member_id,
+            'staff_user_id': staff_target.user_id if staff_target else None,
+            'legacy_member_id': entitlement.member_id,
             'origin_type': entitlement.origin_type,
         },
     )

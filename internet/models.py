@@ -1,4 +1,6 @@
 import uuid
+
+from django.conf import settings
 from django.db import models
 
 
@@ -171,6 +173,33 @@ class InternetOperationsState(models.Model):
 
     def __str__(self):
         return f'Internet operations state ({self.key})'
+
+
+class InternalStaffInternetGrant(models.Model):
+    """Attach a private owner/team Internet entitlement to an actual Hub staff user.
+
+    The commercial entitlement engine remains authoritative for limits and network
+    provisioning.  This companion row only records the operational staff identity;
+    staff do not need a customer Member record to receive internal Internet.
+    """
+
+    entitlement = models.OneToOneField(
+        'core.InternetEntitlement',
+        on_delete=models.CASCADE,
+        related_name='internal_staff_grant',
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='internal_internet_grants',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [models.Index(fields=('user', 'created_at'), name='staff_net_grant_user_idx')]
+
+    def __str__(self):
+        return f'{self.user} → {self.entitlement_id}'
 
 
 class GuestWifiPolicy(models.Model):
