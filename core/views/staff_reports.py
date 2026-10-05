@@ -14,7 +14,7 @@ from core.views_legacy import (
     _day_range_utc,
     _parse_range_dates,
     _product_margin_context,
-    staff_reports_home,
+    staff_reports_home as staff_reports_legacy_home,
     staff_reports_day,
     staff_reports_day_csv,
     staff_product_margin_report,
@@ -221,3 +221,8 @@ def staff_performance_report(request):
         'presets': presets,
     }
     return render(request, 'staff/reports_performance.html', context)
+
+
+# Make the reports landing page the management dashboard. Detailed day/product
+# reports keep their existing URLs and are linked from the dashboard.
+staff_reports_home = staff_performance_report
