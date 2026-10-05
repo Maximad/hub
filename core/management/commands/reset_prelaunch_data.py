@@ -17,13 +17,20 @@ from django.utils import timezone
 CONFIRMATION = 'RESET EXPERIMENTAL DATA'
 MAX_BACKUP_AGE_HOURS = 24
 
-# Children precede parents.  This is deliberately explicit: adding a model to an
+# Children precede parents. This is deliberately explicit: adding a model to an
 # installed app can never silently make it eligible for this destructive command.
 DELETE_MODELS = (
     'core.NotificationRecipient', 'core.NotificationLog', 'core.NotificationEvent',
     'core.InternetRevenueShareAdjustment', 'core.InternetRevenueShare',
     'core.InternetUsageLedger', 'core.InternetNetworkOperation',
     'core.InternetAccessDevice',
+    # Guest/staff Internet runtime state must be reset with sessions/entitlements.
+    # These rows cascade from credentials, sessions, orders, or entitlements; if
+    # omitted, the preservation guard correctly detects that supposedly-preserved
+    # records changed during a reset.
+    'internet.GuestWifiOrderBonus', 'internet.GuestWifiGrant',
+    'internet.GuestWifiDailyAllowance', 'internet.InternalStaffInternetGrant',
+    'internet.InternetOperationsState', 'internet.GuestWifiCodeAttempt',
     'internet.InternetSessionNetworkOperation', 'internet.InternetSessionNetworkState',
     'internet.InternetSessionBrowserBinding', 'core.InternetSession',
     'members.CommercialAllocation', 'core.InternetEntitlement',
@@ -222,7 +229,7 @@ class Command(BaseCommand):
                 if m not in deleted and m._meta.managed and not m._meta.proxy}
 
     def _run_checks(self, deleted_models, preserved_before):
-        # Database constraints cover concrete FKs.  Explicitly inspect GFKs because
+        # Database constraints cover concrete FKs. Explicitly inspect GFKs because
         # the database cannot: every model containing one must itself be reset.
         deleted = set(deleted_models)
         for model in apps.get_models():
