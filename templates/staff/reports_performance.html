@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}الأداء المالي{% endblock %}
+{% block content %}
+<style>
+  .performance-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:1rem;align-items:flex-start;margin-bottom:1rem}
+  .performance-head p{margin:.35rem 0 0;color:var(--hub-muted,#666)}
+  .performance-presets{display:flex;flex-wrap:wrap;gap:.45rem;margin:.75rem 0 1rem}
+  .performance-presets a{display:inline-block;border:1px solid var(--hub-border,#ddd);border-radius:999px;padding:.45rem .7rem;text-decoration:none;color:inherit;background:var(--hub-surface,#fff)}
+  .performance-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.75rem;margin:1rem 0}
+  .performance-card{border:1px solid var(--hub-border,#ddd);border-radius:12px;padding:.9rem;background:var(--hub-surface,#fff)}
+  .performance-card small{display:block;color:var(--hub-muted,#666);margin-bottom:.35rem}
+  .performance-card strong{font-size:1.35rem}
+  .performance-note{border:1px solid var(--hub-border,#ddd);border-radius:12px;padding:.8rem 1rem;margin:1rem 0;background:var(--hub-surface-alt,#f8f5ef)}
+  .performance-note ul{margin:.5rem 0 0;padding-inline-start:1.3rem}
+  .performance-columns{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin-top:1rem}
+  .performance-columns section{border:1px solid var(--hub-border,#ddd);border-radius:12px;padding:.85rem;background:var(--hub-surface,#fff)}
+  .performance-muted{color:var(--hub-muted,#666)}
+  .performance-positive{font-weight:700}
+  .performance-table td,.performance-table th{white-space:nowrap}
+</style>
+
+<div class="performance-head">
+  <div>
+    <h2 class="hub-page-header__title">الأداء المالي والتشغيلي</h2>
+    <p>من {{ date_from|date:'Y-m-d' }} إلى {{ date_to|date:'Y-m-d' }}</p>
+  </div>
+  <p><a href="{% url 'staff_reports_day' %}?date={{ date_to|date:'Y-m-d' }}">التقرير اليومي</a> | <a href="{% url 'staff_product_margin_report' %}?date_from={{ date_from|date:'Y-m-d' }}&date_to={{ date_to|date:'Y-m-d' }}&only_active=0&only_sold=1">تقرير المنتجات والهامش</a> | <a href="{% url 'staff_finance_home' %}">المالية</a></p>
+</div>
+
+<div class="performance-presets">
+  {% for preset in presets %}<a href="?date_from={{ preset.date_from }}&date_to={{ preset.date_to }}">{{ preset.label }}</a>{% endfor %}
+</div>
+
+<form class="hub-form-section" method="get" style="display:flex;flex-wrap:wrap;gap:.75rem;align-items:end;">
+  <label>من تاريخ <input type="date" name="date_from" value="{{ date_from|date:'Y-m-d' }}"></label>
+  <label>إلى تاريخ <input type="date" name="date_to" value="{{ date_to|date:'Y-m-d' }}"></label>
+  <button type="submit">عرض</button>
+</form>
+
+{% if quality_notes %}
+<div class="performance-note">
+  <strong>جودة البيانات</strong>
+  <ul>{% for note in quality_notes %}<li>{{ note }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<div class="performance-grid">
+  <div class="performance-card"><small>إجمالي المبيعات</small><strong>{{ totals.gross_sales_syp }} ل.س</strong></div>
+  <div class="performance-card"><small>صافي المبيعات بعد الخصومات</small><strong>{{ totals.net_sales_syp }} ل.س</strong></div>
+  <div class="performance-card"><small>الوحدات المباعة</small><strong>{{ totals.units_sold }}</strong></div>
+  <div class="performance-card"><small>الخصومات</small><strong>{{ totals.discounts_syp }} ل.س</strong></div>
+  <div class="performance-card"><small>الكلفة التقديرية المعروفة</small><strong>{{ totals.estimated_cost_syp }} ل.س</strong></div>
+  <div class="performance-card"><small>الهامش التقديري على المبيعات ذات الكلفة</small><strong>{{ totals.estimated_margin_syp }} ل.س</strong>{% if totals.estimated_margin_percent != None %}<div class="performance-muted">{{ totals.estimated_margin_percent }}%</div>{% endif %}</div>
+  <div class="performance-card"><small>تغطية بيانات الكلفة</small><strong>{% if totals.cost_coverage_percent == None %}—{% else %}{{ totals.cost_coverage_percent }}%{% endif %}</strong></div>
+  <div class="performance-card"><small>المصروفات المسجلة</small><strong>{{ totals.expenses_syp }} ل.س</strong></div>
+  <div class="performance-card"><small>المشتريات المسجلة</small><strong>{{ totals.purchases_syp }} ل.س</strong><div class="performance-muted">المدفوع: {{ totals.purchases_paid_syp }} ل.س</div></div>
+  <div class="performance-card"><small>المدفوع على طلبات الفترة</small><strong>{{ totals.payments_on_orders_syp }} ل.س</strong><div class="performance-muted">نقداً {{ totals.cash_on_orders_syp }} | تحويل {{ totals.transfer_on_orders_syp }}</div></div>
+  <div class="performance-card"><small>إيراد الإنترنت/مساحة العمل</small><strong>{{ totals.internet_workspace_revenue_syp }} ل.س</strong></div>
+  <div class="performance-card"><small>النتيجة التشغيلية المسجلة</small><strong>{% if totals.recorded_operating_result_syp == None %}غير متاحة{% else %}{{ totals.recorded_operating_result_syp }} ل.س{% endif %}</strong><div class="performance-muted">صافي المبيعات − كلفة المبيعات − المصروفات المسجلة. لا تُطرح المشتريات مرة ثانية.</div></div>
+</div>
+
+<h3>التقدم شهراً بشهر</h3>
+<div class="hub-table-wrap">
+<table class="hub-table performance-table" style="width:100%;border-collapse:collapse;">
+  <tr>
+    <th>الشهر</th><th>الوحدات</th><th>إجمالي المبيعات</th><th>التغير</th><th>صافي المبيعات</th><th>الكلفة التقديرية</th><th>الهامش</th><th>نسبة الهامش</th><th>المصروفات</th><th>المشتريات</th><th>البيانات</th>
+  </tr>
+  {% for row in monthly_rows %}
+  <tr>
+    <td>{{ row.month }}</td>
+    <td>{{ row.units_sold }}</td>
+    <td>{{ row.gross_sales_syp }}</td>
+    <td>{% if row.revenue_change_percent == None %}—{% else %}{{ row.revenue_change_percent }}%{% endif %}</td>
+    <td>{{ row.net_sales_syp }}</td>
+    <td>{{ row.estimated_cost_syp }}</td>
+    <td>{{ row.estimated_margin_syp }}</td>
+    <td>{% if row.estimated_margin_percent == None %}—{% else %}{{ row.estimated_margin_percent }}%{% endif %}</td>
+    <td>{{ row.expenses_syp }}</td>
+    <td>{{ row.purchases_syp }}</td>
+    <td>{% if row.historical_import %}تاريخي مجمّع{% else %}تشغيلي{% endif %}</td>
+  </tr>
+  {% empty %}<tr><td colspan="11">لا توجد بيانات ضمن الفترة.</td></tr>{% endfor %}
+</table>
+</div>
+
+<div class="performance-columns">
+  <section>
+    <h3>أعلى المنتجات إيراداً</h3>
+    <ol>{% for row in top_products %}<li><strong>{{ row.product.name_ar }}</strong> — {{ row.units_sold }} وحدة — {{ row.gross_sales_syp }} ل.س</li>{% empty %}<li>لا توجد مبيعات.</li>{% endfor %}</ol>
+  </section>
+  <section>
+    <h3>أعلى الأقسام/الفئات</h3>
+    <ol>{% for row in top_categories %}<li><strong>{{ row.name }}</strong> — {{ row.units_sold }} وحدة — {{ row.gross_sales_syp }} ل.س</li>{% empty %}<li>لا توجد مبيعات.</li>{% endfor %}</ol>
+  </section>
+</div>
+
+{% if missing_cost_rows %}
+<div class="performance-note">
+  <strong>منتجات مباعة بلا كلفة مقدرة</strong>
+  <p class="performance-muted">لن نعرض ربحاً نهائياً للفترة قبل استكمال هذه الكلف.</p>
+  <ul>{% for row in missing_cost_rows %}<li>{{ row.product.name_ar }} — {{ row.units_sold }} وحدة — {{ row.gross_sales_syp }} ل.س</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+{% if historical_months %}
+<div class="performance-note">
+  <strong>ملاحظة حول المبيعات التاريخية</strong>
+  <p>الأشهر {{ historical_months|join:", " }} مستوردة كملخصات شهرية قبل تشغيل Hub Suite. أرقام الوحدات والمبيعات والأسعار التاريخية قابلة للتحليل، لكن عدد الطلبات والتحصيل والمصروفات والمشتريات التاريخية لا تصبح حقائق مالية إلا بعد إدخال مصادرها الفعلية.</p>
+</div>
+{% endif %}
+{% endblock %}
