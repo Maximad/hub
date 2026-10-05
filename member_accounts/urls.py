@@ -1,6 +1,7 @@
 from django.urls import path
 
 from member_accounts import card_views, views
+from core.views.customer_service import customer_visit_request
 
 
 urlpatterns = [
@@ -10,6 +11,7 @@ urlpatterns = [
     path('me/card/qr.svg', card_views.member_card_qr, name='member_card_qr'),
     path('me/', views.member_home, name='member_account_home'),
     path('me/logout/', views.member_logout, name='member_account_logout'),
+    path('visit/request-service/', customer_visit_request, name='customer_visit_request'),
     path('staff/member-card/<str:token>/', card_views.staff_member_card_scan, name='staff_member_card_scan'),
     path('staff/member-invitations/new/', views.staff_invitation_new, name='staff_member_invitation_new'),
     path('staff/members/<uuid:member_id>/invite/', views.staff_invitation_new, name='staff_member_invitation_existing'),
