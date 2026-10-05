@@ -14,7 +14,7 @@
 
   {% if visit_access_error %}<div class="hub-alert hub-alert-danger" role="alert">{{ visit_access_error }}</div>{% endif %}
 
-  <p class="table-entry__internet-note">اختر حسابك مرة واحدة. بعد ذلك ستستخدم فقط «المنيو» و«جلستي».</p>
+  <p class="table-entry__internet-note">اختر فقط كيف تريد أن يكون حسابك على هذه الطاولة. لن نسألك مرة ثانية خلال الجلسة.</p>
 
   <div class="table-entry__choices">
     {% if open_visit_count %}
@@ -22,8 +22,8 @@
       <div class="table-entry__choice-header">
         <span class="table-entry__choice-icon" aria-hidden="true">●</span>
         <span class="table-entry__choice-copy">
-          <strong>الانضمام إلى حساب موجود</strong>
-          <small>إذا أعطاك أحد الجالسين رمز الجلسة</small>
+          <strong>مع المجموعة الموجودة على الطاولة</strong>
+          <small>استخدم الرمز الذي أعطاك إياه أحد أصدقائك لتكون الطلبات على نفس الحساب</small>
         </span>
       </div>
       <form method="post" action="{% url 'menu_table' table.qr_token %}">
@@ -31,7 +31,7 @@
         <input type="hidden" name="visit_action" value="join">
         <label for="visit-pin">رمز الجلسة</label>
         <input class="hub-input" id="visit-pin" name="pin" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9٠-٩]{4}" maxlength="4" placeholder="0000" required>
-        <button class="hub-button hub-button-primary" type="submit">انضمام</button>
+        <button class="hub-button hub-button-primary" type="submit">الانضمام إلى المجموعة</button>
       </form>
     </section>
 
@@ -39,14 +39,14 @@
       <div class="table-entry__choice-header">
         <span class="table-entry__choice-icon" aria-hidden="true">＋</span>
         <span class="table-entry__choice-copy">
-          <strong>فتح حساب منفصل</strong>
-          <small>طلبات وحساب وإنترنت مستقل</small>
+          <strong>طلباتي على حساب منفصل</strong>
+          <small>سأطلب وأدفع بشكل مستقل عن بقية الجالسين</small>
         </span>
       </div>
       <form method="post" action="{% url 'menu_table' table.qr_token %}">
         {% csrf_token %}
         <input type="hidden" name="visit_action" value="create">
-        <button class="hub-button hub-button-secondary" type="submit">فتح حساب جديد</button>
+        <button class="hub-button hub-button-secondary" type="submit">ابدأ حساباً منفصلاً</button>
       </form>
     </section>
     {% else %}
@@ -54,7 +54,7 @@
       <div class="table-entry__choice-header">
         <span class="table-entry__choice-icon" aria-hidden="true">＋</span>
         <span class="table-entry__choice-copy">
-          <strong>ابدأ جلستك</strong>
+          <strong>ابدأ من هذه الطاولة</strong>
           <small>المنيو · الطلبات · الحساب · الإنترنت</small>
         </span>
       </div>
