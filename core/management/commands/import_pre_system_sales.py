@@ -14,7 +14,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
-from core.models import ActivityLog, Order, OrderItem, Product
+from core.models import ActivityLog, HubVisit, Order, OrderItem, Product
 
 DEFAULT_FILE = Path(settings.BASE_DIR) / 'data' / 'pre_system_sales_2026_07_09.csv'
 TZ = ZoneInfo('Asia/Damascus')
@@ -170,29 +170,49 @@ class Command(BaseCommand):
         year, number = [int(x) for x in month.split('-', 1)]
         day = calendar.monthrange(year, number)[1]
         historical_ts = timezone.make_aware(datetime(year, number, day, 12, 0), TZ)
-        public_code = uuid.uuid5(NAMESPACE, f'hub-pre-system-sales:{month}')
+        visit_code = uuid.uuid5(NAMESPACE, f'hub-pre-system-visit:{month}')
+        order_code = uuid.uuid5(NAMESPACE, f'hub-pre-system-sales:{month}')
+        visit_notes = f'[PRE_SYSTEM_HISTORICAL_SALES_VISIT] month={month} — جلسة تجميعية مغلقة وليست زيارة زبون فعلية.'
+        visit, _ = HubVisit.objects.get_or_create(
+            public_code=visit_code,
+            defaults=dict(
+                status=HubVisit.Status.CLOSED,
+                opened_at=historical_ts,
+                closed_at=historical_ts,
+                last_activity_at=historical_ts,
+                notes=visit_notes,
+            ),
+        )
+        HubVisit.objects.filter(pk=visit.pk).update(
+            status=HubVisit.Status.CLOSED,
+            opened_at=historical_ts,
+            closed_at=historical_ts,
+            last_activity_at=historical_ts,
+            notes=visit_notes,
+        )
         notes = (
             f'[PRE_SYSTEM_HISTORICAL_SALES] month={month}\n'
             'إدخال تاريخي مجمع قبل اعتماد Hub Suite. الكميات والأسعار من سجل المبيعات اليدوي.\n'
             'الحسومات والضيافة وطرق الدفع غير مكتملة وتحتاج تدقيقاً. لا توجد حركة مخزون ناتجة عن هذا الاستيراد.'
         )
         order, created = Order.objects.get_or_create(
-            public_code=public_code,
+            public_code=order_code,
             defaults=dict(
+                visit=visit,
                 service_mode=Order.ServiceMode.DINE_IN,
                 fulfillment_mode=Order.FulfillmentMode.INSIDE_SPACE,
                 status=Order.Status.SERVED,
                 notes=notes,
             ),
         )
-        if not created:
-            Order.objects.filter(pk=order.pk).update(
-                service_mode=Order.ServiceMode.DINE_IN,
-                fulfillment_mode=Order.FulfillmentMode.INSIDE_SPACE,
-                status=Order.Status.SERVED,
-                notes=notes,
-            )
-        Order.objects.filter(pk=order.pk).update(created_at=historical_ts)
+        Order.objects.filter(pk=order.pk).update(
+            visit_id=visit.pk,
+            service_mode=Order.ServiceMode.DINE_IN,
+            fulfillment_mode=Order.FulfillmentMode.INSIDE_SPACE,
+            status=Order.Status.SERVED,
+            notes=notes,
+            created_at=historical_ts,
+        )
         order.refresh_from_db()
         return order, created
 
