@@ -152,6 +152,7 @@ def _start_staff_wifi(request):
         messages.error(request, 'لا توجد منحة إنترنت داخلية فعالة لهذا الحساب.')
         return redirect(_wifi_internet_path())
 
+    raw_cookie = None
     try:
         visit, credential, raw_cookie, _member_context = _ensure_wifi_visit(
             request,
@@ -167,7 +168,7 @@ def _start_staff_wifi(request):
     except ValidationError as exc:
         messages.error(request, _validation_message(exc))
         response = redirect(_wifi_internet_path())
-        return set_visit_cookie(response, raw_cookie) if 'raw_cookie' in locals() and raw_cookie else response
+        return set_visit_cookie(response, raw_cookie) if raw_cookie else response
     except Exception:
         logger.exception(
             'Staff internal Wi-Fi start failed for staff_user_id=%s',
@@ -175,7 +176,7 @@ def _start_staff_wifi(request):
         )
         messages.error(request, 'تعذر بدء إنترنت الفريق حالياً.')
         response = redirect(_wifi_internet_path())
-        return set_visit_cookie(response, raw_cookie) if 'raw_cookie' in locals() and raw_cookie else response
+        return set_visit_cookie(response, raw_cookie) if raw_cookie else response
 
     messages.success(
         request,
