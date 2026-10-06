@@ -235,12 +235,13 @@ def start_visit_metered_session(*, visit, credential, member=None, guest_phone='
 
 
 @transaction.atomic
-def start_existing_visit_entitlement(*, visit, credential, entitlement, actor=None, at=None):
-    """Start a shared/member entitlement on this browser, respecting its own limits."""
+def start_existing_visit_entitlement(*, visit, credential, entitlement, actor=None,
+                                     staff_user=None, at=None):
+    """Start an authorized member/visit/staff entitlement on this browser."""
     visit = HubVisit.objects.select_for_update().get(pk=visit.pk)
     _validate_open_visit_credential(visit, credential)
     entitlement = InternetEntitlement.objects.select_for_update().get(pk=entitlement.pk)
-    authorize_entitlement(visit, entitlement, at)
+    authorize_entitlement(visit, entitlement, at, staff_user=staff_user)
 
     active_for_device = _active_for_fast_start(visit, credential, actor=actor, at=at)
     if active_for_device:
