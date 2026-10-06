@@ -5,7 +5,7 @@ from core.models import InternetBandwidthProfile, InternetEntitlement, InternetP
 from core.services.internet_access import create_entitlement
 from core.services.mikrotik import MikroTikConfigurationError, MikroTikProvisioningError
 from core.services.network_backends import (ManualNetworkBackend, MikroTikNetworkBackend,
-                                             get_network_backend)
+                                             _routeros_time_from_minutes, get_network_backend)
 
 
 class FakeRouterOSClient:
@@ -97,6 +97,15 @@ class MikroTikBackendTests(TestCase):
         self.assertEqual(self.backend.plan(self.entitlement)['mac-address'], 'AA:BB:CC:DD:EE:FF')
 
     def test_health_read(self): self.assertTrue(self.backend.test_connection())
+
+
+class RouterOSTimeFormattingTests(TestCase):
+    def test_subday_duration_keeps_clock_format(self):
+        self.assertEqual(_routeros_time_from_minutes(80), '1:20:00')
+
+    def test_multiday_duration_uses_routeros_day_prefix(self):
+        self.assertEqual(_routeros_time_from_minutes(30 * 24 * 60), '30d00:00:00')
+        self.assertEqual(_routeros_time_from_minutes((29 * 24 * 60) + (23 * 60) + 51), '29d23:51:00')
 
 
 class BackendSelectionTests(TestCase):
