@@ -58,6 +58,14 @@ def wifi_staff_login(request):
         return redirect(_wifi_internet_path())
 
     form = AuthenticationForm(request=request, data=request.POST or None)
+    form.fields['username'].widget.attrs.update({
+        'class': 'hub-input',
+        'autocomplete': 'username',
+    })
+    form.fields['password'].widget.attrs.update({
+        'class': 'hub-input',
+        'autocomplete': 'current-password',
+    })
     if request.method == 'POST' and form.is_valid():
         user = form.get_user()
         if getattr(user, 'role', '') == 'internet_provider':
