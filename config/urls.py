@@ -49,7 +49,7 @@ from core.views.visits import (current_visit, visit_internet_purchase_start,
     visit_internet_entitlement_start, visit_internet_session_connect,
     visit_internet_session_stop)
 from core.views.staff_visits import staff_visits, staff_visit_detail
-from core.views.wifi import wifi_entry
+from core.views.wifi import wifi_entry, wifi_staff_login
 from operations.views_tasks import staff_operational_tasks
 
 
@@ -81,6 +81,7 @@ urlpatterns = [
     path('', include('member_accounts.urls')),
     path('', menu.dashboard, name='dashboard'),
     path('wifi/', wifi_entry, name='wifi_entry'),
+    path('wifi/staff-login/', wifi_staff_login, name='wifi_staff_login'),
     path('menu/', menu.menu_public, name='menu_public'),
     path('menu/table/<uuid:qr_token>/', menu.menu_table, name='menu_table'),
     path('visit/current/', current_visit, name='current_visit'),
