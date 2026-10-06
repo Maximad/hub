@@ -2,6 +2,8 @@
 import logging
 
 from django.contrib import messages
+from django.contrib.auth import login as auth_login
+from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -45,6 +47,35 @@ def _validation_message(error):
 def _wifi_internet_path():
     return reverse('wifi_entry') + '?mode=internet'
 
+
+def wifi_staff_login(request):
+    """Captive-safe login for operational staff accounts.
+
+    Hub staff roles are separate from Django admin access, so this flow must not
+    depend on the admin login page.
+    """
+    if request.user.is_authenticated:
+        return redirect(_wifi_internet_path())
+
+    form = AuthenticationForm(request=request, data=request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        user = form.get_user()
+        if getattr(user, 'role', '') == 'internet_provider':
+            form.add_error(None, 'حساب مزوّد الإنترنت يستخدم بوابته المخصصة.')
+        else:
+            auth_login(request, user)
+            ActivityLog.objects.create(
+                actor=user,
+                action='wifi.staff_authenticated',
+                details={'source': 'captive_portal'},
+            )
+            return redirect(_wifi_internet_path())
+
+    response = render(request, 'menu/wifi_staff_login.html', {'form': form})
+    response['Cache-Control'] = 'no-store, private, max-age=0'
+    response['Pragma'] = 'no-cache'
+    response['X-Robots-Tag'] = 'noindex, nofollow, noarchive'
+    return response
 
 def _menu_path(visit):
     if visit and visit.table_id:
