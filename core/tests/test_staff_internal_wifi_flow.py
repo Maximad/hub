@@ -67,6 +67,28 @@ class StaffInternalWifiFlowTests(TestCase):
     def tearDown(self):
         get_system_settings.cache_clear()
 
+    def test_non_admin_staff_can_sign_in_from_captive_portal(self):
+        self.assertFalse(self.staff_user.is_staff)
+
+        landing = self.client.get(reverse('wifi_entry'), {'mode': 'internet'})
+        self.assertContains(landing, reverse('wifi_staff_login'))
+        self.assertContains(landing, 'دخول فريق هَبّ')
+
+        login_page = self.client.get(reverse('wifi_staff_login'))
+        self.assertEqual(login_page.status_code, 200)
+        self.assertContains(login_page, 'دخول فريق هَبّ')
+
+        signed_in = self.client.post(reverse('wifi_staff_login'), {
+            'username': self.staff_user.username,
+            'password': 'pass',
+        })
+        self.assertEqual(signed_in.status_code, 302)
+        self.assertEqual(signed_in['Location'], reverse('wifi_entry') + '?mode=internet')
+
+        portal = self.client.get(signed_in['Location'])
+        self.assertContains(portal, 'اتصال إنترنت الفريق')
+        self.assertContains(portal, 'value="start_staff_wifi"')
+
     def test_authenticated_staff_sees_private_grant_as_primary_wifi_option(self):
         self.client.force_login(self.staff_user)
 
