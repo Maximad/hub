@@ -146,6 +146,9 @@
         {% if internet_options_available %}
         <form method="post" action="{% url 'wifi_entry' %}">{% csrf_token %}<input type="hidden" name="wifi_action" value="internet_options"><button class="wifi-sheet__option" type="submit"><span>الإنترنت السريع وخيارات الدفع</span><span aria-hidden="true">‹</span></button></form>
         {% endif %}
+        {% if not request.user.is_authenticated %}
+          <a class="wifi-sheet__option" href="{% url 'wifi_staff_login' %}"><span>دخول فريق هَبّ</span><span aria-hidden="true">‹</span></a>
+        {% endif %}
         {% if member_context %}
           <a class="wifi-sheet__option" href="{% url 'member_account_home' %}"><span>فتح حسابي — {{ member_context.member.name_ar }}</span><span aria-hidden="true">‹</span></a>
         {% else %}
