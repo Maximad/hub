@@ -1,0 +1,49 @@
+{% load static message_accessibility %}
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f6f1e8">
+  <title>دخول فريق هَبّ</title>
+  <link rel="icon" type="image/svg+xml" href="{% static 'img/favicon.svg' %}">
+  <link rel="stylesheet" href="{% static 'css/hub.css' %}">
+  <link rel="stylesheet" href="{% static 'css/internet_experience.css' %}">
+  {% include "includes/hub_theme.html" %}
+</head>
+<body class="hub-page wifi-entry-page">
+<main class="wifi-welcome">
+  <section class="wifi-welcome__shell" dir="rtl">
+    <header class="wifi-welcome__brand" aria-label="هَبّ">
+      <div class="wifi-welcome__wordmark" aria-label="هَبّ"><span>هَبّ</span><small>HUB</small></div>
+    </header>
+
+    <div class="wifi-welcome__intro">
+      <h1>دخول فريق هَبّ</h1>
+      <span class="wifi-welcome__accent" aria-hidden="true"></span>
+      <p>سجّل دخولك بحساب العمل لعرض منحة الإنترنت الخاصة بك على هذا الجهاز.</p>
+    </div>
+
+    {% if form.non_field_errors %}
+      <div class="hub-alert hub-alert-danger" role="alert">{{ form.non_field_errors|join:' ' }}</div>
+    {% endif %}
+
+    <form method="post" action="{% url 'wifi_staff_login' %}" class="hub-card hub-form">
+      {% csrf_token %}
+      <label for="{{ form.username.id_for_label }}">اسم المستخدم</label>
+      {{ form.username }}
+      {% if form.username.errors %}<small class="hub-text-danger">{{ form.username.errors|join:' ' }}</small>{% endif %}
+
+      <label for="{{ form.password.id_for_label }}">كلمة المرور</label>
+      {{ form.password }}
+      {% if form.password.errors %}<small class="hub-text-danger">{{ form.password.errors|join:' ' }}</small>{% endif %}
+
+      <button class="hub-button hub-button-primary" type="submit">دخول الفريق</button>
+    </form>
+
+    <a class="hub-button" href="{% url 'wifi_entry' %}?mode=internet">العودة إلى خيارات الإنترنت</a>
+    <p class="wifi-welcome__note"><span aria-hidden="true">ⓘ</span> هذا الدخول لحسابات فريق هَبّ فقط ولا ينشئ عضوية أو عملية بيع.</p>
+  </section>
+</main>
+</body>
+</html>

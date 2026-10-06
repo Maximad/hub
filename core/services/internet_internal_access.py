@@ -20,7 +20,7 @@ from core.models import (
     InternetNetworkOperation,
     InternetPackage,
 )
-from core.services.internet_access import validity_end
+from core.services.internet_access import effectively_active_entitlements, validity_end
 from core.services.internet_lifecycle import cancel_internet_entitlement
 from core.services.network_operations import enqueue_network_operation
 from internet.models import InternalStaffInternetGrant
@@ -42,6 +42,31 @@ GRANT_KIND_LABELS = {
 
 def internal_grants():
     return InternetEntitlement.objects.filter(origin_type__in=INTERNAL_ORIGINS)
+
+
+def usable_internal_grants_for_user(user, at=None):
+    """Return active internal Internet entitlements owned by this staff account.
+
+    Staff identity is authoritative.  These grants deliberately do not depend on a
+    customer Member record, so an authenticated Hub staff user can use the same
+    entitlement engine from the captive/customer device flow without converting the
+    grant into a sale.
+    """
+    if not user or not getattr(user, 'is_authenticated', False) or not user.is_active:
+        return InternetEntitlement.objects.none()
+    return effectively_active_entitlements(
+        internal_grants().filter(internal_staff_grant__user_id=user.pk),
+        at=at,
+    )
+
+
+def usable_internal_grant_for_user(user, at=None):
+    return (
+        usable_internal_grants_for_user(user, at=at)
+        .select_related('internal_staff_grant', 'internal_staff_grant__user')
+        .order_by('-created_at', '-pk')
+        .first()
+    )
 
 
 def _validate_grant_values(*, access_mode, validity_value, validity_unit,

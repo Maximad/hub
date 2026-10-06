@@ -46,6 +46,7 @@ Verify:
 - A session waiting for network authorization is shown as pending, never as connected.
 - Ending fast access restores remaining basic allowance when one exists; otherwise the customer can still use the menu/order path.
 - Internal owner/team access can be granted and revoked, respects device limits, and does not appear in paid sales/revenue-share reporting.
+- An authenticated staff browser with an active internal grant sees **إنترنت الفريق/الإدارة** on the captive portal, can start it on that browser in one action, and cannot see or start another staff user's grant.
 - Provider pages expose only that provider's scope. The default provider may see package-less MikroTik operational traffic, but not Hub internal grants.
 - Staff/provider operational screens distinguish worker freshness, read-only router health, Hub session state, network-ready state, pending operations, and failed operations.
 
@@ -60,7 +61,9 @@ Only after the Django build is authorized for rollout, use one designated custom
 5. Confirm Hub shows pending until network authorization succeeds, then shows the connection as ready.
 6. Start fast access through the normal customer flow and confirm the basic session is paused/ended as designed.
 7. Stop/expire fast access and verify remaining basic allowance is restored when eligible.
-8. Confirm staff operational views show the corresponding Hub/session operations without claiming they are a live RouterOS device census.
+8. On a designated staff phone already signed into Hub, reopen the captive portal, choose **إنترنت الفريق/الإدارة**, and confirm the browser is relayed through the existing HotSpot identity without creating an Order or Payment.
+9. Confirm another staff account cannot use that grant and that the staff session is bound to the initiating browser.
+10. Confirm staff operational views show the corresponding Hub/session operations without claiming they are a live RouterOS device census.
 
 If the captive/pre-login hostname cannot reach Django before Django is loaded, record that as an external network limitation. Do not turn that observation into an automatic MikroTik change request.
 

@@ -11,6 +11,7 @@ from core.models import (ActivityLog, HubVisit, InternetEntitlement, InternetPac
                          InternetSession, Order, OrderItem, Payment)
 from core.services.internet_access import (create_commercial_sale, effectively_active_entitlements,
                                            start_usage_session)
+from core.services.internet_internal_access import usable_internal_grants_for_user
 from core.settings_helpers import get_system_settings
 from internet.models import InternetSessionNetworkOperation, InternetSessionNetworkState
 from internet.session_network_backends import NOT_PROVISIONED
@@ -76,11 +77,30 @@ def usable_member_entitlements(visit, at=None):
     ).exclude(activation_policy=InternetPackage.ActivationPolicy.MANUAL)
 
 
-def authorize_entitlement(visit, entitlement, at=None):
+def usable_visit_entitlements(visit, *, staff_user=None, at=None):
+    """Return entitlements this visit/browser may offer without weakening ownership.
+
+    Customer Member entitlements keep their existing behavior.  When the same
+    browser is authenticated as a Hub staff account, its private internal grant is
+    added to the choices.  The start action re-checks this ownership server-side.
+    """
+    member_entitlements = usable_member_entitlements(visit, at=at)
+    staff_entitlements = usable_internal_grants_for_user(staff_user, at=at)
+    if not staff_entitlements.exists():
+        return member_entitlements
+    if not member_entitlements.exists():
+        return staff_entitlements
+    return (member_entitlements | staff_entitlements).distinct()
+
+
+def authorize_entitlement(visit, entitlement, at=None, *, staff_user=None):
     direct = entitlement.visit_id == visit.pk
     member_owned = bool(visit.member_id and entitlement.member_id == visit.member_id and
                         entitlement.effective_status(at) == entitlement.Status.ACTIVE)
-    if not (direct or member_owned):
+    staff_owned = usable_internal_grants_for_user(
+        staff_user, at=at,
+    ).filter(pk=entitlement.pk).exists()
+    if not (direct or member_owned or staff_owned):
         raise ValidationError('الباقة غير متاحة.')
     if entitlement.effective_status(at) != entitlement.Status.ACTIVE:
         raise ValidationError('انتهت صلاحية هذه الباقة.')

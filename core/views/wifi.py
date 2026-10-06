@@ -2,16 +2,19 @@
 import logging
 
 from django.contrib import messages
+from django.contrib.auth import login as auth_login
+from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
 from catalog.models import MediaAsset
 from core.models import ActivityLog, HubVisit, InternetSession
-from core.services.hotspot_connect import one_tap_session_connect_configured
+from core.services.hotspot_connect import one_tap_connect_configured, one_tap_session_connect_configured
+from core.services.internet_internal_access import usable_internal_grant_for_user
 from core.services.table_visit_access import resolve_table_number
 from core.services.visit_internet import customer_packages, metered_customer_error, self_service_enabled
-from core.services.visit_internet_devices import active_browser_session
+from core.services.visit_internet_devices import active_browser_session, start_existing_visit_entitlement
 from core.services.visits import (
     issue_visit_credential,
     resolve_visit_credential,
@@ -45,6 +48,43 @@ def _wifi_internet_path():
     return reverse('wifi_entry') + '?mode=internet'
 
 
+def wifi_staff_login(request):
+    """Captive-safe login for operational staff accounts.
+
+    Hub staff roles are separate from Django admin access, so this flow must not
+    depend on the admin login page.
+    """
+    if request.user.is_authenticated:
+        return redirect(_wifi_internet_path())
+
+    form = AuthenticationForm(request=request, data=request.POST or None)
+    form.fields['username'].widget.attrs.update({
+        'class': 'hub-input',
+        'autocomplete': 'username',
+    })
+    form.fields['password'].widget.attrs.update({
+        'class': 'hub-input',
+        'autocomplete': 'current-password',
+    })
+    if request.method == 'POST' and form.is_valid():
+        user = form.get_user()
+        if getattr(user, 'role', '') == 'internet_provider':
+            form.add_error(None, 'حساب مزوّد الإنترنت يستخدم بوابته المخصصة.')
+        else:
+            auth_login(request, user)
+            ActivityLog.objects.create(
+                actor=user,
+                action='wifi.staff_authenticated',
+                details={'source': 'captive_portal'},
+            )
+            return redirect(_wifi_internet_path())
+
+    response = render(request, 'menu/wifi_staff_login.html', {'form': form})
+    response['Cache-Control'] = 'no-store, private, max-age=0'
+    response['Pragma'] = 'no-cache'
+    response['X-Robots-Tag'] = 'noindex, nofollow, noarchive'
+    return response
+
 def _menu_path(visit):
     if visit and visit.table_id:
         return reverse('menu_table', kwargs={'qr_token': visit.table.qr_token}) + '?view=menu'
@@ -56,6 +96,8 @@ def _session_network_ready(session):
         return False
     if session.network_provider != InternetSession.NetworkProvider.MIKROTIK:
         return True
+    if session.entitlement_id:
+        return session.entitlement.network_status == session.entitlement.NetworkStatus.PROVISIONED
     return session.network_status == PROVISIONED
 
 
@@ -139,6 +181,72 @@ def _open_internet_options(request):
     return set_visit_cookie(response, raw_cookie) if raw_cookie else response
 
 
+def _start_staff_wifi(request):
+    """Use this authenticated staff account's private grant on this browser/device."""
+    if not self_service_enabled(get_system_settings()):
+        messages.error(request, 'خدمة الإنترنت الذاتية غير متاحة حالياً.')
+        return redirect(_wifi_internet_path())
+
+    staff_user = request.user if request.user.is_authenticated else None
+    entitlement = usable_internal_grant_for_user(staff_user)
+    if entitlement is None:
+        messages.error(request, 'لا توجد منحة إنترنت داخلية فعالة لهذا الحساب.')
+        return redirect(_wifi_internet_path())
+
+    raw_cookie = None
+    try:
+        visit, credential, raw_cookie, _member_context = _ensure_wifi_visit(
+            request,
+            source='staff_internal_wifi',
+        )
+        session, created = start_existing_visit_entitlement(
+            visit=visit,
+            credential=credential,
+            entitlement=entitlement,
+            actor=staff_user,
+            staff_user=staff_user,
+        )
+    except ValidationError as exc:
+        messages.error(request, _validation_message(exc))
+        response = redirect(_wifi_internet_path())
+        return set_visit_cookie(response, raw_cookie) if raw_cookie else response
+    except Exception:
+        logger.exception(
+            'Staff internal Wi-Fi start failed for staff_user_id=%s',
+            getattr(staff_user, 'pk', None),
+        )
+        messages.error(request, 'تعذر بدء إنترنت الفريق حالياً.')
+        response = redirect(_wifi_internet_path())
+        return set_visit_cookie(response, raw_cookie) if raw_cookie else response
+
+    messages.success(
+        request,
+        'تم تفعيل إنترنت الفريق على هذا الجهاز.' if created
+        else 'إنترنت الفريق ما يزال فعالاً على هذا الجهاز.',
+    )
+    if one_tap_connect_configured(entitlement):
+        try:
+            return _hotspot_relay_response(
+                request,
+                session,
+                destination_url=_absolute_destination(request, reverse('staff_home')),
+                raw_cookie=raw_cookie,
+            )
+        except Exception:
+            logger.exception(
+                'Staff internal HotSpot relay failed for staff_user_id=%s entitlement_id=%s',
+                staff_user.pk,
+                entitlement.pk,
+            )
+            messages.warning(
+                request,
+                'بدأ إنترنت الفريق، لكن تعذر الاتصال التلقائي. أعد المحاولة من صفحة جلستك.',
+            )
+
+    response = redirect(reverse('current_visit') + '?focus=internet')
+    return set_visit_cookie(response, raw_cookie) if raw_cookie else response
+
+
 def _start_guest_wifi(request):
     """Create/reuse a browser-bound visit and authorize bounded basic access."""
     system_settings = get_system_settings()
@@ -217,6 +325,8 @@ def wifi_entry(request):
         action = request.POST.get('wifi_action')
         if action == 'start_guest_wifi':
             return _start_guest_wifi(request)
+        if action == 'start_staff_wifi':
+            return _start_staff_wifi(request)
         if action == 'internet_options':
             return _open_internet_options(request)
 
@@ -288,6 +398,16 @@ def wifi_entry(request):
         request.user.is_authenticated
         and (request.user.is_superuser or getattr(request.user, 'role', '') == 'admin')
     )
+    staff_internal_entitlement = usable_internal_grant_for_user(
+        request.user if request.user.is_authenticated else None
+    )
+    active_fast_is_internal = bool(
+        active_fast_session
+        and active_fast_session.entitlement_id
+        and active_fast_session.entitlement.origin_type in {
+            'internal_owner_grant', 'internal_team_grant',
+        }
+    )
 
     response = render(request, 'menu/wifi_entry.html', {
         'table_number_error': table_number_error,
@@ -318,6 +438,11 @@ def wifi_entry(request):
         'active_fast_wifi_session': active_fast_session,
         'active_guest_wifi_network_ready': _session_network_ready(active_guest_session),
         'active_fast_wifi_network_ready': _session_network_ready(active_fast_session),
+        'active_fast_wifi_is_internal': active_fast_is_internal,
+        'staff_internal_access_available': bool(staff_internal_entitlement and internet_options_available),
+        'staff_internal_access_kind': (
+            staff_internal_entitlement.origin_type if staff_internal_entitlement else ''
+        ),
         'wifi_portal_header_url': _visual_media_url(header_media),
         'wifi_portal_header_alt': header_media.display_alt_text if header_media else '',
         'brand_logo_url': _visual_media_url(brand_logo_media),

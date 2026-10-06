@@ -75,11 +75,11 @@
 
   {% if active_fast_wifi_session %}
     <div class="wifi-sheet__heading">
-      <h2 id="wifi-sheet-title">{% if active_fast_wifi_network_ready %}الإنترنت السريع متصل{% else %}الاتصال قيد التجهيز{% endif %}</h2>
-      <p>{% if active_fast_wifi_network_ready %}أكدت الشبكة تجهيز الجلسة على هذا الجهاز.{% else %}طلبك مسجل، لكن الشبكة لم تؤكد الجاهزية بعد.{% endif %}</p>
+      <h2 id="wifi-sheet-title">{% if active_fast_wifi_is_internal %}{% if active_fast_wifi_network_ready %}إنترنت الفريق متصل{% else %}إنترنت الفريق قيد التجهيز{% endif %}{% else %}{% if active_fast_wifi_network_ready %}الإنترنت السريع متصل{% else %}الاتصال قيد التجهيز{% endif %}{% endif %}</h2>
+      <p>{% if active_fast_wifi_network_ready %}{% if active_fast_wifi_is_internal %}تم تفعيل المنحة الداخلية على هذا الجهاز.{% else %}أكدت الشبكة تجهيز الجلسة على هذا الجهاز.{% endif %}{% else %}طلبك مسجل، لكن الشبكة لم تؤكد الجاهزية بعد.{% endif %}</p>
     </div>
     <a class="wifi-sheet__primary" href="{% url 'current_visit' %}#internet"><span>عرض حالة الاتصال</span><span aria-hidden="true">‹</span></a>
-    <form method="post" action="{% url 'visit_internet_session_stop' active_fast_wifi_session.public_code %}">{% csrf_token %}<button class="wifi-sheet__secondary" type="submit">إيقاف السريع والعودة للأساسي</button></form>
+    <form method="post" action="{% url 'visit_internet_session_stop' active_fast_wifi_session.public_code %}">{% csrf_token %}<button class="wifi-sheet__secondary" type="submit">{% if active_fast_wifi_is_internal %}إيقاف استخدام إنترنت الفريق{% else %}إيقاف السريع والعودة للأساسي{% endif %}</button></form>
 
   {% elif active_guest_wifi_session %}
     <div class="wifi-sheet__heading">
@@ -90,7 +90,9 @@
       {% csrf_token %}<input type="hidden" name="wifi_action" value="start_guest_wifi">
       <button class="wifi-sheet__primary" type="submit"><span>إعادة الاتصال</span><span aria-hidden="true">‹</span></button>
     </form>
-    {% if internet_options_available %}
+    {% if staff_internal_access_available %}
+    <form method="post" action="{% url 'wifi_entry' %}">{% csrf_token %}<input type="hidden" name="wifi_action" value="start_staff_wifi"><button class="wifi-sheet__secondary wifi-sheet__secondary--strong" type="submit">استخدام إنترنت الفريق</button></form>
+    {% elif internet_options_available %}
     <form method="post" action="{% url 'wifi_entry' %}">{% csrf_token %}<input type="hidden" name="wifi_action" value="internet_options"><button class="wifi-sheet__secondary" type="submit">إنترنت أسرع</button></form>
     {% endif %}
 
@@ -100,7 +102,13 @@
       <p>اختر أسرع طريقة مناسبة لك.</p>
     </div>
 
-    {% if guest_wifi_available and guest_wifi_can_start and not guest_wifi_code_required %}
+    {% if staff_internal_access_available %}
+      <form method="post" action="{% url 'wifi_entry' %}">
+        {% csrf_token %}<input type="hidden" name="wifi_action" value="start_staff_wifi">
+        <button class="wifi-sheet__primary" type="submit"><span>{% if staff_internal_access_kind == 'internal_owner_grant' %}اتصال إنترنت الإدارة{% else %}اتصال إنترنت الفريق{% endif %}</span><span aria-hidden="true">‹</span></button>
+      </form>
+      <p class="wifi-sheet__primary-note">يستخدم منحتك الداخلية مباشرة على هذا الجهاز · بدون بيع أو دفعة.</p>
+    {% elif guest_wifi_available and guest_wifi_can_start and not guest_wifi_code_required %}
       <form method="post" action="{% url 'wifi_entry' %}">
         {% csrf_token %}<input type="hidden" name="wifi_action" value="start_guest_wifi">
         <button class="wifi-sheet__primary" type="submit"><span>اتصال مباشر</span><span aria-hidden="true">‹</span></button>
@@ -116,7 +124,7 @@
     {% endif %}
 
     {% if guest_wifi_available and guest_wifi_can_start %}
-    <div class="wifi-sheet__code" data-wifi-code-panel {% if not guest_wifi_code_required %}hidden{% endif %}>
+    <div class="wifi-sheet__code" data-wifi-code-panel {% if not guest_wifi_code_required or staff_internal_access_available %}hidden{% endif %}>
       <form method="post" action="{% url 'wifi_entry' %}" class="wifi-sheet__code-form">
         {% csrf_token %}<input type="hidden" name="wifi_action" value="start_guest_wifi">
         <label for="venue-code">الرمز اليومي</label>
@@ -137,6 +145,9 @@
       <div class="wifi-sheet__more-body">
         {% if internet_options_available %}
         <form method="post" action="{% url 'wifi_entry' %}">{% csrf_token %}<input type="hidden" name="wifi_action" value="internet_options"><button class="wifi-sheet__option" type="submit"><span>الإنترنت السريع وخيارات الدفع</span><span aria-hidden="true">‹</span></button></form>
+        {% endif %}
+        {% if not request.user.is_authenticated %}
+          <a class="wifi-sheet__option" href="{% url 'wifi_staff_login' %}"><span>دخول فريق هَبّ</span><span aria-hidden="true">‹</span></a>
         {% endif %}
         {% if member_context %}
           <a class="wifi-sheet__option" href="{% url 'member_account_home' %}"><span>فتح حسابي — {{ member_context.member.name_ar }}</span><span aria-hidden="true">‹</span></a>
