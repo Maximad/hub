@@ -439,7 +439,7 @@ def wifi_entry(request):
         'active_guest_wifi_network_ready': _session_network_ready(active_guest_session),
         'active_fast_wifi_network_ready': _session_network_ready(active_fast_session),
         'active_fast_wifi_is_internal': active_fast_is_internal,
-        'staff_internal_access_available': bool(staff_internal_entitlement),
+        'staff_internal_access_available': bool(staff_internal_entitlement and internet_options_available),
         'staff_internal_access_kind': (
             staff_internal_entitlement.origin_type if staff_internal_entitlement else ''
         ),
