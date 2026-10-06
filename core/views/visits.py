@@ -26,6 +26,7 @@ from core.services.hotspot_connect import (
     one_tap_session_connect_configured,
 )
 from core.services.internet_access import end_usage_session
+from core.services.internet_internal_access import INTERNAL_ORIGINS
 from core.services.network_operations import enqueue_network_operation, process_network_operation
 from core.services.visit_internet import (
     customer_packages,
@@ -440,7 +441,10 @@ def visit_internet_session_stop(request, public_code):
             message = 'تم إيقاف الإنترنت الأساسي. يبقى رصيدك غير المستخدم متاحاً اليوم.'
         elif session.entitlement_id:
             ended = end_usage_session(session)
-            message = 'تم إيقاف استخدام الإنترنت. وقت الباقة المحددة غير المستخدم لا يُستعاد.'
+            if session.entitlement.origin_type in INTERNAL_ORIGINS:
+                message = 'تم إيقاف استخدام إنترنت الفريق على هذا الجهاز. تبقى المنحة الداخلية متاحة ضمن حدودها.'
+            else:
+                message = 'تم إيقاف استخدام الإنترنت. وقت الباقة المحددة غير المستخدم لا يُستعاد.'
             operation = enqueue_network_operation(
                 session.entitlement,
                 InternetNetworkOperation.Operation.DEAUTHENTICATE,
