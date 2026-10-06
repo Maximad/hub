@@ -34,7 +34,7 @@ from core.services.visit_internet import (
     metered_network_activated_at,
     prepare_visit_metered_session_network,
     self_service_enabled,
-    usable_member_entitlements,
+    usable_visit_entitlements,
 )
 from core.services.visit_internet_devices import (
     active_browser_session,
@@ -78,11 +78,14 @@ def _decorate_session_network_state(session):
     return session
 
 
-def _internet_context(visit=None, member=None, credential=None):
+def _internet_context(visit=None, member=None, credential=None, staff_user=None):
     packages = customer_packages(member)
     for package in packages:
         package.customer_price_syp = int(resolve_internet_price(member, package)[0])
-    entitlements = usable_member_entitlements(visit) if visit else InternetEntitlement.objects.none()
+    entitlements = (
+        usable_visit_entitlements(visit, staff_user=staff_user)
+        if visit else InternetEntitlement.objects.none()
+    )
     sessions = list(
         browser_session_queryset(credential)
         .select_related('entitlement', 'package')
@@ -129,7 +132,12 @@ def current_visit(request):
         'focus_internet': internet_enabled and request.GET.get('focus') == 'internet',
     }
     if internet_enabled:
-        context.update(_internet_context(visit, visit.member, credential))
+        context.update(_internet_context(
+            visit,
+            visit.member,
+            credential,
+            request.user if request.user.is_authenticated else None,
+        ))
         metered_error = metered_customer_error(system_settings, visit.member)
         context.update({
             'internet_metered_available': not metered_error,
@@ -356,10 +364,13 @@ def visit_internet_entitlement_start(request, public_code):
             InternetEntitlement,
             public_code=public_code,
         )
+        staff_user = request.user if request.user.is_authenticated else None
         session, _created = start_existing_visit_entitlement(
             visit=credential.visit,
             credential=credential,
             entitlement=entitlement,
+            actor=staff_user,
+            staff_user=staff_user,
         )
         messages.success(request, 'بدأت جلسة الإنترنت.')
         if one_tap_connect_configured(entitlement):
