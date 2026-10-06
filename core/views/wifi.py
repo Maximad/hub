@@ -57,6 +57,8 @@ def _session_network_ready(session):
         return False
     if session.network_provider != InternetSession.NetworkProvider.MIKROTIK:
         return True
+    if session.entitlement_id:
+        return session.entitlement.network_status == session.entitlement.NetworkStatus.PROVISIONED
     return session.network_status == PROVISIONED
 
 
