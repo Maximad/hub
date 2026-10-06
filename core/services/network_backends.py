@@ -20,6 +20,20 @@ def _safe_network_error(exc):
     return text[:500]
 
 
+def _routeros_time_from_minutes(minutes):
+    """Format whole minutes using RouterOS ``time`` syntax.
+
+    Python ``timedelta`` renders durations >= 24h as ``N days, HH:MM:SS``,
+    which RouterOS rejects for fields such as HotSpot ``limit-uptime``.
+    """
+    total_seconds = max(int(minutes or 0), 0) * 60
+    days, remainder = divmod(total_seconds, 24 * 60 * 60)
+    hours, remainder = divmod(remainder, 60 * 60)
+    mins, seconds = divmod(remainder, 60)
+    clock = f'{hours}:{mins:02d}:{seconds:02d}'
+    return f'{days}d{hours:02d}:{mins:02d}:{seconds:02d}' if days else clock
+
+
 class ManualNetworkBackend:
     code = 'manual'
     def provision_access(self, entitlement):
@@ -111,7 +125,7 @@ class MikroTikNetworkBackend:
             entitlement, include_session_limit=False, include_reservations=True)
         values = {'name': self.username(entitlement), 'server': settings.MIKROTIK_HOTSPOT_SERVER,
                   'profile': profile, 'comment': self.ownership(entitlement), 'disabled': 'false'}
-        if safe_minutes is not None: values['limit-uptime'] = str(timedelta(minutes=safe_minutes))
+        if safe_minutes is not None: values['limit-uptime'] = _routeros_time_from_minutes(safe_minutes)
         devices = list(entitlement.devices.filter(is_active=True).values_list('device_mac', flat=True)[:2])
         if len(devices) == 1: values['mac-address'] = devices[0]
         if include_password: values['password'] = self._credential(entitlement)[0]
