@@ -22,7 +22,12 @@ from core.services.table_visit_access import (
 )
 from core.services.visit_internet import customer_packages, metered_customer_error, self_service_enabled
 from core.services.visit_internet_devices import active_browser_session
-from core.services.visits import issue_visit_credential, resolve_visit_credential, set_visit_cookie
+from core.services.visits import (
+    customer_visit_queryset,
+    issue_visit_credential,
+    resolve_visit_credential,
+    set_visit_cookie,
+)
 from core.settings_helpers import get_system_settings
 from core.views.staff_cashier_visits import (
     staff_cashier as _visit_staff_cashier,
@@ -293,7 +298,9 @@ def _cashier_target(public_code):
     order = Order.objects.select_related('visit').filter(public_code=public_code).first()
     if order:
         return order, order.visit
-    visit = HubVisit.objects.filter(public_code=public_code).first()
+    visit = customer_visit_queryset(
+        HubVisit.objects.filter(public_code=public_code)
+    ).first()
     return None, visit
 
 
