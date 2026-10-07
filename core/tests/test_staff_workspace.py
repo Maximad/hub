@@ -38,6 +38,12 @@ class StaffWorkspaceTests(TestCase):
         self.kitchen = User.objects.create_user(
             username='workspace-kitchen', phone='92003', password='x', role='kitchen'
         )
+        self.cashier = User.objects.create_user(
+            username='workspace-cashier', phone='92004', password='x', role='cashier'
+        )
+        self.bartender = User.objects.create_user(
+            username='workspace-bartender', phone='92005', password='x', role='bartender'
+        )
         FinancialAccount.objects.create(
             code='cash:workspace-test',
             name_ar='صندوق الاختبار',
@@ -199,7 +205,7 @@ class StaffWorkspaceTests(TestCase):
         self.assertNotContains(waiter_home, f'href="{internet_url}">الإنترنت</a>')
         self.assertNotContains(waiter_home, f'href="{internet_url}">الإنترنت والجلسات</a>')
 
-    def test_kitchen_workspace_hides_customer_and_cashier_actions(self):
+    def test_kitchen_workspace_keeps_financial_actions_hidden_but_exposes_operations_controls(self):
         self.client.force_login(self.kitchen)
         response = self.client.get(reverse('staff_home'))
 
@@ -208,7 +214,85 @@ class StaffWorkspaceTests(TestCase):
         self.assertNotContains(response, '+ طلب جديد')
         self.assertNotContains(response, '+ فتح حساب / جلسة جديدة')
         self.assertNotContains(response, 'data-context-title="الدفع وإغلاق الحساب"')
-        self.assertNotContains(response, 'data-context-title="إنترنت الحساب"')
+        self.assertContains(response, 'كل الطلبات')
+        self.assertContains(response, 'كل الجلسات')
+        self.assertContains(response, 'data-context-title="إنترنت الحساب"')
+        self.assertContains(response, '>تعديل</a>', html=False)
+
+    def test_all_operational_staff_can_open_order_edit_and_visit_management(self):
+        for user in (self.admin, self.cashier, self.waiter, self.kitchen, self.bartender):
+            with self.subTest(role=user.role):
+                self.client.force_login(user)
+                orders = self.client.get(reverse('staff_orders'))
+                self.assertEqual(orders.status_code, 200)
+                self.assertContains(
+                    orders,
+                    reverse('staff_order_edit', kwargs={'public_code': self.order.public_code}),
+                )
+                edit = self.client.get(
+                    reverse('staff_order_edit', kwargs={'public_code': self.order.public_code}),
+                )
+                self.assertEqual(edit.status_code, 200)
+                visit = self.client.get(
+                    reverse('staff_visit_detail', kwargs={'public_code': self.visit.public_code}),
+                )
+                self.assertEqual(visit.status_code, 200)
+                self.assertContains(visit, 'إدارة الجلسة')
+
+    def test_operational_staff_can_cancel_order_without_hard_deleting_audit_record(self):
+        self.client.force_login(self.kitchen)
+        response = self.client.post(
+            reverse('staff_order_status', kwargs={'public_code': self.order.public_code}),
+            {
+                'status': Order.Status.CANCELLED,
+                'cancellation_reason': 'staff_mistake',
+                'cancellation_notes': 'اختبار',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.CANCELLED)
+        self.assertEqual(self.order.cancellation_reason, 'staff_mistake')
+        self.assertTrue(Order.objects.filter(pk=self.order.pk).exists())
+
+    def test_operational_staff_can_delete_only_empty_visit(self):
+        empty_visit = HubVisit.objects.create(table=self.table)
+        self.client.force_login(self.bartender)
+
+        deleted = self.client.post(
+            reverse('staff_visit_detail', kwargs={'public_code': empty_visit.public_code}),
+            {'action': 'delete_empty'},
+        )
+        self.assertEqual(deleted.status_code, 302)
+        self.assertFalse(HubVisit.objects.filter(pk=empty_visit.pk).exists())
+
+        blocked = self.client.post(
+            reverse('staff_visit_detail', kwargs={'public_code': self.visit.public_code}),
+            {'action': 'delete_empty'},
+        )
+        self.assertEqual(blocked.status_code, 302)
+        self.assertTrue(HubVisit.objects.filter(pk=self.visit.pk).exists())
+
+    def test_operational_staff_can_stop_internet_inside_visit_without_billing_access(self):
+        session = self._start_metered()
+        self.client.force_login(self.kitchen)
+        panel_url = reverse(
+            'staff_visit_detail',
+            kwargs={'public_code': self.visit.public_code},
+        )
+
+        panel = self.client.get(panel_url, {'panel': 'internet'})
+        self.assertEqual(panel.status_code, 200)
+        self.assertContains(panel, 'إيقاف هذه الجلسة')
+
+        stopped = self.client.post(
+            panel_url + '?panel=internet',
+            {'action': 'internet_stop', 'session_id': session.pk},
+        )
+        self.assertEqual(stopped.status_code, 200)
+        session.refresh_from_db()
+        self.assertNotEqual(session.status, InternetSession.Status.ACTIVE)
 
     def test_staff_can_open_second_independent_account_on_same_table_from_operations(self):
         self.client.force_login(self.admin)
