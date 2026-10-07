@@ -11,6 +11,8 @@ from django.views.decorators.http import require_http_methods
 
 from accounts.permissions import user_has_capability
 from core.models import ActivityLog, HubVisit, Order
+from core.services.qr_codes import qr_svg_response
+from core.services.visits import customer_visit_queryset
 from member_accounts.card import issue_member_card_token, member_card_max_age_seconds, resolve_member_card_token
 from member_accounts.identity import resolve_member_identity
 
@@ -52,14 +54,7 @@ def member_card_qr(request):
 
     token = issue_member_card_token(identity.member)
     scan_url = _member_card_scan_url(request, token)
-    try:
-        import qrcode
-        import qrcode.image.svg
-    except ImportError:
-        return HttpResponse('QR renderer unavailable.', status=503, content_type='text/plain; charset=utf-8')
-
-    response = HttpResponse(content_type='image/svg+xml')
-    qrcode.make(scan_url, image_factory=qrcode.image.svg.SvgPathImage).save(response)
+    response = qr_svg_response(scan_url)
     response.headers['X-Member-Card-Max-Age'] = str(member_card_max_age_seconds())
     return _no_store(response)
 
@@ -85,7 +80,7 @@ def staff_member_card_scan(request, token):
         try:
             with transaction.atomic():
                 selected_visit = (
-                    HubVisit.objects.select_for_update(of=('self',))
+                    customer_visit_queryset(HubVisit.objects.select_for_update(of=('self',)))
                     .select_related('table', 'member')
                     .filter(public_code=raw_visit, status=HubVisit.Status.OPEN)
                     .first()
@@ -127,7 +122,7 @@ def staff_member_card_scan(request, token):
             return redirect('staff_visit_detail', public_code=selected_visit.public_code)
 
     visits = (
-        HubVisit.objects.filter(status=HubVisit.Status.OPEN)
+        customer_visit_queryset(HubVisit.objects.filter(status=HubVisit.Status.OPEN))
         .select_related('table', 'table__room', 'member')
         .order_by('-last_activity_at', '-id')[:20]
     )

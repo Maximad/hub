@@ -125,6 +125,18 @@ class VisitCashierSettlementTests(TestCase):
         self.assertEqual([row['order'].pk for row in response.context['standalone_rows']], [standalone.pk])
         self.assertContains(response, '<p><strong>2</strong> طلبات مرتبطة بهذه الجلسة</p>', html=True)
 
+    def test_cashier_hides_legacy_internal_staff_wifi_visits(self):
+        customer_visit = self.visit()
+        self.order(100, visit=customer_visit)
+        legacy_staff_visit = HubVisit.objects.create(notes='staff_internal_wifi')
+
+        response = self.client.get(reverse('staff_cashier'))
+
+        self.assertEqual(response.status_code, 200)
+        visit_ids = [row['visit'].pk for row in response.context['visit_rows']]
+        self.assertIn(customer_visit.pk, visit_ids)
+        self.assertNotIn(legacy_staff_visit.pk, visit_ids)
+
     def test_order_cashier_link_resolves_to_combined_visit_account(self):
         visit = self.visit()
         first = self.order(100, visit=visit, name='الأول')

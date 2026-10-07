@@ -15,6 +15,7 @@ from django.utils import timezone
 from accounts.permissions import require_staff_capability, user_has_capability
 from core.models import HubVisit, InternetSession, Member, Order, Payment, TableArea
 from operations.services import current_business_date
+from core.services.visits import customer_visit_queryset
 
 
 ACTIVE_ORDER_STATUSES = (
@@ -55,7 +56,7 @@ def staff_home(request):
 
     day_start = _current_business_day_start()
     open_visits = list(
-        HubVisit.objects.filter(status=HubVisit.Status.OPEN)
+        customer_visit_queryset(HubVisit.objects.filter(status=HubVisit.Status.OPEN))
         .select_related("table", "table__room", "member")
         .prefetch_related(
             Prefetch(

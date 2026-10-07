@@ -45,9 +45,9 @@ from core.views.internet_provider import (
     internet_provider_subscriptions,
     legacy_internet_partner_dashboard,
 )
-from core.views.visits import (current_visit, visit_internet_purchase_start,
-    visit_internet_entitlement_start, visit_internet_session_connect,
-    visit_internet_session_stop)
+from core.views.visits import (current_visit, current_visit_checkout_qr,
+    visit_internet_purchase_start, visit_internet_entitlement_start,
+    visit_internet_session_connect, visit_internet_session_stop)
 from core.views.staff_visits import staff_visits, staff_visit_detail
 from core.views.wifi import wifi_entry, wifi_staff_login
 from operations.views_tasks import staff_operational_tasks
@@ -85,6 +85,7 @@ urlpatterns = [
     path('menu/', menu.menu_public, name='menu_public'),
     path('menu/table/<uuid:qr_token>/', menu.menu_table, name='menu_table'),
     path('visit/current/', current_visit, name='current_visit'),
+    path('visit/current/checkout-qr.svg', current_visit_checkout_qr, name='current_visit_checkout_qr'),
     path('visit/internet/start/', visit_internet_purchase_start, name='visit_internet_start'),
     path('visit/internet/entitlement/<uuid:public_code>/start/', visit_internet_entitlement_start, name='visit_internet_entitlement_start'),
     path('visit/internet/session/<uuid:public_code>/connect/', visit_internet_session_connect, name='visit_internet_session_connect'),

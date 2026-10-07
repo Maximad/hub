@@ -7,13 +7,36 @@
   <header class="hub-card current-visit__header current-visit__header--compact">
     <div>
       <p class="menu-public__brand">{% if focus_internet %}الإنترنت{% else %}جلستي{% endif %}</p>
-      <h1 class="hub-section-title">{% if focus_internet %}خيارات الإنترنت{% elif visit.table %}{{ visit.table.display_name }}{% else %}هَبّ{% endif %}</h1>
-      {% if focus_internet %}<p>اختر طريقة الاتصال المناسبة لهذا الجهاز.</p>{% elif visit.table and visit.table.room_display_name %}<p>{{ visit.table.room_display_name }}</p>{% endif %}
+      <h1 class="hub-section-title">{% if focus_internet %}خيارات الإنترنت{% elif visit.table %}{{ visit.table.display_name }}{% else %}جلسة {{ visit.display_number }}{% endif %}</h1>
+      {% if focus_internet %}
+        <p>اختر طريقة الاتصال المناسبة لهذا الجهاز.</p>
+      {% elif visit.table %}
+        <p>{% if visit.table.room_display_name %}{{ visit.table.room_display_name }} · {% endif %}جلسة {{ visit.display_number }}</p>
+      {% else %}
+        <p>داخل المكان · احتفظ برقم الجلسة للدفع عند الكاشير.</p>
+      {% endif %}
     </div>
     <a class="hub-button hub-button-primary" href="{{ menu_url }}">+ أضف طلباً</a>
   </header>
 
   {% if not focus_internet %}{% include 'menu/_visit_totals.html' %}{% endif %}
+
+  {% if not focus_internet and show_checkout_qr %}
+  <details class="hub-card current-visit__checkout">
+    <summary>
+      <span><strong>الدفع عند الكاشير</strong><small>جلسة {{ visit.display_number }}</small></span>
+      <span aria-hidden="true">‹</span>
+    </summary>
+    <div class="current-visit__checkout-body">
+      <img class="hub-qr current-visit__checkout-qr" src="{% url 'current_visit_checkout_qr' %}" alt="QR حساب الجلسة {{ visit.display_number }}">
+      <div>
+        <strong>اعرض هذا الرمز عند الدفع</strong>
+        <p>يفتح للكاشير حساب جلستك الكامل بما فيه كل الطلبات وأي إنترنت مدفوع.</p>
+        <small>إذا تعذر المسح، أخبر الكاشير برقم الجلسة: <strong>{{ visit.display_number }}</strong></small>
+      </div>
+    </div>
+  </details>
+  {% endif %}
 
   {% if not focus_internet %}
   <section class="hub-card current-visit__quick-actions" id="visit-actions" aria-label="خدمة الجلسة">

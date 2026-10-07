@@ -28,6 +28,7 @@ from core.services.hotspot_connect import (
 from core.services.internet_access import end_usage_session
 from core.services.internet_internal_access import INTERNAL_ORIGINS
 from core.services.network_operations import enqueue_network_operation, process_network_operation
+from core.services.qr_codes import qr_svg_response
 from core.services.visit_internet import (
     customer_packages,
     finalize_visit_metered_session,
@@ -44,7 +45,8 @@ from core.services.visit_internet_devices import (
     start_existing_visit_entitlement,
     start_visit_metered_session,
 )
-from core.services.visits import issue_visit_credential, resolve_visit_credential, set_visit_cookie
+from core.services.visits import (LEGACY_INTERNAL_STAFF_VISIT_NOTE, issue_visit_credential,
+    resolve_visit_credential, set_visit_cookie)
 from core.settings_helpers import get_system_settings
 from members.benefits import resolve_internet_price
 from members.services import resolve_member_from_request
@@ -111,6 +113,8 @@ def current_visit(request):
     if not credential:
         return redirect('menu_public')
     visit = credential.visit
+    if visit.notes == LEGACY_INTERNAL_STAFF_VISIT_NOTE:
+        return redirect('staff_home' if request.user.is_authenticated else 'menu_public')
     orders = visit.orders.exclude(status='cancelled').prefetch_related(
         'items', 'discounts', 'payments').order_by('-created_at', '-id')
     table_entry_url = (
@@ -129,6 +133,13 @@ def current_visit(request):
         'menu_url': menu_url,
         'table_entry_url': table_entry_url,
         'active_internet_session': active_internet_session,
+        'show_checkout_qr': bool(
+            orders.exists()
+            or (
+                active_internet_session
+                and active_internet_session.billing_mode != InternetSession.BillingMode.FREE
+            )
+        ),
         'internet_self_service_enabled': internet_enabled,
         'focus_internet': internet_enabled and request.GET.get('focus') == 'internet',
     }
@@ -173,8 +184,21 @@ def _start_destination(request, table):
     return _current_visit_destination(request)
 
 
+def _render_hotspot_relay_response(request, payload, *, raw_cookie=None):
+    response = render(request, 'menu/hotspot_connect.html', payload)
+    response['Cache-Control'] = 'no-store, private, max-age=0'
+    response['Pragma'] = 'no-cache'
+    response['Referrer-Policy'] = 'no-referrer'
+    response['X-Robots-Tag'] = 'noindex, nofollow, noarchive'
+    response['Content-Security-Policy'] = (
+        "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
+        f"form-action {payload['login_origin']}; base-uri 'none'; frame-ancestors 'none'"
+    )
+    return set_visit_cookie(response, raw_cookie) if raw_cookie else response
+
+
 def _hotspot_relay_response(request, session, *, destination_url, raw_cookie=None):
-    """Render the no-store RouterOS POST relay for an authorized visit session."""
+    """Render the no-store RouterOS POST relay for an authorized customer session."""
     if session.entitlement_id:
         payload = build_hotspot_login_payload(
             session.entitlement,
@@ -192,16 +216,45 @@ def _hotspot_relay_response(request, session, *, destination_url, raw_cookie=Non
         'entitlement_id': session.entitlement_id,
         'network_provider': session.network_provider,
     })
-    response = render(request, 'menu/hotspot_connect.html', payload)
+    return _render_hotspot_relay_response(request, payload, raw_cookie=raw_cookie)
+
+
+def _entitlement_hotspot_relay_response(request, entitlement, *, destination_url, actor=None):
+    """Relay a reusable entitlement without manufacturing a customer HubVisit."""
+    payload = build_hotspot_login_payload(
+        entitlement,
+        destination_url=destination_url,
+    )
+    ActivityLog.objects.create(
+        actor=actor,
+        action='internet.internal_hotspot_relay_issued',
+        details={
+            'entitlement_id': entitlement.pk,
+            'origin_type': entitlement.origin_type,
+            'network_backend': entitlement.network_backend,
+        },
+    )
+    return _render_hotspot_relay_response(request, payload)
+
+
+def current_visit_checkout_qr(request):
+    """QR for the cashier to open this browser-bound aggregate visit."""
+    system_settings = get_system_settings()
+    if not system_settings.customer_visits_enabled:
+        return redirect('menu_public')
+    credential = resolve_visit_credential(request, touch=False)
+    if not credential:
+        return redirect('menu_public')
+    visit = credential.visit
+    cashier_path = reverse(
+        'staff_cashier_order',
+        kwargs={'public_code': visit.public_code},
+    )
+    response = qr_svg_response(_absolute_destination(request, cashier_path))
     response['Cache-Control'] = 'no-store, private, max-age=0'
     response['Pragma'] = 'no-cache'
-    response['Referrer-Policy'] = 'no-referrer'
     response['X-Robots-Tag'] = 'noindex, nofollow, noarchive'
-    response['Content-Security-Policy'] = (
-        "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
-        f"form-action {payload['login_origin']}; base-uri 'none'; frame-ancestors 'none'"
-    )
-    return set_visit_cookie(response, raw_cookie) if raw_cookie else response
+    return response
 
 
 @require_POST

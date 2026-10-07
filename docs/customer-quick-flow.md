@@ -48,8 +48,24 @@ step.
 ## Staff
 
 A staff login started from the captive portal continues directly into the staff
-Internet grant when an active grant exists. It must not require Django admin access,
-create a commercial sale, or expose another staff user's grant.
+Internet grant when an active grant exists. Internal staff Internet is operational
+access, not a customer visit: it must not create a HubVisit, customer bill, customer
+Internet session, Order or Payment. Connection/audit state remains available through
+the internal entitlement, activity log and admin/provider Internet surfaces.
+
+Legacy synthetic visits created by older builds with `staff_internal_wifi` are hidden
+from customer operations and safely retired when that staff browser reconnects.
+
+## Cashier handoff
+
+A real customer visit has one human-readable session number whether or not it has a
+table. **جلستي** exposes a compact cashier QR only when the visit has billable/order
+activity or an active Internet session. The QR identifies the aggregate HubVisit and
+opens the staff-authenticated cashier account, never an individual order.
+
+A tableless inside-space customer is therefore handled exactly like a table customer:
+their browser owns a HubVisit, later orders reuse it, and the cashier can scan the QR
+or search the visible session number.
 
 ## Session screen
 

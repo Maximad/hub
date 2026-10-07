@@ -4,10 +4,17 @@ import secrets
 from django.conf import settings
 from django.utils import timezone
 
-from core.models import HubVisitBrowserCredential
+from core.models import HubVisit, HubVisitBrowserCredential
 
 COOKIE_NAME = 'hub_visit'
 COOKIE_MAX_AGE = 60 * 60 * 24 * 30
+LEGACY_INTERNAL_STAFF_VISIT_NOTE = 'staff_internal_wifi'
+
+
+def customer_visit_queryset(queryset=None):
+    """Customer-facing visits only; hide legacy synthetic staff Wi-Fi visits."""
+    qs = queryset if queryset is not None else HubVisit.objects.all()
+    return qs.exclude(notes=LEGACY_INTERNAL_STAFF_VISIT_NOTE)
 
 
 def token_hash(raw_token):

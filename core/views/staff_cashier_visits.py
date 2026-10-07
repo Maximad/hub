@@ -23,6 +23,7 @@ from core.services.visit_settlement import (
     visit_financials,
 )
 from core.settings_helpers import get_page_setting, get_system_settings
+from core.services.visits import customer_visit_queryset
 from reservations.models import Reservation
 from reservations.services import complete_reservation_for_visit
 
@@ -35,7 +36,7 @@ def _visit_queryset():
         .order_by('created_at', 'pk')
     )
     return (
-        HubVisit.objects.select_related('table', 'table__room', 'member')
+        customer_visit_queryset(HubVisit.objects.select_related('table', 'table__room', 'member'))
         .prefetch_related(Prefetch('orders', queryset=order_qs, to_attr='cashier_orders'))
     )
 
@@ -150,7 +151,7 @@ def staff_cashier(request):
             if order.visit_id:
                 return redirect('staff_cashier_order', public_code=order.visit.public_code)
             return redirect('staff_cashier_order', public_code=order.public_code)
-        visit = HubVisit.objects.filter(pk=int(normalized)).first()
+        visit = customer_visit_queryset(HubVisit.objects.filter(pk=int(normalized))).first()
         if visit:
             return redirect('staff_cashier_order', public_code=visit.public_code)
 
