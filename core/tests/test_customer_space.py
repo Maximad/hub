@@ -1,3 +1,6 @@
+from unittest.mock import patch
+
+from django.http import HttpResponse
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
@@ -89,6 +92,51 @@ class CustomerSpaceTests(TestCase):
         self.assertNotContains(response, '<span>الإجمالي</span>', html=False)
         self.assertNotContains(response, 'هل تحتاج شيئاً؟')
         self.assertContains(response, '>أحتاج مساعدة<', html=False)
+
+    @patch('core.views.visits.qr_svg_response')
+    def test_checkout_qr_targets_aggregate_cashier_visit(self, qr_svg_response):
+        self._start_visit_with_order()
+        visit = HubVisit.objects.get()
+        qr_svg_response.return_value = HttpResponse(
+            '<svg></svg>', content_type='image/svg+xml'
+        )
+
+        page = self.client.get(reverse('current_visit'))
+        self.assertContains(page, 'الدفع عند الكاشير')
+        self.assertContains(page, f'جلسة {visit.display_number}')
+        self.assertContains(page, reverse('current_visit_checkout_qr'))
+
+        qr = self.client.get(reverse('current_visit_checkout_qr'))
+
+        self.assertEqual(qr.status_code, 200)
+        target = qr_svg_response.call_args.args[0]
+        self.assertIn(
+            reverse('staff_cashier_order', kwargs={'public_code': visit.public_code}),
+            target,
+        )
+        self.assertEqual(qr['Cache-Control'], 'no-store, private, max-age=0')
+
+    def test_tableless_inside_space_order_gets_first_class_visit_number_and_checkout_qr(self):
+        response = self.client.post(
+            reverse('menu_public'),
+            {
+                f'qty_{self.product.pk}': '1',
+                'fulfillment_mode': Order.FulfillmentMode.INSIDE_SPACE,
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        visit = HubVisit.objects.get()
+        self.assertIsNone(visit.table_id)
+        order = Order.objects.get()
+        self.assertEqual(order.visit_id, visit.pk)
+        self.assertIn('hub_visit', self.client.cookies)
+
+        current = self.client.get(reverse('current_visit'))
+        self.assertContains(current, f'جلسة {visit.display_number}')
+        self.assertContains(current, 'داخل المكان')
+        self.assertContains(current, 'الدفع عند الكاشير')
+        self.assertContains(current, reverse('current_visit_checkout_qr'))
 
     def test_visit_order_submission_returns_to_menu_not_confirmation_screen(self):
         order_response = self._start_visit_with_order()
