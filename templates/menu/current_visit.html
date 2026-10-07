@@ -21,7 +21,7 @@
 
   {% if not focus_internet %}{% include 'menu/_visit_totals.html' %}{% endif %}
 
-  {% if not focus_internet and orders or not focus_internet and active_internet_session %}
+  {% if not focus_internet and show_checkout_qr %}
   <details class="hub-card current-visit__checkout">
     <summary>
       <span><strong>الدفع عند الكاشير</strong><small>جلسة {{ visit.display_number }}</small></span>
