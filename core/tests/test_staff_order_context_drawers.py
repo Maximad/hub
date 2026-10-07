@@ -174,10 +174,12 @@ class StaffOrderContextDrawerTests(TestCase):
         self.assertEqual(full.status_code, 200)
         self.assertTemplateUsed(full, "staff/cashier_order.html")
 
-    def test_kitchen_workspace_does_not_expose_order_payment_drawer(self):
+    def test_kitchen_workspace_exposes_operational_drawer_but_not_payment_controls(self):
         self.client.force_login(self.kitchen)
         response = self.client.get(reverse("staff_home"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "data-staff-context-url")
-        self.assertNotContains(response, 'id="staff-context-drawer"')
+        self.assertContains(response, 'id="staff-context-drawer"')
+        self.assertContains(response, "data-staff-context-url")
+        self.assertContains(response, ">تعديل</a>", html=False)
+        self.assertNotContains(response, 'data-context-title="الدفع وإغلاق الحساب"')
