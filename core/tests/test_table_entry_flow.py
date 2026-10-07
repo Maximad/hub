@@ -204,15 +204,16 @@ class TableEntryFlowTests(TestCase):
         self.assertContains(response, reverse('current_visit'))
         self.assertNotContains(response, 'table-entry__package-picker')
 
-    def test_session_screen_can_start_internet_without_returning_to_welcome(self):
+    def test_session_screen_links_to_quick_internet_flow(self):
         self._bind_new_visit()
         response = self.client.get(reverse('current_visit'))
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'menu/current_visit.html')
-        self.assertContains(response, 'تشغيل الإنترنت السريع')
-        self.assertContains(response, 'name="mode" value="metered"')
-        self.assertContains(response, self.package.name_ar)
+        self.assertContains(response, 'اتصل بالإنترنت')
+        self.assertContains(response, reverse('wifi_entry') + '?mode=internet')
+        self.assertNotContains(response, 'name="mode" value="metered"')
+        self.assertNotContains(response, self.package.name_ar)
         self.assertContains(response, self.menu_url)
         self.assertNotContains(response, 'ابدأ جلستك')
 
