@@ -133,6 +133,13 @@ def current_visit(request):
         'menu_url': menu_url,
         'table_entry_url': table_entry_url,
         'active_internet_session': active_internet_session,
+        'show_checkout_qr': bool(
+            orders.exists()
+            or (
+                active_internet_session
+                and active_internet_session.billing_mode != InternetSession.BillingMode.FREE
+            )
+        ),
         'internet_self_service_enabled': internet_enabled,
         'focus_internet': internet_enabled and request.GET.get('focus') == 'internet',
     }
