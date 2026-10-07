@@ -9,6 +9,7 @@ from accounts.permissions import require_staff_capability, user_has_capability
 from core.models import ActivityLog, HubVisit, InternetSession, Member, Order, TableArea
 from core.services.internet_access import end_usage_session
 from core.services.visit_internet import finalize_visit_metered_session
+from core.services.visits import customer_visit_queryset
 from reservations.models import Reservation
 from reservations.services import complete_reservation_for_visit
 
@@ -102,7 +103,7 @@ def staff_visits(request):
         if request.POST.get('next') == 'workspace':
             return _workspace_redirect(visit)
         return redirect('staff_visit_detail', public_code=visit.public_code)
-    visits = HubVisit.objects.select_related('table', 'table__room', 'member').prefetch_related('orders__items', 'orders__discounts', 'orders__payments')
+    visits = customer_visit_queryset(HubVisit.objects.select_related('table', 'table__room', 'member')).prefetch_related('orders__items', 'orders__discounts', 'orders__payments')
     status = request.GET.get('status', 'open')
     if status in HubVisit.Status.values:
         visits = visits.filter(status=status)
