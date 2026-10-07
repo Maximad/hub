@@ -135,6 +135,98 @@ body.customer-space-nav-active #hub-main-content {
   margin-bottom: .75rem;
 }
 
+.current-visit__header--compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .85rem;
+}
+
+.current-visit__header--compact .hub-section-title,
+.current-visit__header--compact p {
+  margin-block: .15rem;
+}
+
+.current-visit__totals--compact {
+  padding-block: 1rem;
+}
+
+.current-visit__totals-summary {
+  display: grid;
+  gap: .22rem;
+}
+
+.current-visit__totals-summary h2 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--hub-muted);
+}
+
+.current-visit__totals-primary {
+  font-size: 1.25rem;
+}
+
+.current-visit__totals-summary small {
+  color: var(--hub-muted);
+}
+
+.current-visit__quick-actions {
+  padding-block: 1rem;
+}
+
+.current-visit__quick-actions-head h2 {
+  margin: 0 0 .65rem;
+  font-size: 1rem;
+}
+
+.customer-visit-actions form:only-child {
+  grid-column: 1 / -1;
+}
+
+.current-visit__internet-status {
+  display: grid;
+  gap: .55rem;
+}
+
+.current-visit__internet-status p,
+.current-visit__internet-empty p {
+  margin: 0;
+}
+
+.current-visit__internet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+
+.current-visit__internet-actions form {
+  margin: 0;
+}
+
+.current-visit__internet-upgrade {
+  justify-self: start;
+}
+
+.current-visit__internet-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  flex-wrap: wrap;
+}
+
+.current-visit__internet-choice {
+  display: grid;
+  gap: .65rem;
+  padding: .9rem 0;
+  border-top: 1px solid var(--hub-border);
+}
+
+.current-visit__internet-choice h3,
+.current-visit__internet-choice p {
+  margin: 0;
+}
+
 .customer-visit-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0,1fr));
@@ -224,8 +316,17 @@ body.customer-space-nav-active #hub-main-content {
     top: 4rem;
   }
 
+  .current-visit__header--compact {
+    align-items: flex-start;
+  }
+
   .customer-visit-actions {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0,1fr));
+  }
+
+  .customer-visit-actions .hub-button {
+    min-height: 2.7rem;
+    padding-inline: .55rem;
   }
 }
 
