@@ -7,24 +7,27 @@ from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.utils import timezone
 
 from catalog.models import MediaAsset
 from core.models import ActivityLog, HubVisit, InternetEntitlement, InternetSession
 from core.services.hotspot_connect import one_tap_connect_configured, one_tap_session_connect_configured
-from core.services.internet_internal_access import usable_internal_grant_for_user
+from core.services.internet_internal_access import INTERNAL_ORIGINS, usable_internal_grant_for_user
 from core.services.table_visit_access import resolve_table_number
 from core.services.visit_internet import (customer_packages, metered_customer_error,
     prepare_visit_metered_session_network, self_service_enabled,
     usable_entitlements_for_member)
 from core.services.visit_internet_devices import (active_browser_session,
     start_existing_visit_entitlement, start_visit_metered_session)
+from core.services.internet_access import end_usage_session
 from core.services.visits import (
     issue_visit_credential,
     resolve_visit_credential,
     set_visit_cookie,
 )
 from core.settings_helpers import get_system_settings
-from core.views.visits import _absolute_destination, _hotspot_relay_response
+from core.views.visits import (_absolute_destination, _entitlement_hotspot_relay_response,
+    _hotspot_relay_response)
 from internet.guest_wifi import (
     get_guest_wifi_policy,
     guest_wifi_code_required,
@@ -323,8 +326,46 @@ def _start_fast_wifi(request):
     return set_visit_cookie(response, raw_cookie) if raw_cookie else response
 
 
+def _retire_legacy_staff_wifi_visit(request, *, actor):
+    """Close the old synthetic customer visit created only for internal staff Wi-Fi."""
+    credential = resolve_visit_credential(request, touch=False)
+    if not credential:
+        return
+    visit = credential.visit
+    if visit.notes != 'staff_internal_wifi' or visit.orders.exists():
+        return
+    sessions = list(
+        visit.internet_sessions.select_related('entitlement').filter(
+            entitlement__origin_type__in=INTERNAL_ORIGINS,
+            status=InternetSession.Status.ACTIVE,
+        )
+    )
+    # Only retire the synthetic visit when all of its Internet activity is internal.
+    non_internal = visit.internet_sessions.exclude(
+        entitlement__origin_type__in=INTERNAL_ORIGINS,
+    ).exists()
+    if non_internal:
+        return
+    now = timezone.now()
+    for session in sessions:
+        end_usage_session(session, actor=actor, at=now)
+    visit.status = HubVisit.Status.CLOSED
+    visit.closed_at = now
+    visit.last_activity_at = now
+    visit.save(update_fields=['status', 'closed_at', 'last_activity_at', 'updated_at'])
+    visit.browser_credentials.filter(revoked_at__isnull=True).update(revoked_at=now)
+    ActivityLog.objects.create(
+        actor=actor,
+        action='internet.legacy_staff_visit_retired',
+        details={
+            'visit_id': visit.pk,
+            'ended_internal_session_ids': [session.pk for session in sessions],
+        },
+    )
+
+
 def _start_staff_wifi(request):
-    """Use this authenticated staff account's private grant on this browser/device."""
+    """Connect internal staff Internet without creating a customer visit/session."""
     if not self_service_enabled(get_system_settings()):
         messages.error(request, 'خدمة الإنترنت الذاتية غير متاحة حالياً.')
         return redirect(_wifi_internet_path())
@@ -335,58 +376,35 @@ def _start_staff_wifi(request):
         messages.error(request, 'لا توجد منحة إنترنت داخلية فعالة لهذا الحساب.')
         return redirect(_wifi_internet_path())
 
-    raw_cookie = None
     try:
-        visit, credential, raw_cookie, _member_context = _ensure_wifi_visit(
-            request,
-            source='staff_internal_wifi',
-        )
-        session, created = start_existing_visit_entitlement(
-            visit=visit,
-            credential=credential,
-            entitlement=entitlement,
+        _retire_legacy_staff_wifi_visit(request, actor=staff_user)
+        if not one_tap_connect_configured(entitlement):
+            raise ValidationError('الاتصال التلقائي بإنترنت الفريق غير متاح حالياً.')
+        ActivityLog.objects.create(
             actor=staff_user,
-            staff_user=staff_user,
+            action='internet.internal_staff_connected',
+            details={
+                'entitlement_id': entitlement.pk,
+                'origin_type': entitlement.origin_type,
+            },
+        )
+        messages.success(request, 'تم تفعيل إنترنت الفريق على هذا الجهاز.')
+        return _entitlement_hotspot_relay_response(
+            request,
+            entitlement,
+            destination_url=_absolute_destination(request, reverse('staff_home')),
+            actor=staff_user,
         )
     except ValidationError as exc:
         messages.error(request, _validation_message(exc))
-        response = redirect(_wifi_internet_path())
-        return set_visit_cookie(response, raw_cookie) if raw_cookie else response
     except Exception:
         logger.exception(
-            'Staff internal Wi-Fi start failed for staff_user_id=%s',
+            'Staff internal Wi-Fi relay failed for staff_user_id=%s entitlement_id=%s',
             getattr(staff_user, 'pk', None),
+            entitlement.pk,
         )
-        messages.error(request, 'تعذر بدء إنترنت الفريق حالياً.')
-        response = redirect(_wifi_internet_path())
-        return set_visit_cookie(response, raw_cookie) if raw_cookie else response
-
-    messages.success(
-        request,
-        'تم تفعيل إنترنت الفريق على هذا الجهاز.' if created
-        else 'إنترنت الفريق ما يزال فعالاً على هذا الجهاز.',
-    )
-    if one_tap_connect_configured(entitlement):
-        try:
-            return _hotspot_relay_response(
-                request,
-                session,
-                destination_url=_absolute_destination(request, reverse('staff_home')),
-                raw_cookie=raw_cookie,
-            )
-        except Exception:
-            logger.exception(
-                'Staff internal HotSpot relay failed for staff_user_id=%s entitlement_id=%s',
-                staff_user.pk,
-                entitlement.pk,
-            )
-            messages.warning(
-                request,
-                'بدأ إنترنت الفريق، لكن تعذر الاتصال التلقائي. أعد المحاولة من صفحة جلستك.',
-            )
-
-    response = redirect(reverse('current_visit') + '?focus=internet')
-    return set_visit_cookie(response, raw_cookie) if raw_cookie else response
+        messages.error(request, 'تعذر الاتصال بإنترنت الفريق حالياً.')
+    return redirect(_wifi_internet_path())
 
 
 def _start_guest_wifi(request):
@@ -488,7 +506,20 @@ def wifi_entry(request):
             return redirect('menu_table', qr_token=table.qr_token)
 
     credential = resolve_visit_credential(request, touch=False)
+    staff_internal_entitlement = usable_internal_grant_for_user(
+        request.user if request.user.is_authenticated else None
+    )
     visit = credential.visit if credential else None
+    # Old builds created a synthetic customer visit for internal staff Wi-Fi.
+    # Ignore that legacy visit in the captive UI; reconnecting retires it safely.
+    if (
+        visit is not None
+        and staff_internal_entitlement is not None
+        and visit.notes == 'staff_internal_wifi'
+        and not visit.orders.exists()
+    ):
+        credential = None
+        visit = None
     current_table = visit.table if visit and visit.table_id else None
     current_table_url = ''
     if current_table is not None:
@@ -553,9 +584,6 @@ def wifi_entry(request):
     can_customize_portal = bool(
         request.user.is_authenticated
         and (request.user.is_superuser or getattr(request.user, 'role', '') == 'admin')
-    )
-    staff_internal_entitlement = usable_internal_grant_for_user(
-        request.user if request.user.is_authenticated else None
     )
     active_fast_is_internal = bool(
         active_fast_session
