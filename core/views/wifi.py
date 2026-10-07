@@ -5,6 +5,7 @@ from django.contrib import messages
 from django.contrib.auth import login as auth_login
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -341,8 +342,8 @@ def _retire_legacy_staff_wifi_visit(request, *, actor):
         )
     )
     # Only retire the synthetic visit when all of its Internet activity is internal.
-    non_internal = visit.internet_sessions.exclude(
-        entitlement__origin_type__in=INTERNAL_ORIGINS,
+    non_internal = visit.internet_sessions.filter(
+        Q(entitlement__isnull=True) | ~Q(entitlement__origin_type__in=INTERNAL_ORIGINS)
     ).exists()
     if non_internal:
         return
