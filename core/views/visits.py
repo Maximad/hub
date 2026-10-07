@@ -240,7 +240,11 @@ def current_visit_checkout_qr(request):
         'staff_cashier_order',
         kwargs={'public_code': visit.public_code},
     )
-    return qr_svg_response(_absolute_destination(request, cashier_path))
+    response = qr_svg_response(_absolute_destination(request, cashier_path))
+    response['Cache-Control'] = 'no-store, private, max-age=0'
+    response['Pragma'] = 'no-cache'
+    response['X-Robots-Tag'] = 'noindex, nofollow, noarchive'
+    return response
 
 
 @require_POST
