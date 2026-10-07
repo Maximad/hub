@@ -17,7 +17,7 @@
       <article class="hub-card">
         <div class="hub-toolbar" style="justify-content:space-between;align-items:flex-start">
           <div>
-            <strong>{% if visit.table %}{{ visit.table }}{% else %}جلسة {{ visit.display_number }}{% endif %}</strong>
+            <strong>{% if visit.table %}{{ visit.table }}{% else %}داخل المكان · جلسة {{ visit.display_number }}{% endif %}</strong>
             <div class="hub-location-detail">{{ visit.display_number }}{% if visit.member %} — {{ visit.member }}{% endif %}</div>
           </div>
           <span class="hub-badge {% if row.remaining == 0 %}hub-badge-success{% else %}hub-badge-info{% endif %}">{{ row.payment_label }}</span>
