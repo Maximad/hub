@@ -2,6 +2,7 @@ from unittest.mock import patch
 from urllib.parse import urlsplit
 
 from django.contrib.auth import get_user_model
+from django.http import HttpResponseRedirect
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
@@ -15,7 +16,7 @@ from core.models import (
 )
 from core.services.internet_internal_access import grant_internal_access
 from core.settings_helpers import get_system_settings
-from internet.models import InternetSessionBrowserBinding
+from core.services.visits import issue_visit_credential
 
 
 @override_settings(
@@ -67,8 +68,13 @@ class StaffInternalWifiFlowTests(TestCase):
     def tearDown(self):
         get_system_settings.cache_clear()
 
-    def test_non_admin_staff_can_sign_in_from_captive_portal(self):
+    @patch('core.views.wifi._entitlement_hotspot_relay_response')
+    @patch('core.views.wifi.one_tap_connect_configured', return_value=True)
+    def test_non_admin_staff_can_sign_in_and_connect_without_customer_visit(
+        self, _configured, relay,
+    ):
         self.assertFalse(self.staff_user.is_staff)
+        relay.return_value = HttpResponseRedirect(reverse('staff_home'))
 
         landing = self.client.get(reverse('wifi_entry'), {'mode': 'internet'})
         self.assertContains(landing, reverse('wifi_staff_login'))
@@ -83,11 +89,11 @@ class StaffInternalWifiFlowTests(TestCase):
             'password': 'pass',
         })
         self.assertEqual(signed_in.status_code, 302)
-        self.assertEqual(
-            signed_in['Location'],
-            reverse('current_visit') + '?focus=internet',
-        )
-        self.assertEqual(InternetSession.objects.count(), 1)
+        self.assertEqual(signed_in['Location'], reverse('staff_home'))
+        self.assertEqual(HubVisit.objects.count(), 0)
+        self.assertEqual(InternetSession.objects.count(), 0)
+        self.assertEqual(Order.objects.count(), 0)
+        self.assertEqual(Payment.objects.count(), 0)
 
     def test_authenticated_staff_sees_private_grant_as_primary_wifi_option(self):
         self.client.force_login(self.staff_user)
@@ -110,8 +116,13 @@ class StaffInternalWifiFlowTests(TestCase):
         self.assertNotContains(response, 'value="start_staff_wifi"')
         self.assertNotContains(response, 'اتصال إنترنت الفريق')
 
-    def test_staff_wifi_start_binds_internal_grant_to_this_browser_without_sale(self):
+    @patch('core.views.wifi._entitlement_hotspot_relay_response')
+    @patch('core.views.wifi.one_tap_connect_configured', return_value=True)
+    def test_staff_wifi_start_never_creates_customer_visit_or_customer_session(
+        self, _configured, relay,
+    ):
         self.client.force_login(self.staff_user)
+        relay.return_value = HttpResponseRedirect(reverse('staff_home'))
 
         response = self.client.post(
             reverse('wifi_entry'),
@@ -119,24 +130,14 @@ class StaffInternalWifiFlowTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(
-            response['Location'],
-            reverse('current_visit') + '?focus=internet',
-        )
-        self.assertIn('hub_visit', self.client.cookies)
-
-        session = InternetSession.objects.get()
-        self.assertEqual(session.entitlement_id, self.entitlement.pk)
-        self.assertEqual(session.started_by_id, self.staff_user.pk)
-        self.assertEqual(session.visit_id, HubVisit.objects.get().pk)
-        binding = InternetSessionBrowserBinding.objects.get(session=session)
-        self.assertEqual(binding.credential.visit_id, session.visit_id)
+        self.assertEqual(response['Location'], reverse('staff_home'))
+        self.assertNotIn('hub_visit', response.cookies)
+        self.assertEqual(HubVisit.objects.count(), 0)
+        self.assertEqual(InternetSession.objects.count(), 0)
         self.assertEqual(Order.objects.count(), 0)
         self.assertEqual(Payment.objects.count(), 0)
-
-        page = self.client.get(reverse('current_visit') + '?focus=internet')
-        self.assertEqual(page.status_code, 200)
-        self.assertContains(page, 'إنترنت الفريق')
+        relay.assert_called_once()
+        self.assertEqual(relay.call_args.args[1].pk, self.entitlement.pk)
 
     def test_direct_entitlement_endpoint_rechecks_staff_ownership(self):
         self.client.force_login(self.other_user)
@@ -157,6 +158,37 @@ class StaffInternalWifiFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'الباقة غير متاحة')
         self.assertEqual(InternetSession.objects.count(), 0)
+
+    @patch('core.views.wifi._entitlement_hotspot_relay_response')
+    @patch('core.views.wifi.one_tap_connect_configured', return_value=True)
+    def test_reconnect_retires_legacy_synthetic_staff_visit(
+        self, _configured, relay,
+    ):
+        self.client.force_login(self.staff_user)
+        visit = HubVisit.objects.create(notes='staff_internal_wifi')
+        credential, raw = issue_visit_credential(visit)
+        self.client.cookies['hub_visit'] = raw
+        session = InternetSession.objects.create(
+            entitlement=self.entitlement,
+            visit=visit,
+            status=InternetSession.Status.ACTIVE,
+            billing_mode=InternetSession.BillingMode.PREPAID,
+            started_by=self.staff_user,
+        )
+        relay.return_value = HttpResponseRedirect(reverse('staff_home'))
+
+        response = self.client.post(
+            reverse('wifi_entry'),
+            {'wifi_action': 'start_staff_wifi'},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        visit.refresh_from_db()
+        session.refresh_from_db()
+        credential.refresh_from_db()
+        self.assertEqual(visit.status, HubVisit.Status.CLOSED)
+        self.assertEqual(session.status, InternetSession.Status.ENDED)
+        self.assertIsNotNone(credential.revoked_at)
 
     @patch('core.views.visits.build_hotspot_login_payload')
     @patch('core.views.wifi.one_tap_connect_configured', return_value=True)
@@ -179,7 +211,9 @@ class StaffInternalWifiFlowTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'menu/hotspot_connect.html')
-        self.assertIn('hub_visit', self.client.cookies)
+        self.assertNotIn('hub_visit', response.cookies)
+        self.assertEqual(HubVisit.objects.count(), 0)
+        self.assertEqual(InternetSession.objects.count(), 0)
         destination = build_payload.call_args.kwargs['destination_url']
         self.assertEqual(urlsplit(destination).path, reverse('staff_home'))
         self.assertContains(response, 'جارٍ توصيلك بالشبكة')
