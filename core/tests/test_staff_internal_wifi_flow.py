@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.http import HttpResponseRedirect
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from core.models import (
     HubVisit,
@@ -168,12 +169,15 @@ class StaffInternalWifiFlowTests(TestCase):
         visit = HubVisit.objects.create(notes='staff_internal_wifi')
         credential, raw = issue_visit_credential(visit)
         self.client.cookies['hub_visit'] = raw
+        started = timezone.now()
         session = InternetSession.objects.create(
             entitlement=self.entitlement,
             visit=visit,
             status=InternetSession.Status.ACTIVE,
             billing_mode=InternetSession.BillingMode.PREPAID,
             started_by=self.staff_user,
+            started_at=started,
+            start_time=started,
         )
         relay.return_value = HttpResponseRedirect(reverse('staff_home'))
 
