@@ -12,6 +12,7 @@ from django.utils import timezone
 from accounts.permissions import require_staff_capability
 from core.models import ActivityLog, HubVisit, Member, Order, Product, TableArea
 from core.settings_helpers import get_page_setting, get_system_settings
+from core.services.visits import customer_visit_queryset
 from core.views_legacy import (
     _create_order_from_selected_items,
     _order_location_note,
@@ -73,7 +74,7 @@ def staff_pos(request):
 
     settings = get_system_settings()
     requested_visit = (
-        HubVisit.objects.select_related('table').filter(
+        customer_visit_queryset(HubVisit.objects.select_related('table')).filter(
             public_code=request.GET.get('visit'),
             status=HubVisit.Status.OPEN,
         ).first()
@@ -93,7 +94,7 @@ def staff_pos(request):
         'member_query': member_query,
         'member_rows': member_rows,
         'settings': settings,
-        'open_visits': HubVisit.objects.filter(status=HubVisit.Status.OPEN)
+        'open_visits': customer_visit_queryset(HubVisit.objects.filter(status=HubVisit.Status.OPEN))
         .select_related('table').order_by('-last_activity_at'),
         'selected_visit_id': str(requested_visit.pk) if requested_visit else '',
         'selected_table_id': requested_table_id,
@@ -120,7 +121,7 @@ def staff_pos(request):
 
         visit_id = request.POST.get('visit_id', '').strip()
         visit = (
-            HubVisit.objects.select_related('table').filter(
+            customer_visit_queryset(HubVisit.objects.select_related('table')).filter(
                 pk=visit_id,
                 status=HubVisit.Status.OPEN,
             ).first()
