@@ -85,6 +85,34 @@
     {% endif %}
   </section>
 
+  {% if can_edit and 'cancelled' in order.allowed_status_transitions %}
+    <section class="hub-card hub-section">
+      <h3 class="hub-section-title">إلغاء الطلب</h3>
+      <p class="hub-help-text">الإلغاء يزيل الطلب من الحساب التشغيلي مع إبقاء سجل التدقيق. الطلب المدفوع أو المدفوع جزئياً قد يحتاج موافقة المدير.</p>
+      <form method="post" action="{% url 'staff_order_status' order.public_code %}" class="hub-form hub-form-section" onsubmit="return confirm('إلغاء هذا الطلب؟');">
+        {% csrf_token %}
+        <input type="hidden" name="status" value="cancelled">
+        <input type="hidden" name="next" value="{% url 'staff_order_edit' order.public_code %}">
+        <label>سبب الإلغاء
+          <select class="hub-input" name="cancellation_reason" required>
+            <option value="">اختر السبب</option>
+            <option value="customer_changed_mind">غيّر الزبون رأيه</option>
+            <option value="item_unavailable">المنتج غير متوفر</option>
+            <option value="staff_mistake">خطأ من الموظف</option>
+            <option value="duplicate_order">طلب مكرر</option>
+            <option value="quality_issue">مشكلة جودة</option>
+            <option value="manager_decision">قرار المدير</option>
+            <option value="other">سبب آخر</option>
+          </select>
+        </label>
+        <label>ملاحظات الإلغاء
+          <input class="hub-input" name="cancellation_notes" placeholder="اختياري">
+        </label>
+        <button class="hub-button hub-button-danger" type="submit">إلغاء الطلب</button>
+      </form>
+    </section>
+  {% endif %}
+
   {% if can_edit %}
     <section class="hub-card hub-section">
       <h3 class="hub-section-title">إضافة منتجات</h3>
