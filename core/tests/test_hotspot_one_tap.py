@@ -70,7 +70,7 @@ class HotspotOneTapTests(TestCase):
     def test_current_visit_shows_reconnect_for_mikrotik_session(self):
         response = self.client.get(reverse('current_visit'))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'إعادة توصيل هذا الجهاز')
+        self.assertContains(response, 'إعادة الاتصال')
         self.assertContains(response, self.connect_url)
 
     def test_connect_is_post_only_and_visit_scoped(self):
@@ -97,7 +97,7 @@ class HotspotOneTapTests(TestCase):
         with self.assertRaises(ValidationError):
             hotspot_login_url()
         response = self.client.get(reverse('current_visit'))
-        self.assertNotContains(response, 'إعادة توصيل هذا الجهاز')
+        self.assertNotContains(response, 'إعادة الاتصال')
         relay = self.client.post(self.connect_url)
         self.assertEqual(relay.status_code, 302)
         self.assertEqual(relay['Location'], reverse('current_visit'))
