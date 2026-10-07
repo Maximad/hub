@@ -380,14 +380,6 @@ def _start_staff_wifi(request):
         _retire_legacy_staff_wifi_visit(request, actor=staff_user)
         if not one_tap_connect_configured(entitlement):
             raise ValidationError('الاتصال التلقائي بإنترنت الفريق غير متاح حالياً.')
-        ActivityLog.objects.create(
-            actor=staff_user,
-            action='internet.internal_staff_connected',
-            details={
-                'entitlement_id': entitlement.pk,
-                'origin_type': entitlement.origin_type,
-            },
-        )
         messages.success(request, 'تم تفعيل إنترنت الفريق على هذا الجهاز.')
         return _entitlement_hotspot_relay_response(
             request,
