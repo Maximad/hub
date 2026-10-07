@@ -515,10 +515,13 @@ def wifi_entry(request):
             internet_member, first_package,
         )[0])
 
-    member_entitlements = list(
-        usable_entitlements_for_member(internet_member)
-        .select_related('package')
-        .order_by('-created_at', '-pk')[:2]
+    member_entitlements = (
+        list(
+            usable_entitlements_for_member(internet_member)
+            .select_related('package')
+            .order_by('-created_at', '-pk')[:2]
+        )
+        if internet_options_available else []
     )
     member_primary_entitlement = member_entitlements[0] if len(member_entitlements) == 1 else None
 
