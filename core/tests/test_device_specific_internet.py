@@ -177,6 +177,7 @@ class DeviceSpecificInternetTests(TestCase):
 
         first_page = first.get(reverse('current_visit'))
         self.assertContains(first_page, 'سريع · متصل')
+        self.assertContains(first_page, 'التكلفة تُحسب حتى إيقاف الاتصال')
         second_page = second.get(reverse('current_visit'))
         self.assertContains(second_page, 'اتصل بالإنترنت')
         self.assertNotContains(second_page, 'سريع · متصل')
