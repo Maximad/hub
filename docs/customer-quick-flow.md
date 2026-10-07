@@ -20,10 +20,11 @@ When the Internet sheet opens, Hub resolves the primary action in this order:
 
 1. an already active browser-bound Internet session;
 2. an authenticated staff user's active internal grant;
-3. available basic/complimentary Internet;
-4. direct metered fast Internet;
-5. other paid packages;
-6. unavailable state.
+3. a recognized member's active Internet entitlement;
+4. available basic/complimentary Internet;
+5. direct metered fast Internet;
+6. other paid packages;
+7. unavailable state.
 
 Only one primary connection action should dominate the sheet.
 
