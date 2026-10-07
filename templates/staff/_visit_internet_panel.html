@@ -32,7 +32,7 @@
           <small>منذ {{ session.start_time|timesince }}</small>
           {% if not session.entitlement_id and session.rate_per_hour_syp %}<strong>{{ session.rate_per_hour_syp|format_syp }} / ساعة</strong>{% endif %}
         </div>
-        {% if visit_caps.internet_billing and visit.status == 'open' %}
+        {% if visit_caps.visit_manage and visit.status == 'open' %}
         <form method="post" action="{% url 'staff_visit_detail' visit.public_code %}" hx-post="{% url 'staff_visit_detail' visit.public_code %}?panel=internet" hx-target="#staff-context-drawer-body" hx-swap="innerHTML">
           {% csrf_token %}
           <input type="hidden" name="action" value="internet_stop">

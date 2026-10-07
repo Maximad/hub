@@ -27,6 +27,7 @@ CAPABILITY_LABELS = {
     'kitchen_board': 'لوحة التحضير',
     'partial_payment_approval': 'الموافقات الإدارية',
     'order_edit': 'تعديل الطلبات',
+    'visit_manage': 'إدارة الجلسات والحسابات',
     'delivery_management': 'إدارة التوصيل',
     'provider_dashboard': 'لوحة مزوّد الإنترنت',
     'internet_view_members': 'عرض عملاء الإنترنت',
@@ -152,7 +153,11 @@ def _default_partial_payment_approval(user):
 
 
 def _default_order_edit(user):
-    return is_owner_or_admin(user) or is_cashier(user) or is_waiter(user)
+    return _default_staff_home(user)
+
+
+def _default_visit_manage(user):
+    return _default_staff_home(user)
 
 
 def _default_delivery_management(user):
@@ -184,6 +189,7 @@ CAPABILITY_CHECKS = {
     'kitchen_board': _default_kitchen_board,
     'partial_payment_approval': _default_partial_payment_approval,
     'order_edit': _default_order_edit,
+    'visit_manage': _default_visit_manage,
     'delivery_management': _default_delivery_management,
     'provider_dashboard': _default_provider_capability,
     'internet_view_members': _default_provider_capability,
@@ -303,6 +309,10 @@ def can_approve_partial_payment(user):
 
 def can_edit_order(user):
     return user_has_capability(user, 'order_edit')
+
+
+def can_manage_visits(user):
+    return user_has_capability(user, 'visit_manage')
 
 
 def can_manage_delivery(user):

@@ -1079,7 +1079,7 @@ def _staff_menu_tools_context(request, products):
     }
 
 
-@require_staff_capability('orders')
+@require_staff_capability('order_edit')
 def staff_orders(request):
     statuses = [choice[0] for choice in Order.Status.choices]
     orders = (
@@ -1101,7 +1101,7 @@ def staff_orders(request):
     return render(request, template, {'grouped': grouped, 'page_setting': get_page_setting('staff_orders', 'لوحة الطلبات', 'Orders')})
 
 
-@require_staff_capability('orders')
+@require_staff_capability('order_edit')
 def staff_order_status(request, public_code):
     if request.method != 'POST':
         raise Http404()

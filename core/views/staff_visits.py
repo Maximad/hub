@@ -44,6 +44,7 @@ def _visit_context(request, visit):
             'cashier': user_has_capability(request.user, 'cashier'),
             'internet_billing': user_has_capability(request.user, 'internet_billing'),
             'order_edit': user_has_capability(request.user, 'order_edit'),
+            'visit_manage': user_has_capability(request.user, 'visit_manage'),
         },
     }
 
@@ -61,7 +62,7 @@ def _render_visit_panel(request, visit, panel):
     return render(request, 'staff/visit_detail.html', context)
 
 
-@require_staff_capability('orders')
+@require_staff_capability('visit_manage')
 @require_http_methods(['GET', 'POST'])
 def staff_visits(request):
     if request.method == 'POST':
@@ -114,7 +115,7 @@ def staff_visits(request):
     return render(request, 'staff/visits.html', {'visits': visits, 'status_filter': status, 'tables': TableArea.objects.select_related('room'), 'members': Member.objects.order_by('name_ar')[:200]})
 
 
-@require_staff_capability('orders')
+@require_staff_capability('visit_manage')
 @require_http_methods(['GET', 'POST'])
 def staff_visit_detail(request, public_code):
     visit = get_object_or_404(
@@ -167,8 +168,8 @@ def staff_visit_detail(request, public_code):
                 visit.last_activity_at = timezone.now(); visit.save(update_fields=['member', 'last_activity_at', 'updated_at'])
                 _log(request, 'visit.member_attached' if visit.member_id else 'visit.member_detached', visit, old_member_id=old_id, new_member_id=visit.member_id)
             elif action == 'internet_stop':
-                if not user_has_capability(request.user, 'internet_billing'):
-                    raise PermissionDenied('لا تملك صلاحية إدارة الإنترنت.')
+                if not user_has_capability(request.user, 'visit_manage'):
+                    raise PermissionDenied('لا تملك صلاحية إدارة الجلسة.')
                 session = get_object_or_404(
                     InternetSession.objects.select_for_update(),
                     pk=request.POST.get('session_id'),
@@ -191,6 +192,34 @@ def staff_visit_detail(request, public_code):
                     source='staff_operations',
                 )
                 messages.success(request, 'تم إيقاف جلسة الإنترنت وتحديث الحساب.')
+            elif action == 'delete_empty':
+                has_orders = visit.orders.exists()
+                has_internet = (
+                    visit.internet_sessions.exists()
+                    or visit.internet_entitlements.exists()
+                )
+                has_reservation = Reservation.objects.filter(visit_id=visit.pk).exists()
+                if has_orders or has_internet or has_reservation:
+                    messages.error(
+                        request,
+                        'لا يمكن حذف جلسة لها طلبات أو إنترنت أو حجز. ألغِ أو سوِّ النشاط ثم أغلق الجلسة.',
+                    )
+                    return redirect('staff_visit_detail', public_code=visit.public_code)
+                snapshot = {
+                    'visit_id': visit.pk,
+                    'visit_public_code': str(visit.public_code),
+                    'table_id': visit.table_id,
+                    'member_id': visit.member_id,
+                    'notes': visit.notes,
+                }
+                visit.delete()
+                ActivityLog.objects.create(
+                    actor=request.user,
+                    action='visit.deleted_empty',
+                    details=snapshot,
+                )
+                messages.success(request, 'تم حذف الجلسة الفارغة.')
+                return redirect('staff_visits')
             elif action == 'close':
                 now = timezone.now()
                 active_sessions = list(InternetSession.objects.select_for_update().filter(
