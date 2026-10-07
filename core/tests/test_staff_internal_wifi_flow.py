@@ -95,7 +95,7 @@ class StaffInternalWifiFlowTests(TestCase):
         response = self.client.get(reverse('wifi_entry'), {'mode': 'internet'})
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'اتصال إنترنت الفريق')
+        self.assertContains(response, 'اتصل بإنترنت الفريق')
         self.assertContains(response, 'value="start_staff_wifi"')
         self.assertContains(response, 'منحتك الداخلية جاهزة')
         self.assertEqual(HubVisit.objects.count(), 0)
