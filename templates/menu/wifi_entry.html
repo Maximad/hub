@@ -45,6 +45,10 @@
       <p>اختر ما تريد بخطوة واحدة فقط</p>
     </div>
 
+    {% if table_number_error %}
+      <div class="hub-alert hub-alert-danger" role="alert">{{ table_number_error }}</div>
+    {% endif %}
+
     {% if came_from_free_access %}
       <div class="hub-alert hub-alert-success" role="status">تمت العودة من بوابة الشبكة. إذا لم يعمل الإنترنت، افتح الاتصال وأعد المحاولة.</div>
     {% endif %}
