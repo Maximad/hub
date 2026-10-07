@@ -39,7 +39,6 @@ from reservations.services import change_reservation_status, create_reservation
 from vendors.models import Vendor, VendorParticipation
 from core.notifications import create_notification, notify_order_created
 from core.services.margins import item_margin, product_margin_from_values
-from core.services.qr_codes import qr_svg_response
 from core.services.internet_access import (create_commercial_sale, daily_minutes_remaining,
     daily_minutes_used, effectively_active_entitlements, get_effective_network_allowance)
 from core.services.visit_internet import customer_packages, self_service_enabled
@@ -49,6 +48,19 @@ from members.benefits import resolve_internet_price
 DAMASCUS_TZ = ZoneInfo('Asia/Damascus')
 PHONE_ALLOWED_PATTERN = re.compile(r'^[\d\s\-\+\(\)]+$')
 logger = logging.getLogger(__name__)
+
+
+def _qr_svg_response(data):
+    try:
+        import qrcode
+        import qrcode.image.svg
+    except ImportError as exc:
+        return HttpResponse('qrcode package is required to render QR SVG.', status=503, content_type='text/plain; charset=utf-8')
+    factory = qrcode.image.svg.SvgPathImage
+    image = qrcode.make(data, image_factory=factory, border=2, box_size=10)
+    response = HttpResponse(content_type='image/svg+xml')
+    image.save(response)
+    return response
 
 
 def _order_location_note(table, service_mode=Order.ServiceMode.DINE_IN, fulfillment_mode=None):
@@ -638,7 +650,7 @@ def order_public(request, public_code):
 def order_qr(request, public_code):
     order = get_object_or_404(Order, public_code=public_code)
     path = reverse('order_public', kwargs={'public_code': order.public_code})
-    return qr_svg_response(request.build_absolute_uri(path))
+    return _qr_svg_response(request.build_absolute_uri(path))
 
 
 STAFF_CAPABILITIES = {
@@ -1079,7 +1091,7 @@ def _staff_menu_tools_context(request, products):
     }
 
 
-@require_staff_capability('orders')
+@require_staff_capability('order_edit')
 def staff_orders(request):
     statuses = [choice[0] for choice in Order.Status.choices]
     orders = (
@@ -1101,7 +1113,7 @@ def staff_orders(request):
     return render(request, template, {'grouped': grouped, 'page_setting': get_page_setting('staff_orders', 'لوحة الطلبات', 'Orders')})
 
 
-@require_staff_capability('orders')
+@require_staff_capability('order_edit')
 def staff_order_status(request, public_code):
     if request.method != 'POST':
         raise Http404()
