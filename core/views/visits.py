@@ -45,7 +45,8 @@ from core.services.visit_internet_devices import (
     start_existing_visit_entitlement,
     start_visit_metered_session,
 )
-from core.services.visits import issue_visit_credential, resolve_visit_credential, set_visit_cookie
+from core.services.visits import (LEGACY_INTERNAL_STAFF_VISIT_NOTE, issue_visit_credential,
+    resolve_visit_credential, set_visit_cookie)
 from core.settings_helpers import get_system_settings
 from members.benefits import resolve_internet_price
 from members.services import resolve_member_from_request
@@ -112,6 +113,8 @@ def current_visit(request):
     if not credential:
         return redirect('menu_public')
     visit = credential.visit
+    if visit.notes == LEGACY_INTERNAL_STAFF_VISIT_NOTE:
+        return redirect('staff_home' if request.user.is_authenticated else 'menu_public')
     orders = visit.orders.exclude(status='cancelled').prefetch_related(
         'items', 'discounts', 'payments').order_by('-created_at', '-id')
     table_entry_url = (
