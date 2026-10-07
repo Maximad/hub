@@ -79,6 +79,17 @@ class CustomerSpaceTests(TestCase):
         self.assertContains(response, 'المنيو')
         self.assertContains(response, 'جلستي')
 
+    def test_empty_session_uses_compact_zero_balance_summary(self):
+        self._bind_visit()
+
+        response = self.client.get(reverse('current_visit'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'لا يوجد مبلغ مستحق')
+        self.assertNotContains(response, '<span>الإجمالي</span>', html=False)
+        self.assertNotContains(response, 'هل تحتاج شيئاً؟')
+        self.assertContains(response, '>أحتاج مساعدة<', html=False)
+
     def test_visit_order_submission_returns_to_menu_not_confirmation_screen(self):
         order_response = self._start_visit_with_order()
         menu = self.client.get(order_response['Location'])
