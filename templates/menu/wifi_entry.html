@@ -109,7 +109,14 @@
 
     {% if active_guest_wifi_network_ready %}
       <a class="wifi-sheet__primary" href="{{ menu_url }}"><span>افتح المنيو</span><span aria-hidden="true">‹</span></a>
-      {% if internet_metered_available %}
+      {% if member_primary_internet_entitlement %}
+        <form method="post" action="{% url 'wifi_entry' %}">
+          {% csrf_token %}<input type="hidden" name="wifi_action" value="start_member_wifi"><input type="hidden" name="entitlement" value="{{ member_primary_internet_entitlement.public_code }}">
+          <button class="wifi-sheet__secondary" type="submit">استخدم إنترنت حسابك</button>
+        </form>
+      {% elif member_has_internet_entitlements %}
+        <form method="post" action="{% url 'wifi_entry' %}">{% csrf_token %}<input type="hidden" name="wifi_action" value="internet_options"><button class="wifi-sheet__secondary" type="submit">خيارات إنترنت حسابك</button></form>
+      {% elif internet_metered_available %}
         <form method="post" action="{% url 'wifi_entry' %}">
           {% csrf_token %}<input type="hidden" name="wifi_action" value="start_fast_wifi">
           <button class="wifi-sheet__secondary" type="submit">إنترنت أسرع · {{ internet_metered_rate_syp|format_syp }} / ساعة</button>
@@ -130,6 +137,8 @@
       <h2 id="wifi-sheet-title">الاتصال بالإنترنت</h2>
       {% if staff_internal_access_available %}
         <p>منحتك الداخلية جاهزة على هذا الحساب.</p>
+      {% elif member_has_internet_entitlements %}
+        <p>لديك إنترنت متاح ضمن حساب هَبّ.</p>
       {% elif guest_wifi_available and guest_wifi_can_start %}
         <p>اتصل بخطوة واحدة.</p>
       {% elif internet_metered_available %}
@@ -148,6 +157,20 @@
           <span>{% if staff_internal_access_kind == 'internal_owner_grant' %}اتصل بإنترنت الإدارة{% else %}اتصل بإنترنت الفريق{% endif %}</span>
           <span aria-hidden="true">‹</span>
         </button>
+      </form>
+
+    {% elif member_primary_internet_entitlement %}
+      <form method="post" action="{% url 'wifi_entry' %}">
+        {% csrf_token %}
+        <input type="hidden" name="wifi_action" value="start_member_wifi">
+        <input type="hidden" name="entitlement" value="{{ member_primary_internet_entitlement.public_code }}">
+        <button class="wifi-sheet__primary" type="submit"><span>اتصل بإنترنت حسابك</span><span aria-hidden="true">‹</span></button>
+      </form>
+
+    {% elif member_has_internet_entitlements %}
+      <form method="post" action="{% url 'wifi_entry' %}">
+        {% csrf_token %}<input type="hidden" name="wifi_action" value="internet_options">
+        <button class="wifi-sheet__primary" type="submit"><span>اختر إنترنت حسابك</span><span aria-hidden="true">‹</span></button>
       </form>
 
     {% elif guest_wifi_available and guest_wifi_can_start and not guest_wifi_code_required %}
