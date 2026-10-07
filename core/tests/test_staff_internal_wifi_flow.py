@@ -83,11 +83,11 @@ class StaffInternalWifiFlowTests(TestCase):
             'password': 'pass',
         })
         self.assertEqual(signed_in.status_code, 302)
-        self.assertEqual(signed_in['Location'], reverse('wifi_entry') + '?mode=internet')
-
-        portal = self.client.get(signed_in['Location'])
-        self.assertContains(portal, 'اتصال إنترنت الفريق')
-        self.assertContains(portal, 'value="start_staff_wifi"')
+        self.assertEqual(
+            signed_in['Location'],
+            reverse('current_visit') + '?focus=internet',
+        )
+        self.assertEqual(InternetSession.objects.count(), 1)
 
     def test_authenticated_staff_sees_private_grant_as_primary_wifi_option(self):
         self.client.force_login(self.staff_user)
@@ -95,9 +95,9 @@ class StaffInternalWifiFlowTests(TestCase):
         response = self.client.get(reverse('wifi_entry'), {'mode': 'internet'})
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'اتصال إنترنت الفريق')
+        self.assertContains(response, 'اتصل بإنترنت الفريق')
         self.assertContains(response, 'value="start_staff_wifi"')
-        self.assertContains(response, 'بدون بيع أو دفعة')
+        self.assertContains(response, 'منحتك الداخلية جاهزة')
         self.assertEqual(HubVisit.objects.count(), 0)
         self.assertEqual(InternetSession.objects.count(), 0)
 

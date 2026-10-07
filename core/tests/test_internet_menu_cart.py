@@ -119,12 +119,12 @@ class InternetMenuCartTests(TestCase):
         self.assertNotContains(menu, self.package.name_ar)
         self.assertNotContains(menu, f'name="qty_{self.internet_product.pk}"')
 
-        session = self.client.get(reverse('current_visit'))
+        session = self.client.get(reverse('current_visit') + '?focus=internet')
         self.assertEqual(session.status_code, 200)
         self.assertContains(session, 'الإنترنت')
         self.assertContains(session, self.package.name_ar)
         self.assertContains(session, 'name="package"')
-        self.assertContains(session, 'تشغيل الإنترنت السريع')
+        self.assertContains(session, 'ابدأ الآن')
         self.assertNotContains(session, f'name="qty_{self.internet_product.pk}"')
 
     def test_full_table_catalog_shows_food_but_suppresses_internet_product(self):

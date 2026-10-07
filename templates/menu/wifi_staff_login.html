@@ -21,7 +21,7 @@
     <div class="wifi-welcome__intro">
       <h1>دخول فريق هَبّ</h1>
       <span class="wifi-welcome__accent" aria-hidden="true"></span>
-      <p>سجّل دخولك بحساب العمل لعرض منحة الإنترنت الخاصة بك على هذا الجهاز.</p>
+      <p>سجّل دخولك بحساب العمل وسيتم توصيل هذا الجهاز مباشرة إذا كانت لديك منحة إنترنت فعالة.</p>
     </div>
 
     {% if form.non_field_errors %}
@@ -38,7 +38,7 @@
       {{ form.password }}
       {% if form.password.errors %}<small class="hub-text-danger">{{ form.password.errors|join:' ' }}</small>{% endif %}
 
-      <button class="hub-button hub-button-primary" type="submit">دخول الفريق</button>
+      <button class="hub-button hub-button-primary" type="submit">دخول والاتصال</button>
     </form>
 
     <a class="hub-button" href="{% url 'wifi_entry' %}?mode=internet">العودة إلى خيارات الإنترنت</a>

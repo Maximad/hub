@@ -1,2 +1,15 @@
 {% load hub_numbers %}
-<section class="hub-card current-visit__totals" aria-label="الحساب"><h2>الحساب</h2><div><p><span>الإجمالي</span><strong>{{ visit.gross_syp|format_syp }}</strong></p><p><span>المدفوع</span><strong>{{ visit.paid_syp|format_syp }}</strong></p><p><span>المتبقي</span><strong>{{ visit.remaining_syp|format_syp }}</strong></p></div></section>
+<section class="hub-card current-visit__totals current-visit__totals--compact" aria-label="الحساب">
+  <div class="current-visit__totals-summary">
+    <h2>الحساب</h2>
+    {% if visit.remaining_syp %}
+      <strong class="current-visit__totals-primary">متبقي {{ visit.remaining_syp|format_syp }}</strong>
+      <small>الإجمالي {{ visit.gross_syp|format_syp }} · المدفوع {{ visit.paid_syp|format_syp }}</small>
+    {% elif visit.gross_syp %}
+      <strong class="current-visit__totals-primary">الحساب مسدّد</strong>
+      <small>الإجمالي {{ visit.gross_syp|format_syp }}</small>
+    {% else %}
+      <strong class="current-visit__totals-primary">لا يوجد مبلغ مستحق</strong>
+    {% endif %}
+  </div>
+</section>

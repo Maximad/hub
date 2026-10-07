@@ -65,8 +65,8 @@ class WifiEntryTests(TestCase):
         self.assertContains(response, 'التصفح والطلب بدون إنترنت')
         self.assertContains(response, 'href="{}"'.format(reverse('menu_public')))
         self.assertContains(response, 'data-wifi-internet-open')
-        self.assertContains(response, 'طرق أخرى للدخول')
-        self.assertContains(response, 'رقم الطاولة')
+        self.assertContains(response, 'لديك حساب أو تعمل في هَبّ؟')
+        self.assertNotContains(response, 'name="table_number"')
         self.assertContains(response, reverse('member_account_login'))
         self.assertNotContains(response, self.access.staff_description)
         self.assertEqual(response['Cache-Control'], 'no-store, private, max-age=0')
@@ -92,7 +92,7 @@ class WifiEntryTests(TestCase):
         response = self.client.get(reverse('wifi_entry'))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '>اتصال مباشر<', html=False)
+        self.assertContains(response, '>اتصل الآن<', html=False)
         self.assertContains(response, 'value="start_guest_wifi"')
         self.assertEqual(HubVisit.objects.count(), 0)
         self.assertEqual(InternetSession.objects.count(), 0)
@@ -103,9 +103,9 @@ class WifiEntryTests(TestCase):
         response = self.client.get(reverse('wifi_entry'), {'mode': 'internet'})
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'الاتصال بالرمز اليومي')
+        self.assertContains(response, 'الرمز اليومي')
         self.assertContains(response, 'name="venue_code"')
-        self.assertContains(response, 'إعداد هَبّ الحالي يطلب رمز المكان')
+        self.assertContains(response, '>اتصال<', html=False)
         self.assertEqual(HubVisit.objects.count(), 0)
         self.assertEqual(InternetSession.objects.count(), 0)
 
@@ -116,7 +116,8 @@ class WifiEntryTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'wifi-entry-page--sheet-open')
-        self.assertContains(response, 'اتصال مباشر')
+        self.assertContains(response, 'اتصل الآن')
+        self.assertNotContains(response, 'name="table_number"')
         self.assertEqual(HubVisit.objects.count(), 0)
         self.assertEqual(InternetSession.objects.count(), 0)
 
@@ -168,9 +169,8 @@ class WifiEntryTests(TestCase):
         response = self.client.get(reverse('wifi_entry'))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'العودة إلى {}'.format(self.table.name_ar))
-        self.assertContains(response, table_url + '?view=menu')
-        self.assertContains(response, 'href="{}"'.format(table_url + '?view=menu'))
+        self.assertNotContains(response, 'name="table_number"')
+        self.assertNotContains(response, 'العودة إلى {}'.format(self.table.name_ar))
         self.assertNotContains(response, self.access.staff_description)
 
     def test_free_redirect_marker_is_only_presentational(self):
@@ -202,9 +202,66 @@ class WifiEntryTests(TestCase):
 
         page = self.client.get(response['Location'])
         self.assertEqual(page.status_code, 200)
-        self.assertContains(page, 'العضوية ليست شرطاً لشراء الإنترنت السريع')
+        self.assertContains(page, 'خيارات الإنترنت')
         content = page.content.decode()
         self.assertLess(content.index('id="internet"'), content.index('aria-label="الحساب"'))
+
+    @patch('core.views.visits.build_session_hotspot_login_payload')
+    @patch('core.views.wifi.one_tap_session_connect_configured', return_value=True)
+    @patch('core.views.wifi.prepare_visit_metered_session_network', return_value=True)
+    def test_direct_fast_connection_skips_session_options_and_returns_to_menu(
+        self, _prepare, _one_tap, build_payload,
+    ):
+        category = Category.objects.create(name_ar='خدمات')
+        internet_product = Product.objects.create(
+            category=category,
+            name_ar='إنترنت حسب الوقت',
+            price_syp=0,
+            product_type=Product.ProductType.INTERNET,
+            item_type=Product.ItemType.SERVICE,
+            service_type=Product.ServiceType.INTERNET,
+            requires_preparation=False,
+            visible_on_qr=False,
+            orderable_on_qr=False,
+            visible_on_pos=False,
+            orderable_on_pos=False,
+            not_discountable=True,
+            track_margin=False,
+        )
+        SystemSetting.objects.create(
+            customer_visits_enabled=True,
+            customer_internet_self_service_enabled=True,
+            internet_metered_enabled=True,
+            default_rate_per_hour_syp=600,
+            default_minimum_minutes=1,
+            default_rounding_increment_minutes=1,
+            auto_create_order_for_metered_sessions=True,
+            internet_service_product=internet_product,
+        )
+        get_system_settings.cache_clear()
+        build_payload.return_value = {
+            'login_url': 'https://wifi.test/login',
+            'login_origin': 'https://wifi.test',
+            'username': 'fast-user',
+            'password': 'temporary-secret',
+            'destination_url': 'https://testserver/menu/',
+        }
+
+        sheet = self.client.get(reverse('wifi_entry'), {'mode': 'internet'})
+        self.assertContains(sheet, 'ابدأ الإنترنت السريع')
+        self.assertContains(sheet, 'value="start_fast_wifi"')
+        self.assertNotContains(sheet, 'name="table_number"')
+
+        response = self.client.post(
+            reverse('wifi_entry'), {'wifi_action': 'start_fast_wifi'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'menu/hotspot_connect.html')
+        self.assertIn('hub_visit', self.client.cookies)
+        self.assertEqual(InternetSession.objects.count(), 1)
+        destination = build_payload.call_args.kwargs['destination_url']
+        self.assertEqual(urlsplit(destination).path, reverse('menu_public'))
 
     @patch('core.views.visits.build_session_hotspot_login_payload')
     @patch('core.views.wifi.one_tap_session_connect_configured', return_value=True)
@@ -278,7 +335,7 @@ class WifiEntryTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'الاتصال قيد التجهيز')
-        self.assertContains(response, 'طلبك مسجل، لكن الشبكة لم تؤكد الجاهزية بعد')
+        self.assertContains(response, 'لن يبدأ احتساب الوقت قبل نجاح تجهيز الشبكة')
         self.assertNotContains(response, 'الإنترنت السريع متصل')
 
     def test_menu_remains_available_without_pin_or_starting_internet(self):

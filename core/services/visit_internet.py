@@ -69,12 +69,19 @@ def customer_packages(member=None, at=None):
     return [package for package in packages if package_customer_error(package, member, at) is None]
 
 
-def usable_member_entitlements(visit, at=None):
-    if not visit.member_id:
+def usable_entitlements_for_member(member, at=None):
+    if not member:
         return InternetEntitlement.objects.none()
     return effectively_active_entitlements(
-        InternetEntitlement.objects.filter(member_id=visit.member_id), at=at,
+        InternetEntitlement.objects.filter(member_id=member.pk), at=at,
     ).exclude(activation_policy=InternetPackage.ActivationPolicy.MANUAL)
+
+
+def usable_member_entitlements(visit, at=None):
+    return usable_entitlements_for_member(
+        visit.member if visit and visit.member_id else None,
+        at=at,
+    )
 
 
 def usable_visit_entitlements(visit, *, staff_user=None, at=None):
