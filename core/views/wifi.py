@@ -9,12 +9,13 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 
 from catalog.models import MediaAsset
-from core.models import ActivityLog, HubVisit, InternetSession
+from core.models import ActivityLog, HubVisit, InternetEntitlement, InternetSession
 from core.services.hotspot_connect import one_tap_connect_configured, one_tap_session_connect_configured
 from core.services.internet_internal_access import usable_internal_grant_for_user
 from core.services.table_visit_access import resolve_table_number
 from core.services.visit_internet import (customer_packages, metered_customer_error,
-    prepare_visit_metered_session_network, self_service_enabled)
+    prepare_visit_metered_session_network, self_service_enabled,
+    usable_entitlements_for_member)
 from core.services.visit_internet_devices import (active_browser_session,
     start_existing_visit_entitlement, start_visit_metered_session)
 from core.services.visits import (
@@ -181,6 +182,75 @@ def _open_internet_options(request):
     except ValidationError as exc:
         messages.error(request, _validation_message(exc))
         return redirect(_wifi_internet_path())
+    response = redirect(reverse('current_visit') + '?focus=internet')
+    return set_visit_cookie(response, raw_cookie) if raw_cookie else response
+
+
+def _start_member_wifi(request):
+    """Use one active entitlement owned by the recognized Hub member on this browser."""
+    if not self_service_enabled(get_system_settings()):
+        messages.error(request, 'خدمة الإنترنت الذاتية غير متاحة حالياً.')
+        return redirect(_wifi_internet_path())
+
+    member_context = resolve_member_from_request(request)
+    if not member_context:
+        messages.error(request, 'سجّل الدخول إلى حساب هَبّ أولاً.')
+        return redirect(_wifi_internet_path())
+
+    entitlement = (
+        usable_entitlements_for_member(member_context.member)
+        .filter(public_code=request.POST.get('entitlement', ''))
+        .first()
+    )
+    if entitlement is None:
+        messages.error(request, 'هذا الرصيد غير متاح لهذا الحساب.')
+        return redirect(_wifi_internet_path())
+
+    raw_cookie = None
+    try:
+        visit, credential, raw_cookie, _member_context = _ensure_wifi_visit(
+            request,
+            source='member_internet',
+        )
+        session, created = start_existing_visit_entitlement(
+            visit=visit,
+            credential=credential,
+            entitlement=entitlement,
+        )
+    except ValidationError as exc:
+        messages.error(request, _validation_message(exc))
+        response = redirect(_wifi_internet_path())
+        return set_visit_cookie(response, raw_cookie) if raw_cookie else response
+    except Exception:
+        logger.exception(
+            'Member Internet start failed for entitlement_id=%s',
+            entitlement.pk,
+        )
+        messages.error(request, 'تعذر بدء إنترنت حسابك حالياً.')
+        response = redirect(_wifi_internet_path())
+        return set_visit_cookie(response, raw_cookie) if raw_cookie else response
+
+    messages.success(
+        request,
+        'تم الاتصال بإنترنت حسابك.' if created
+        else 'إنترنت حسابك ما يزال فعالاً على هذا الجهاز.',
+    )
+    if one_tap_connect_configured(entitlement):
+        try:
+            return _hotspot_relay_response(
+                request,
+                session,
+                destination_url=_absolute_destination(request, _menu_path(visit)),
+                raw_cookie=raw_cookie,
+            )
+        except Exception:
+            logger.exception(
+                'Member HotSpot relay failed for entitlement_id=%s session_id=%s',
+                entitlement.pk,
+                session.pk,
+            )
+            messages.warning(request, 'بدأت الجلسة، لكن تعذر الاتصال التلقائي.')
+
     response = redirect(reverse('current_visit') + '?focus=internet')
     return set_visit_cookie(response, raw_cookie) if raw_cookie else response
 
@@ -397,6 +467,8 @@ def wifi_entry(request):
         action = request.POST.get('wifi_action')
         if action == 'start_guest_wifi':
             return _start_guest_wifi(request)
+        if action == 'start_member_wifi':
+            return _start_member_wifi(request)
         if action == 'start_fast_wifi':
             return _start_fast_wifi(request)
         if action == 'start_staff_wifi':
@@ -442,6 +514,13 @@ def wifi_entry(request):
         first_package.customer_price_syp = int(resolve_internet_price(
             internet_member, first_package,
         )[0])
+
+    member_entitlements = list(
+        usable_entitlements_for_member(internet_member)
+        .select_related('package')
+        .order_by('-created_at', '-pk')[:2]
+    )
+    member_primary_entitlement = member_entitlements[0] if len(member_entitlements) == 1 else None
 
     active_session = active_browser_session(credential) if credential else None
     active_guest_session = None
@@ -500,6 +579,8 @@ def wifi_entry(request):
             system_settings.require_phone_for_guest_session and internet_member is None
         ),
         'first_internet_package': first_package,
+        'member_has_internet_entitlements': bool(member_entitlements),
+        'member_primary_internet_entitlement': member_primary_entitlement,
         'guest_wifi_available': guest_available,
         'guest_wifi_unavailable_reason': guest_error or '',
         'guest_wifi_code_required': (
