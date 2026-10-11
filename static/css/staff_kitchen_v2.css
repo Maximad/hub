@@ -120,3 +120,18 @@
   .kitchen-v2__item-row h3{font-size:.96rem}
   .kitchen-v2__ticket-actions .staff-v2-button{min-height:40px}
 }
+
+
+/* Hub 3.1: per-station workflow profiles, progressive enhancement only. */
+.hub-staff-ui .kitchen-v2__workflow-badge{font-size:.71rem;white-space:normal}
+.hub-staff-ui .kitchen-v2__workflow-badge--direct{background:#dff4ec;color:#075b4d}
+.hub-staff-ui .kitchen-v2__workflow-badge--event{background:#f2e4fa;color:#633285}
+.hub-staff-ui .prep-workflow__explanations{display:grid;gap:.55rem}
+.hub-staff-ui .prep-workflow__explanations p{margin:0;line-height:1.65}
+.hub-staff-ui .prep-workflow__stations{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));gap:13px}
+.hub-staff-ui .prep-workflow__station{display:grid;align-content:start;gap:16px}
+.hub-staff-ui .prep-workflow__station-header{display:flex;justify-content:space-between;align-items:start;gap:12px;flex-wrap:wrap}
+.hub-staff-ui .prep-workflow__station-header h2{margin:0}
+.hub-staff-ui .prep-workflow__form{display:grid;gap:9px;margin:0}
+.hub-staff-ui .prep-workflow__form select,.hub-staff-ui .prep-workflow__form button{min-height:44px}
+.hub-staff-ui .prep-workflow__form label{font-weight:600}
