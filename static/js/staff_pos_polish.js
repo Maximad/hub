@@ -63,9 +63,11 @@
   fulfillmentGroup.after(select);
 
   if (contextBoundAtLoad) {
-    // A POS opened from an existing visit already has an authoritative table/session.
-    // Keep those values in the form for submission, but remove redundant controls.
-    selectMode('table', false);
+    // A POS opened from an existing visit already has an authoritative location.
+    // Table-bound visits stay in table mode; tableless visits stay inside-space.
+    // Never manufacture "table" just because a visit is selected.
+    const boundMode = tableSelect?.value ? 'table' : 'inside_space_general';
+    selectMode(boundMode, false);
     const fulfillmentField = fulfillmentGroup.closest('div');
     const tableField = tableSelect?.closest('div');
     const visitField = visitSelect?.closest('div');
