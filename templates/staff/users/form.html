@@ -5,7 +5,7 @@
   <div class="hub-toolbar"><a class="hub-button hub-button-secondary" href="{% url 'staff_users_list' %}">العودة للمستخدمين</a></div>
   <h2 class="hub-page-header__title">{% if mode == 'create' %}إنشاء مستخدم جديد{% else %}تعديل {{ target_user.username }}{% endif %}</h2>
   {% if mode == 'edit' %}
-    <p class="hub-help-text">الدور يحدد الصلاحيات الافتراضية. استخدم الاستثناءات أدناه فقط عندما يحتاج هذا المستخدم صلاحية مختلفة عن بقية أصحاب الدور نفسه.</p>
+    <p class="hub-help-text">المسمى الوظيفي وصفي فقط. نمط الوصول يحدد الصلاحيات الأساسية. استخدم الاستثناءات أدناه فقط عندما يحتاج هذا المستخدم صلاحية مختلفة عن بقية أصحاب النمط نفسه.</p>
   {% endif %}
   <form method="post" class="hub-form hub-form-section">{% csrf_token %}
     {{ form.non_field_errors }}
