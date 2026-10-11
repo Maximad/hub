@@ -30,7 +30,11 @@ def _audit_user_change(actor, action, target, **details):
 
 
 def _last_active_admin_count():
-    return User.objects.filter(is_active=True).filter(Q(is_superuser=True) | Q(role=User.Role.ADMIN)).count()
+    return User.objects.filter(is_active=True).filter(
+        Q(is_superuser=True)
+        | Q(access_profile__base_role=AccessProfile.BaseRole.ADMIN)
+        | Q(access_profile__isnull=True, role=User.Role.ADMIN)
+    ).distinct().count()
 
 
 def _would_remove_last_active_admin(user, new_active=None, new_profile=None, new_superuser=None):
@@ -44,7 +48,10 @@ def _would_remove_last_active_admin(user, new_active=None, new_profile=None, new
     remains_admin = active and (superuser or role == User.Role.ADMIN)
     if remains_admin:
         return False
-    was_active_admin = user.is_active and (user.is_superuser or user.role == User.Role.ADMIN)
+    current_role = (
+        user.access_profile.base_role if user.access_profile_id else user.role
+    )
+    was_active_admin = user.is_active and (user.is_superuser or current_role == User.Role.ADMIN)
     return was_active_admin and _last_active_admin_count() <= 1
 
 
@@ -58,7 +65,8 @@ def staff_users_list(request):
     if query:
         users = users.filter(
             Q(username__icontains=query) | Q(first_name__icontains=query) | Q(last_name__icontains=query) |
-            Q(email__icontains=query) | Q(phone__icontains=query)
+            Q(email__icontains=query) | Q(phone__icontains=query) |
+            Q(job_title__icontains=query) | Q(access_profile__name_ar__icontains=query)
         )
     if profile:
         users = users.filter(access_profile_id=profile)
