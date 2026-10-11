@@ -1,19 +1,45 @@
 from django.contrib import messages
 from django.contrib.auth import get_user_model
+from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from accounts.forms import StaffUserCreateForm, StaffUserEditForm, StaffUserPasswordForm
+from accounts.middleware import VIEW_AS_USER_SESSION_KEY
+from accounts.models import AccessProfile
 from accounts.permissions import (
     ADMIN_ONLY_MESSAGE,
     CAPABILITY_LABELS,
     get_capability_overrides,
     get_staff_capabilities,
     require_staff_capability,
+    user_has_capability,
 )
 
 User = get_user_model()
+
+
+def _view_as_landing(user):
+    if user.role == User.Role.INTERNET_PROVIDER or user_has_capability(user, 'provider_dashboard'):
+        return 'internet_provider_dashboard'
+    candidates = (
+        ('staff_home', 'staff_home'),
+        ('events', 'staff_events'),
+        ('reservations', 'staff_reservations'),
+        ('kitchen_board', 'staff_kitchen'),
+        ('inventory', 'staff_inventory_home'),
+        ('internet_billing', 'staff_internet'),
+        ('finance', 'staff_finance_home'),
+        ('cashier', 'staff_cashier'),
+        ('reports', 'staff_reports_home'),
+        ('orders', 'staff_orders'),
+    )
+    for capability, route_name in candidates:
+        if user_has_capability(user, capability):
+            return route_name
+    return 'staff_home'
 
 
 def _audit_user_change(actor, action, target, **details):
@@ -26,17 +52,28 @@ def _audit_user_change(actor, action, target, **details):
 
 
 def _last_active_admin_count():
-    return User.objects.filter(is_active=True).filter(Q(is_superuser=True) | Q(role=User.Role.ADMIN)).count()
+    return User.objects.filter(is_active=True).filter(
+        Q(is_superuser=True)
+        | Q(access_profile__base_role=AccessProfile.BaseRole.ADMIN)
+        | Q(access_profile__isnull=True, role=User.Role.ADMIN)
+    ).distinct().count()
 
 
-def _would_remove_last_active_admin(user, new_active=None, new_role=None, new_superuser=None):
+def _would_remove_last_active_admin(user, new_active=None, new_profile=None, new_superuser=None):
     active = user.is_active if new_active is None else new_active
-    role = user.role if new_role is None else new_role
+    role = (
+        new_profile.base_role
+        if new_profile is not None
+        else (user.access_profile.base_role if user.access_profile_id else user.role)
+    )
     superuser = user.is_superuser if new_superuser is None else new_superuser
     remains_admin = active and (superuser or role == User.Role.ADMIN)
     if remains_admin:
         return False
-    was_active_admin = user.is_active and (user.is_superuser or user.role == User.Role.ADMIN)
+    current_role = (
+        user.access_profile.base_role if user.access_profile_id else user.role
+    )
+    was_active_admin = user.is_active and (user.is_superuser or current_role == User.Role.ADMIN)
     return was_active_admin and _last_active_admin_count() <= 1
 
 
@@ -44,16 +81,17 @@ def _would_remove_last_active_admin(user, new_active=None, new_role=None, new_su
 def staff_users_list(request):
     users = User.objects.all().order_by('username')
     query = request.GET.get('q', '').strip()
-    role = request.GET.get('role', '').strip()
+    profile = request.GET.get('profile', '').strip()
     active = request.GET.get('active', '').strip()
     admin_access = request.GET.get('admin_access', '').strip()
     if query:
         users = users.filter(
             Q(username__icontains=query) | Q(first_name__icontains=query) | Q(last_name__icontains=query) |
-            Q(email__icontains=query) | Q(phone__icontains=query)
+            Q(email__icontains=query) | Q(phone__icontains=query) |
+            Q(job_title__icontains=query) | Q(access_profile__name_ar__icontains=query)
         )
-    if role:
-        users = users.filter(role=role)
+    if profile:
+        users = users.filter(access_profile_id=profile)
     if active == 'yes':
         users = users.filter(is_active=True)
     elif active == 'no':
@@ -63,9 +101,9 @@ def staff_users_list(request):
     elif admin_access == 'no':
         users = users.filter(is_staff=False)
     return render(request, 'staff/users/list.html', {
-        'users': users,
-        'role_choices': User.Role.choices,
-        'filters': {'q': query, 'role': role, 'active': active, 'admin_access': admin_access},
+        'users': users.select_related('access_profile'),
+        'access_profiles': AccessProfile.objects.filter(is_active=True).order_by('name_ar'),
+        'filters': {'q': query, 'profile': profile, 'active': active, 'admin_access': admin_access},
     })
 
 
@@ -77,6 +115,8 @@ def staff_user_new(request):
         _audit_user_change(
             request.user, 'accounts.user_created', user,
             role=user.role,
+            access_profile_id=user.access_profile_id,
+            job_title=user.job_title,
             internet_partner_assigned=(user.role == User.Role.INTERNET_PROVIDER),
         )
         messages.success(request, f'تم إنشاء المستخدم {user.username}.')
@@ -101,6 +141,9 @@ def staff_user_detail(request, user_id):
     return render(request, 'staff/users/detail.html', {
         'target_user': target,
         'capability_rows': capability_rows,
+        'can_view_as': bool(
+            request.user.is_superuser and target.is_active and not target.is_superuser
+        ),
     })
 
 
@@ -108,12 +151,13 @@ def staff_user_detail(request, user_id):
 def staff_user_edit(request, user_id):
     target = get_object_or_404(User, pk=user_id)
     previous_role = target.role
+    previous_profile_id = target.access_profile_id
     form = StaffUserEditForm(request.POST or None, instance=target, actor=request.user)
     if request.method == 'POST' and form.is_valid():
         if _would_remove_last_active_admin(
             target,
             new_active=form.cleaned_data['is_active'],
-            new_role=form.cleaned_data['role'],
+            new_profile=form.cleaned_data.get('access_profile'),
             new_superuser=form.cleaned_data.get('make_superuser', target.is_superuser),
         ):
             form.add_error(None, 'لا يمكن تعطيل أو إزالة آخر مدير/مالك نشط.')
@@ -123,6 +167,9 @@ def staff_user_edit(request, user_id):
                 request.user, 'accounts.user_changed', user,
                 previous_role=previous_role,
                 role=user.role,
+                previous_access_profile_id=previous_profile_id,
+                access_profile_id=user.access_profile_id,
+                job_title=user.job_title,
                 internet_partner_assigned=(user.role == User.Role.INTERNET_PROVIDER),
             )
             messages.success(request, 'تم تحديث بيانات المستخدم وصلاحياته.')
@@ -161,3 +208,46 @@ def staff_user_toggle_active(request, user_id):
     )
     messages.success(request, 'تم تفعيل المستخدم.' if new_active else 'تم تعطيل المستخدم.')
     return redirect('staff_user_detail', user_id=target.pk)
+
+
+@login_required
+def staff_user_view_as(request, user_id):
+    if not request.user.is_superuser:
+        raise PermissionDenied
+    target = get_object_or_404(
+        User.objects.select_related('access_profile'),
+        pk=user_id,
+        is_active=True,
+    )
+    if target.is_superuser or target.pk == request.user.pk:
+        messages.error(request, 'View As مخصص لمعاينة حساب موظف غير Superuser.')
+        return redirect('staff_user_detail', user_id=target.pk)
+
+    request.session[VIEW_AS_USER_SESSION_KEY] = target.pk
+    _audit_user_change(
+        request.user,
+        'accounts.view_as_started',
+        target,
+        access_profile_id=target.access_profile_id,
+        job_title=target.job_title,
+    )
+    return redirect(_view_as_landing(target))
+
+
+@login_required
+def staff_view_as_exit(request):
+    if not request.user.is_superuser:
+        raise PermissionDenied
+    target_id = request.session.pop(VIEW_AS_USER_SESSION_KEY, None)
+    target = User.objects.filter(pk=target_id).first() if target_id else None
+    if target is not None:
+        _audit_user_change(
+            request.user,
+            'accounts.view_as_stopped',
+            target,
+            access_profile_id=target.access_profile_id,
+            job_title=target.job_title,
+        )
+        messages.success(request, f'تم إنهاء معاينة حساب {target.get_full_name() or target.username}.')
+        return redirect('staff_user_detail', user_id=target.pk)
+    return redirect('staff_users_list')

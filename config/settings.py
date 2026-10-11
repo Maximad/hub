@@ -127,6 +127,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'accounts.middleware.ViewAsUserMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'core.middleware.table_visit_guard.TableVisitGuardMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',

@@ -47,6 +47,15 @@
   <script src="{% static 'js/htmx.min.js' %}"></script>
 </head>
 <body class="hub-page {% block body_class %}{% endblock %}{% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %} hub-staff-ui{% endif %}{% if request.path|slice:":10" == "/provider/" %} hub-provider-ui{% endif %}{% if system_settings %} density-{{ system_settings.safe_ui_density }} button-scale-{{ system_settings.safe_button_padding_scale }} input-size-{{ system_settings.safe_input_size }} shadow-{{ system_settings.safe_card_shadow_level }}{% if system_settings.sticky_header_enabled %} hub-sticky-header{% endif %}{% endif %}">
+  {% if view_as_active %}
+  <aside class="hub-view-as-banner" role="status">
+    <div class="hub-container hub-view-as-banner__inner">
+      <span><strong>View As</strong> — أنت تشاهد النظام كما يراه <strong>{{ view_as_target.get_full_name|default:view_as_target.username }}</strong>{% if view_as_target.job_title %} · {{ view_as_target.job_title }}{% endif %}{% if view_as_target.access_profile %} · {{ view_as_target.access_profile.name_ar }}{% endif %}.</span>
+      <span>المعاينة للقراءة فقط.</span>
+      <a class="hub-button hub-button-primary" href="{% url 'staff_view_as_exit' %}">إنهاء المعاينة</a>
+    </div>
+  </aside>
+  {% endif %}
   {% if request.user.is_authenticated and request.path|slice:":10" == "/provider/" and request.path != "/provider/login/" %}
     {% include "includes/provider_shell_nav.html" %}
   {% elif request.user.is_authenticated and request.path|slice:":7" == "/staff/" %}
@@ -73,7 +82,7 @@
   <script src="{% static 'js/csrf.js' %}"></script>
   <script src="{% static 'js/hub_numbers.js' %}"></script>
   {% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %}
-    <script src="{% static 'js/staff_notifications.js' %}"></script>
+    {% if not view_as_active %}<script src="{% static 'js/staff_notifications.js' %}"></script>{% endif %}
     <script src="{% static 'js/staff_responsive_tables.js' %}"></script>
     <script src="{% static 'js/staff_ui_v2.js' %}"></script>
     <script src="{% static 'js/staff_launch_ui.js' %}"></script>

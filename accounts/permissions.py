@@ -46,6 +46,9 @@ CAPABILITY_LABELS = {
 
 
 def _role(user):
+    profile = getattr(user, 'access_profile', None)
+    if profile is not None:
+        return getattr(profile, 'base_role', '') or getattr(user, 'role', '')
     return getattr(user, 'role', '')
 
 
@@ -63,6 +66,10 @@ def is_cashier(user):
 
 def is_waiter(user):
     return _is_authenticated_active(user) and _role(user) == 'waiter'
+
+
+def is_general_staff(user):
+    return _is_authenticated_active(user) and _role(user) == 'staff'
 
 
 def is_kitchen(user):
@@ -87,6 +94,7 @@ def _default_staff_home(user):
         or is_cashier(user)
         or is_waiter(user)
         or is_kitchen(user)
+        or is_general_staff(user)
     )
 
 
@@ -228,6 +236,13 @@ def user_has_capability(user, capability):
     override = _capability_override(user, capability)
     if override is not None:
         return bool(override)
+
+    profile = getattr(user, 'access_profile', None)
+    if profile is not None:
+        capabilities = getattr(profile, 'capabilities', None) or []
+        return capability in set(capabilities)
+
+    # Legacy users without an assigned profile keep the old role defaults.
     return bool(checker(user))
 
 

@@ -4,8 +4,9 @@ from django import forms
 from django.contrib.auth import get_user_model, password_validation
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 
-from accounts.models import UserCapabilityOverride
+from accounts.models import AccessProfile, UserCapabilityOverride
 from accounts.permissions import CAPABILITY_LABELS, get_capability_overrides, is_owner_or_admin
 
 User = get_user_model()
@@ -20,14 +21,15 @@ class StaffUserBaseForm(forms.ModelForm):
 
     class Meta:
         model = User
-        fields = ['username', 'first_name', 'last_name', 'email', 'phone', 'role', 'is_active']
+        fields = ['username', 'first_name', 'last_name', 'email', 'phone', 'job_title', 'access_profile', 'is_active']
         labels = {
             'username': 'اسم المستخدم',
             'first_name': 'الاسم الأول',
             'last_name': 'الاسم الأخير',
             'email': 'البريد الإلكتروني',
             'phone': 'الهاتف',
-            'role': 'الدور داخل Hub/Masharib',
+            'job_title': 'المسمى الوظيفي',
+            'access_profile': 'نمط الوصول',
             'is_active': 'نشط',
         }
 
@@ -38,6 +40,16 @@ class StaffUserBaseForm(forms.ModelForm):
             field.widget.attrs.setdefault('class', 'hub-input')
         self.fields['is_active'].initial = True
         self.fields['phone'].required = False
+        self.fields['access_profile'].required = True
+        profile_qs = AccessProfile.objects.filter(is_active=True)
+        if self.instance and self.instance.pk and self.instance.access_profile_id:
+            profile_qs = AccessProfile.objects.filter(
+                Q(is_active=True) | Q(pk=self.instance.access_profile_id)
+            )
+        self.fields['access_profile'].queryset = profile_qs.order_by('name_ar', 'code')
+        self.fields['access_profile'].help_text = (
+            'يحدد الصلاحيات الأساسية. المسمى الوظيفي مستقل عنه ويمكن أن يكون مصوراً أو مدير فعاليات أو غير ذلك.'
+        )
         if self.instance and self.instance.pk:
             self.fields['allow_django_admin_access'].initial = self.instance.is_staff
             self.fields['make_superuser'].initial = self.instance.is_superuser
@@ -73,7 +85,12 @@ class StaffUserBaseForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        if cleaned.get('role') == User.Role.INTERNET_PROVIDER and not cleaned.get('internet_partner'):
+        profile = cleaned.get('access_profile')
+        if (
+            profile
+            and profile.base_role == AccessProfile.BaseRole.INTERNET_PROVIDER
+            and not cleaned.get('internet_partner')
+        ):
             self.add_error('internet_partner', 'اختر مزوّد الإنترنت المرتبط بهذا الحساب.')
         return cleaned
 
@@ -92,10 +109,20 @@ class StaffUserBaseForm(forms.ModelForm):
 
     def save(self, commit=True):
         user = super().save(commit=False)
+        profile = self.cleaned_data.get('access_profile')
+        if profile is not None:
+            user.access_profile = profile
+            user.role = profile.base_role
         user.is_staff = bool(self.cleaned_data.get('allow_django_admin_access', False))
         user.is_superuser = bool(self.cleaned_data.get('make_superuser', False)) if self.actor and self.actor.is_superuser else bool(getattr(user, 'is_superuser', False))
         if user.is_superuser:
             user.is_staff = True
+            admin_profile = AccessProfile.objects.filter(
+                base_role=AccessProfile.BaseRole.ADMIN,
+                is_active=True,
+            ).order_by('-is_system', 'pk').first()
+            if admin_profile is not None:
+                user.access_profile = admin_profile
             user.role = User.Role.ADMIN
         elif user.role == User.Role.INTERNET_PROVIDER:
             # Provider authentication has its own portal and must never imply
@@ -114,7 +141,7 @@ class StaffUserCreateForm(StaffUserBaseForm):
     confirm_password = forms.CharField(label='تأكيد كلمة المرور', widget=forms.PasswordInput(attrs={'class': 'hub-input'}))
 
     class Meta(StaffUserBaseForm.Meta):
-        fields = ['username', 'first_name', 'last_name', 'email', 'phone', 'role', 'is_active']
+        fields = ['username', 'first_name', 'last_name', 'email', 'phone', 'job_title', 'access_profile', 'is_active']
 
     def clean(self):
         cleaned = super().clean()
@@ -147,17 +174,17 @@ class StaffUserEditForm(StaffUserBaseForm):
         label='صلاحيات إضافية لهذا المستخدم',
         required=False,
         widget=forms.CheckboxSelectMultiple,
-        help_text='تتجاوز افتراضات الدور وتمنح الصلاحيات المحددة لهذا المستخدم فقط.',
+        help_text='تتجاوز نمط الوصول وتمنح الصلاحيات المحددة لهذا المستخدم فقط.',
     )
     capability_deny = forms.MultipleChoiceField(
         label='صلاحيات ممنوعة لهذا المستخدم',
         required=False,
         widget=forms.CheckboxSelectMultiple,
-        help_text='تتجاوز افتراضات الدور وتمنع الصلاحيات المحددة لهذا المستخدم فقط.',
+        help_text='تتجاوز نمط الوصول وتمنع الصلاحيات المحددة لهذا المستخدم فقط.',
     )
 
     class Meta(StaffUserBaseForm.Meta):
-        fields = ['first_name', 'last_name', 'email', 'phone', 'role', 'is_active']
+        fields = ['first_name', 'last_name', 'email', 'phone', 'job_title', 'access_profile', 'is_active']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -224,6 +251,10 @@ class CustomUserCreationForm(UserCreationForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['phone'].required = False
+        self.fields['access_profile'].required = True
+        self.fields['access_profile'].queryset = AccessProfile.objects.filter(
+            is_active=True
+        ).order_by('name_ar', 'code')
 
     def clean_phone(self):
         phone = (self.cleaned_data.get('phone') or '').strip()
@@ -231,15 +262,69 @@ class CustomUserCreationForm(UserCreationForm):
 
     class Meta(UserCreationForm.Meta):
         model = User
-        fields = ('username', 'email', 'phone', 'role', 'is_staff', 'is_superuser', 'is_active')
-        labels = {'phone': 'الهاتف', 'role': 'دور Hub/Masharib'}
+        fields = (
+            'username', 'email', 'phone', 'job_title', 'access_profile',
+            'is_staff', 'is_superuser', 'is_active',
+        )
+        labels = {
+            'phone': 'الهاتف',
+            'job_title': 'المسمى الوظيفي',
+            'access_profile': 'نمط الوصول',
+        }
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        if user.is_superuser:
+            admin_profile = AccessProfile.objects.filter(
+                base_role=AccessProfile.BaseRole.ADMIN,
+                is_active=True,
+            ).order_by('-is_system', 'pk').first()
+            if admin_profile is not None:
+                user.access_profile = admin_profile
+            user.role = User.Role.ADMIN
+        elif user.access_profile_id:
+            user.role = user.access_profile.base_role
+        if commit:
+            user.save()
+            self.save_m2m()
+        return user
 
 
 class CustomUserChangeForm(UserChangeForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if 'access_profile' in self.fields:
+            self.fields['access_profile'].required = True
+            qs = AccessProfile.objects.filter(is_active=True)
+            if self.instance and self.instance.pk and self.instance.access_profile_id:
+                qs = AccessProfile.objects.filter(
+                    Q(is_active=True) | Q(pk=self.instance.access_profile_id)
+                )
+            self.fields['access_profile'].queryset = qs.order_by('name_ar', 'code')
+
     class Meta(UserChangeForm.Meta):
         model = User
         fields = '__all__'
         help_texts = {
             'is_staff': 'is_staff = صلاحية دخول لوحة Django admin التقنية.',
-            'role': 'role = دور وصلاحيات المستخدم داخل Hub/Masharib.',
+            'access_profile': 'نمط الوصول يحدد الصلاحيات الأساسية داخل Hub.',
+            'job_title': 'المسمى الوظيفي وصفي فقط ولا يمنح صلاحيات.',
+            'role': 'حقل توافق داخلي يُزامن تلقائياً من نمط الوصول.',
         }
+
+    def save(self, commit=True):
+        user = super().save(commit=False)
+        if user.is_superuser:
+            admin_profile = AccessProfile.objects.filter(
+                base_role=AccessProfile.BaseRole.ADMIN,
+                is_active=True,
+            ).order_by('-is_system', 'pk').first()
+            if admin_profile is not None:
+                user.access_profile = admin_profile
+            user.role = User.Role.ADMIN
+        elif user.access_profile_id:
+            user.role = user.access_profile.base_role
+        if commit:
+            user.save()
+            self.save_m2m()
+        return user
