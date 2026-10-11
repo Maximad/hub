@@ -37,6 +37,8 @@ class AccessProfile(models.Model):
 
     class Meta:
         ordering = ('name_ar', 'code')
+        verbose_name = 'نمط وصول'
+        verbose_name_plural = 'أنماط الوصول'
 
     def __str__(self):
         return self.name_ar
