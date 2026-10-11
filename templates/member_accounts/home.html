@@ -1,6 +1,5 @@
 {% extends "base.html" %}
-{% block title %}حسابي في هَب</div>
-{% endblock %}
+{% block title %}حسابي في هَب{% endblock %}
 {% block content %}
 <div class="hub-member-home">
 <section class="hub-card hub-member-home__intro">
@@ -16,7 +15,7 @@
 </section>
 
 <section class="hub-card hub-member-home__qr">
-  <h3 style="margin-top:0;">بطاقة هَب</h3>
+  <h3>بطاقة هَب</h3>
   <p>اعرض هذا الرمز لموظف هَب لربط حسابك بالجلسة. يتجدد تلقائياً ولا يحتوي بيانات تسجيل الدخول.</p>
   <div class="hub-member-home__qr-frame">
     <img id="member-card-qr" src="{% url 'member_card_qr' %}" alt="رمز بطاقة هَب" width="240" height="240">
@@ -47,7 +46,7 @@
 
 <section class="hub-card">
   <h3>أجهزتي</h3>
-  <div class="hub-table-wrap"><table class="hub-table" style="width:100%">
+  <div class="hub-table-wrap"><table class="hub-table">
     <tr><th>الجهاز</th><th>تاريخ التفعيل</th><th>آخر استخدام</th></tr>
     {% for device in devices %}<tr><td>{{ device.device_label|default:'جهاز' }}</td><td>{{ device.created_at }}</td><td>{{ device.last_used_at|default:'—' }}</td></tr>
     {% empty %}<tr><td colspan="3">لا توجد أجهزة مفعّلة.</td></tr>{% endfor %}
@@ -56,7 +55,7 @@
 
 <section class="hub-card">
   <h3>جلسات الإنترنت</h3>
-  <div class="hub-table-wrap"><table class="hub-table" style="width:100%">
+  <div class="hub-table-wrap"><table class="hub-table">
     <tr><th>الباقة</th><th>البداية</th><th>النهاية</th><th>الحالة</th></tr>
     {% for session in sessions %}<tr><td>{{ session.package.name_ar|default:'—' }}</td><td>{{ session.start_time }}</td><td>{{ session.end_time|default:'—' }}</td><td>{{ session.status }}</td></tr>
     {% empty %}<tr><td colspan="4">لا توجد جلسات إنترنت.</td></tr>{% endfor %}
@@ -65,7 +64,7 @@
 
 <section class="hub-card">
   <h3>طلباتي الأخيرة</h3>
-  <div class="hub-table-wrap"><table class="hub-table" style="width:100%">
+  <div class="hub-table-wrap"><table class="hub-table">
     <tr><th>#</th><th>المجموع</th><th>التاريخ</th></tr>
     {% for order in orders %}<tr><td>{{ order.display_number }}</td><td>{{ order.total_syp }} ل.س</td><td>{{ order.created_at }}</td></tr>
     {% empty %}<tr><td colspan="3">لا توجد طلبات.</td></tr>{% endfor %}
@@ -77,4 +76,5 @@
   {% csrf_token %}
   <button type="submit" class="hub-button">تسجيل الخروج من هذا الجهاز</button>
 </form>
+</div>
 {% endblock %}
