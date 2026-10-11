@@ -330,6 +330,52 @@ body.hub-provider-ui.hub-ui-v3 .provider-login-card {
   border-top:5px solid #3498db;
 }
 
+/* Separate Wi-Fi/captive-portal document: zero external assets required.
+   Keep authentication, PIN and network state completely unchanged. */
+body.hub-ui-v3.wifi-entry-page {
+  --hub-v3-canvas:#f7f8f8;
+  background:#f7f8f8;
+  color:#34495e;
+}
+body.hub-ui-v3.wifi-entry-page .wifi-welcome__hero {
+  border-radius:18px;
+  box-shadow:none;
+}
+body.hub-ui-v3.wifi-entry-page .wifi-welcome__hero--placeholder {
+  background:linear-gradient(135deg,#1abc9c,#dff5ed);
+}
+body.hub-ui-v3.wifi-entry-page .wifi-welcome__hero-placeholder {
+  background:radial-gradient(circle at 20% 20%,rgba(255,255,255,.24),transparent 37%);
+  color:#073d39;
+}
+body.hub-ui-v3.wifi-entry-page :is(.wifi-welcome__intro h1,.wifi-welcome__wordmark) {
+  color:#34495e;
+  font-weight:700;
+}
+body.hub-ui-v3.wifi-entry-page :is(.wifi-welcome__shell .hub-card,.wifi-welcome__shell .hub-form) {
+  border-color:#dce4e7;
+  border-radius:14px;
+  box-shadow:none;
+}
+body.hub-ui-v3.wifi-entry-page .wifi-welcome__accent {background:#1abc9c}
+body.hub-ui-v3.wifi-entry-page .hub-button-primary {background:#137f70;border-color:#137f70;color:#fff}
+body.hub-provider-ui.hub-ui-v3 .hub-button-primary {
+  background:#246d9c;
+  border-color:#246d9c;
+  color:#fff;
+}
+body.hub-provider-ui.hub-ui-v3 .hub-button-primary:hover {
+  background:#185275;
+  border-color:#185275;
+}
+body.hub-staff-ui.hub-ui-v3 .hub-reports-v3__metric>div {
+  color:#34495e;
+  font-size:clamp(1rem,2vw,1.45rem);
+  line-height:1.3;
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+}
+
 /* Print, receipts, kitchen tickets, PDF/QR labels: protect practical contrast. */
 @media print {
   body.hub-ui-v3 {
