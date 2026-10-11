@@ -31,6 +31,7 @@
           <div class="kitchen-v2__ticket-chips">
             <span class="staff-v2-badge">{{ order.get_fulfillment_label }}</span>
             <span class="staff-v2-badge kitchen-v2__station-badge">{{ row.station_label }}</span>
+            <span class="staff-v2-badge kitchen-v2__workflow-badge kitchen-v2__workflow-badge--{{ row.workflow_profile }}">{{ row.workflow_label }}</span>
             <span class="staff-v2-badge kitchen-v2__status-badge">{{ item.get_prep_status_display }}</span>
           </div>
         </div>
@@ -65,7 +66,7 @@
           <form method="post" action="{% url 'staff_kitchen_item_status' item.id %}">
             {% csrf_token %}
             <input type="hidden" name="action" value="{{ action }}">
-            <button class="staff-v2-button{% if action == 'cancel' %} kitchen-v2__action-danger{% elif action == 'ready' or action == 'accept' or action == 'prepare' or action == 'served' %} staff-v2-button--primary{% endif %}" type="submit">{{ label }}</button>
+            <button class="staff-v2-button{% if action == 'cancel' %} kitchen-v2__action-danger{% elif action == 'serve_direct' or action == 'ready' or action == 'accept' or action == 'prepare' or action == 'served' %} staff-v2-button--primary{% endif %}" type="submit">{{ label }}</button>
           </form>
           {% endfor %}
           <a class="staff-v2-button staff-v2-button--ghost kitchen-v2__print" href="{% url 'staff_order_prep_ticket' order.public_code %}?station={{ item.prep_station.code|default:'' }}">طباعة</a>

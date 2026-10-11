@@ -183,8 +183,8 @@ class ProductOptionGroupAssignmentAdmin(admin.ModelAdmin):
 
 @admin.register(PrepStation)
 class PrepStationAdmin(admin.ModelAdmin):
-    list_display = ('name_ar', 'code', 'station_type', 'is_active', 'sort_order')
-    list_filter = ('station_type', 'is_active')
+    list_display = ('name_ar', 'code', 'station_type', 'workflow_profile', 'is_active', 'sort_order')
+    list_filter = ('station_type', 'workflow_profile', 'is_active')
     search_fields = ('name_ar', 'name_en', 'code')
     ordering = ('sort_order', 'name_ar')
 

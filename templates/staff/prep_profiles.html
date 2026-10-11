@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}أساليب التحضير{% endblock %}
+{% block body_class %}staff-workspace-page staff-ui-v2-page kitchen-v2-page{% endblock %}
+{% block content %}
+<main class="staff-v2-page kitchen-v2" dir="rtl">
+  <header class="staff-v2-page-head">
+    <div class="staff-v2-page-head__copy">
+      <p class="staff-v2-eyebrow">تشغيل هَبّ</p>
+      <h1 class="staff-v2-title hub-page-header__title">أساليب التحضير</h1>
+      <p class="staff-v2-subtitle">اختر أسلوباً لكل محطة بشكل مستقل. تغيير الأسلوب لا يغيّر حالة العناصر السابقة ولا سجلاتها.</p>
+    </div>
+    <a class="staff-v2-button" href="{% url 'staff_prep' %}">عودة إلى لوحة التحضير</a>
+  </header>
+
+  <section class="hub-card hub-section">
+    <h2 class="hub-section-title">ما الفرق بين الأساليب؟</h2>
+    <div class="prep-workflow__explanations">
+      <p><strong>مباشر:</strong> الموظف يحضّر ويقدّم بنفسه، ثم يضغط «تم التقديم» مرة واحدة عند التسليم الفعلي. تتوفر مراحل التحضير القديمة للعمليات التي بدأت قبل التغيير.</p>
+      <p><strong>فريق:</strong> استلام ← تحضير ← جاهز ← تم التسليم. مناسب لفصل المسؤوليات بين الموظفين.</p>
+      <p><strong>فعالية:</strong> مراحل الفريق المفصلة مع إظهار أن المحطة تعمل بوضع الفعالية. الإسناد والأولوية المتقدمة ليست جزءاً من هذه المرحلة.</p>
+    </div>
+  </section>
+
+  <section class="prep-workflow__stations" aria-label="محطات التحضير">
+    {% for station in stations %}
+    <article class="hub-card prep-workflow__station">
+      <div class="prep-workflow__station-header">
+        <div>
+          <h2>{{ station.name_ar }}</h2>
+          <p class="hub-help-text">{{ station.code }} · {{ station.get_station_type_display }}</p>
+        </div>
+        <span class="hub-badge">{{ station.get_workflow_profile_display }}</span>
+      </div>
+      <form method="post" class="hub-form prep-workflow__form">
+        {% csrf_token %}
+        <input type="hidden" name="station_id" value="{{ station.pk }}">
+        <label for="station-mode-{{ station.pk }}">أسلوب التحضير</label>
+        <select id="station-mode-{{ station.pk }}" name="workflow_profile" class="hub-input" required>
+          {% for value,label in profiles %}
+          <option value="{{ value }}" {% if station.workflow_profile == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <button class="hub-button hub-button-primary" type="submit">حفظ أسلوب المحطة</button>
+      </form>
+    </article>
+    {% empty %}
+    <div class="hub-empty-state">لا توجد محطات تحضير مفعّلة.</div>
+    {% endfor %}
+  </section>
+</main>
+{% endblock %}

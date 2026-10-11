@@ -1,6 +1,7 @@
 from collections import OrderedDict
 
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import Prefetch, Q
 from django.http import Http404
@@ -57,6 +58,7 @@ ALLOWED_TRANSITIONS = {
     OrderItem.PrepStatus.READY: {OrderItem.PrepStatus.SERVED, OrderItem.PrepStatus.CANCELLED},
 }
 ACTION_LABELS = {
+    'serve_direct': 'تم التقديم',
     'accept': 'استلام',
     'prepare': 'بدء التحضير',
     'ready': 'جاهز',
@@ -88,13 +90,44 @@ def _lane_key_for_status(status):
     return 'incoming'
 
 
+def _effective_station(item):
+    """Use the assigned station snapshot, falling back to the product station."""
+    return item.prep_station or item.product.prep_station_ref
+
+
+def _profile_for_item(item):
+    station = _effective_station(item)
+    if station is not None and station.is_active:
+        return station.workflow_profile
+    return PrepStation.WorkflowProfile.TEAM
+
+
+def _can_complete_direct(user, item):
+    return (
+        _profile_for_item(item) == PrepStation.WorkflowProfile.DIRECT
+        and not item.order.is_delivery
+        and item.order.status != Order.Status.CANCELLED
+        and item.prep_status in {
+            OrderItem.PrepStatus.NEW,
+            OrderItem.PrepStatus.SENT,
+            OrderItem.PrepStatus.ACCEPTED,
+            OrderItem.PrepStatus.PREPARING,
+            OrderItem.PrepStatus.READY,
+        }
+        and (is_owner_or_admin(user) or is_kitchen(user) or can_access_pos(user) or can_access_cashier(user))
+    )
+
+
 def _item_actions(item, user):
     actions = []
     owner_or_admin = is_owner_or_admin(user)
     can_serve = owner_or_admin or can_access_cashier(user) or can_access_pos(user)
     can_cancel = owner_or_admin or can_access_cashier(user)
 
-    if item.prep_status == OrderItem.PrepStatus.NEW:
+    if _can_complete_direct(user, item):
+        # One actual completion event; no fictitious accept/prepare/ready steps.
+        actions.append(('serve_direct', ACTION_LABELS['serve_direct'], 'hub-button hub-button-success'))
+    elif item.prep_status in {OrderItem.PrepStatus.NEW, OrderItem.PrepStatus.SENT}:
         actions.append(('accept', ACTION_LABELS['accept'], 'hub-button'))
     elif item.prep_status == OrderItem.PrepStatus.ACCEPTED:
         actions.append(('prepare', ACTION_LABELS['prepare'], 'hub-button'))
@@ -175,7 +208,7 @@ def _board_context(request):
     total_pending = 0
 
     for item in items:
-        station = item.prep_station or item.product.prep_station_ref
+        station = _effective_station(item)
         station_key = station.id if station else 'none'
         if station_key not in grouped_map:
             grouped_map[station_key] = {
@@ -193,6 +226,8 @@ def _board_context(request):
             'order_notes': _kitchen_order_notes(item.order),
             'station': station,
             'station_label': _prep_station_label(station),
+            'workflow_profile': _profile_for_item(item),
+            'workflow_label': station.get_workflow_profile_display() if station and station.is_active else PrepStation.WorkflowProfile.TEAM.label,
         }
         grouped_map[station_key]['items'].append(row)
         lane_map[_lane_key_for_status(item.prep_status)]['items'].append(row)
@@ -211,6 +246,8 @@ def _board_context(request):
         'pending_count': total_pending,
         'visible_count': sum(len(lane['items']) for lane in lane_map.values()),
         'page_setting': get_page_setting('staff_prep', 'المطبخ / التحضير', 'Kitchen'),
+        'profile_choices': PrepStation.WorkflowProfile.choices,
+        'can_manage_profiles': is_owner_or_admin(request.user),
     }
 
 
@@ -241,45 +278,100 @@ def staff_prep_item_status(request, item_id):
     if request.method != 'POST':
         raise Http404()
     action = request.POST.get('action', '').strip()
-    new_status = NEXT_STATUS_BY_ACTION.get(action)
+    direct_completion = action == 'serve_direct'
+    new_status = OrderItem.PrepStatus.SERVED if direct_completion else NEXT_STATUS_BY_ACTION.get(action)
     if not new_status:
         messages.error(request, 'الإجراء المطلوب غير صالح.')
         return redirect('staff_prep')
 
-    item = get_object_or_404(OrderItem.objects.select_related('order', 'product'), pk=item_id)
-    order = item.order
-    if order.status == Order.Status.CANCELLED and not is_owner_or_admin(request.user):
-        messages.error(request, 'لا يمكن تحديث عنصر من طلب ملغي.')
-        return redirect('staff_prep')
+    with transaction.atomic():
+        # Concurrency guard: do not serve/cancel the same item from stale tabs.
+        item = get_object_or_404(
+            OrderItem.objects.select_for_update(of=('self',)).select_related(
+                'order', 'product', 'prep_station', 'product__prep_station_ref'
+            ), pk=item_id,
+        )
+        order = item.order
+        if order.status == Order.Status.CANCELLED and not is_owner_or_admin(request.user):
+            messages.error(request, 'لا يمكن تحديث عنصر من طلب ملغي.')
+            return redirect('staff_prep')
 
-    old_status = item.prep_status
-    if not _can_change_to(request.user, old_status, new_status):
-        messages.error(request, 'لا يمكن تنفيذ هذا الانتقال في حالة العنصر الحالية أو بصلاحياتك الحالية.')
-        return redirect('staff_prep')
+        old_status = item.prep_status
+        allowed = (
+            _can_complete_direct(request.user, item)
+            if direct_completion
+            else _can_change_to(request.user, old_status, new_status)
+        )
+        if not allowed:
+            messages.error(request, 'لا يمكن تنفيذ هذا الانتقال في حالة العنصر الحالية أو بصلاحياتك الحالية.')
+            return redirect('staff_prep')
 
-    if old_status != new_status:
-        with transaction.atomic():
-            item.prep_status = new_status
-            item.save(update_fields=['prep_status', 'updated_at'])
-            ActivityLog.objects.create(
-                actor=request.user,
-                action='order_item_prep_status_changed',
-                details={
-                    'actor_username': getattr(request.user, 'username', ''),
-                    'order_display_number': order.display_number,
-                    'order_public_code': str(order.public_code),
-                    'old_status': old_status,
-                    'new_status': new_status,
-                    'item_name': item.product_name_ar_snapshot,
-                    'item_id': item.id,
-                },
-            )
-        if new_status == OrderItem.PrepStatus.READY:
-            create_notification('prep_item_ready', 'عنصر جاهز', f'{item.product_name_ar_snapshot} — {order.display_number}', order=order, order_item=item, target_station=item.prep_station, created_by=request.user)
-        elif new_status == OrderItem.PrepStatus.CANCELLED:
-            create_notification('prep_item_cancelled', 'تم إلغاء عنصر', f'{item.product_name_ar_snapshot} — {order.display_number}', order=order, order_item=item, target_station=item.prep_station, created_by=request.user)
-        messages.success(request, 'تم تحديث حالة العنصر.')
+        item.prep_status = new_status
+        item.save(update_fields=['prep_status', 'updated_at'])
+        ActivityLog.objects.create(
+            actor=request.user,
+            action='order_item_prep_status_changed',
+            details={
+                'actor_username': getattr(request.user, 'username', ''),
+                'order_display_number': order.display_number,
+                'order_public_code': str(order.public_code),
+                'old_status': old_status,
+                'new_status': new_status,
+                'item_name': item.product_name_ar_snapshot,
+                'item_id': item.id,
+                'workflow_profile': _profile_for_item(item),
+                'transition_kind': 'direct_completion' if direct_completion else 'normal',
+                'station_id': _effective_station(item).pk if _effective_station(item) else None,
+            },
+        )
+
+    if new_status == OrderItem.PrepStatus.READY:
+        create_notification('prep_item_ready', 'عنصر جاهز', f'{item.product_name_ar_snapshot} — {order.display_number}', order=order, order_item=item, target_station=item.prep_station, created_by=request.user)
+    elif new_status == OrderItem.PrepStatus.CANCELLED:
+        create_notification('prep_item_cancelled', 'تم إلغاء عنصر', f'{item.product_name_ar_snapshot} — {order.display_number}', order=order, order_item=item, target_station=item.prep_station, created_by=request.user)
+    messages.success(request, 'تم تسجيل التقديم.' if direct_completion else 'تم تحديث حالة العنصر.')
     return redirect('staff_prep')
+
+
+@require_staff_capability('kitchen_board')
+def staff_prep_profiles(request):
+    """Owner/admin-only profile selection. Existing items keep their real status."""
+    if not is_owner_or_admin(request.user):
+        raise PermissionDenied('إعداد أسلوب التحضير متاح للإدارة فقط.')
+
+    if request.method == 'POST':
+        station_id = request.POST.get('station_id')
+        new_profile = request.POST.get('workflow_profile', '').strip()
+        if new_profile not in PrepStation.WorkflowProfile.values:
+            messages.error(request, 'أسلوب التحضير غير صالح.')
+            return redirect('staff_prep_profiles')
+        with transaction.atomic():
+            station = get_object_or_404(
+                PrepStation.objects.select_for_update(),
+                pk=station_id,
+                is_active=True,
+            )
+            old_profile = station.workflow_profile
+            if old_profile != new_profile:
+                station.workflow_profile = new_profile
+                station.save(update_fields=['workflow_profile', 'updated_at'])
+                ActivityLog.objects.create(
+                    actor=request.user,
+                    action='prep_station.workflow_profile_changed',
+                    details={
+                        'station_id': station.pk,
+                        'station_code': station.code,
+                        'old_profile': old_profile,
+                        'new_profile': new_profile,
+                    },
+                )
+        messages.success(request, 'تم تحديث أسلوب التحضير للمحطة.')
+        return redirect('staff_prep_profiles')
+
+    return render(request, 'staff/prep_profiles.html', {
+        'stations': PrepStation.objects.filter(is_active=True).order_by('sort_order', 'name_ar'),
+        'profiles': PrepStation.WorkflowProfile.choices,
+    })
 
 
 staff_kitchen = staff_prep
