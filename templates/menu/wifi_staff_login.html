@@ -9,9 +9,11 @@
   <link rel="icon" type="image/svg+xml" href="{% static 'img/favicon.svg' %}">
   <link rel="stylesheet" href="{% static 'css/hub.css' %}">
   <link rel="stylesheet" href="{% static 'css/internet_experience.css' %}">
+  {# Local styling only: captive portal must not depend on external font CDNs. #}
+  <link rel="stylesheet" href="{% static 'css/hub_ui_v3_suite.css' %}">
   {% include "includes/hub_theme.html" %}
 </head>
-<body class="hub-page wifi-entry-page">
+<body class="hub-page hub-ui-v3 wifi-entry-page">
 <main class="wifi-welcome">
   <section class="wifi-welcome__shell" dir="rtl">
     <header class="wifi-welcome__brand" aria-label="هَبّ">

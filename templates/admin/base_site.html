@@ -1,9 +1,11 @@
 {% extends "admin/base_site.html" %}
 {% load static %}
-{% block extrahead %}{{ block.super }}<meta name="viewport" content="width=device-width, initial-scale=1">{% include "includes/hub_theme.html" %}<link rel="stylesheet" href="{% static 'admin/css/hub_admin.css' %}"><link rel="stylesheet" href="{% static 'admin/css/product_visibility_source.css' %}"><script src="{% static 'admin/js/product_visibility_source.js' %}" defer></script>{% endblock %}
+{% block extrahead %}{{ block.super }}<meta name="viewport" content="width=device-width, initial-scale=1">{% include "includes/hub_theme.html" %}<link rel="stylesheet" href="{% static 'admin/css/hub_admin.css' %}"><link rel="stylesheet" href="{% static 'admin/css/product_visibility_source.css' %}"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" media="print" onload="this.media='all'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap"></noscript><link rel="stylesheet" href="{% static 'admin/css/hub_admin_v3.css' %}"><script src="{% static 'admin/js/product_visibility_source.js' %}" defer></script>{% endblock %}
 {% block welcome-msg %}مرحباً، <strong>{% firstof user.get_short_name user.get_username %}</strong>{% endblock %}
 {% block userlinks %}
   {% if user.has_usable_password %}<a href="{% url 'admin:password_change' %}">تغيير كلمة المرور</a>{% endif %}
   {% if site_url %}<a href="{{ site_url }}">عرض الموقع</a>{% endif %}
   <form id="logout-form" method="post" action="{% url 'admin:logout' %}">{% csrf_token %}<button type="submit">تسجيل الخروج</button></form>
 {% endblock %}
+
+{% block bodyclass %}{{ block.super }} hub-admin-v3{% endblock %}

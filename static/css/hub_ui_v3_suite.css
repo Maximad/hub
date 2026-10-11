@@ -1,0 +1,403 @@
+/*
+ * Hub Suite UI 3.0 — suite-wide design language.
+ * Applied after all legacy styles; role-specific colors keep operations calm.
+ * Intentionally visual only: no layout modes, DOM visibility, status meanings,
+ * permissions, form names, table structures, or QR/checkout behaviour changed.
+ * Preserve the original configured logo assets and brand text.
+ */
+
+/* IBM Plex Sans Arabic, 300–700. Fonts load asynchronously with local fallback. */
+body.hub-ui-v3 {
+  --hub-v3-primary:#137f70;
+  --hub-v3-turquoise:#1abc9c;
+  --hub-v3-ink:#34495e;
+  --hub-v3-muted:#667b86;
+  --hub-v3-canvas:#f7f8f8;
+  --hub-v3-surface:#fff;
+  --hub-v3-subtle:#f0f4f5;
+  --hub-v3-border:#dce4e7;
+  --hub-v3-orange:#e67e22;
+  --hub-v3-purple:#9b59b6;
+  --hub-v3-yellow:#f1c40f;
+  --hub-v3-blue:#2980b9;
+  --hub-v3-green:#16804c;
+  --hub-v3-red:#b43f39;
+  --hub-font-body:"IBM Plex Sans Arabic","Noto Sans Arabic",Tahoma,"Segoe UI",Arial,sans-serif;
+  --hub-font-heading:var(--hub-font-body);
+  --hub-color-primary:var(--hub-v3-primary);
+  --hub-color-primary-hover:#0d655a;
+  --hub-color-primary-contrast:#fff;
+  --hub-color-accent:#e67e22;
+  --hub-color-accent-contrast:#3e240e;
+  --hub-color-background:var(--hub-v3-canvas);
+  --hub-color-surface:var(--hub-v3-surface);
+  --hub-color-surface-secondary:var(--hub-v3-subtle);
+  --hub-color-surface-hover:#edf6f3;
+  --hub-color-text:var(--hub-v3-ink);
+  --hub-color-text-muted:var(--hub-v3-muted);
+  --hub-color-border:var(--hub-v3-border);
+  --hub-primary:var(--hub-v3-primary);
+  --hub-primary-strong:#0d655a;
+  --hub-accent:var(--hub-v3-orange);
+  --hub-bg:var(--hub-v3-canvas);
+  --hub-surface:var(--hub-v3-surface);
+  --hub-surface-alt:var(--hub-v3-subtle);
+  --hub-card:var(--hub-v3-surface);
+  --hub-border:var(--hub-v3-border);
+  --hub-text:var(--hub-v3-ink);
+  --hub-muted:var(--hub-v3-muted);
+  --hub-brand:var(--hub-v3-primary);
+  --hub-page-background:var(--hub-v3-canvas);
+  --hub-surface-main:#fff;
+  --hub-text-primary:var(--hub-v3-ink);
+  --hub-text-muted:var(--hub-v3-muted);
+  --hub-border-subtle:var(--hub-v3-border);
+  --hub-button:var(--hub-v3-primary);
+  --hub-header:var(--hub-v3-ink);
+  background:var(--hub-v3-canvas);
+  color:var(--hub-v3-ink);
+  font-family:var(--hub-font-body);
+}
+
+/* Functional baseline: leave controls wired to the same Django forms. */
+body.hub-ui-v3 :is(h1,h2,h3,h4,h5,h6,.hub-section-title,.hub-page-header__title,.staff-v2-title) {
+  font-family:var(--hub-font-heading);
+  letter-spacing:normal;
+  overflow-wrap:break-word;
+  word-break:normal;
+}
+body.hub-ui-v3 :is(.hub-page-header__title,.hub-section-title) {
+  color:var(--hub-v3-ink);
+  font-weight:700;
+  line-height:1.32;
+}
+body.hub-ui-v3 :is(.hub-page-header__meta,.hub-help-text,.hub-text-muted,.hub-subtitle) {
+  color:var(--hub-v3-muted);
+  font-weight:400;
+  line-height:1.55;
+}
+body.hub-ui-v3 :is(button,input,select,textarea) {
+  font-family:var(--hub-font-body);
+}
+body.hub-ui-v3 :is(a,button,input,select,textarea,summary,[role="button"]):focus-visible {
+  outline:3px solid #236aa9;
+  outline-offset:2px;
+}
+body.hub-ui-v3 :is(.hub-input,input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),select,textarea) {
+  border-color:var(--hub-v3-border);
+  border-radius:10px;
+  color:var(--hub-v3-ink);
+}
+body.hub-ui-v3 :is(.hub-input,input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),select,textarea):focus-visible {
+  border-color:var(--hub-v3-primary);
+}
+body.hub-ui-v3 :is(.hub-card,.hub-panel,.hub-summary-card,.hub-form-section,.hub-table-wrap) {
+  border-color:var(--hub-v3-border);
+  border-radius:14px;
+}
+body.hub-ui-v3 :is(.hub-button,.hub-nav-chip,.staff-v2-button) {
+  font-weight:600;
+  border-radius:10px;
+  text-decoration:none;
+}
+body.hub-ui-v3 .hub-button-primary {
+  background:var(--hub-v3-primary);
+  border-color:var(--hub-v3-primary);
+  color:#fff;
+}
+body.hub-ui-v3 .hub-button-primary:hover {background:#0d655a;border-color:#0d655a;color:#fff}
+body.hub-ui-v3 :is(.hub-nav-chip[aria-current="page"],.hub-nav-chip.is-active) {
+  background:#def3ec;
+  border-color:#8bc9b9;
+  color:#0c6456;
+}
+body.hub-ui-v3 .hub-nav-tabs {
+  gap:.4rem;
+  border-color:var(--hub-v3-border);
+  scrollbar-width:thin;
+}
+body.hub-ui-v3 :is(.hub-table-wrap,.provider-table-wrap) {
+  scrollbar-width:thin;
+  scrollbar-color:#afbdc3 transparent;
+}
+body.hub-ui-v3 .hub-table :is(th,td) {border-color:var(--hub-v3-border)}
+body.hub-ui-v3 .hub-table th {background:#edf3f5;color:#34495e;font-weight:600}
+body.hub-ui-v3 .hub-message {border-radius:12px}
+body.hub-ui-v3 .hub-badge {font-weight:600;border-radius:999px}
+body.hub-ui-v3 :is(.hub-money,.hub-number,.hub-price,.hub-order-number,.latin-numbers) {
+  font-variant-numeric:tabular-nums;
+}
+
+/* PUBLIC: the menu keeps its bold turquoise hero and image categories.
+   Supporting pages use the same typography with less color saturation. */
+body.hub-ui-v3:not(.hub-staff-ui):not(.hub-provider-ui) .hub-header--customer {
+  border-bottom:1px solid var(--hub-v3-border);
+  box-shadow:none;
+  background:rgba(247,248,248,.96);
+  backdrop-filter:blur(10px);
+}
+body.hub-ui-v3:not(.hub-staff-ui):not(.hub-provider-ui) .hub-customer-header__brand {
+  color:var(--hub-v3-ink);
+  font-weight:700;
+}
+body.hub-ui-v3:not(.hub-staff-ui):not(.hub-provider-ui) :is(.customer-space,.table-entry,.order-confirm) {
+  color:var(--hub-v3-ink);
+}
+body.hub-ui-v3 .customer-space .current-visit__header,
+body.hub-ui-v3 .table-entry__hero,
+body.hub-ui-v3 .order-confirm__header {
+  border-color:#c5e9df;
+  border-radius:18px;
+}
+body.hub-ui-v3 :is(.table-entry__choice,.current-visit__internet,.current-visit__checkout,.order-confirm__totals) {
+  border-color:var(--hub-v3-border);
+}
+body.hub-ui-v3 :is(.table-entry__choice-icon,.order-confirm__meta strong) {
+  color:var(--hub-v3-primary);
+}
+body.hub-ui-v3 .customer-space-nav {
+  border-color:var(--hub-v3-border);
+  background:rgba(255,255,255,.98);
+}
+body.hub-ui-v3 :is(.customer-space-nav a.is-active,.customer-space-nav button.is-active) {
+  color:var(--hub-v3-primary);
+}
+body.hub-ui-v3 .hub-public-auth {
+  max-width:560px;
+  margin:clamp(1.2rem,5vw,3rem) auto;
+  padding:clamp(1rem,4vw,1.5rem);
+  border-top:5px solid var(--hub-v3-turquoise);
+}
+body.hub-ui-v3 .hub-public-auth h1,
+body.hub-ui-v3 .hub-public-auth h2 {font-weight:700;line-height:1.3}
+body.hub-ui-v3 .hub-public-auth .hub-form {gap:.75rem}
+body.hub-ui-v3 .hub-public-auth .hub-button-primary {min-height:46px}
+body.hub-ui-v3 .hub-member-home {display:grid;gap:14px;max-width:1020px;margin-inline:auto}
+body.hub-ui-v3 .hub-member-home .hub-card {margin:0;padding:clamp(.85rem,2.2vw,1.25rem)}
+body.hub-ui-v3 .hub-member-home__intro {
+  border-top:5px solid var(--hub-v3-turquoise);
+  background:linear-gradient(135deg,#e5f7f0,#fff 55%);
+}
+body.hub-ui-v3 .hub-member-home__intro h1 {margin:0 0 .25rem;font-size:clamp(1.3rem,3.5vw,2rem)}
+body.hub-ui-v3 .hub-member-home__qr {text-align:center}
+body.hub-ui-v3 .hub-member-home__qr img {display:block;max-width:min(70vw,240px);height:auto;margin-inline:auto}
+body.hub-ui-v3 .hub-member-home__sections {display:grid;gap:14px;min-width:0}
+body.hub-ui-v3 .hub-member-home__sections .hub-table-wrap {min-width:0;overflow:auto}
+body.hub-ui-v3 .hub-member-home__logout {margin:0 0 1.5rem}
+body.hub-ui-v3 .hub-member-home__logout button {min-height:44px}
+@media(min-width:850px) {
+  body.hub-ui-v3 .hub-member-home__sections {grid-template-columns:repeat(2,minmax(0,1fr))}
+  body.hub-ui-v3 .hub-member-home__sections>.hub-card {min-width:0}
+}
+
+/* STAFF: compact, neutral tools; category colors only when they have meaning. */
+body.hub-staff-ui.hub-ui-v3 {
+  --staff-v2-bg:#f7f8f8;
+  --staff-v2-surface:#fff;
+  --staff-v2-surface-soft:#eff4f5;
+  --staff-v2-ink:#34495e;
+  --staff-v2-muted:#667b86;
+  --staff-v2-line:#dce4e7;
+  --staff-v2-brand:#137f70;
+  --staff-v2-brand-strong:#0d655a;
+  --staff-v2-brand-soft:#e2f5ef;
+  --staff-v2-sand:#a36d20;
+  --staff-v2-sand-soft:#fff0d7;
+  --staff-v2-danger:#b43f39;
+  --staff-v2-danger-soft:#feeeee;
+  --staff-v2-success:#16804c;
+  --staff-v2-success-soft:#e5f4e9;
+  --staff-v2-radius-xs:8px;
+  --staff-v2-radius-sm:11px;
+  --staff-v2-radius-md:15px;
+  --staff-v2-radius-lg:20px;
+  --staff-v2-shadow:0 2px 12px rgba(30,54,68,.035);
+  --staff-v2-shadow-raised:0 12px 28px rgba(30,54,68,.10);
+  --staff-shadow:0 2px 12px rgba(30,54,68,.035);
+  --staff-soft-border:#dce4e7;
+  --staff-gap:clamp(.65rem,1.4vw,1rem);
+}
+body.hub-staff-ui.hub-ui-v3 .staff-app-header {
+  background:rgba(255,255,255,.96);
+  border-bottom:1px solid var(--hub-v3-border);
+  box-shadow:none;
+}
+body.hub-staff-ui.hub-ui-v3 .staff-app-header__mark {
+  background:#e2f5ef;
+  color:#137f70;
+}
+body.hub-staff-ui.hub-ui-v3 .staff-app-header__brand-copy strong,
+body.hub-staff-ui.hub-ui-v3 .staff-v2-title,
+body.hub-staff-ui.hub-ui-v3 .hub-page-header__title {font-weight:700;color:#34495e}
+body.hub-staff-ui.hub-ui-v3 .staff-app-header__brand-copy span {color:#667b86}
+body.hub-staff-ui.hub-ui-v3 .staff-shell-nav a[aria-current="page"],
+body.hub-staff-ui.hub-ui-v3 .staff-mobile-nav a[aria-current="page"] {
+  color:#137f70;
+  background:#e2f5ef;
+}
+body.hub-staff-ui.hub-ui-v3 :is(.hub-card,.hub-summary-card,.staff-v2-panel,.staff-v2-dialog,.staff-context-drawer__surface,.staff-pos__product,.staff-pos__cart) {
+  border-color:var(--hub-v3-border);
+  background:#fff;
+  box-shadow:0 2px 12px rgba(30,54,68,.035);
+}
+body.hub-staff-ui.hub-ui-v3 :is(.hub-summary-card,.staff-v2-panel,.staff-pos__product) {
+  border-radius:14px;
+}
+body.hub-staff-ui.hub-ui-v3 .staff-v2-button--primary,
+body.hub-staff-ui.hub-ui-v3 .staff-pos__tap-zone.is-selected {
+  background:#137f70;
+  border-color:#137f70;
+  color:#fff;
+}
+body.hub-staff-ui.hub-ui-v3 :is(.staff-v2-badge,.hub-status-chip) {
+  font-weight:600;
+  border-radius:999px;
+}
+body.hub-staff-ui.hub-ui-v3 :is(.staff-v2-toolbar,.hub-form-section[method="get"],form.hub-form-section[method="get"]) {
+  border-color:var(--hub-v3-border);
+  box-shadow:none;
+}
+body.hub-staff-ui.hub-ui-v3 .hub-summary-card strong {font-weight:700}
+body.hub-staff-ui.hub-ui-v3 .hub-responsive-table tr {border-color:var(--hub-v3-border)}
+body.hub-staff-ui.hub-ui-v3 .hub-table :is(th,td) {border-color:var(--hub-v3-border)}
+body.hub-staff-ui.hub-ui-v3 .hub-table th {background:#eff4f5;font-weight:600}
+body.hub-staff-ui.hub-ui-v3 .hub-nav-chip {white-space:nowrap}
+body.hub-staff-ui.hub-ui-v3 .staff-pos__header {border-top:4px solid #e67e22}
+body.hub-staff-ui.hub-ui-v3 .staff-pos__catalog-tools {border-color:var(--hub-v3-border)}
+body.hub-staff-ui.hub-ui-v3 .staff-pos__product.is-selected {border-color:#137f70}
+body.hub-staff-ui.hub-ui-v3 .staff-v2-eyebrow {font-weight:600;letter-spacing:normal}
+body.hub-staff-ui.hub-ui-v3 .hub-page-header__meta {font-size:.84rem}
+body.hub-staff-ui.hub-ui-v3 .hub-reports-v3 {display:grid;gap:12px}
+body.hub-staff-ui.hub-ui-v3 .hub-reports-v3__links {display:flex;flex-wrap:wrap;gap:8px}
+body.hub-staff-ui.hub-ui-v3 .hub-reports-v3__metrics {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+body.hub-staff-ui.hub-ui-v3 .hub-reports-v3__metric {display:grid;gap:6px;padding:13px}
+body.hub-staff-ui.hub-ui-v3 .hub-reports-v3__metric strong {font-size:.84rem;font-weight:500;color:#667b86}
+body.hub-staff-ui.hub-ui-v3 .hub-reports-v3__metric .hub-number {font-size:1.3rem;font-weight:700;color:#34495e}
+@media(min-width:900px) {
+  body.hub-staff-ui.hub-ui-v3 .hub-reports-v3__metrics {grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+@media(max-width:700px) {
+  body.hub-staff-ui.hub-ui-v3 .hub-reports-v3__metrics {grid-template-columns:repeat(2,minmax(0,1fr))}
+  body.hub-staff-ui.hub-ui-v3 .staff-v2-panel {padding:clamp(.7rem,2vw,1rem)}
+}
+
+/* PROVIDER: a cooler blue networking accent, separate from operational states. */
+body.hub-provider-ui.hub-ui-v3 {
+  --provider-ink:#34495e;
+  --provider-green:#246d9c;
+  --provider-mint:#e6f2fb;
+  --provider-coral:#3498db;
+  --provider-sand:#f0f4f5;
+  --hub-color-primary:#246d9c;
+  --hub-primary:#246d9c;
+  --hub-button:#246d9c;
+  --hub-brand:#246d9c;
+  --hub-primary-strong:#185275;
+  color:#34495e;
+  background:#f7f8f8;
+}
+body.hub-provider-ui.hub-ui-v3 .provider-app-header {
+  background:#34495e;
+  box-shadow:none;
+  border-bottom:3px solid #3498db;
+}
+body.hub-provider-ui.hub-ui-v3 .provider-login-header {background:#34495e}
+body.hub-provider-ui.hub-ui-v3 :is(.provider-card,.provider-stat,.provider-login-card) {
+  background:#fff;
+  border-color:#dce4e7;
+  border-radius:14px;
+  box-shadow:none;
+}
+body.hub-provider-ui.hub-ui-v3 .provider-stat--accent {
+  background:#34495e;
+  border-color:#34495e;
+}
+body.hub-provider-ui.hub-ui-v3 .provider-stat--accent :is(span,strong) {color:#fff}
+body.hub-provider-ui.hub-ui-v3 .provider-page-header h1,
+body.hub-provider-ui.hub-ui-v3 .provider-card h2 {color:#34495e;font-weight:700}
+body.hub-provider-ui.hub-ui-v3 .provider-page-header p {color:#667b86}
+body.hub-provider-ui.hub-ui-v3 .provider-eyebrow {color:#246d9c;font-weight:600}
+body.hub-provider-ui.hub-ui-v3 .provider-meta>div {background:#f0f4f5;border-radius:10px}
+body.hub-provider-ui.hub-ui-v3 .provider-table-wrap {border-color:#dce4e7}
+body.hub-provider-ui.hub-ui-v3 .provider-table th {background:#eaf2f7;color:#34495e}
+body.hub-provider-ui.hub-ui-v3 .provider-table :is(th,td) {border-color:#dce4e7}
+body.hub-provider-ui.hub-ui-v3 .provider-mobile-nav {border-color:#dce4e7;box-shadow:0 -4px 14px rgba(30,54,68,.06)}
+body.hub-provider-ui.hub-ui-v3 .provider-mobile-nav a[aria-current="page"] {color:#246d9c}
+body.hub-provider-ui.hub-ui-v3 .provider-desktop-nav a[aria-current="page"] {background:rgba(255,255,255,.16)}
+body.hub-provider-ui.hub-ui-v3 .provider-login-card {
+  max-width:480px;
+  margin:clamp(1.5rem,5vw,3rem) auto;
+  border-top:5px solid #3498db;
+}
+
+/* Separate Wi-Fi/captive-portal document: zero external assets required.
+   Keep authentication, PIN and network state completely unchanged. */
+body.hub-ui-v3.wifi-entry-page {
+  --hub-v3-canvas:#f7f8f8;
+  background:#f7f8f8;
+  color:#34495e;
+}
+body.hub-ui-v3.wifi-entry-page .wifi-welcome__hero {
+  border-radius:18px;
+  box-shadow:none;
+}
+body.hub-ui-v3.wifi-entry-page .wifi-welcome__hero--placeholder {
+  background:linear-gradient(135deg,#1abc9c,#dff5ed);
+}
+body.hub-ui-v3.wifi-entry-page .wifi-welcome__hero-placeholder {
+  background:radial-gradient(circle at 20% 20%,rgba(255,255,255,.24),transparent 37%);
+  color:#073d39;
+}
+body.hub-ui-v3.wifi-entry-page :is(.wifi-welcome__intro h1,.wifi-welcome__wordmark) {
+  color:#34495e;
+  font-weight:700;
+}
+body.hub-ui-v3.wifi-entry-page :is(.wifi-welcome__shell .hub-card,.wifi-welcome__shell .hub-form) {
+  border-color:#dce4e7;
+  border-radius:14px;
+  box-shadow:none;
+}
+body.hub-ui-v3.wifi-entry-page .wifi-welcome__accent {background:#1abc9c}
+body.hub-ui-v3.wifi-entry-page .hub-button-primary {background:#137f70;border-color:#137f70;color:#fff}
+body.hub-provider-ui.hub-ui-v3 .hub-button-primary {
+  background:#246d9c;
+  border-color:#246d9c;
+  color:#fff;
+}
+body.hub-provider-ui.hub-ui-v3 .hub-button-primary:hover {
+  background:#185275;
+  border-color:#185275;
+}
+body.hub-staff-ui.hub-ui-v3 .hub-reports-v3__metric>div {
+  color:#34495e;
+  font-size:clamp(1rem,2vw,1.45rem);
+  line-height:1.3;
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+}
+
+/* Print, receipts, kitchen tickets, PDF/QR labels: protect practical contrast. */
+@media print {
+  body.hub-ui-v3 {
+    --hub-v3-canvas:#fff;
+    --hub-v3-surface:#fff;
+    --hub-v3-ink:#000;
+    --hub-v3-muted:#444;
+    --hub-v3-border:#aaa;
+    background:#fff!important;
+    color:#000!important;
+    box-shadow:none!important;
+  }
+  body.hub-ui-v3 :is(.hub-card,.hub-panel,.hub-summary-card,.provider-card,.provider-stat) {
+    color:#000;
+    background:#fff!important;
+    box-shadow:none!important;
+    break-inside:avoid;
+  }
+  body.hub-ui-v3 .hub-reports-v3__metric {border:1px solid #aaa}
+}
+@media(prefers-reduced-motion:reduce) {
+  body.hub-ui-v3 :is(.hub-card,.hub-button,.provider-card,.staff-v2-button) {
+    transition:none!important;
+  }
+}

@@ -1,0 +1,96 @@
+/*
+ * Hub admin UI v3 — keep Django's native forms, permissions, actions, sidebar,
+ * filters, inlines, inline scripts and print layout intact. Brand styling only.
+ */
+html body.hub-admin-v3 {
+  --hub-admin-primary:#137f70;
+  --hub-admin-accent:#e67e22;
+  --hub-admin-border:#dce4e7;
+  --hub-admin-bg:#f7f8f8;
+  --hub-admin-card:#fff;
+  --hub-admin-text:#34495e;
+  --primary:#137f70;
+  --secondary:#34495e;
+  --accent:#e67e22;
+  --primary-fg:#fff;
+  --body-bg:#f7f8f8;
+  --body-fg:#34495e;
+  --body-quiet-color:#667b86;
+  --hairline-color:#dce4e7;
+  --border-color:#dce4e7;
+  --darkened-bg:#edf3f5;
+  --selected-bg:#e2f5ef;
+  --selected-row:#eaf7f2;
+  --link-fg:#0c6659;
+  --link-hover-color:#075548;
+  --button-bg:#137f70;
+  --button-hover-bg:#0d655a;
+  --default-button-bg:#137f70;
+  --default-button-hover-bg:#0d655a;
+  font-family:"IBM Plex Sans Arabic","Noto Sans Arabic",Tahoma,system-ui,sans-serif;
+  background:#f7f8f8;
+  color:#34495e;
+}
+html body.hub-admin-v3 :is(button,input,select,textarea) {
+  font-family:inherit;
+}
+html body.hub-admin-v3 #header {background:#34495e;border-bottom:3px solid #1abc9c}
+html body.hub-admin-v3 div.breadcrumbs {background:#263c4c}
+html body.hub-admin-v3 #branding :is(h1,h1 a) {font-weight:700}
+html body.hub-admin-v3 :is(.hub-hero,.hub-card,.hub-recent-actions,.module,.inline-group) {
+  border-color:#dce4e7;
+  border-radius:13px;
+  box-shadow:none;
+}
+html body.hub-admin-v3 :is(.module caption,.inline-group h2) {
+  background:#137f70;
+  color:#fff;
+}
+html body.hub-admin-v3 .hub-hero {border-inline-start:5px solid #1abc9c}
+html body.hub-admin-v3 .hub-hero :is(h1,h2) {font-weight:700;color:#34495e}
+html body.hub-admin-v3 .hub-card h2 {color:#137f70}
+html body.hub-admin-v3 :is(.hub-action,.hub-mini-add,.submit-row input.default) {
+  background:#137f70;
+  color:#fff!important;
+  border-radius:10px;
+  font-weight:600;
+}
+html body.hub-admin-v3 :is(.hub-staff-links a,.button,button,input[type="submit"]) {border-radius:10px}
+html body.hub-admin-v3 :is(.results th,.module table th) {background:#edf3f5;color:#34495e}
+html body.hub-admin-v3 :is(input,textarea,select) {border-color:#dce4e7;border-radius:8px}
+html body.hub-admin-v3 :is(a,button,input,select,textarea,summary):focus-visible {
+  outline:3px solid #236aa9;
+  outline-offset:2px;
+}
+html body.hub-admin-v3 .submit-row {background:#fff;border-top:1px solid #dce4e7}
+@media(max-width:760px) {
+  html body.hub-admin-v3 #content {padding:10px}
+  html body.hub-admin-v3 :is(.hub-hero,.hub-card,.hub-recent-actions) {padding:12px}
+}
+@media(prefers-color-scheme:dark) {
+  /* Honor actual Django admin dark-mode palette instead of creating
+     illegible light cards when Django switches its root variables. */
+  html body.hub-admin-v3 {
+    --body-bg:#17242d;
+    --body-fg:#edf5f8;
+    --body-quiet-color:#b4c4cd;
+    --darkened-bg:#253541;
+    --border-color:#3c5261;
+    --hairline-color:#3c5261;
+    --link-fg:#95e4d4;
+    --link-hover-color:#c3f5e9;
+    background:var(--body-bg);
+    color:var(--body-fg);
+  }
+  html body.hub-admin-v3 :is(.module,.inline-group,.hub-hero,.hub-card,.hub-recent-actions,.submit-row) {
+    background:#243440;
+    color:var(--body-fg);
+    border-color:#3c5261;
+  }
+  html body.hub-admin-v3 :is(.hub-hero h1,.hub-card h2) {color:#b7e9db}
+  html body.hub-admin-v3 :is(.results th,.module table th) {background:#2d4350;color:#edf5f8}
+}
+@media print {
+  html body.hub-admin-v3 {background:#fff;color:#000}
+  html body.hub-admin-v3 :is(.hub-card,.hub-hero,.module,.inline-group) {background:#fff;box-shadow:none}
+}
