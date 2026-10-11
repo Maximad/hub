@@ -154,11 +154,13 @@ body.public-menu-page.hub-ui-v3 .hub-v3-feature__eyebrow {
 }
 body.public-menu-page.hub-ui-v3 .hub-v3-feature__title {
   z-index:1;
-  max-width:8ch;
-  font-size:clamp(1.2rem,4.7vw,1.8rem);
+  max-width:none;
+  font-size:clamp(1.1rem,3vw,1.8rem);
   font-weight:700;
-  line-height:1.25;
-  overflow-wrap:anywhere;
+  line-height:1.32;
+  overflow-wrap:normal;
+  word-break:normal;
+  text-wrap:balance;
 }
 body.public-menu-page.hub-ui-v3 .hub-v3-feature__more {
   z-index:1;
@@ -179,6 +181,62 @@ body.public-menu-page.hub-ui-v3 .hub-v3-feature__image {
   pointer-events:none;
 }
 /* Search remains directly above the existing category rail. */
+/* The original session banner is superseded by .customer-space-context;
+ * class-level display:flex rules must not undo its HTML hidden state. */
+body.public-menu-page.hub-ui-v3 .visit-banner[hidden] {display:none!important;}
+
+/* Search and chips share one sticky grid item, so the desktop cart cannot
+ * stretch an otherwise empty row between controls and products. */
+body.public-menu-page.hub-ui-v3 .hub-v3-menu-tools {
+  position:sticky;
+  top:var(--hub-v3-sticky-top, 0px);
+  z-index:29;
+  grid-column:1;
+  align-self:start;
+  display:grid;
+  gap:6px;
+  min-width:0;
+  padding:7px 0;
+  background:rgba(247,248,248,.97);
+}
+body.public-menu-page.hub-ui-v3 .hub-v3-menu-tools .customer-menu-search {
+  position:static;
+  top:auto;
+  margin:0;
+}
+body.public-menu-page.hub-ui-v3 .hub-v3-menu-tools .menu-sections-nav {
+  position:static;
+  top:auto;
+  margin:0;
+  padding:5px 0;
+  max-width:100%;
+  overflow-x:auto;
+}
+body.public-menu-page.hub-ui-v3 .menu-sections-wrap .hub-section {
+  scroll-margin-top:calc(var(--hub-v3-sticky-top, 0px) + var(--hub-v3-tools-height, 116px) + 12px);
+}
+@media(min-width:1024px) {
+  body.public-menu-page.hub-ui-v3 #menu-order-form {
+    grid-template-columns:minmax(0,1fr) 350px;
+    grid-template-rows:auto minmax(0,1fr);
+    align-items:start;
+    gap:12px 24px;
+  }
+  body.public-menu-page.hub-ui-v3 .hub-v3-menu-tools {
+    grid-column:1;
+    grid-row:1;
+  }
+  body.public-menu-page.hub-ui-v3 .menu-sections-wrap {
+    grid-column:1;
+    grid-row:2;
+    align-self:start;
+  }
+  body.public-menu-page.hub-ui-v3 .menu-cart-review {
+    grid-column:2;
+    grid-row:1 / span 2;
+    align-self:start;
+  }
+}
 body.public-menu-page.hub-ui-v3 .customer-menu-search {
   padding:7px 9px;
   margin-bottom:8px;
@@ -301,7 +359,11 @@ body.staff-workspace-page.hub-ui-v3 .ops-v2__order {border-color:var(--staff-v2-
   body.public-menu-page.hub-ui-v3 .menu-public__banner {max-height:112px;}
   body.public-menu-page.hub-ui-v3 .hub-v3-feature-nav {gap:8px;margin-bottom:10px;}
   body.public-menu-page.hub-ui-v3 .hub-v3-feature {min-height:124px;padding:10px;border-radius:14px;}
-  body.public-menu-page.hub-ui-v3 .hub-v3-feature__title {max-width:9ch;}
+  body.public-menu-page.hub-ui-v3 .hub-v3-feature__title {max-width:none;font-size:clamp(1.05rem,4vw,1.3rem);}
+  body.public-menu-page.hub-ui-v3 .hub-v3-menu-tools {gap:3px;padding:5px 0;}
+  body.public-menu-page.hub-ui-v3 .hub-v3-menu-tools .customer-menu-search {padding:5px 7px;}
+  body.public-menu-page.hub-ui-v3 .hub-v3-menu-tools .customer-menu-search label {font-size:.72rem;}
+  body.public-menu-page.hub-ui-v3 .hub-v3-menu-tools .customer-menu-search input {min-height:40px;}
   body.public-menu-page.hub-ui-v3 .menu-product-grid {gap:8px;}
   body.public-menu-page.hub-ui-v3 .menu-product-card:has(> .menu-product-media) {
     grid-template-columns:84px minmax(0,1fr);

@@ -54,13 +54,24 @@
   <form method="post" class="hub-form" id="menu-order-form" data-show-modifier-summary="{% if not system_settings or system_settings.show_modifier_summary %}true{% else %}false{% endif %}">
     {% csrf_token %}
 
-    {% if section_products %}
-      {% if not system_settings or system_settings.show_section_chips %}<nav class="menu-sections-nav" aria-label="أقسام المنيو" data-category-nav>
+    {# Keep search and category chips in one sticky grid cell beside the desktop cart. #}
+    <div class="hub-v3-menu-tools" data-hub-v3-sticky-filters>
+      <div class="customer-menu-search">
+        <label for="customer-menu-search">ابحث في المنيو</label>
+        <input class="hub-input" type="search" id="customer-menu-search" placeholder="قهوة، متّة، ساندويش..." data-pos-search autocomplete="off">
+      </div>
+      {% if section_products %}
+      {% if not system_settings or system_settings.show_section_chips %}
+      <nav class="menu-sections-nav" aria-label="أقسام المنيو" data-category-nav>
         {% for section, products in section_products %}
           <a class="menu-section-chip" href="#section-{{ section.id }}">{{ section.name_ar }}</a>
         {% endfor %}
-      </nav>{% endif %}
+      </nav>
+      {% endif %}
+      {% endif %}
+    </div>
 
+    {% if section_products %}
       <div class="menu-sections-wrap">
       {% for section, products in section_products %}
         <section class="hub-card hub-section" id="section-{{ section.id }}">

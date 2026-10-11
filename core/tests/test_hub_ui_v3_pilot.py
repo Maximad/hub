@@ -52,6 +52,38 @@ class HubUiV3PilotContractTests(SimpleTestCase):
         self.assertIn("system_settings.show_product_images", self.menu)
         self.assertIn('loading="lazy"', self.menu)
 
+    def test_menu_search_and_categories_share_one_sticky_grid_cell(self):
+        javascript = (Path(settings.BASE_DIR) / "static/js/customer_space.js").read_text(encoding="utf-8")
+        self.assertEqual(self.menu.count('data-pos-search'), 1)
+        self.assertIn('class="hub-v3-menu-tools" data-hub-v3-sticky-filters', self.menu)
+        self.assertLess(
+            self.menu.index('class="hub-v3-menu-tools"'),
+            self.menu.index('class="menu-sections-wrap"'),
+        )
+        tools_html = self.menu.split('class="hub-v3-menu-tools"', 1)[1].split('</div>', 2)[0]
+        self.assertIn('class="customer-menu-search"', tools_html)
+        self.assertIn('id="customer-menu-search"', tools_html)
+        self.assertIn("position:sticky;", self.css)
+        self.assertIn(".hub-v3-menu-tools .menu-sections-nav", self.css)
+        self.assertIn("grid-row:1 / span 2", self.css)
+        self.assertIn("grid-row:2;", self.css)
+        self.assertIn("scroll-margin-top:calc(", self.css)
+        self.assertIn("updateMenuStickyOffsets", javascript)
+        self.assertIn("contextHeight + 'px'", javascript)
+        self.assertIn("body.style.setProperty('--hub-v3-tools-height'", javascript)
+
+    def test_old_session_banner_stays_hidden_when_compact_context_replaces_it(self):
+        self.assertIn(".visit-banner[hidden] {display:none!important;}", self.css)
+        javascript = (Path(settings.BASE_DIR) / "static/js/customer_space.js").read_text(encoding="utf-8")
+        self.assertIn("visitBanner.hidden = true", javascript)
+
+    def test_feature_names_wrap_only_at_normal_word_boundaries(self):
+        self.assertIn("word-break:normal", self.css)
+        self.assertIn("overflow-wrap:normal", self.css)
+        self.assertIn("text-wrap:balance", self.css)
+        self.assertNotIn("max-width:8ch", self.css)
+        self.assertNotIn("max-width:9ch", self.css)
+
     def test_staff_context_and_capability_controls_remain(self):
         self.assertIn("workspace_caps.pos", self.operations)
         self.assertIn("workspace_caps.cashier", self.operations)

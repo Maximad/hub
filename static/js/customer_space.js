@@ -88,4 +88,29 @@
     menu?.insertBefore(context, menu.firstChild);
     visitBanner.hidden = true;
   }
+
+  // Keep the sticky filter rail below the actual session context, when present.
+  // The offsets also ensure category anchor links reveal their section headings.
+  if (isMenu) {
+    const tools = document.querySelector('[data-hub-v3-sticky-filters]');
+    if (tools) {
+      function updateMenuStickyOffsets() {
+        const context = document.querySelector('.customer-space-context');
+        const contextHeight = context && getComputedStyle(context).position === 'sticky'
+          ? Math.ceil(context.getBoundingClientRect().height) : 0;
+        body.style.setProperty('--hub-v3-sticky-top', contextHeight + 'px');
+        body.style.setProperty('--hub-v3-tools-height', Math.ceil(tools.getBoundingClientRect().height) + 'px');
+      }
+
+      updateMenuStickyOffsets();
+      window.addEventListener('resize', updateMenuStickyOffsets);
+      window.addEventListener('load', updateMenuStickyOffsets, { once: true });
+      if (typeof ResizeObserver !== 'undefined') {
+        const observer = new ResizeObserver(updateMenuStickyOffsets);
+        observer.observe(tools);
+        const context = document.querySelector('.customer-space-context');
+        if (context) observer.observe(context);
+      }
+    }
+  }
 })();
