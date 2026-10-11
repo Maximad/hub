@@ -245,6 +245,10 @@ class CustomUserCreationForm(UserCreationForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['phone'].required = False
+        self.fields['access_profile'].required = True
+        self.fields['access_profile'].queryset = AccessProfile.objects.filter(
+            is_active=True
+        ).order_by('name_ar', 'code')
 
     def clean_phone(self):
         phone = (self.cleaned_data.get('phone') or '').strip()
@@ -273,6 +277,17 @@ class CustomUserCreationForm(UserCreationForm):
 
 
 class CustomUserChangeForm(UserChangeForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if 'access_profile' in self.fields:
+            self.fields['access_profile'].required = True
+            qs = AccessProfile.objects.filter(is_active=True)
+            if self.instance and self.instance.pk and self.instance.access_profile_id:
+                qs = AccessProfile.objects.filter(
+                    Q(is_active=True) | Q(pk=self.instance.access_profile_id)
+                )
+            self.fields['access_profile'].queryset = qs.order_by('name_ar', 'code')
+
     class Meta(UserChangeForm.Meta):
         model = User
         fields = '__all__'
