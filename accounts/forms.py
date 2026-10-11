@@ -168,13 +168,13 @@ class StaffUserEditForm(StaffUserBaseForm):
         label='صلاحيات إضافية لهذا المستخدم',
         required=False,
         widget=forms.CheckboxSelectMultiple,
-        help_text='تتجاوز افتراضات الدور وتمنح الصلاحيات المحددة لهذا المستخدم فقط.',
+        help_text='تتجاوز نمط الوصول وتمنح الصلاحيات المحددة لهذا المستخدم فقط.',
     )
     capability_deny = forms.MultipleChoiceField(
         label='صلاحيات ممنوعة لهذا المستخدم',
         required=False,
         widget=forms.CheckboxSelectMultiple,
-        help_text='تتجاوز افتراضات الدور وتمنع الصلاحيات المحددة لهذا المستخدم فقط.',
+        help_text='تتجاوز نمط الوصول وتمنع الصلاحيات المحددة لهذا المستخدم فقط.',
     )
 
     class Meta(StaffUserBaseForm.Meta):
