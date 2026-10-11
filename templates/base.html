@@ -46,6 +46,9 @@
   <link rel="stylesheet" href="{% static 'css/hub_ui_v3_pilot.css' %}">
   {% endif %}
   <link rel="stylesheet" href="{% static 'css/hub_ui_v3_suite.css' %}">
+  {% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %}
+  <link rel="stylesheet" href="{% static 'css/staff_ux31.css' %}">
+  {% endif %}
   {% include "includes/hub_theme.html" %}
   {% comment %}Legacy density choices map onto the semantic token layer.{% endcomment %}
   {% if system_settings %}<style>:root{
