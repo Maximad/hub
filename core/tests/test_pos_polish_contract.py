@@ -28,6 +28,11 @@ class PosPolishContractTests(SimpleTestCase):
 
     def test_visit_bound_pos_hides_redundant_context_controls(self):
         self.assertIn("contextBoundAtLoad = Boolean(visitSelect?.value)", self.js)
+        self.assertIn(
+            "const boundMode = tableSelect?.value ? 'table' : 'inside_space_general';",
+            self.js,
+        )
+        self.assertIn("selectMode(boundMode, false)", self.js)
         self.assertIn("fulfillmentField.hidden = true", self.js)
         self.assertIn("tableField.hidden = true", self.js)
         self.assertIn("visitField.hidden = true", self.js)
