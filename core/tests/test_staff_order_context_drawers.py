@@ -167,6 +167,27 @@ class StaffOrderContextDrawerTests(TestCase):
         self.item.refresh_from_db()
         self.assertEqual(self.item.quantity, 2)
 
+    def test_quick_edit_rejects_external_return_target(self):
+        self.client.force_login(self.waiter)
+        response = self.client.post(
+            reverse(
+                "staff_order_edit_update_item",
+                kwargs={"public_code": self.order.public_code, "item_id": self.item.pk},
+            ),
+            {
+                "quantity": "2",
+                "item_note": "",
+                "edit_scope": "basic",
+                "next": "https://example.invalid/leave-hub",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("staff_order_edit", kwargs={"public_code": self.order.public_code}),
+            fetch_redirect_response=False,
+        )
+
     def test_quick_remove_returns_to_workspace(self):
         self.client.force_login(self.waiter)
         response = self.client.post(
