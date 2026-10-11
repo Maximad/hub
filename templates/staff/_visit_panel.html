@@ -61,6 +61,44 @@
     {% if visit_caps.visit_manage %}<a href="{% url 'staff_visit_detail' visit.public_code %}" data-staff-context-url="{% url 'staff_visit_detail' visit.public_code %}?panel=internet" data-context-title="إنترنت الحساب" aria-haspopup="dialog">إدارة الإنترنت داخل الحساب ←</a>{% endif %}
   </section>
 
+  {% if visit_caps.visit_manage and visit.status == 'open' %}
+  <section class="staff-visit-panel__section" aria-label="تعديل بيانات الجلسة">
+    <details class="staff-visit-panel__quick-edit">
+      <summary>تعديل الطاولة أو العضو</summary>
+      <p class="hub-help-text">تُحفظ التغييرات في سجل الجلسة. الحساب والدفعات لا يتغيران.</p>
+      <form method="post" action="{% url 'staff_visit_detail' visit.public_code %}" hx-post="{% url 'staff_visit_detail' visit.public_code %}?panel=1" hx-target="#staff-context-drawer-body" hx-swap="innerHTML" class="hub-form hub-form-section">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="change_table">
+        <label>الطاولة
+          <select class="hub-input" name="table">
+            <option value="">بدون طاولة</option>
+            {% for table in tables %}<option value="{{ table.pk }}" {% if visit.table_id == table.pk %}selected{% endif %}>{{ table }}</option>{% endfor %}
+          </select>
+        </label>
+        <button class="hub-button hub-button-secondary" type="submit">تحديث الطاولة</button>
+      </form>
+      <form method="post" action="{% url 'staff_visit_detail' visit.public_code %}" hx-post="{% url 'staff_visit_detail' visit.public_code %}?panel=1" hx-target="#staff-context-drawer-body" hx-swap="innerHTML" class="hub-form hub-form-section">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="attach_member">
+        <label>ربط عضو
+          <select class="hub-input" name="member" required>
+            <option value="">اختر عضواً</option>
+            {% for member in members %}<option value="{{ member.pk }}" {% if visit.member_id == member.pk %}selected{% endif %}>{{ member }}</option>{% endfor %}
+          </select>
+        </label>
+        <button class="hub-button hub-button-secondary" type="submit">تحديث العضو</button>
+      </form>
+      {% if visit.member_id %}
+      <form method="post" action="{% url 'staff_visit_detail' visit.public_code %}" hx-post="{% url 'staff_visit_detail' visit.public_code %}?panel=1" hx-target="#staff-context-drawer-body" hx-swap="innerHTML">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="detach_member">
+        <button class="hub-button hub-button-secondary" type="submit">فصل العضو عن الجلسة</button>
+      </form>
+      {% endif %}
+    </details>
+  </section>
+  {% endif %}
+
   {% if visit.notes %}<section class="staff-visit-panel__section"><h4>ملاحظة</h4><p>{{ visit.notes }}</p></section>{% endif %}
 
   <footer class="staff-payment-panel__footer"><a class="hub-button" href="{% url 'staff_visit_detail' visit.public_code %}">تعديل الجلسة والتفاصيل</a></footer>
