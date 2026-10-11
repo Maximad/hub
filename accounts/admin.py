@@ -49,6 +49,18 @@ class AccessProfileAdminForm(forms.ModelForm):
         allowed = set(CAPABILITY_LABELS)
         return [value for value in self.cleaned_data.get('capability_choices', []) if value in allowed]
 
+    def clean_base_role(self):
+        base_role = self.cleaned_data['base_role']
+        if (
+            self.instance.pk
+            and self.instance.users.exists()
+            and self.instance.base_role != base_role
+        ):
+            raise forms.ValidationError(
+                'لا يمكن تغيير المسار الداخلي لنمط مستخدم حالياً. أنشئ نمطاً جديداً أو انقل المستخدمين أولاً.'
+            )
+        return base_role
+
     def save(self, commit=True):
         profile = super().save(commit=False)
         profile.capabilities = sorted(set(self.cleaned_data.get('capability_choices') or []))
@@ -68,6 +80,12 @@ class AccessProfileAdmin(admin.ModelAdmin):
     @admin.display(description='عدد الصلاحيات')
     def capability_count(self, obj):
         return len(obj.capabilities or [])
+
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        # Keep legacy role-routing fields synchronized for assigned accounts.
+        obj.users.exclude(role=obj.base_role).update(role=obj.base_role)
 
 
 @admin.register(User)
