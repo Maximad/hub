@@ -6,18 +6,20 @@
     <a class="hub-button hub-button-secondary" href="{% url 'staff_users_list' %}">العودة للمستخدمين</a>
     <a class="hub-button" href="{% url 'staff_user_edit' target_user.id %}">تعديل</a>
     <a class="hub-button" href="{% url 'staff_user_password' target_user.id %}">تعيين كلمة المرور</a>
+    {% if can_view_as %}<a class="hub-button hub-button-primary" href="{% url 'staff_user_view_as' target_user.id %}">View As</a>{% endif %}
   </div>
   <h2 class="hub-page-header__title">{{ target_user.get_full_name|default:target_user.username }}</h2>
   <div class="hub-grid hub-grid-2">
     <p><strong>اسم المستخدم:</strong> {{ target_user.username }}</p><p><strong>البريد:</strong> {{ target_user.email|default:'-' }}</p>
-    <p><strong>الهاتف:</strong> {{ target_user.phone|default:'-' }}</p><p><strong>الدور:</strong> {{ target_user.get_role_display }}</p>
+    <p><strong>الهاتف:</strong> {{ target_user.phone|default:'-' }}</p><p><strong>المسمى الوظيفي:</strong> {{ target_user.job_title|default:'-' }}</p>
+    <p><strong>نمط الوصول:</strong> {% if target_user.access_profile %}{{ target_user.access_profile.name_ar }}{% else %}{{ target_user.get_role_display }}{% endif %}</p><p><strong>المسار الداخلي:</strong> {{ target_user.get_role_display }}</p>
     <p><strong>نشط:</strong> {{ target_user.is_active|yesno:'نعم,لا' }}</p><p><strong>is_staff:</strong> {{ target_user.is_staff|yesno:'نعم,لا' }}</p>
     <p><strong>is_superuser:</strong> {{ target_user.is_superuser|yesno:'نعم,لا' }}</p><p><strong>آخر دخول:</strong> {{ target_user.last_login|date:'Y-m-d H:i'|default:'-' }}</p>
   </div>
 
   <div class="hub-form-section">
     <h3>الصلاحيات الفعلية</h3>
-    <p class="hub-help-text">الدور يحدد الصلاحيات الافتراضية، والاستثناءات الفردية أدناه يمكن أن تمنح أو تمنع صلاحية لهذا المستخدم فقط.</p>
+    <p class="hub-help-text">نمط الوصول يحدد الصلاحيات الأساسية، والاستثناءات الفردية أدناه يمكن أن تمنح أو تمنع صلاحية لهذا المستخدم فقط.</p>
     <div class="hub-table-wrap">
       <table class="hub-table">
         <thead><tr><th>الصلاحية</th><th>الحالة</th><th>المصدر</th></tr></thead>
@@ -30,7 +32,8 @@
                 {% if row.override is True %}استثناء: منح
                 {% elif row.override is False %}استثناء: منع
                 {% elif target_user.is_superuser %}Superuser
-                {% else %}افتراضي حسب الدور{% endif %}
+                {% elif target_user.access_profile %}نمط الوصول: {{ target_user.access_profile.name_ar }}
+                {% else %}توافق قديم حسب الدور{% endif %}
               </td>
             </tr>
           {% endfor %}
