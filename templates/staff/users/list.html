@@ -5,6 +5,7 @@
   <div class="hub-toolbar">
     <a class="hub-button hub-button-secondary" href="{% url 'staff_home' %}">العودة للفريق</a>
     <a class="hub-button hub-button-primary" href="{% url 'staff_user_new' %}">مستخدم جديد</a>
+    {% if request.user.is_superuser %}<a class="hub-button" href="{% url 'admin:accounts_accessprofile_changelist' %}">إدارة أنماط الوصول</a>{% endif %}
   </div>
   <h2 class="hub-section-title">المستخدمون والصلاحيات</h2>
   <div class="hub-card">
