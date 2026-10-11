@@ -1079,6 +1079,16 @@ def _staff_menu_tools_context(request, products):
     }
 
 
+def _staff_order_mutation_redirect(request, order=None, *, default='staff_orders'):
+    """Return staff mutations to a trusted in-app page when one was supplied."""
+    target = (request.POST.get('next') or '').strip()
+    if target.startswith('/') and not target.startswith('//'):
+        return redirect(target)
+    if default == 'staff_order_edit' and order is not None:
+        return redirect('staff_order_edit', public_code=order.public_code)
+    return redirect(default)
+
+
 @require_staff_capability('order_edit')
 def staff_orders(request):
     statuses = [choice[0] for choice in Order.Status.choices]
@@ -1135,18 +1145,18 @@ def staff_order_status(request, public_code):
                     create_notification(event_map[new_delivery_status], f'{order.get_delivery_status_display()} {order.display_number}', order.location_label, order=order, created_by=request.user)
             except ValidationError as exc:
                 messages.error(request, '; '.join(exc.messages))
-        return redirect(request.POST.get('next') or 'staff_orders')
+        return _staff_order_mutation_redirect(request, order, default='staff_orders')
     new_status = request.POST.get('status')
     valid = {choice[0] for choice in Order.Status.choices}
     if new_status not in valid:
-        return redirect('staff_orders')
+        return _staff_order_mutation_redirect(request, order, default='staff_orders')
     if order.status != new_status:
         if new_status == Order.Status.CANCELLED and not correction:
             cancellation_reason = request.POST.get('cancellation_reason', '').strip()
             _total, paid, _remaining, _label = _order_financials(Order.objects.prefetch_related('items', 'payments', 'discounts').get(pk=order.pk))
             if paid > 0 and not _can_approve_partial_payment(request.user):
                 messages.error(request, 'إلغاء طلب مدفوع أو مدفوع جزئياً يحتاج موافقة المدير.')
-                return redirect('staff_orders')
+                return _staff_order_mutation_redirect(request, order, default='staff_orders')
         try:
             if correction:
                 Order.correct_status(order.pk, actor=request.user, new_status=new_status, reason=reason)
@@ -1156,7 +1166,7 @@ def staff_order_status(request, public_code):
                                         cancellation_notes=request.POST.get('cancellation_notes', ''))
         except ValidationError as exc:
             messages.error(request, '; '.join(exc.messages))
-    return redirect('staff_orders')
+    return _staff_order_mutation_redirect(request, order, default='staff_orders')
 
 
 @require_staff_capability('order_edit')
@@ -1216,7 +1226,7 @@ def staff_order_edit_add_item(request, public_code):
         if item.prep_status != OrderItem.PrepStatus.NO_PREP:
             transaction.on_commit(lambda: create_notification('new_prep_item', 'عنصر جديد للتحضير', f'{item.product_name_ar_snapshot} × {item.quantity} — {order.display_number}', order=order, order_item=item, target_station=item.prep_station, created_by=request.user))
     messages.success(request, 'تمت إضافة العنصر إلى الطلب.')
-    return redirect('staff_order_edit', public_code=order.public_code)
+    return _staff_order_mutation_redirect(request, order, default='staff_order_edit')
 
 
 @require_staff_capability('order_edit')
@@ -1271,7 +1281,7 @@ def staff_order_edit_update_item(request, public_code, item_id):
     )
     create_notification('order_edited', f'تم تعديل الطلب {order.display_number}', 'تم تعديل كمية/ملاحظات/خيارات عنصر', order=order, order_item=item, target_station=item.prep_station, created_by=request.user)
     messages.success(request, 'تم تحديث العنصر.')
-    return redirect('staff_order_edit', public_code=order.public_code)
+    return _staff_order_mutation_redirect(request, order, default='staff_order_edit')
 
 
 @require_staff_capability('order_edit')
@@ -1298,7 +1308,7 @@ def staff_order_edit_remove_item(request, public_code, item_id):
         transaction.on_commit(lambda: create_notification('prep_item_cancelled', 'تم إلغاء عنصر', snapshot.get('product_name_ar_snapshot',''), order=order, target_station=getattr(item, 'prep_station', None), created_by=request.user))
         transaction.on_commit(lambda: create_notification('order_edited', f'تم تعديل الطلب {order.display_number}', 'تم حذف عنصر من الطلب', order=order, created_by=request.user))
     messages.success(request, 'تم حذف العنصر من الطلب.')
-    return redirect('staff_order_edit', public_code=order.public_code)
+    return _staff_order_mutation_redirect(request, order, default='staff_order_edit')
 
 
 @require_staff_capability('delivery_management')
