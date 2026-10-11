@@ -60,4 +60,8 @@ class ViewAsUserMiddleware:
                 content_type='text/plain; charset=utf-8',
             )
 
-        return self.get_response(request)
+        response = self.get_response(request)
+        response['Cache-Control'] = 'no-store, private, max-age=0'
+        response['Pragma'] = 'no-cache'
+        response['X-Robots-Tag'] = 'noindex, nofollow, noarchive'
+        return response
