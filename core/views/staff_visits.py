@@ -1,5 +1,5 @@
 from django.contrib import messages
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -10,6 +10,7 @@ from core.models import ActivityLog, HubVisit, InternetSession, Member, Order, T
 from core.services.internet_access import end_usage_session
 from core.services.visit_internet import finalize_visit_metered_session
 from core.services.visits import customer_visit_queryset
+from core.services.visit_order_corrections import move_unpaid_order
 from reservations.models import Reservation
 from reservations.services import complete_reservation_for_visit
 
@@ -31,7 +32,15 @@ def _visit_context(request, visit):
     internet_sessions = visit.internet_sessions.select_related(
         'package', 'entitlement', 'browser_binding__credential'
     ).order_by('-start_time')
+    can_transfer = user_has_capability(request.user, 'visit_manage') and user_has_capability(request.user, 'cashier')
+    transfer_targets = (
+        HubVisit.objects.filter(status=HubVisit.Status.OPEN).exclude(pk=visit.pk)
+        .select_related('table', 'table__room').order_by('-last_activity_at')[:100]
+        if can_transfer and visit.status == HubVisit.Status.OPEN else []
+    )
     return {
+        'can_transfer_orders': can_transfer,
+        'transfer_targets': transfer_targets,
         'visit': visit,
         'tables': TableArea.objects.select_related('room'),
         'members': Member.objects.order_by('name_ar')[:200],
@@ -127,6 +136,63 @@ def staff_visit_detail(request, public_code):
     panel = request.GET.get('panel', '')
     if request.method == 'POST':
         action = request.POST.get('action')
+        panel_response = panel in {'1', 'internet'}
+
+        if action in {'transfer_order', 'attach_order', 'detach_order'}:
+            if not user_has_capability(request.user, 'cashier'):
+                raise PermissionDenied('نقل الطلبات بين الحسابات يحتاج صلاحية الكاشير وإدارة الجلسات.')
+            try:
+                if action == 'transfer_order':
+                    destination = HubVisit.objects.filter(
+                        public_code=request.POST.get('destination_visit', ''),
+                    ).first()
+                    if destination is None:
+                        raise ValidationError('اختر حساباً وجهة صالحاً.')
+                    order_id = request.POST.get('order_id')
+                    if not str(order_id).isdigit():
+                        raise ValidationError('اختر طلباً صالحاً.')
+                    move_unpaid_order(
+                        actor=request.user,
+                        order_id=int(order_id),
+                        source_visit_id=visit.pk,
+                        destination_visit_id=destination.pk,
+                        reason=request.POST.get('reason'),
+                    )
+                elif action == 'attach_order':
+                    order = Order.objects.filter(public_code=request.POST.get('order_code')).first()
+                    if order is None:
+                        raise ValidationError('رمز الطلب غير صالح.')
+                    move_unpaid_order(
+                        actor=request.user,
+                        order_id=order.pk,
+                        source_visit_id=order.visit_id,
+                        destination_visit_id=visit.pk,
+                        reason=request.POST.get('reason') or 'ربط يدوي بواسطة الكاشير',
+                    )
+                else:
+                    order_id = request.POST.get('order_id')
+                    if not str(order_id).isdigit():
+                        raise ValidationError('اختر طلباً صالحاً.')
+                    move_unpaid_order(
+                        actor=request.user,
+                        order_id=int(order_id),
+                        source_visit_id=visit.pk,
+                        destination_visit_id=None,
+                        reason=request.POST.get('reason') or 'فصل يدوي بواسطة الكاشير',
+                    )
+                messages.success(request, 'تم تحديث ربط الطلب مع تسجيل السبب وسجل التدقيق.')
+            except ValidationError as error:
+                messages.error(request, ' '.join(error.messages))
+            if panel_response:
+                visit = get_object_or_404(
+                    HubVisit.objects.select_related('table', 'table__room', 'member').prefetch_related(
+                        'orders__items', 'orders__discounts', 'orders__payments', 'browser_credentials'
+                    ),
+                    pk=visit.pk,
+                )
+                return _render_visit_panel(request, visit, panel)
+            return redirect('staff_visit_detail', public_code=visit.public_code)
+
         with transaction.atomic():
             # Reservation check-in locks Reservation -> HubVisit. Keep that same
             # order for closure so a repeated check-in cannot deadlock closure.
@@ -146,18 +212,7 @@ def staff_visit_detail(request, public_code):
                     return _render_visit_panel(request, visit, panel)
                 return redirect('staff_visit_detail', public_code=visit.public_code)
 
-            if action == 'attach_order':
-                order = get_object_or_404(Order, public_code=request.POST.get('order_code'))
-                old_visit_id = order.visit_id
-                order.visit = visit
-                order.save(update_fields=['visit', 'updated_at'])
-                visit.last_activity_at = timezone.now(); visit.save(update_fields=['last_activity_at', 'updated_at'])
-                _log(request, 'visit.order_attached', visit, order_id=order.pk, old_visit_id=old_visit_id)
-            elif action == 'detach_order':
-                order = get_object_or_404(Order, pk=request.POST.get('order_id'), visit=visit)
-                order.visit = None; order.save(update_fields=['visit', 'updated_at'])
-                _log(request, 'visit.order_attached', visit, order_id=order.pk, detached=True)
-            elif action == 'change_table':
+            if action == 'change_table':
                 old_id = visit.table_id
                 visit.table = TableArea.objects.filter(pk=request.POST.get('table')).first() if request.POST.get('table') else None
                 visit.last_activity_at = timezone.now(); visit.save(update_fields=['table', 'last_activity_at', 'updated_at'])
@@ -167,6 +222,19 @@ def staff_visit_detail(request, public_code):
                 visit.member = Member.objects.filter(pk=request.POST.get('member')).first() if action == 'attach_member' else None
                 visit.last_activity_at = timezone.now(); visit.save(update_fields=['member', 'last_activity_at', 'updated_at'])
                 _log(request, 'visit.member_attached' if visit.member_id else 'visit.member_detached', visit, old_member_id=old_id, new_member_id=visit.member_id)
+            elif action == 'edit_notes':
+                before_notes = visit.notes
+                after_notes = request.POST.get('notes', '').strip()
+                if len(after_notes) > 2000:
+                    messages.error(request, 'ملاحظات الجلسة يجب ألا تتجاوز 2000 حرف.')
+                    if panel in {'1', 'internet'}:
+                        return _render_visit_panel(request, visit, panel)
+                    return redirect('staff_visit_detail', public_code=visit.public_code)
+                if before_notes != after_notes:
+                    visit.notes = after_notes
+                    visit.last_activity_at = timezone.now()
+                    visit.save(update_fields=['notes', 'last_activity_at', 'updated_at'])
+                    _log(request, 'visit.notes_updated', visit, old_notes=before_notes, new_notes=after_notes)
             elif action == 'internet_stop':
                 if not user_has_capability(request.user, 'visit_manage'):
                     raise PermissionDenied('لا تملك صلاحية إدارة الجلسة.')
