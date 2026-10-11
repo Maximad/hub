@@ -53,6 +53,15 @@
     var body = document.getElementById('staff-context-drawer-body');
     var title = document.getElementById('staff-context-drawer-title');
     if (!supportsDialog(dialog) || !body) return;
+    var requestVersion = 0;
+    var drawerChanged = false;
+
+    // Keep the current specialist screen visible after each inline mutation.
+    // Refresh its counts only when the staff member closes the drawer.
+    dialog.addEventListener('close', function () {
+      requestVersion += 1;
+      if (drawerChanged) window.location.reload();
+    });
 
     function openContext(link) {
       var panelUrl = link.getAttribute('data-staff-context-url') || link.getAttribute('data-visit-context-url');
@@ -60,6 +69,7 @@
 
       if (title) title.textContent = link.getAttribute('data-context-title') || 'تفاصيل';
       body.innerHTML = loadingMarkup();
+      var version = ++requestVersion;
       if (!dialog.open) dialog.showModal();
 
       fetch(panelUrl, {
@@ -71,11 +81,14 @@
           return response.text();
         })
         .then(function (html) {
+          if (version !== requestVersion || !dialog.open) return;
           body.innerHTML = html;
           initializeDynamicPanel(body);
         })
         .catch(function () {
-          body.replaceChildren(errorMarkup(link.href));
+          if (version === requestVersion && dialog.open) {
+            body.replaceChildren(errorMarkup(link.href));
+          }
         });
     }
 
@@ -111,7 +124,13 @@
     });
 
     document.body.addEventListener('htmx:afterSwap', function (event) {
-      if (event.target === body || body.contains(event.target)) initializeDynamicPanel(body);
+      if (event.target === body || body.contains(event.target)) {
+        initializeDynamicPanel(body);
+        if (event.detail && event.detail.requestConfig &&
+            String(event.detail.requestConfig.verb).toLowerCase() === 'post') {
+          drawerChanged = true;
+        }
+      }
     });
 
     // Reservation check-in redirects back to the workspace with ?visit=<uuid>.
