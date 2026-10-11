@@ -1,0 +1,21 @@
+{% load static %}
+{# Shared contextual workspace, deliberately gated by the existing staff capabilities.
+   The regular page links and server-side permission checks remain authoritative. #}
+{% if staff_caps.visit_manage or staff_caps.order_edit or staff_caps.cashier %}
+<dialog id="staff-context-drawer" class="staff-context-drawer" aria-labelledby="staff-context-drawer-title">
+  <section class="staff-context-drawer__surface" dir="rtl">
+    <header class="staff-context-drawer__header">
+      <div>
+        <p class="staff-v2-eyebrow">العمليات</p>
+        <h2 id="staff-context-drawer-title">التفاصيل</h2>
+      </div>
+      <button type="button" class="staff-context-drawer__close" data-close-staff-context aria-label="إغلاق">×</button>
+    </header>
+    <div id="staff-context-drawer-body" class="staff-context-drawer__body" aria-live="polite">
+      <div class="staff-context-drawer__loading">اختر حساباً أو طلباً.</div>
+    </div>
+  </section>
+</dialog>
+<script src="{% static 'js/currency-entry.js' %}" defer></script>
+<script src="{% static 'js/staff_workspace.js' %}" defer></script>
+{% endif %}
