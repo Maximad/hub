@@ -134,7 +134,7 @@ body.public-menu-page.hub-ui-v3 .hub-v3-feature {
   color:#073d39;
   text-decoration:none;
 }
-body.public-menu-page.hub-ui-v3 .hub-v3-feature--2 {background:var(--hub-v3-food);color:#fff;}
+body.public-menu-page.hub-ui-v3 .hub-v3-feature--2 {background:var(--hub-v3-food);color:#4b2509;}
 body.public-menu-page.hub-ui-v3 .hub-v3-feature::after {
   content:"";
   position:absolute;
