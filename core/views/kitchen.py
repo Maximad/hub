@@ -333,6 +333,47 @@ def staff_prep_item_status(request, item_id):
     return redirect('staff_prep')
 
 
+@require_staff_capability('kitchen_board')
+def staff_prep_profiles(request):
+    """Owner/admin-only profile selection. Existing items keep their real status."""
+    if not is_owner_or_admin(request.user):
+        raise PermissionDenied('إعداد أسلوب التحضير متاح للإدارة فقط.')
+
+    if request.method == 'POST':
+        station_id = request.POST.get('station_id')
+        new_profile = request.POST.get('workflow_profile', '').strip()
+        if new_profile not in PrepStation.WorkflowProfile.values:
+            messages.error(request, 'أسلوب التحضير غير صالح.')
+            return redirect('staff_prep_profiles')
+        with transaction.atomic():
+            station = get_object_or_404(
+                PrepStation.objects.select_for_update(),
+                pk=station_id,
+                is_active=True,
+            )
+            old_profile = station.workflow_profile
+            if old_profile != new_profile:
+                station.workflow_profile = new_profile
+                station.save(update_fields=['workflow_profile', 'updated_at'])
+                ActivityLog.objects.create(
+                    actor=request.user,
+                    action='prep_station.workflow_profile_changed',
+                    details={
+                        'station_id': station.pk,
+                        'station_code': station.code,
+                        'old_profile': old_profile,
+                        'new_profile': new_profile,
+                    },
+                )
+        messages.success(request, 'تم تحديث أسلوب التحضير للمحطة.')
+        return redirect('staff_prep_profiles')
+
+    return render(request, 'staff/prep_profiles.html', {
+        'stations': PrepStation.objects.filter(is_active=True).order_by('sort_order', 'name_ar'),
+        'profiles': PrepStation.WorkflowProfile.choices,
+    })
+
+
 staff_kitchen = staff_prep
 staff_kitchen_partial = staff_prep_partial
 staff_kitchen_order = staff_prep_order
