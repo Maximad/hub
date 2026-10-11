@@ -8,7 +8,7 @@
   {% if current_visit %}
     <nav class="customer-visit-hub__menu-links" aria-label="خدمات الجلسة">
       <a href="{% url 'current_visit' %}#visit-account">حساب جلستي</a>
-      {% if internet_self_service_enabled %}<a href="{% url 'current_visit' %}?focus=internet#internet">{% if active_visit_internet %}إدارة الإنترنت{% else %}الاتصال بالإنترنت{% endif %}</a>{% endif %}
+      {% if visit_internet_navigation_enabled %}<a href="{% url 'current_visit' %}?focus=internet#internet">{% if active_visit_internet %}إدارة الإنترنت{% else %}الاتصال بالإنترنت{% endif %}</a>{% endif %}
       <a href="{% url 'current_visit' %}#customer-orders">طلباتي</a>
     </nav>
   {% endif %}
