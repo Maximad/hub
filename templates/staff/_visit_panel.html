@@ -45,6 +45,27 @@
           <div class="staff-visit-panel__order-links">
             {% if visit_caps.order_edit %}<a href="{% url 'staff_order_edit' order.public_code %}" data-staff-context-url="{% url 'staff_order_edit' order.public_code %}?panel=context" data-context-title="تفاصيل الطلب" aria-haspopup="dialog">عرض</a><a href="{% url 'staff_order_edit' order.public_code %}">تعديل متقدم</a>{% endif %}
             {% if visit_caps.cashier and order.remaining_syp > 0 %}<a href="{% url 'staff_cashier_order' visit.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' visit.public_code %}?panel=payment" data-context-title="الدفع وإغلاق الحساب" aria-haspopup="dialog">دفع</a>{% endif %}
+            {% if can_transfer_orders and visit.status == 'open' and transfer_targets %}
+            <details class="staff-visit-panel__quick-edit staff-visit-panel__order-transfer">
+              <summary>نقل الطلب إلى حساب آخر</summary>
+              <p class="hub-help-text">ينقل الطلب كاملاً إذا كان غير مدفوع وغير مرتبط بخدمات إنترنت أو خصومات، ولا يزال مؤهلاً للنقل.</p>
+              <form method="post" action="{% url 'staff_visit_detail' visit.public_code %}" hx-post="{% url 'staff_visit_detail' visit.public_code %}?panel=1" hx-target="#staff-context-drawer-body" hx-swap="innerHTML" class="hub-form hub-form-section" onsubmit="return confirm('نقل الطلب بالكامل إلى الحساب المحدد؟');">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="transfer_order">
+                <input type="hidden" name="order_id" value="{{ order.pk }}">
+                <label>الحساب الوجهة
+                  <select class="hub-input" name="destination_visit" required>
+                    <option value="">اختر حساباً مفتوحاً</option>
+                    {% for target in transfer_targets %}
+                      <option value="{{ target.public_code }}">{% if target.table %}{{ target.table }}{% else %}جلسة{% endif %} {{ target.display_number }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label>سبب النقل<input class="hub-input" name="reason" maxlength="255" minlength="3" placeholder="تصحيح حساب الطاولة" required></label>
+                <button class="hub-button hub-button-secondary" type="submit">تأكيد النقل</button>
+              </form>
+            </details>
+            {% endif %}
           </div>
         </article>
       {% empty %}<div class="hub-empty-state">لا توجد طلبات في هذا الحساب بعد.</div>{% endfor %}
@@ -60,6 +81,20 @@
     </div>
     {% if visit_caps.visit_manage %}<a href="{% url 'staff_visit_detail' visit.public_code %}" data-staff-context-url="{% url 'staff_visit_detail' visit.public_code %}?panel=internet" data-context-title="إنترنت الحساب" aria-haspopup="dialog">إدارة الإنترنت داخل الحساب ←</a>{% endif %}
   </section>
+
+  {% if visit_caps.visit_manage and visit.status == 'open' %}
+  <section class="staff-visit-panel__section" aria-label="ملاحظات الجلسة">
+    <details class="staff-visit-panel__quick-edit">
+      <summary>تعديل ملاحظات الجلسة</summary>
+      <form method="post" action="{% url 'staff_visit_detail' visit.public_code %}" hx-post="{% url 'staff_visit_detail' visit.public_code %}?panel=1" hx-target="#staff-context-drawer-body" hx-swap="innerHTML" class="hub-form hub-form-section">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="edit_notes">
+        <label>الملاحظات<textarea class="hub-input" name="notes" maxlength="2000" rows="3">{{ visit.notes }}</textarea></label>
+        <button class="hub-button hub-button-secondary" type="submit">حفظ الملاحظات</button>
+      </form>
+    </details>
+  </section>
+  {% endif %}
 
   {% if visit_caps.visit_manage and visit.status == 'open' %}
   <section class="staff-visit-panel__section" aria-label="تعديل بيانات الجلسة">
