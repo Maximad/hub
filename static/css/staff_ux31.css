@@ -84,3 +84,27 @@ body.hub-staff-ui .staff-visit-panel__quick-edit summary:focus-visible {
 @media(prefers-reduced-motion:reduce) {
   body.hub-staff-ui .staff-context-drawer {scroll-behavior:auto}
 }
+
+/* Phase 4a: compact whole-order transfer inside an account drawer. */
+body.hub-staff-ui .staff-visit-panel__order-transfer {
+  flex:1 0 100%;
+  max-width:100%;
+  min-width:0;
+  margin-top:8px;
+}
+body.hub-staff-ui .staff-visit-panel__order-transfer>summary {
+  color:#0d655a;
+  font-weight:600;
+  cursor:pointer;
+}
+body.hub-staff-ui .staff-visit-panel__order-transfer select,
+body.hub-staff-ui .staff-visit-panel__order-transfer input,
+body.hub-staff-ui .staff-visit-panel__quick-edit textarea {
+  width:100%;
+  min-height:44px;
+  min-width:0;
+}
+body.hub-staff-ui .staff-visit-panel__order-transfer .hub-help-text {
+  margin:6px 0;
+  font-size:.82rem;
+}
