@@ -54,7 +54,7 @@ class StaffOrderContextDrawerTests(TestCase):
             fulfillment_mode=Order.FulfillmentMode.TABLE,
             service_mode=Order.ServiceMode.TABLE,
         )
-        OrderItem.objects.create(
+        self.item = OrderItem.objects.create(
             order=self.order,
             product=self.product,
             quantity=1,
@@ -110,6 +110,114 @@ class StaffOrderContextDrawerTests(TestCase):
         self.assertContains(response, "تعديل الطلب")
         self.assertNotContains(response, "دفع الحساب")
         self.assertNotContains(response, "تفاصيل الكاشير")
+
+    def test_workspace_edit_link_opens_quick_order_drawer(self):
+        self.client.force_login(self.waiter)
+        response = self.client.get(reverse("staff_home"))
+
+        edit_url = reverse(
+            "staff_order_edit", kwargs={"public_code": self.order.public_code}
+        )
+        self.assertContains(
+            response,
+            f'data-staff-context-url="{edit_url}?panel=context"',
+        )
+        self.assertContains(response, 'data-context-title="تعديل سريع للطلب"')
+
+    def test_order_drawer_contains_quick_item_and_cancel_mutations(self):
+        self.client.force_login(self.waiter)
+        response = self.client.get(
+            reverse("staff_order_edit", kwargs={"public_code": self.order.public_code}),
+            {"panel": "context"},
+        )
+
+        update_url = reverse(
+            "staff_order_edit_update_item",
+            kwargs={"public_code": self.order.public_code, "item_id": self.item.pk},
+        )
+        remove_url = reverse(
+            "staff_order_edit_remove_item",
+            kwargs={"public_code": self.order.public_code, "item_id": self.item.pk},
+        )
+        self.assertContains(response, update_url)
+        self.assertContains(response, remove_url)
+        self.assertContains(response, "إلغاء الطلب")
+        self.assertContains(
+            response,
+            f'<input type="hidden" name="next" value="{reverse("staff_home")}">',
+            html=False,
+        )
+
+    def test_quick_quantity_update_returns_to_workspace(self):
+        self.client.force_login(self.waiter)
+        response = self.client.post(
+            reverse(
+                "staff_order_edit_update_item",
+                kwargs={"public_code": self.order.public_code, "item_id": self.item.pk},
+            ),
+            {
+                "quantity": "2",
+                "item_note": "",
+                "edit_scope": "basic",
+                "next": reverse("staff_home"),
+            },
+        )
+
+        self.assertRedirects(response, reverse("staff_home"), fetch_redirect_response=False)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.quantity, 2)
+
+    def test_quick_edit_rejects_external_return_target(self):
+        self.client.force_login(self.waiter)
+        response = self.client.post(
+            reverse(
+                "staff_order_edit_update_item",
+                kwargs={"public_code": self.order.public_code, "item_id": self.item.pk},
+            ),
+            {
+                "quantity": "2",
+                "item_note": "",
+                "edit_scope": "basic",
+                "next": "https://example.invalid/leave-hub",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("staff_order_edit", kwargs={"public_code": self.order.public_code}),
+            fetch_redirect_response=False,
+        )
+
+    def test_quick_remove_returns_to_workspace(self):
+        self.client.force_login(self.waiter)
+        response = self.client.post(
+            reverse(
+                "staff_order_edit_remove_item",
+                kwargs={"public_code": self.order.public_code, "item_id": self.item.pk},
+            ),
+            {"next": reverse("staff_home")},
+        )
+
+        self.assertRedirects(response, reverse("staff_home"), fetch_redirect_response=False)
+        self.assertFalse(OrderItem.objects.filter(pk=self.item.pk).exists())
+
+    def test_quick_cancel_returns_to_workspace_and_preserves_order(self):
+        self.client.force_login(self.waiter)
+        response = self.client.post(
+            reverse("staff_order_status", kwargs={"public_code": self.order.public_code}),
+            {
+                "status": Order.Status.CANCELLED,
+                "cancellation_reason": "staff_mistake",
+                "cancellation_notes": "اختبار تعديل سريع",
+                "next": reverse("staff_home"),
+            },
+        )
+
+        self.assertRedirects(response, reverse("staff_home"), fetch_redirect_response=False)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.CANCELLED)
+        self.assertEqual(self.order.cancellation_reason, "staff_mistake")
+        self.assertTrue(Order.objects.filter(pk=self.order.pk).exists())
 
     def test_visit_order_cashier_link_gets_combined_payment_panel(self):
         self.client.force_login(self.cashier)

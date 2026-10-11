@@ -48,10 +48,69 @@
             <small>{% for group in item.selected_options_snapshot %}{% for option in group.options %}{{ option.name_ar }}{% if not forloop.last %}، {% endif %}{% endfor %}{% endfor %}</small>
           {% endif %}
           {% if item.item_note %}<small>ملاحظة: {{ item.item_note }}</small>{% endif %}
+          {% if order_caps.edit and not order_edit_block_reason %}
+            <div class="staff-order-panel__item-actions" aria-label="تعديل سريع للعنصر">
+              {% if item.quantity > 1 %}
+                <form method="post" action="{% url 'staff_order_edit_update_item' order.public_code item.id %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="quantity" value="{{ item.quantity|add:'-1' }}">
+                  <input type="hidden" name="item_note" value="{{ item.item_note }}">
+                  <input type="hidden" name="edit_scope" value="basic">
+                  <input type="hidden" name="next" value="{% url 'staff_home' %}">
+                  <button class="hub-button hub-button-secondary" type="submit" aria-label="تقليل {{ item.product_name_ar_snapshot }}">−</button>
+                </form>
+              {% else %}
+                <button class="hub-button hub-button-secondary" type="button" disabled aria-label="الكمية الدنيا">−</button>
+              {% endif %}
+              <strong class="hub-number">{{ item.quantity }}</strong>
+              <form method="post" action="{% url 'staff_order_edit_update_item' order.public_code item.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="quantity" value="{{ item.quantity|add:'1' }}">
+                <input type="hidden" name="item_note" value="{{ item.item_note }}">
+                <input type="hidden" name="edit_scope" value="basic">
+                <input type="hidden" name="next" value="{% url 'staff_home' %}">
+                <button class="hub-button hub-button-secondary" type="submit" aria-label="زيادة {{ item.product_name_ar_snapshot }}">+</button>
+              </form>
+              <form method="post" action="{% url 'staff_order_edit_remove_item' order.public_code item.id %}" onsubmit="return confirm('حذف هذا العنصر من الطلب؟');">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{% url 'staff_home' %}">
+                <button class="hub-button hub-button-danger" type="submit">حذف</button>
+              </form>
+            </div>
+          {% endif %}
         </article>
       {% empty %}<div class="hub-empty-state">لا توجد عناصر في هذا الطلب.</div>{% endfor %}
     </div>
   </section>
+
+  {% if order_caps.edit and paid == 0 and 'cancelled' in order.allowed_status_transitions %}
+    <section class="staff-order-panel__section">
+      <details class="staff-order-panel__cancel">
+        <summary class="hub-button hub-button-danger">إلغاء الطلب</summary>
+        <form method="post" action="{% url 'staff_order_status' order.public_code %}" class="hub-form hub-form-section" onsubmit="return confirm('إلغاء الطلب بالكامل؟');">
+          {% csrf_token %}
+          <input type="hidden" name="status" value="cancelled">
+          <input type="hidden" name="next" value="{% url 'staff_home' %}">
+          <label>سبب الإلغاء
+            <select class="hub-input" name="cancellation_reason" required>
+              <option value="">اختر السبب</option>
+              <option value="customer_changed_mind">غيّر الزبون رأيه</option>
+              <option value="item_unavailable">المنتج غير متوفر</option>
+              <option value="staff_mistake">خطأ من الموظف</option>
+              <option value="duplicate_order">طلب مكرر</option>
+              <option value="quality_issue">مشكلة جودة</option>
+              <option value="manager_decision">قرار المدير</option>
+              <option value="other">سبب آخر</option>
+            </select>
+          </label>
+          <label>ملاحظة
+            <input class="hub-input" name="cancellation_notes" placeholder="اختياري">
+          </label>
+          <button class="hub-button hub-button-danger" type="submit">تأكيد إلغاء الطلب</button>
+        </form>
+      </details>
+    </section>
+  {% endif %}
 
   <section class="staff-order-panel__section staff-order-panel__summary">
     <div><span>طريقة الطلب</span><strong>{{ order.get_fulfillment_label }}</strong></div>
