@@ -181,6 +181,10 @@ body.public-menu-page.hub-ui-v3 .hub-v3-feature__image {
   pointer-events:none;
 }
 /* Search remains directly above the existing category rail. */
+/* The original session banner is superseded by .customer-space-context;
+ * class-level display:flex rules must not undo its HTML hidden state. */
+body.public-menu-page.hub-ui-v3 .visit-banner[hidden] {display:none!important;}
+
 /* Search and chips share one sticky grid item, so the desktop cart cannot
  * stretch an otherwise empty row between controls and products. */
 body.public-menu-page.hub-ui-v3 .hub-v3-menu-tools {
