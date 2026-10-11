@@ -15,4 +15,7 @@ def system_settings(request):
         'hub_theme_numbers': numbers,
         'hub_icons_enabled': bool(settings is None or settings.show_interface_icons),
         'staff_caps': get_staff_capabilities(request.user),
+        'view_as_active': bool(getattr(request, 'view_as_target', None)),
+        'view_as_actor': getattr(request, 'view_as_actor', None),
+        'view_as_target': getattr(request, 'view_as_target', None),
     }
