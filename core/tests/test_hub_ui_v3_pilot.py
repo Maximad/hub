@@ -91,7 +91,11 @@ class HubUiV3PilotContractTests(SimpleTestCase):
         self.assertIn("data-ops-filter", self.operations)
         self.assertIn("data-ops-cards", self.operations)
         self.assertIn("data-staff-context-url", self.operations)
-        self.assertIn('id="staff-context-drawer"', self.operations)
+        base = (Path(settings.BASE_DIR) / "templates/base.html").read_text(encoding="utf-8")
+        shell = (Path(settings.BASE_DIR) / "templates/staff/_context_drawer_shell.html").read_text(encoding="utf-8")
+        self.assertIn('staff/_context_drawer_shell.html', base)
+        self.assertIn('id="staff-context-drawer"', shell)
+        self.assertIn('staff_caps.order_edit', shell)
 
     def test_mobile_and_accessibility_guards(self):
         self.assertIn("@media(max-width:700px)", self.css)
