@@ -6,6 +6,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from core.models import (
+    ActivityLog,
     Category,
     HubVisit,
     Order,
@@ -281,6 +282,132 @@ class StaffOrderContextDrawerTests(TestCase):
         self.assertContains(panel, "قبض الطلب")
         self.assertEqual(full.status_code, 200)
         self.assertTemplateUsed(full, "staff/cashier_order.html")
+
+
+    def test_specialist_screens_share_one_role_gated_context_drawer(self):
+        self.client.force_login(self.admin)
+        for name in ('staff_home', 'staff_orders', 'staff_visits', 'staff_cashier'):
+            with self.subTest(page=name):
+                response = self.client.get(reverse(name))
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, 'id="staff-context-drawer"', count=1)
+                self.assertContains(response, 'js/staff_workspace.js', count=1)
+                self.assertContains(response, 'css/staff_ux31.css')
+
+        cashier_url = reverse('staff_cashier_order', kwargs={'public_code': self.visit.public_code})
+        cashier_page = self.client.get(reverse('staff_cashier'))
+        self.assertContains(
+            cashier_page,
+            f'data-staff-context-url="{cashier_url}?panel=payment"',
+        )
+
+    def test_cashier_only_can_open_payment_sheet_from_cashier_list(self):
+        self.client.force_login(self.cashier)
+        page = self.client.get(reverse('staff_cashier'))
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, 'id="staff-context-drawer"', count=1)
+        self.assertContains(page, 'data-context-title="قبض حساب الجلسة"')
+        payment = self.client.get(
+            reverse('staff_cashier_order', kwargs={'public_code': self.visit.public_code}),
+            {'panel': 'payment'},
+        )
+        self.assertTemplateUsed(payment, 'staff/_visit_payment_panel.html')
+
+    def test_orders_and_visits_lists_open_details_in_drawer(self):
+        self.client.force_login(self.admin)
+        edit_url = reverse('staff_order_edit', kwargs={'public_code': self.order.public_code})
+        visit_url = reverse('staff_visit_detail', kwargs={'public_code': self.visit.public_code})
+        orders = self.client.get(reverse('staff_orders'))
+        visits = self.client.get(reverse('staff_visits'))
+        self.assertContains(orders, f'data-staff-context-url="{edit_url}?panel=context"')
+        self.assertContains(visits, f'data-visit-context-url="{visit_url}?panel=1"')
+
+    def test_order_editor_has_note_form_without_leaving_drawer(self):
+        self.client.force_login(self.waiter)
+        url = reverse('staff_order_edit', kwargs={'public_code': self.order.public_code})
+        fragment = self.client.get(url, {'panel': 'context'})
+        item_url = reverse(
+            'staff_order_edit_update_item',
+            kwargs={'public_code': self.order.public_code, 'item_id': self.item.pk},
+        )
+        self.assertContains(fragment, 'تعديل الكمية أو الملاحظة')
+        self.assertContains(fragment, f'hx-post="{item_url}?panel=context"')
+        self.assertContains(fragment, 'name="item_note"')
+        self.assertContains(fragment, 'name="edit_scope" value="basic"')
+
+        response = self.client.post(
+            item_url + '?panel=context',
+            {'quantity': '2', 'item_note': 'بدون سكر', 'edit_scope': 'basic'},
+            HTTP_HX_REQUEST='true',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'staff/_order_panel.html')
+        self.assertEqual(response['HX-Trigger'], 'hub:staff-context-updated')
+        self.assertContains(response, 'بدون سكر')
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.quantity, 2)
+        self.assertEqual(self.item.item_note, 'بدون سكر')
+        self.assertTrue(ActivityLog.objects.filter(action='order_item_updated').exists())
+
+    def test_order_removal_stays_in_drawer_and_is_audited(self):
+        self.client.force_login(self.waiter)
+        url = reverse('staff_order_edit_remove_item', kwargs={
+            'public_code': self.order.public_code, 'item_id': self.item.pk,
+        })
+        response = self.client.post(url + '?panel=context', {}, HTTP_HX_REQUEST='true')
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'staff/_order_panel.html')
+        self.assertEqual(response['HX-Trigger'], 'hub:staff-context-updated')
+        self.assertFalse(OrderItem.objects.filter(pk=self.item.pk).exists())
+        self.assertTrue(ActivityLog.objects.filter(action='order_item_removed').exists())
+
+    def test_visit_account_drawer_changes_table_with_existing_audit_path(self):
+        self.client.force_login(self.admin)
+        destination = TableArea.objects.create(room=self.room, name_ar='طاولة 9')
+        url = reverse('staff_visit_detail', kwargs={'public_code': self.visit.public_code})
+        panel = self.client.get(url, {'panel': '1'})
+        self.assertContains(panel, 'تعديل الطاولة أو العضو')
+        self.assertContains(panel, f'hx-post="{url}?panel=1"')
+        self.assertContains(panel, 'name="action" value="change_table"')
+        self.assertContains(panel, 'name="action" value="attach_member"')
+
+        changed = self.client.post(
+            url + '?panel=1',
+            {'action': 'change_table', 'table': str(destination.pk)},
+            HTTP_HX_REQUEST='true',
+        )
+        self.assertEqual(changed.status_code, 200)
+        self.assertTemplateUsed(changed, 'staff/_visit_panel.html')
+        self.visit.refresh_from_db()
+        self.assertEqual(self.visit.table_id, destination.pk)
+        self.assertContains(changed, destination.name_ar)
+        self.assertTrue(ActivityLog.objects.filter(action='visit.table_changed').exists())
+
+    def test_empty_visit_delete_is_available_but_nonempty_stays_protected(self):
+        self.client.force_login(self.admin)
+        url = reverse('staff_visit_detail', kwargs={'public_code': self.visit.public_code})
+        nonempty = self.client.get(url, {'panel': '1'})
+        self.assertNotContains(nonempty, 'name="action" value="delete_empty"')
+        empty = HubVisit.objects.create(table=self.table)
+        empty_url = reverse('staff_visit_detail', kwargs={'public_code': empty.public_code})
+        panel = self.client.get(empty_url, {'panel': '1'})
+        self.assertContains(panel, 'name="action" value="delete_empty"')
+        self.assertContains(panel, 'تأكيد حذف الجلسة الفارغة')
+        deleted = self.client.post(empty_url, {'action': 'delete_empty'})
+        self.assertEqual(deleted.status_code, 302)
+        self.assertFalse(HubVisit.objects.filter(pk=empty.pk).exists())
+
+    def test_plain_post_and_full_page_paths_remain_available(self):
+        self.client.force_login(self.waiter)
+        url = reverse('staff_order_edit_update_item', kwargs={
+            'public_code': self.order.public_code, 'item_id': self.item.pk,
+        })
+        result = self.client.post(url, {
+            'quantity': '2', 'item_note': 'اختبار كامل',
+            'edit_scope': 'basic', 'next': reverse('staff_home'),
+        })
+        self.assertRedirects(result, reverse('staff_home'), fetch_redirect_response=False)
+        self.assertNotIn('HX-Trigger', result)
 
     def test_kitchen_workspace_exposes_operational_drawer_but_not_payment_controls(self):
         self.client.force_login(self.kitchen)

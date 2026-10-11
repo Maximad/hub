@@ -78,9 +78,11 @@ class StaffDesignSystemContractTests(SimpleTestCase):
             'data-ops-view="list"',
             'data-ops-tab="orders"',
             'new-account-dialog',
-            'staff-context-drawer',
         ):
             self.assertIn(contract, self.operations)
+        drawer = (self.root / 'templates/staff/_context_drawer_shell.html').read_text(encoding='utf-8')
+        self.assertIn('staff-context-drawer', drawer)
+        self.assertIn('staff/_context_drawer_shell.html', self.base)
 
     def test_operations_mobile_contract_uses_bottom_navigation_and_bottom_sheet(self):
         self.assertIn('.staff-mobile-nav{position:fixed;display:grid', self.v2_css)

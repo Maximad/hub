@@ -9,7 +9,7 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import resolve, reverse
 
-from accounts.permissions import user_has_capability
+from accounts.permissions import require_staff_capability, user_has_capability
 from core.models import ActivityLog, HubVisit, Order, TableArea
 from core.services.table_visit_access import (
     assert_pin_attempt_allowed,
@@ -58,8 +58,8 @@ from core.views_legacy import (
     staff_order_status,
     staff_order_edit as _legacy_staff_order_edit,
     staff_order_edit_add_item,
-    staff_order_edit_update_item,
-    staff_order_edit_remove_item,
+    staff_order_edit_update_item as _legacy_staff_order_edit_update_item,
+    staff_order_edit_remove_item as _legacy_staff_order_edit_remove_item,
     staff_cashier_order as _legacy_staff_cashier_order,
     staff_cashier_pay as _legacy_staff_cashier_pay,
     staff_cashier_discount,
@@ -292,6 +292,38 @@ def staff_order_edit(request, public_code):
     ):
         return render_order_context_panel(request, public_code)
     return _legacy_staff_order_edit(request, public_code)
+
+
+
+def _contextual_order_mutation_response(request, public_code, response):
+    """Stay in the existing drawer after canonical audited order mutations.
+
+    The legacy handlers perform all permission, validation, financial, inventory
+    and audit work. Only turn a successful navigation response into an HTMX
+    fragment when the caller explicitly requested the contextual experience.
+    """
+    if (
+        request.method == 'POST'
+        and request.GET.get('panel') == 'context'
+        and request.headers.get('HX-Request') == 'true'
+        and 300 <= response.status_code < 400
+    ):
+        fragment = render_order_context_panel(request, public_code)
+        fragment['HX-Trigger'] = 'hub:staff-context-updated'
+        return fragment
+    return response
+
+
+@require_staff_capability('order_edit')
+def staff_order_edit_update_item(request, public_code, item_id):
+    response = _legacy_staff_order_edit_update_item(request, public_code, item_id)
+    return _contextual_order_mutation_response(request, public_code, response)
+
+
+@require_staff_capability('order_edit')
+def staff_order_edit_remove_item(request, public_code, item_id):
+    response = _legacy_staff_order_edit_remove_item(request, public_code, item_id)
+    return _contextual_order_mutation_response(request, public_code, response)
 
 
 def staff_cashier(request):

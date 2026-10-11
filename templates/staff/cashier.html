@@ -24,7 +24,7 @@
         </div>
         <p><strong>{{ row.orders|length }}</strong> طلبات مرتبطة بهذه الجلسة</p>
         <div>الإجمالي <span class="hub-money">{{ row.total|format_syp }}</span> | المدفوع <span class="hub-money">{{ row.paid|format_syp }}</span> | <strong>المتبقي <span class="hub-money">{{ row.remaining|format_syp }}</span></strong></div>
-        <div class="hub-toolbar" style="margin-top:.75rem"><a class="hub-button hub-button-primary" href="{% url 'staff_cashier_order' visit.public_code %}">فتح الحساب المجمع</a><a class="hub-button" href="{% url 'staff_visit_detail' visit.public_code %}">تفاصيل الجلسة</a></div>
+        <div class="hub-toolbar" style="margin-top:.75rem"><a class="hub-button hub-button-primary" href="{% url 'staff_cashier_order' visit.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' visit.public_code %}?panel=payment" data-context-title="قبض حساب الجلسة" aria-haspopup="dialog">قبض الحساب</a>{% if staff_caps.visit_manage %}<a class="hub-button" href="{% url 'staff_visit_detail' visit.public_code %}" data-visit-context-url="{% url 'staff_visit_detail' visit.public_code %}?panel=1" data-context-title="تفاصيل الجلسة" aria-haspopup="dialog">تفاصيل الجلسة</a>{% endif %}</div>
       </article>
       {% endwith %}
     {% empty %}
@@ -43,7 +43,7 @@
         <div><strong class="hub-order-number">{{ order.display_number }}</strong></div>
         <div><span class="hub-badge hub-badge-info">{{ order.get_fulfillment_label }}</span>{% if order.location_detail %}<div class="hub-location-detail">{{ order.location_detail }}</div>{% endif %}</div>
         <div>المجموع <span class="hub-money">{{ row.total|format_syp }}</span> | المدفوع <span class="hub-money">{{ row.paid|format_syp }}</span> | المتبقي <span class="hub-money">{{ row.remaining|format_syp }}</span></div>
-        <a class="hub-button hub-button-primary" href="{% url 'staff_cashier_order' order.public_code %}">فتح</a>
+        <a class="hub-button hub-button-primary" href="{% url 'staff_cashier_order' order.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' order.public_code %}?panel=payment" data-context-title="قبض الطلب المستقل" aria-haspopup="dialog">قبض الطلب</a>
       </article>
     {% endwith %}{% endfor %}
   </div>
