@@ -251,11 +251,23 @@ class PrepStation(CatalogTimeStampedModel):
         SERVICE = 'service', 'الخدمات'
         GENERAL = 'general', 'عام'
 
+    class WorkflowProfile(models.TextChoices):
+        DIRECT = 'direct', 'مباشر · موظف واحد'
+        TEAM = 'team', 'فريق · مراحل التحضير والتسليم'
+        EVENT = 'event', 'فعالية · مراحل مفصلة'
+
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     code = models.SlugField(unique=True)
     name_ar = models.CharField(max_length=120)
     name_en = models.CharField(max_length=120, blank=True)
     station_type = models.CharField(max_length=20, choices=StationType.choices, default=StationType.GENERAL)
+    workflow_profile = models.CharField(
+        'أسلوب التحضير',
+        max_length=12,
+        choices=WorkflowProfile.choices,
+        default=WorkflowProfile.TEAM,
+        help_text='المباشر يسمح بإنهاء تقديم العنصر بخطوة واحدة. الفريق والفعاليات يحتفظان بالمراحل المفصلة.',
+    )
     is_active = models.BooleanField(default=True)
     sort_order = models.IntegerField(default=0)
 
