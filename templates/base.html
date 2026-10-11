@@ -37,6 +37,14 @@
     <link rel="stylesheet" href="{% static 'css/public_menu_flow.css' %}">
     <link rel="stylesheet" href="{% static 'css/customer_experience_v2.css' %}">
   {% endif %}
+  {% if request.path|slice:":6" == "/menu/" or request.path == "/staff/" %}
+  {# Optional, non-blocking font: local fallbacks keep the menu usable on slow/offline connections. #}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap"></noscript>
+  <link rel="stylesheet" href="{% static 'css/hub_ui_v3_pilot.css' %}">
+  {% endif %}
   {% include "includes/hub_theme.html" %}
   {% comment %}Legacy density choices map onto the semantic token layer.{% endcomment %}
   {% if system_settings %}<style>:root{

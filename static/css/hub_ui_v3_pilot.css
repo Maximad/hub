@@ -1,0 +1,365 @@
+/* Hub Suite UI 3.0 pilot — mobile-first visual layer.
+ * Opt-in: .hub-ui-v3 on the public menu and the staff Operations workspace only.
+ * Presentation only: no business/permission/cart/network changes.
+ * Do not append these declarations to hub.css or duplicate the v2 components.
+ */
+body.hub-ui-v3 {
+  --hub-v3-turquoise:#1abc9c;
+  --hub-v3-primary:#137f70;
+  --hub-v3-food:#e67e22;
+  --hub-v3-events:#9b59b6;
+  --hub-v3-kids:#f1c40f;
+  --hub-v3-ink:#34495e;
+  --hub-v3-canvas:#f7f8f8;
+  --hub-v3-border:#dce4e7;
+  --hub-v3-muted:#667b86;
+  --hub-color-primary:var(--hub-v3-primary);
+  --hub-color-primary-hover:#0d655a;
+  --hub-color-primary-contrast:#fff;
+  --hub-color-background:var(--hub-v3-canvas);
+  --hub-color-surface:#fff;
+  --hub-color-surface-secondary:#f1f5f5;
+  --hub-color-border:var(--hub-v3-border);
+  --hub-color-text:var(--hub-v3-ink);
+  --hub-color-text-muted:var(--hub-v3-muted);
+  --hub-primary:var(--hub-v3-primary);
+  --hub-primary-strong:#0d655a;
+  --hub-bg:var(--hub-v3-canvas);
+  --hub-card:#fff;
+  --hub-surface:#fff;
+  --hub-surface-alt:#f1f5f5;
+  --hub-border:var(--hub-v3-border);
+  --hub-text:var(--hub-v3-ink);
+  --hub-muted:var(--hub-v3-muted);
+  --hub-button:var(--hub-v3-primary);
+  --hub-font-body:"IBM Plex Sans Arabic","Noto Sans Arabic",Tahoma,"Segoe UI",Arial,sans-serif;
+  --hub-font-heading:var(--hub-font-body);
+  background:var(--hub-v3-canvas);
+  color:var(--hub-v3-ink);
+  font-family:var(--hub-font-body);
+}
+body.hub-ui-v3 :is(button,input,select,textarea) { font-family:var(--hub-font-body); }
+body.hub-ui-v3 :is(.hub-button,.staff-v2-button,.menu-section-chip):focus-visible,
+body.hub-ui-v3 :is(a,button,input,select,textarea):focus-visible {
+  outline:3px solid #216fbc;
+  outline-offset:2px;
+}
+body.hub-ui-v3 .hub-button-primary { background:var(--hub-v3-primary);border-color:var(--hub-v3-primary);color:#fff; }
+
+/* PUBLIC MENU — editorial landing, compact ordering. The registered logo is unchanged. */
+body.public-menu-page.hub-ui-v3 .hub-header--customer {
+  background:rgba(247,248,248,.97);
+  box-shadow:none;
+  border-bottom:1px solid var(--hub-v3-border);
+  padding:0;
+  color:var(--hub-v3-ink);
+}
+body.public-menu-page.hub-ui-v3 .hub-customer-header__inner { min-height:56px; }
+body.public-menu-page.hub-ui-v3 .hub-customer-header__brand {font-weight:600;}
+body.public-menu-page.hub-ui-v3 .hub-customer-header__account {font-size:.83rem;min-height:40px;}
+body.public-menu-page.hub-ui-v3 .menu-public__header {
+  position:relative;
+  overflow:hidden;
+  padding:clamp(18px,4.5vw,30px);
+  background:var(--hub-v3-turquoise);
+  border:0;
+  border-radius:20px;
+  color:#073d39;
+  box-shadow:none;
+}
+body.public-menu-page.hub-ui-v3 .menu-public__header::after {
+  content:"";
+  position:absolute;
+  inset-inline-end:-42px;
+  inset-block-end:-68px;
+  width:180px;
+  height:180px;
+  border:28px solid rgba(255,255,255,.17);
+  border-radius:50%;
+  pointer-events:none;
+}
+body.public-menu-page.hub-ui-v3 .menu-public__header-content,
+body.public-menu-page.hub-ui-v3 .menu-public__heading {position:relative;z-index:1;}
+body.public-menu-page.hub-ui-v3 .menu-public__header .menu-public__brand,
+body.public-menu-page.hub-ui-v3 .menu-public__header .menu-public__eyebrow,
+body.public-menu-page.hub-ui-v3 .menu-public__header .menu-public__table-banner {color:#07584e;}
+body.public-menu-page.hub-ui-v3 .menu-public__eyebrow {
+  font-size:.79rem;
+  font-weight:500;
+  letter-spacing:0;
+}
+body.public-menu-page.hub-ui-v3 .menu-public__heading .hub-section-title {
+  max-width:15ch;
+  margin:.25rem 0;
+  font-size:clamp(1.65rem,5.8vw,2.9rem);
+  font-weight:700;
+  line-height:1.23;
+  color:#073d39;
+}
+body.public-menu-page.hub-ui-v3 .menu-public__heading>p:not(.menu-public__brand):not(.menu-public__eyebrow) {
+  color:#174f49;
+  font-size:.92rem;
+  font-weight:300;
+  line-height:1.65;
+}
+body.public-menu-page.hub-ui-v3 .menu-public__logo {max-height:62px;object-fit:contain;}
+body.public-menu-page.hub-ui-v3 .menu-public__banner {border-radius:14px;max-height:180px;object-fit:cover;}
+body.public-menu-page.hub-ui-v3 .menu-public__table-banner {
+  position:relative;
+  z-index:1;
+  margin-top:10px;
+  font-size:.82rem;
+  font-weight:500;
+}
+
+/* First two REAL menu sections, with actual product media where available. */
+body.public-menu-page.hub-ui-v3 .hub-v3-feature-nav {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+  margin:0 0 14px;
+}
+body.public-menu-page.hub-ui-v3 .hub-v3-feature {
+  position:relative;
+  isolation:isolate;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  min-width:0;
+  min-height:140px;
+  overflow:hidden;
+  border-radius:17px;
+  padding:12px;
+  background:var(--hub-v3-turquoise);
+  color:#073d39;
+  text-decoration:none;
+}
+body.public-menu-page.hub-ui-v3 .hub-v3-feature--2 {background:var(--hub-v3-food);color:#4b2509;}
+body.public-menu-page.hub-ui-v3 .hub-v3-feature::after {
+  content:"";
+  position:absolute;
+  z-index:-1;
+  width:115px;
+  height:115px;
+  inset-inline-end:-40px;
+  inset-block-end:-35px;
+  background:rgba(255,255,255,.16);
+  border-radius:50%;
+}
+body.public-menu-page.hub-ui-v3 .hub-v3-feature__eyebrow {
+  z-index:1;
+  font-size:.7rem;
+  font-weight:500;
+  opacity:.9;
+}
+body.public-menu-page.hub-ui-v3 .hub-v3-feature__title {
+  z-index:1;
+  max-width:8ch;
+  font-size:clamp(1.2rem,4.7vw,1.8rem);
+  font-weight:700;
+  line-height:1.25;
+  overflow-wrap:anywhere;
+}
+body.public-menu-page.hub-ui-v3 .hub-v3-feature__more {
+  z-index:1;
+  font-size:.73rem;
+  font-weight:600;
+}
+body.public-menu-page.hub-ui-v3 .hub-v3-feature__image {
+  position:absolute;
+  z-index:0;
+  inset-inline-end:0;
+  inset-block-end:0;
+  width:49%;
+  height:75%;
+  object-fit:cover;
+  opacity:.65;
+  mask-image:linear-gradient(to left,#000 70%,transparent);
+  -webkit-mask-image:linear-gradient(to left,#000 70%,transparent);
+  pointer-events:none;
+}
+/* Search remains directly above the existing category rail. */
+body.public-menu-page.hub-ui-v3 .customer-menu-search {
+  padding:7px 9px;
+  margin-bottom:8px;
+  border:1px solid var(--hub-v3-border);
+  border-radius:13px;
+  background:rgba(255,255,255,.97);
+  box-shadow:none;
+}
+body.public-menu-page.hub-ui-v3 .customer-menu-search label {font-size:.77rem;font-weight:500;margin-bottom:3px;}
+body.public-menu-page.hub-ui-v3 .customer-menu-search input {min-height:42px;}
+body.public-menu-page.hub-ui-v3 .menu-sections-nav {
+  background:var(--hub-v3-canvas);
+  border:0;
+  box-shadow:none;
+  padding:6px 0;
+  margin-bottom:12px;
+  border-radius:0;
+}
+body.public-menu-page.hub-ui-v3 .menu-section-chip {
+  background:#fff;
+  border:1px solid var(--hub-v3-border);
+  color:var(--hub-v3-ink);
+  min-height:39px;
+  padding:8px 13px;
+  font-weight:500;
+}
+body.public-menu-page.hub-ui-v3 .menu-section-chip:focus-visible,
+body.public-menu-page.hub-ui-v3 .menu-section-chip:hover {
+  background:#dff6ef;
+  border-color:var(--hub-v3-primary);
+}
+body.public-menu-page.hub-ui-v3 .menu-sections-wrap>.hub-section {
+  padding:0;
+  background:transparent;
+  box-shadow:none;
+  border:0;
+}
+body.public-menu-page.hub-ui-v3 .menu-section-heading .hub-section-title {
+  font-size:clamp(1.25rem,3.8vw,1.65rem);
+  font-weight:700;
+  color:var(--hub-v3-ink);
+}
+body.public-menu-page.hub-ui-v3 .menu-product-card {
+  border:1px solid var(--hub-v3-border);
+  border-radius:15px;
+  background:#fff;
+  box-shadow:none;
+  transition:border-color .15s ease;
+}
+body.public-menu-page.hub-ui-v3 .menu-product-card:hover {border-color:var(--hub-v3-primary);}
+body.public-menu-page.hub-ui-v3 .menu-product-name {font-weight:600;color:var(--hub-v3-ink);}
+body.public-menu-page.hub-ui-v3 .menu-product-price {color:#096256;font-weight:700;}
+body.public-menu-page.hub-ui-v3 .menu-product-desc {font-weight:400;color:var(--hub-v3-muted);}
+body.public-menu-page.hub-ui-v3 .customer-space-nav {
+  background:rgba(255,255,255,.98);
+  border-color:var(--hub-v3-border);
+  box-shadow:0 8px 24px rgba(30,54,68,.10);
+}
+body.public-menu-page.hub-ui-v3 .customer-space-nav a.is-active,
+body.public-menu-page.hub-ui-v3 .customer-space-nav button.is-active {background:var(--hub-v3-primary);color:#fff;}
+
+/* STAFF OPERATIONS — preserve v2 structure, capability links, drawers and KPIs. */
+body.staff-workspace-page.hub-ui-v3 {
+  --staff-v2-bg:#f7f8f8;
+  --staff-v2-surface:#fff;
+  --staff-v2-surface-soft:#f1f5f5;
+  --staff-v2-ink:#34495e;
+  --staff-v2-muted:#667b86;
+  --staff-v2-line:#dce4e7;
+  --staff-v2-brand:#137f70;
+  --staff-v2-brand-soft:#e2f5ef;
+  --staff-v2-sand:#a66b17;
+  --staff-v2-sand-soft:#fff0d7;
+  --staff-v2-radius-sm:12px;
+  --staff-v2-radius-md:16px;
+  --staff-v2-shadow:0 2px 12px rgba(30,54,68,.035);
+}
+body.staff-workspace-page.hub-ui-v3 .staff-app-header {
+  background:rgba(255,255,255,.97);
+  border-bottom:1px solid var(--staff-v2-line);
+}
+body.staff-workspace-page.hub-ui-v3 .staff-app-header__brand-copy strong {font-weight:600;}
+body.staff-workspace-page.hub-ui-v3 .staff-v2-title {
+  font-weight:700;
+  letter-spacing:0;
+  color:var(--staff-v2-ink);
+}
+body.staff-workspace-page.hub-ui-v3 .staff-v2-eyebrow {font-weight:500;color:var(--staff-v2-brand);}
+body.staff-workspace-page.hub-ui-v3 .staff-v2-button--primary {
+  background:var(--staff-v2-brand);
+  border-color:var(--staff-v2-brand);
+  color:#fff;
+}
+body.staff-workspace-page.hub-ui-v3 .ops-v2__stat,
+body.staff-workspace-page.hub-ui-v3 .ops-v2__account,
+body.staff-workspace-page.hub-ui-v3 .ops-v2__orders-panel {
+  border-color:var(--staff-v2-line);
+  background:#fff;
+  box-shadow:none;
+}
+body.staff-workspace-page.hub-ui-v3 .ops-v2__stat-icon {
+  background:#e1f5ee;
+  color:#137f70;
+}
+body.staff-workspace-page.hub-ui-v3 .ops-v2__stat:nth-child(2) .ops-v2__stat-icon {background:#e5f2fb;color:#216eab;}
+body.staff-workspace-page.hub-ui-v3 .ops-v2__stat:nth-child(3) .ops-v2__stat-icon {background:#e4f5e9;color:#167d48;}
+body.staff-workspace-page.hub-ui-v3 .ops-v2__stat:nth-child(4) .ops-v2__stat-icon {background:#fff0d7;color:#98600e;}
+body.staff-workspace-page.hub-ui-v3 .ops-v2__account:hover {border-color:#85bcb3;box-shadow:0 3px 12px rgba(29,65,68,.06);}
+body.staff-workspace-page.hub-ui-v3 .ops-v2__account-main {color:var(--staff-v2-ink);}
+body.staff-workspace-page.hub-ui-v3 .ops-v2__account-title strong {font-weight:600;}
+body.staff-workspace-page.hub-ui-v3 .ops-v2__money-cell strong {font-weight:600;}
+body.staff-workspace-page.hub-ui-v3 .ops-v2__account-actions .staff-v2-button {font-weight:600;}
+body.staff-workspace-page.hub-ui-v3 .ops-v2__account-actions .staff-v2-button--primary {color:#fff;}
+body.staff-workspace-page.hub-ui-v3 .ops-v2__order {border-color:var(--staff-v2-line);}
+
+@media(max-width:700px){
+  body.public-menu-page.hub-ui-v3 main.hub-container {padding-inline:10px;}
+  body.public-menu-page.hub-ui-v3 .menu-public__header {padding:16px;border-radius:16px;margin-bottom:10px;}
+  body.public-menu-page.hub-ui-v3 .menu-public__logo {max-height:44px;}
+  body.public-menu-page.hub-ui-v3 .menu-public__banner {max-height:112px;}
+  body.public-menu-page.hub-ui-v3 .hub-v3-feature-nav {gap:8px;margin-bottom:10px;}
+  body.public-menu-page.hub-ui-v3 .hub-v3-feature {min-height:124px;padding:10px;border-radius:14px;}
+  body.public-menu-page.hub-ui-v3 .hub-v3-feature__title {max-width:9ch;}
+  body.public-menu-page.hub-ui-v3 .menu-product-grid {gap:8px;}
+  body.public-menu-page.hub-ui-v3 .menu-product-card:has(> .menu-product-media) {
+    grid-template-columns:84px minmax(0,1fr);
+    align-items:center;
+    gap:9px;
+    padding:9px;
+  }
+  body.public-menu-page.hub-ui-v3 .menu-product-card>.menu-product-media {
+    width:84px!important;
+    height:84px!important;
+    min-height:0!important;
+    aspect-ratio:1/1!important;
+    margin:0;
+    border-radius:10px;
+  }
+  body.public-menu-page.hub-ui-v3 .menu-product-card .menu-list-row {
+    display:grid;
+    grid-template-columns:76px minmax(0,1fr);
+    align-items:center;
+    gap:9px;
+  }
+  body.public-menu-page.hub-ui-v3 .menu-product-card .menu-list-row .menu-product-media {
+    width:76px!important;
+    height:76px!important;
+    min-height:0!important;
+    aspect-ratio:1/1!important;
+    margin:0;
+    border-radius:10px;
+  }
+  body.public-menu-page.hub-ui-v3 .menu-product-card .menu-product-name {font-size:.98rem;line-height:1.4;}
+  body.public-menu-page.hub-ui-v3 .menu-product-card .menu-product-desc {font-size:.78rem;line-height:1.5;}
+  body.public-menu-page.hub-ui-v3 .menu-product-card .menu-product-badges {grid-column:1/-1;}
+  body.staff-workspace-page.hub-ui-v3 .ops-v2__hero {
+    display:flex;
+    flex-direction:row;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+  }
+  body.staff-workspace-page.hub-ui-v3 .ops-v2__hero .staff-v2-actions {
+    display:flex;
+    width:auto;
+    max-width:53%;
+    gap:5px;
+    overflow-x:auto;
+    scrollbar-width:none;
+  }
+  body.staff-workspace-page.hub-ui-v3 .ops-v2__hero .staff-v2-actions>* {
+    flex:0 0 auto;
+    min-height:42px;
+    white-space:nowrap;
+    padding-inline:10px;
+  }
+  body.staff-workspace-page.hub-ui-v3 .ops-v2__stats {scroll-padding-inline:10px;}
+  body.staff-workspace-page.hub-ui-v3 .ops-v2__stat {flex-basis:124px;min-height:72px;}
+  body.staff-workspace-page.hub-ui-v3 .ops-v2__account-actions .staff-v2-button {min-height:42px;}
+}
+@media(prefers-reduced-motion:reduce){
+  body.hub-ui-v3 .menu-product-card,
+  body.hub-ui-v3 .ops-v2__account {transition:none;}
+}

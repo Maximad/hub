@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static menu_form product_media %}
 {% block title %}المنيو{% endblock %}
-{% block body_class %}public-menu-page{% endblock %}
+{% block body_class %}public-menu-page hub-ui-v3{% endblock %}
 {% block content %}
 <div class="menu-public public-menu-redesign menu-layout-{{ system_settings.safe_public_menu_layout|default:'comfortable' }} public-menu-layout-{{ system_settings.safe_public_menu_layout|default:'comfortable' }} mobile-density-{{ system_settings.safe_mobile_product_density|default:'compact' }} card-style-{{ system_settings.safe_card_style|default:'soft' }} menu-layout-{{ system_settings.menu_layout_preset|default:'default_masharib' }} menu-mobile-{{ system_settings.menu_mobile_layout|default:'one_column_cards' }} {{ system_settings.menu_mobile_layout_class|default:'layout-grid-1' }} {{ system_settings.menu_tablet_layout_class|default:'layout-tablet-2' }} {{ system_settings.menu_desktop_layout_class|default:'layout-grid-3' }} {{ system_settings.product_card_style_class|default:'card-image-first' }} sticky-cart-{{ system_settings.sticky_cart_style|default:'bottom_bar' }} cart-review-{{ system_settings.cart_review_position|default:'bottom' }}" dir="rtl">
   {% if current_visit %}<aside class="visit-banner" aria-label="ملخص جلستك"><span><strong>جلستك اليوم</strong> · المتبقي <span class="hub-money">{{ current_visit.remaining_syp }} ل.س</span></span>{% if active_visit_internet %}<span class="hub-badge hub-badge-info">الإنترنت فعال</span>{% endif %}<a class="hub-button hub-button-secondary" href="{% url 'current_visit' %}">عرض الجلسة</a></aside>{% endif %}
@@ -27,6 +27,29 @@
       <p class="menu-public__table-banner">الطلب مرتبط بالطاولة: <strong>{{ table.display_name }}</strong>{% if table.room_display_name %} — المساحة: {{ table.room_display_name }}{% endif %}</p>
     {% endif %}
   </header>{% endif %}
+
+
+    {% if section_products %}
+    {% if not system_settings or system_settings.show_section_chips %}
+    <nav class="hub-v3-feature-nav" aria-label="استكشف أقسام المنيو">
+      {% for section, products in section_products|slice:":2" %}
+      <a class="hub-v3-feature hub-v3-feature--{{ forloop.counter }}" href="#section-{{ section.id }}">
+        <span class="hub-v3-feature__eyebrow">0{{ forloop.counter }} / من المنيو</span>
+        <strong class="hub-v3-feature__title">{{ section.name_ar }}</strong>
+        {% if not system_settings or system_settings.show_product_images %}
+        {% for p in products|slice:":1" %}
+        {% if p.primary_media and p.primary_media.is_visual_media %}
+          {% product_card_image p.primary_media 320 as hub_v3_feature_img %}
+          <img class="hub-v3-feature__image" src="{{ hub_v3_feature_img }}" alt="" loading="lazy" decoding="async" width="320" height="400">
+        {% endif %}
+        {% endfor %}
+        {% endif %}
+        <span class="hub-v3-feature__more">تصفّح القسم ←</span>
+      </a>
+      {% endfor %}
+    </nav>
+    {% endif %}
+    {% endif %}
 
   <form method="post" class="hub-form" id="menu-order-form" data-show-modifier-summary="{% if not system_settings or system_settings.show_modifier_summary %}true{% else %}false{% endif %}">
     {% csrf_token %}
