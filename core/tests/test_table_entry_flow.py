@@ -114,9 +114,9 @@ class TableEntryFlowTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'menu/table_landing.html')
-        self.assertContains(response, 'ابدأ جلستك')
+        self.assertContains(response, 'ادخل إلى هَبّ من هذه الطاولة')
         self.assertContains(response, 'دخول إلى المنيو')
-        self.assertContains(response, 'بعد ذلك ستستخدم فقط')
+        self.assertContains(response, 'امسح رمز الطاولة مرة واحدة')
         self.assertNotContains(response, self.food.name_ar)
 
         self._bind_new_visit()
@@ -125,7 +125,7 @@ class TableEntryFlowTests(TestCase):
         self.assertTemplateUsed(response, 'menu/menu.html')
         self.assertContains(response, self.food.name_ar)
         self.assertContains(response, reverse('current_visit'))
-        self.assertNotContains(response, 'ابدأ جلستك')
+        self.assertNotContains(response, 'ادخل إلى هَبّ من هذه الطاولة')
 
     def test_menu_choice_opens_catalog_without_generic_internet_product(self):
         self._bind_new_visit()
@@ -211,11 +211,33 @@ class TableEntryFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'menu/current_visit.html')
         self.assertContains(response, 'اتصل بالإنترنت')
-        self.assertContains(response, reverse('wifi_entry') + '?mode=internet')
+        self.assertContains(response, reverse('current_visit') + '?focus=internet#internet')
         self.assertNotContains(response, 'name="mode" value="metered"')
         self.assertNotContains(response, self.package.name_ar)
         self.assertContains(response, self.menu_url)
-        self.assertNotContains(response, 'ابدأ جلستك')
+        self.assertNotContains(response, 'ادخل إلى هَبّ من هذه الطاولة')
+
+    def test_internet_options_open_in_same_visit_with_account_and_orders_preserved(self):
+        self._bind_new_visit()
+        response = self.client.get(reverse('current_visit'), {'focus': 'internet'})
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'menu/current_visit.html')
+        self.assertContains(response, 'id="visit-account"')
+        self.assertContains(response, 'id="customer-orders"')
+        self.assertContains(response, 'id="internet"')
+        self.assertContains(response, 'خيارات الاتصال لهذا الجهاز')
+        self.assertContains(response, 'name="mode" value="metered"')
+        self.assertContains(response, self.package.name_ar)
+        self.assertContains(response, self.menu_url)
+
+    def test_visit_menu_has_one_scan_shortcuts_to_internet_and_balance(self):
+        self._bind_new_visit()
+        response = self.client.get(self.menu_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'aria-label="خدمات الجلسة"')
+        self.assertContains(response, reverse('current_visit') + '#visit-account')
+        self.assertContains(response, reverse('current_visit') + '?focus=internet#internet')
+        self.assertContains(response, reverse('current_visit') + '#customer-orders')
 
     def test_package_is_rejected_while_metered_visit_session_is_active(self):
         self._start_metered()
