@@ -287,7 +287,7 @@ def staff_prep_item_status(request, item_id):
     with transaction.atomic():
         # Concurrency guard: do not serve/cancel the same item from stale tabs.
         item = get_object_or_404(
-            OrderItem.objects.select_for_update().select_related(
+            OrderItem.objects.select_for_update(of=('self',)).select_related(
                 'order', 'product', 'prep_station', 'product__prep_station_ref'
             ), pk=item_id,
         )
