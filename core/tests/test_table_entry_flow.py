@@ -225,7 +225,7 @@ class TableEntryFlowTests(TestCase):
         self.assertContains(response, 'id="visit-account"')
         self.assertContains(response, 'id="customer-orders"')
         self.assertContains(response, 'id="internet"')
-        self.assertContains(response, 'خيارات الاتصال لهذا الجهاز')
+        self.assertContains(response, 'خيارات الإنترنت لهذا الجهاز')
         self.assertContains(response, 'name="mode" value="metered"')
         self.assertContains(response, self.package.name_ar)
         self.assertContains(response, self.menu_url)
