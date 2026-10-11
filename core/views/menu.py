@@ -86,6 +86,11 @@ def _validation_message(error):
 
 def _render_customer_menu(request, *, table=None, error=''):
     context = decorate_menu_context(_menu_context(table=table, request=request), table=table)
+    # Catalog product visibility intentionally disables the old Internet storefront.
+    # Keep a separate, read-only shortcut into this browser's existing visit.
+    context['visit_internet_navigation_enabled'] = bool(
+        table and context.get('current_visit') and self_service_enabled(context['settings'])
+    )
     if error:
         context['error'] = error
         context['form_values'] = request.POST

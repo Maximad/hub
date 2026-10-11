@@ -190,6 +190,122 @@ body.hub-ui-v3 .hub-member-home__logout button {min-height:44px}
   body.hub-ui-v3 .hub-member-home__sections>.hub-card {min-width:0}
 }
 
+/* Hub 3.1 customer visit: one QR, one account view, in-page anchors.
+   This supplements v3; no menu/cart or Internet business logic is changed. */
+body.hub-ui-v3.customer-space-page .customer-visit-hub__navigation,
+body.hub-ui-v3.public-menu-page .customer-visit-hub__menu-links {
+  display:flex;
+  align-items:stretch;
+  gap:8px;
+  max-width:100%;
+  overflow-x:auto;
+  scrollbar-width:thin;
+  padding:4px 0 8px;
+  scroll-snap-type:x proximity;
+}
+body.hub-ui-v3.customer-space-page .customer-visit-hub__nav-link,
+body.hub-ui-v3.public-menu-page .customer-visit-hub__menu-links a {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex:1 0 auto;
+  min-height:44px;
+  min-width:0;
+  padding:9px 14px;
+  border:1px solid #c9e8df;
+  border-radius:12px;
+  background:#eff9f5;
+  color:#0d655a;
+  font-size:.88rem;
+  font-weight:600;
+  text-decoration:none;
+  white-space:nowrap;
+  scroll-snap-align:start;
+}
+body.hub-ui-v3.customer-space-page .customer-visit-hub__nav-link:hover,
+body.hub-ui-v3.public-menu-page .customer-visit-hub__menu-links a:hover {
+  background:#dff4ec;
+  border-color:#81bcac;
+}
+body.hub-ui-v3.customer-space-page :is(#visit-account,#internet,#customer-orders,#visit-actions) {
+  scroll-margin-top:clamp(75px,16vh,135px);
+}
+body.hub-ui-v3.customer-space-page .customer-visit-hub__breakdown {
+  margin-top:10px;
+  color:#536975;
+}
+body.hub-ui-v3.customer-space-page .customer-visit-hub__breakdown>summary {
+  display:list-item;
+  width:max-content;
+  max-width:100%;
+  min-height:36px;
+  padding:7px 4px;
+  color:#0c685b;
+  font-size:.85rem;
+  font-weight:600;
+  cursor:pointer;
+}
+body.hub-ui-v3.customer-space-page .customer-visit-hub__breakdown dl {
+  display:grid;
+  gap:7px;
+  margin:8px 0 0;
+}
+body.hub-ui-v3.customer-space-page .customer-visit-hub__breakdown dl>div {
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:16px;
+  padding:7px 0;
+  border-bottom:1px solid #e0e7e9;
+}
+body.hub-ui-v3.customer-space-page .customer-visit-hub__breakdown dt {
+  color:#637883;
+}
+body.hub-ui-v3.customer-space-page .customer-visit-hub__breakdown dd {
+  margin:0;
+  color:#34495e;
+  font-weight:600;
+  font-variant-numeric:tabular-nums;
+}
+body.hub-ui-v3.customer-space-page .current-visit__internet-options-heading {
+  margin:12px 0 10px;
+  padding:12px 14px;
+  border-radius:13px;
+  background:#e6f5f2;
+  border:1px solid #c8e7dd;
+}
+body.hub-ui-v3.customer-space-page .current-visit__internet-options-heading h3 {
+  margin:0 0 4px;
+  color:#0e6055;
+  font-size:1.05rem;
+  font-weight:700;
+}
+body.hub-ui-v3.customer-space-page .current-visit__internet-options-heading p {
+  margin:0;
+  color:#466a64;
+  font-size:.86rem;
+}
+@media(max-width:600px) {
+  body.hub-ui-v3.customer-space-page .current-visit__header--compact {
+    align-items:start;
+    gap:10px;
+  }
+  body.hub-ui-v3.customer-space-page .current-visit__header--compact .hub-section-title {
+    font-size:clamp(1.35rem,5vw,1.7rem);
+    line-height:1.35;
+  }
+  body.hub-ui-v3.customer-space-page .customer-visit-hub__nav-link,
+  body.hub-ui-v3.public-menu-page .customer-visit-hub__menu-links a {
+    flex:0 0 auto;
+    min-height:44px;
+    font-size:.81rem;
+    padding-inline:13px;
+  }
+  body.hub-ui-v3.customer-space-page .customer-visit-hub__breakdown dl>div {
+    padding-block:6px;
+  }
+}
+
 /* STAFF: compact, neutral tools; category colors only when they have meaning. */
 body.hub-staff-ui.hub-ui-v3 {
   --staff-v2-bg:#f7f8f8;

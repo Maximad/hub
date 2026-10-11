@@ -204,7 +204,8 @@ class WifiEntryTests(TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, 'خيارات الإنترنت')
         content = page.content.decode()
-        self.assertLess(content.index('id="internet"'), content.index('aria-label="الحساب"'))
+        self.assertLess(content.index('id="visit-account"'), content.index('id="internet"'))
+        self.assertIn('id="customer-orders"', content)
 
     @patch('core.views.visits.build_session_hotspot_login_payload')
     @patch('core.views.wifi.one_tap_session_connect_configured', return_value=True)
