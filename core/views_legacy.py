@@ -12,6 +12,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 import re
 
 from members.models import MembershipBenefitRule, MembershipPlan, MembershipSubscription, MemberCreditLedger
@@ -1082,7 +1083,11 @@ def _staff_menu_tools_context(request, products):
 def _staff_order_mutation_redirect(request, order=None, *, default='staff_orders'):
     """Return staff mutations to a trusted in-app page when one was supplied."""
     target = (request.POST.get('next') or '').strip()
-    if target.startswith('/') and not target.startswith('//'):
+    if target and url_has_allowed_host_and_scheme(
+        target,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
         return redirect(target)
     if default == 'staff_order_edit' and order is not None:
         return redirect('staff_order_edit', public_code=order.public_code)
