@@ -5,6 +5,7 @@ from django.http import HttpResponseForbidden
 VIEW_AS_USER_SESSION_KEY = 'hub_view_as_user_id'
 VIEW_AS_SCOPE_PREFIXES = ('/staff/', '/provider/')
 VIEW_AS_EXIT_PATH = '/staff/view-as/exit/'
+VIEW_AS_START_SUFFIX = '/view-as/'
 SAFE_METHODS = {'GET', 'HEAD', 'OPTIONS'}
 
 
@@ -32,8 +33,12 @@ class ViewAsUserMiddleware:
 
         request.view_as_actor = real_user
 
-        # Keep /admin/ and the exit endpoint under the real superuser identity.
-        if request.path == VIEW_AS_EXIT_PATH or not request.path.startswith(VIEW_AS_SCOPE_PREFIXES):
+        # Keep /admin/ and View As controls under the real superuser identity.
+        if (
+            request.path == VIEW_AS_EXIT_PATH
+            or request.path.endswith(VIEW_AS_START_SUFFIX)
+            or not request.path.startswith(VIEW_AS_SCOPE_PREFIXES)
+        ):
             return self.get_response(request)
 
         User = get_user_model()
@@ -46,9 +51,12 @@ class ViewAsUserMiddleware:
         request.real_user = real_user
         request.user = target
 
-        if request.method.upper() not in SAFE_METHODS:
+        if (
+            request.method.upper() not in SAFE_METHODS
+            or request.path == '/provider/logout/'
+        ):
             return HttpResponseForbidden(
-                'وضع View As للمعاينة فقط. أنهِ المعاينة قبل تنفيذ أي تعديل.',
+                'وضع View As للمعاينة فقط. أنهِ المعاينة قبل تنفيذ أي تعديل أو تسجيل خروج.',
                 content_type='text/plain; charset=utf-8',
             )
 
