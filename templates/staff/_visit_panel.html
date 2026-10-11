@@ -99,6 +99,20 @@
   </section>
   {% endif %}
 
+  {% if visit_caps.visit_manage and visit.status == 'open' and not visit.orders.all and not internet_sessions and not internet_entitlements %}
+  <section class="staff-visit-panel__section">
+    <details class="staff-visit-panel__quick-edit">
+      <summary>حذف جلسة فارغة</summary>
+      <p class="hub-help-text">حذف الجلسة متاح فقط إذا لم يكن لها طلبات أو إنترنت أو حجوزات. يتحقق النظام من ذلك قبل الحذف.</p>
+      <form method="post" action="{% url 'staff_visit_detail' visit.public_code %}" onsubmit="return confirm('حذف هذه الجلسة الفارغة؟');">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="delete_empty">
+        <button type="submit" class="hub-button hub-button-danger">تأكيد حذف الجلسة الفارغة</button>
+      </form>
+    </details>
+  </section>
+  {% endif %}
+
   {% if visit.notes %}<section class="staff-visit-panel__section"><h4>ملاحظة</h4><p>{{ visit.notes }}</p></section>{% endif %}
 
   <footer class="staff-payment-panel__footer"><a class="hub-button" href="{% url 'staff_visit_detail' visit.public_code %}">تعديل الجلسة والتفاصيل</a></footer>
