@@ -125,7 +125,7 @@ def seed_access_profiles(apps, schema_editor):
         profiles[base_role] = profile
 
     for user in User.objects.all().iterator():
-        profile = profiles.get(user.role) or profiles['staff']
+        profile = profiles['admin'] if user.is_superuser else (profiles.get(user.role) or profiles['staff'])
         User.objects.filter(pk=user.pk).update(access_profile_id=profile.pk)
 
 
