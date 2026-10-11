@@ -6,22 +6,27 @@
 <main class="menu-public customer-space" dir="rtl" data-customer-space data-has-visit="true" data-menu-url="{{ menu_url }}" data-visit-url="{% url 'current_visit' %}" data-orders-url="{% url 'current_visit' %}#customer-orders">
   <header class="hub-card current-visit__header current-visit__header--compact">
     <div>
-      <p class="menu-public__brand">{% if focus_internet %}الإنترنت{% else %}جلستي{% endif %}</p>
-      <h1 class="hub-section-title">{% if focus_internet %}خيارات الإنترنت{% elif visit.table %}{{ visit.table.display_name }}{% else %}جلسة {{ visit.display_number }}{% endif %}</h1>
-      {% if focus_internet %}
-        <p>اختر طريقة الاتصال المناسبة لهذا الجهاز.</p>
-      {% elif visit.table %}
-        <p>{% if visit.table.room_display_name %}{{ visit.table.room_display_name }} · {% endif %}جلسة {{ visit.display_number }}</p>
+      <p class="menu-public__brand">جلستي في هَبّ</p>
+      <h1 class="hub-section-title">{% if visit.table %}{{ visit.table.display_name }}{% else %}جلسة {{ visit.display_number }}{% endif %}</h1>
+      {% if visit.table %}
+        <p>{% if visit.table.room_display_name %}{{ visit.table.room_display_name }} · {% endif %}جلستك وطلباتك والإنترنت وحسابك في مكان واحد.</p>
       {% else %}
-        <p>داخل المكان · احتفظ برقم الجلسة للدفع عند الكاشير.</p>
+        <p>داخل المكان · طلباتك والإنترنت وحسابك في مكان واحد.</p>
       {% endif %}
     </div>
     <a class="hub-button hub-button-primary" href="{{ menu_url }}">+ أضف طلباً</a>
   </header>
 
-  {% if not focus_internet %}{% include 'menu/_visit_totals.html' %}{% endif %}
+  <nav class="customer-visit-hub__navigation" aria-label="أقسام جلستي">
+    <a href="{{ menu_url }}" class="customer-visit-hub__nav-link">المنيو</a>
+    <a href="#visit-account" class="customer-visit-hub__nav-link">الحساب</a>
+    {% if internet_self_service_enabled %}<a href="#internet" class="customer-visit-hub__nav-link">الإنترنت</a>{% endif %}
+    <a href="#customer-orders" class="customer-visit-hub__nav-link">طلباتي</a>
+  </nav>
 
-  {% if not focus_internet and show_checkout_qr %}
+  {% include 'menu/_visit_totals.html' %}
+
+  {% if show_checkout_qr %}
   <details class="hub-card current-visit__checkout">
     <summary>
       <span><strong>الدفع عند الكاشير</strong><small>جلسة {{ visit.display_number }}</small></span>
@@ -38,7 +43,6 @@
   </details>
   {% endif %}
 
-  {% if not focus_internet %}
   <section class="hub-card current-visit__quick-actions" id="visit-actions" aria-label="خدمة الجلسة">
     <div class="current-visit__quick-actions-head"><h2>الخدمة</h2></div>
     <div class="customer-visit-actions">
@@ -48,7 +52,6 @@
       <form method="post" action="{% url 'customer_visit_request' %}">{% csrf_token %}<input type="hidden" name="action" value="assistance"><button class="hub-button hub-button-secondary" type="submit">أحتاج مساعدة</button></form>
     </div>
   </section>
-  {% endif %}
 
   {% if internet_self_service_enabled %}
   <section class="hub-card current-visit__internet" id="internet" aria-label="إنترنت هذا الجهاز">
@@ -79,19 +82,23 @@
         {% endif %}
         <form method="post" action="{% url 'visit_internet_session_stop' active_internet_session.public_code %}">{% csrf_token %}<button class="hub-button" type="submit">{% if active_internet_session.billing_mode == 'free' %}إيقاف الأساسي{% elif active_internet_session.entitlement.origin_type == 'internal_owner_grant' or active_internet_session.entitlement.origin_type == 'internal_team_grant' %}إيقاف هذا الاستخدام{% elif active_internet_session.network_ready %}إيقاف الإنترنت{% else %}إلغاء الطلب{% endif %}</button></form>
       </div>
-      {% if not focus_internet and active_internet_session.billing_mode == 'free' %}
-        <a class="hub-button hub-button-secondary current-visit__internet-upgrade" href="{% url 'wifi_entry' %}?mode=internet">إنترنت أسرع</a>
+      {% if active_internet_session.billing_mode == 'free' and not focus_internet %}
+        <a class="hub-button hub-button-secondary current-visit__internet-upgrade" href="{% url 'current_visit' %}?focus=internet#internet">خيارات الإنترنت الأسرع</a>
       {% endif %}
     </article>
 
-    {% elif not focus_internet %}
+    {% else %}
       <div class="current-visit__internet-empty">
         <p>لا يوجد اتصال فعّال على هذا الجهاز.</p>
-        <a class="hub-button hub-button-primary" href="{% url 'wifi_entry' %}?mode=internet">اتصل بالإنترنت</a>
+        <a class="hub-button hub-button-primary" href="{% url 'current_visit' %}?focus=internet#internet">اتصل بالإنترنت</a>
       </div>
     {% endif %}
 
     {% if focus_internet and not active_internet_session or focus_internet and active_internet_session.billing_mode == 'free' %}
+      <div class="current-visit__internet-options-heading" role="status">
+        <h3>خيارات الاتصال لهذا الجهاز</h3>
+        <p>اختر ما يناسبك. يمكنك العودة إلى المنيو أو حسابك من دون مسح رمز جديد.</p>
+      </div>
       {% if internet_entitlements %}
         <div class="current-visit__internet-choice">
           <h3>إنترنت مشمول بحسابك</h3>
@@ -129,8 +136,6 @@
     {% endif %}
   </section>
   {% endif %}
-
-  {% if focus_internet %}{% include 'menu/_visit_totals.html' %}{% endif %}
 
   <section class="hub-card" id="customer-orders">
     <div class="menu-section-heading"><span aria-hidden="true"></span><h2>طلباتي</h2></div>
