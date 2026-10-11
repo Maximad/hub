@@ -21,7 +21,9 @@ from core.views import staff_inventory
 from core.views_notifications import staff_notifications, staff_notifications_poll, staff_notifications_mark_read, staff_notifications_preferences
 from core.views_pwa import staff_web_app_manifest, service_worker, staff_push_config, staff_push_subscription
 from accounts.views_staff import (
-    staff_users_list, staff_user_new, staff_user_detail, staff_user_edit, staff_user_password, staff_user_toggle_active,
+    staff_users_list, staff_user_new, staff_user_detail, staff_user_edit,
+    staff_user_password, staff_user_toggle_active, staff_user_view_as,
+    staff_view_as_exit,
 )
 from members import views as member_device_views
 from core.views.internet_provider import (
@@ -116,6 +118,8 @@ urlpatterns = [
     path('staff/users/<int:user_id>/edit/', staff_user_edit, name='staff_user_edit'),
     path('staff/users/<int:user_id>/password/', staff_user_password, name='staff_user_password'),
     path('staff/users/<int:user_id>/toggle-active/', staff_user_toggle_active, name='staff_user_toggle_active'),
+    path('staff/users/<int:user_id>/view-as/', staff_user_view_as, name='staff_user_view_as'),
+    path('staff/view-as/exit/', staff_view_as_exit, name='staff_view_as_exit'),
     path('staff/import/', staff_import_home, name='staff_import_home'),
     path('staff/import/operations/', staff_operations_import_upload, name='staff_operations_import_upload'),
     path('staff/import/operations/template.xlsx', staff_operations_import_template, name='staff_operations_import_template'),
