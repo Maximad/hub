@@ -107,7 +107,7 @@ class InternetMenuCartTests(TestCase):
     def test_table_entry_requires_account_then_internet_lives_on_session_screen(self):
         response = self.client.get(self.table_url)
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'ابدأ جلستك')
+        self.assertContains(response, 'ادخل إلى هَبّ من هذه الطاولة')
         self.assertNotContains(response, self.package.name_ar)
         self.assertNotContains(response, self.food.name_ar)
 
