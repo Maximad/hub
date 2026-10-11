@@ -181,12 +181,13 @@ class Migration(migrations.Migration):
                 on_delete=django.db.models.deletion.PROTECT,
                 related_name='users',
                 to='accounts.accessprofile',
+                verbose_name='نمط الوصول',
             ),
         ),
         migrations.AddField(
             model_name='user',
             name='job_title',
-            field=models.CharField(blank=True, max_length=120),
+            field=models.CharField(blank=True, max_length=120, verbose_name='المسمى الوظيفي'),
         ),
         migrations.AlterField(
             model_name='user',
