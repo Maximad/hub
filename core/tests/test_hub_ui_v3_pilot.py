@@ -72,6 +72,11 @@ class HubUiV3PilotContractTests(SimpleTestCase):
         self.assertIn("contextHeight + 'px'", javascript)
         self.assertIn("body.style.setProperty('--hub-v3-tools-height'", javascript)
 
+    def test_old_session_banner_stays_hidden_when_compact_context_replaces_it(self):
+        self.assertIn(".visit-banner[hidden] {display:none!important;}", self.css)
+        javascript = (Path(settings.BASE_DIR) / "static/js/customer_space.js").read_text(encoding="utf-8")
+        self.assertIn("visitBanner.hidden = true", javascript)
+
     def test_feature_names_wrap_only_at_normal_word_boundaries(self):
         self.assertIn("word-break:normal", self.css)
         self.assertIn("overflow-wrap:normal", self.css)
