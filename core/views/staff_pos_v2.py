@@ -84,9 +84,13 @@ def staff_pos(request):
     initial_form_values = (
         {
             'table_id': requested_table_id,
-            'fulfillment_mode': Order.FulfillmentMode.TABLE,
+            'fulfillment_mode': (
+                Order.FulfillmentMode.TABLE
+                if requested_table_id
+                else Order.FulfillmentMode.INSIDE_SPACE
+            ),
         }
-        if requested_table_id else {}
+        if requested_visit else {}
     )
     context = {
         'section_products': section_products,
@@ -130,15 +134,24 @@ def staff_pos(request):
         if visit_id and visit is None:
             validation_errors.append('الجلسة المحددة غير صالحة أو مغلقة.')
 
-        if visit and visit.table_id:
-            if table is not None and table.pk != visit.table_id:
-                validation_errors.append('الطاولة المحددة لا تطابق طاولة الحساب المفتوح.')
-            table = visit.table
-            table_id = str(visit.table_id)
-            posted_mode = request.POST.get('fulfillment_mode', '').strip()
-            if posted_mode and posted_mode != Order.FulfillmentMode.TABLE:
-                validation_errors.append('طريقة الطلب لا تطابق الحساب المرتبط بطاولة.')
-            fulfillment_mode = Order.FulfillmentMode.TABLE
+        if visit:
+            # The selected account is the authority for service location. A
+            # table-bound account stays at its table. A tableless account stays
+            # an inside-space account even if an old/stale POS form submits
+            # "table" without a table (the production bug seen from + طلب).
+            if visit.table_id:
+                if table is not None and table.pk != visit.table_id:
+                    validation_errors.append('الطاولة المحددة لا تطابق طاولة الحساب المفتوح.')
+                table = visit.table
+                table_id = str(visit.table_id)
+                posted_mode = request.POST.get('fulfillment_mode', '').strip()
+                if posted_mode and posted_mode != Order.FulfillmentMode.TABLE:
+                    validation_errors.append('طريقة الطلب لا تطابق الحساب المرتبط بطاولة.')
+                fulfillment_mode = Order.FulfillmentMode.TABLE
+            else:
+                table = None
+                table_id = ''
+                fulfillment_mode = Order.FulfillmentMode.INSIDE_SPACE
             fulfillment_error = ''
         else:
             fulfillment_mode, fulfillment_error = _validate_fulfillment_mode(
