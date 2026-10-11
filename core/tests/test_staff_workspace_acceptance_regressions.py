@@ -3,7 +3,8 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from core.models import HubVisit, Order, Room, TableArea
+from catalog.models import MenuSection
+from core.models import Category, HubVisit, Order, Product, Room, TableArea
 
 
 @override_settings(
@@ -111,6 +112,60 @@ class StaffWorkspaceAcceptanceRegressionTests(TestCase):
             'name="fulfillment_mode" value="table" checked',
             html=False,
         )
+
+    def test_context_bound_tableless_pos_keeps_inside_space_mode(self):
+        tableless = HubVisit.objects.create()
+
+        response = self.client.get(
+            reverse('staff_pos'),
+            {'visit': str(tableless.public_code)},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['selected_visit_id'], str(tableless.pk))
+        self.assertEqual(response.context['selected_table_id'], '')
+        self.assertEqual(
+            response.context['form_values']['fulfillment_mode'],
+            Order.FulfillmentMode.INSIDE_SPACE,
+        )
+        self.assertContains(
+            response,
+            'name="fulfillment_mode" value="inside_space_general" checked',
+            html=False,
+        )
+
+    def test_tableless_bound_visit_ignores_stale_table_mode_on_pos_submit(self):
+        tableless = HubVisit.objects.create()
+        category = Category.objects.create(name_ar='اختبار POS')
+        section = MenuSection.objects.create(name_ar='اختبار POS')
+        product = Product.objects.create(
+            category=category,
+            name_ar='قهوة اختبار',
+            price_syp=150,
+            is_available=True,
+            visible_on_qr=True,
+            orderable_on_qr=True,
+            visible_on_pos=True,
+            orderable_on_pos=True,
+        )
+        product.menu_sections.add(section)
+
+        response = self.client.post(
+            reverse('staff_pos') + f'?visit={tableless.public_code}',
+            {
+                'visit_id': str(tableless.pk),
+                'table_id': '',
+                'fulfillment_mode': Order.FulfillmentMode.TABLE,
+                f'qty_{product.pk}': '1',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        created = Order.objects.exclude(pk=self.order.pk).get()
+        self.assertEqual(created.visit_id, tableless.pk)
+        self.assertIsNone(created.table_id)
+        self.assertEqual(created.fulfillment_mode, Order.FulfillmentMode.INSIDE_SPACE)
+        self.assertEqual(created.service_mode, Order.ServiceMode.DINE_IN)
 
     def test_closed_visit_rejects_stale_mutation_and_hides_pos_action(self):
         other_table = TableArea.objects.create(room=self.room, name_ar='طاولة أخرى')
