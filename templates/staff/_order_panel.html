@@ -16,6 +16,8 @@
     {% endif %}
   </header>
 
+  {% if messages %}<div class="staff-payment-panel__messages" role="status">{% for message in messages %}<p class="hub-message hub-message-{{ message.tags|default:'info' }}">{{ message }}</p>{% endfor %}</div>{% endif %}
+
   <section class="staff-order-panel__totals" aria-label="حساب الطلب">
     <div><span>الإجمالي</span><strong>{{ total|format_syp }}</strong></div>
     <div><span>المدفوع</span><strong>{{ paid|format_syp }}</strong></div>
@@ -51,7 +53,7 @@
           {% if order_caps.edit and not order_edit_block_reason %}
             <div class="staff-order-panel__item-actions" aria-label="تعديل سريع للعنصر">
               {% if item.quantity > 1 %}
-                <form method="post" action="{% url 'staff_order_edit_update_item' order.public_code item.id %}">
+                <form method="post" action="{% url 'staff_order_edit_update_item' order.public_code item.id %}" hx-post="{% url 'staff_order_edit_update_item' order.public_code item.id %}?panel=context" hx-target="#staff-context-drawer-body" hx-swap="innerHTML">
                   {% csrf_token %}
                   <input type="hidden" name="quantity" value="{{ item.quantity|add:'-1' }}">
                   <input type="hidden" name="item_note" value="{{ item.item_note }}">
@@ -63,7 +65,7 @@
                 <button class="hub-button hub-button-secondary" type="button" disabled aria-label="الكمية الدنيا">−</button>
               {% endif %}
               <strong class="hub-number">{{ item.quantity }}</strong>
-              <form method="post" action="{% url 'staff_order_edit_update_item' order.public_code item.id %}">
+              <form method="post" action="{% url 'staff_order_edit_update_item' order.public_code item.id %}" hx-post="{% url 'staff_order_edit_update_item' order.public_code item.id %}?panel=context" hx-target="#staff-context-drawer-body" hx-swap="innerHTML">
                 {% csrf_token %}
                 <input type="hidden" name="quantity" value="{{ item.quantity|add:'1' }}">
                 <input type="hidden" name="item_note" value="{{ item.item_note }}">
@@ -71,12 +73,23 @@
                 <input type="hidden" name="next" value="{% url 'staff_home' %}">
                 <button class="hub-button hub-button-secondary" type="submit" aria-label="زيادة {{ item.product_name_ar_snapshot }}">+</button>
               </form>
-              <form method="post" action="{% url 'staff_order_edit_remove_item' order.public_code item.id %}" onsubmit="return confirm('حذف هذا العنصر من الطلب؟');">
+              <form method="post" action="{% url 'staff_order_edit_remove_item' order.public_code item.id %}" hx-post="{% url 'staff_order_edit_remove_item' order.public_code item.id %}?panel=context" hx-target="#staff-context-drawer-body" hx-swap="innerHTML" onsubmit="return confirm('حذف هذا العنصر من الطلب؟');">
                 {% csrf_token %}
                 <input type="hidden" name="next" value="{% url 'staff_home' %}">
                 <button class="hub-button hub-button-danger" type="submit">حذف</button>
               </form>
             </div>
+            <details class="staff-order-panel__item-editor">
+              <summary>تعديل الكمية أو الملاحظة</summary>
+              <form method="post" action="{% url 'staff_order_edit_update_item' order.public_code item.id %}" hx-post="{% url 'staff_order_edit_update_item' order.public_code item.id %}?panel=context" hx-target="#staff-context-drawer-body" hx-swap="innerHTML" class="hub-form hub-form-section">
+                {% csrf_token %}
+                <input type="hidden" name="edit_scope" value="basic">
+                <input type="hidden" name="next" value="{% url 'staff_home' %}">
+                <label>الكمية<input class="hub-input" type="number" name="quantity" value="{{ item.quantity }}" min="1" max="999" step="1" inputmode="numeric" required></label>
+                <label>ملاحظة التحضير<textarea class="hub-input" name="item_note" rows="2">{{ item.item_note }}</textarea></label>
+                <button class="hub-button hub-button-primary" type="submit">حفظ تعديل العنصر</button>
+              </form>
+            </details>
           {% endif %}
         </article>
       {% empty %}<div class="hub-empty-state">لا توجد عناصر في هذا الطلب.</div>{% endfor %}
