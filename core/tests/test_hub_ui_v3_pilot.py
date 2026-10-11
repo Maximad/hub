@@ -66,5 +66,5 @@ class HubUiV3PilotContractTests(SimpleTestCase):
         self.assertIn("@media(prefers-reduced-motion:reduce)", self.css)
         self.assertIn(":focus-visible", self.css)
         self.assertIn('font-family:var(--hub-font-body)', self.css)
-        self.assertIn("IBM Plex Sans Arabic", self.base)
+        self.assertIn("IBM+Plex+Sans+Arabic", self.base)
         self.assertIn("Noto Sans Arabic", self.css)
