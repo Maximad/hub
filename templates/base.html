@@ -88,6 +88,9 @@
     {% endif %}
     {% block content %}{% endblock %}
   </main>
+  {% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %}
+    {% include "staff/_context_drawer_shell.html" %}
+  {% endif %}
   <script src="{% static 'js/csrf.js' %}"></script>
   <script src="{% static 'js/hub_numbers.js' %}"></script>
   {% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %}
