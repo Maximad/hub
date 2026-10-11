@@ -15,9 +15,31 @@ from accounts.permissions import (
     get_capability_overrides,
     get_staff_capabilities,
     require_staff_capability,
+    user_has_capability,
 )
 
 User = get_user_model()
+
+
+def _view_as_landing(user):
+    if user.role == User.Role.INTERNET_PROVIDER or user_has_capability(user, 'provider_dashboard'):
+        return 'internet_provider_dashboard'
+    candidates = (
+        ('staff_home', 'staff_home'),
+        ('events', 'staff_events'),
+        ('reservations', 'staff_reservations'),
+        ('kitchen_board', 'staff_kitchen'),
+        ('inventory', 'staff_inventory_home'),
+        ('internet_billing', 'staff_internet'),
+        ('finance', 'staff_finance_home'),
+        ('cashier', 'staff_cashier'),
+        ('reports', 'staff_reports_home'),
+        ('orders', 'staff_orders'),
+    )
+    for capability, route_name in candidates:
+        if user_has_capability(user, capability):
+            return route_name
+    return 'staff_home'
 
 
 def _audit_user_change(actor, action, target, **details):
@@ -209,9 +231,7 @@ def staff_user_view_as(request, user_id):
         access_profile_id=target.access_profile_id,
         job_title=target.job_title,
     )
-    if target.role == User.Role.INTERNET_PROVIDER:
-        return redirect('internet_provider_dashboard')
-    return redirect('staff_home')
+    return redirect(_view_as_landing(target))
 
 
 @login_required
