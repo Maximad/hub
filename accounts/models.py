@@ -61,9 +61,10 @@ class User(AbstractUser):
     public_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     phone = models.CharField(max_length=30, unique=True)
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.WAITER)
-    job_title = models.CharField(max_length=120, blank=True)
+    job_title = models.CharField('المسمى الوظيفي', max_length=120, blank=True)
     access_profile = models.ForeignKey(
         AccessProfile,
+        verbose_name='نمط الوصول',
         on_delete=models.PROTECT,
         related_name='users',
         null=True,
