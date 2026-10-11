@@ -7,9 +7,10 @@
     <div class="staff-v2-page-head__copy">
       <span class="staff-v2-eyebrow">تشغيل هَبّ</span>
       <h1 id="kitchen-title" class="staff-v2-title">{{ page_setting.title|default:"التحضير" }}</h1>
-      <p class="staff-v2-subtitle">استلام الطلبات، متابعة التحضير، وتسليم العناصر الجاهزة من لوحة واحدة.</p>
+      <p class="staff-v2-subtitle">المحطة المباشرة تتيح تسجيل تقديم العنصر بضغطة واحدة. الفريق والفعاليات يحتفظان بمراحل التحضير المفصلة.</p>
     </div>
     <div class="staff-v2-actions kitchen-v2__hero-actions">
+      {% if can_manage_profiles %}<a class="staff-v2-button staff-v2-button--ghost" href="{% url 'staff_prep_profiles' %}">إعداد أسلوب التحضير</a>{% endif %}
       <a class="staff-v2-button staff-v2-button--ghost" href="{{ request.get_full_path }}">
         {% include "includes/staff_icon.html" with name="clock" class="staff-icon--sm" %}
         <span>تحديث الآن</span>
