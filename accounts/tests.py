@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from accounts.admin import AccessProfileAdminForm
 from accounts.forms import StaffUserCreateForm, StaffUserEditForm
 from accounts.middleware import VIEW_AS_USER_SESSION_KEY
 from accounts.models import AccessProfile, UserCapabilityOverride
@@ -173,6 +174,54 @@ class StaffCapabilityTests(TestCase):
         self.assertTrue(association.can_view_customer_phone)
         self.assertFalse(provider.is_staff)
         self.assertFalse(provider.is_superuser)
+
+
+class AccessProfileAdminTests(TestCase):
+    def test_admin_form_creates_custom_capability_profile(self):
+        form = AccessProfileAdminForm(data={
+            'name_ar': 'فريق فعاليات',
+            'code': 'event-team-admin',
+            'description': 'صلاحيات الفعاليات فقط',
+            'base_role': AccessProfile.BaseRole.STAFF,
+            'capability_choices': ['staff_home', 'events', 'reservations'],
+            'is_active': 'on',
+            'is_system': '',
+        })
+        self.assertTrue(form.is_valid(), form.errors)
+        profile = form.save()
+        self.assertEqual(
+            set(profile.capabilities),
+            {'staff_home', 'events', 'reservations'},
+        )
+
+    def test_admin_form_blocks_routing_family_change_while_profile_is_assigned(self):
+        profile = AccessProfile.objects.create(
+            code='assigned-profile',
+            name_ar='نمط مستخدم',
+            base_role=AccessProfile.BaseRole.STAFF,
+            capabilities=['staff_home'],
+        )
+        get_user_model().objects.create_user(
+            username='assigned-profile-user',
+            password='pass',
+            phone='+963100000190',
+            role='staff',
+            access_profile=profile,
+        )
+        form = AccessProfileAdminForm(
+            data={
+                'name_ar': profile.name_ar,
+                'code': profile.code,
+                'description': '',
+                'base_role': AccessProfile.BaseRole.WAITER,
+                'capability_choices': ['staff_home'],
+                'is_active': 'on',
+                'is_system': '',
+            },
+            instance=profile,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn('base_role', form.errors)
 
 
 class ViewAsTests(TestCase):
