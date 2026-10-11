@@ -170,7 +170,7 @@ class Migration(migrations.Migration):
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
             ],
-            options={'ordering': ('name_ar', 'code')},
+            options={'ordering': ('name_ar', 'code'), 'verbose_name': 'نمط وصول', 'verbose_name_plural': 'أنماط الوصول'},
         ),
         migrations.AddField(
             model_name='user',
