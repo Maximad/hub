@@ -100,13 +100,15 @@ class VisitOrderCorrectionTests(TestCase):
         response = self.client.post(self.url + '?panel=1', self.payload())
         self.assertContains(response, 'سجل دفعات')
         self.unchanged()
-        payment.is_reversed = True
-        payment.is_active = False
-        payment.reversal_reason = 'other'
+        # Construct an already-reversed historical record directly in the
+        # fixture; the production reversal API has its own dedicated tests.
+        # Saving Payment here would trigger a separate legacy Internet-share
+        # signal, unrelated to a visit-transfer safety check.
         from django.utils import timezone
-        payment.reversed_at = timezone.now()
-        payment.reversed_by = self.admin
-        payment.save()
+        Payment.objects.filter(pk=payment.pk).update(
+            is_reversed=True, is_active=False, reversal_reason='other',
+            reversed_at=timezone.now(), reversed_by=self.admin,
+        )
         self.client.post(self.url, self.payload())
         self.unchanged()
 
