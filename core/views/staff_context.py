@@ -10,7 +10,7 @@ from django.shortcuts import get_object_or_404, render
 from accounts.permissions import user_has_capability
 from core.currency_forms import CurrencyEntryFormService
 from core.models import Order, OrderDiscount, Payment
-from core.views_legacy import _order_financials
+from core.views_legacy import _order_edit_block_reason, _order_financials
 
 
 def _order_queryset():
@@ -41,8 +41,10 @@ def render_order_context_panel(request, public_code):
     """Render a compact order summary for the shared staff drawer."""
 
     order = get_object_or_404(_order_queryset(), public_code=public_code)
+    edit_block_reason, _total, _paid, _remaining = _order_edit_block_reason(order)
     context = {
         "order": order,
+        "order_edit_block_reason": edit_block_reason,
         **_financial_context(order),
         "order_caps": {
             "edit": user_has_capability(request.user, "order_edit"),
