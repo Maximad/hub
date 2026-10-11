@@ -161,7 +161,11 @@ def staff_pos(request):
                 fulfillment_mode = Order.FulfillmentMode.TABLE
         if fulfillment_error:
             validation_errors.append(fulfillment_error)
-        if request.POST.get('fulfillment_mode') == Order.FulfillmentMode.TABLE and not table:
+        if (
+            not visit
+            and request.POST.get('fulfillment_mode') == Order.FulfillmentMode.TABLE
+            and not table
+        ):
             validation_errors.append('يرجى اختيار طاولة لهذا الطلب.')
         if not selected:
             context.update({
