@@ -1,0 +1,86 @@
+/* Hub Suite 3.1 — contextual daily staff work.
+   Only visual and progressive enhancement rules: full-page forms remain valid. */
+body.hub-staff-ui .staff-context-drawer {
+  z-index:100;
+}
+body.hub-staff-ui .staff-context-drawer__body {
+  overscroll-behavior:contain;
+  scrollbar-width:thin;
+}
+body.hub-staff-ui .staff-order-panel__item-editor,
+body.hub-staff-ui .staff-visit-panel__quick-edit {
+  min-width:0;
+  border:1px solid #dce4e7;
+  background:#f7f9f8;
+  border-radius:12px;
+  padding:9px 11px;
+}
+body.hub-staff-ui .staff-order-panel__item-editor>summary,
+body.hub-staff-ui .staff-visit-panel__quick-edit>summary {
+  cursor:pointer;
+  min-height:40px;
+  padding:7px 2px;
+  color:#0d655a;
+  font-weight:600;
+}
+body.hub-staff-ui .staff-order-panel__item-editor .hub-form,
+body.hub-staff-ui .staff-visit-panel__quick-edit .hub-form {
+  margin:8px 0 12px;
+  padding:10px;
+  display:grid;
+  gap:9px;
+  background:#fff;
+  border:1px solid #dce4e7;
+  border-radius:11px;
+}
+body.hub-staff-ui .staff-order-panel__item-editor label,
+body.hub-staff-ui .staff-visit-panel__quick-edit label {
+  display:grid;
+  gap:5px;
+  font-weight:500;
+  font-size:.89rem;
+}
+body.hub-staff-ui .staff-order-panel__item-editor :is(input,textarea),
+body.hub-staff-ui .staff-visit-panel__quick-edit select {
+  width:100%;
+  min-height:44px;
+  min-width:0;
+  font:inherit;
+}
+body.hub-staff-ui .staff-order-panel__item-editor textarea {min-height:70px}
+body.hub-staff-ui .staff-visit-panel__quick-edit .hub-help-text {
+  margin:4px 0 8px;
+  font-size:.81rem;
+}
+body.hub-staff-ui .staff-order-panel__item-editor button,
+body.hub-staff-ui .staff-visit-panel__quick-edit button {
+  min-height:44px;
+}
+body.hub-staff-ui .staff-order-panel__item-actions {
+  flex-wrap:wrap;
+}
+body.hub-staff-ui .staff-context-drawer__header {
+  background:rgba(255,255,255,.97);
+}
+body.hub-staff-ui .staff-context-drawer__close:focus-visible,
+body.hub-staff-ui .staff-order-panel__item-editor summary:focus-visible,
+body.hub-staff-ui .staff-visit-panel__quick-edit summary:focus-visible {
+  outline:3px solid #236aa9;
+  outline-offset:2px;
+}
+@media(max-width:700px) {
+  body.hub-staff-ui .staff-context-drawer {
+    height:min(90dvh,850px);
+    max-height:90dvh;
+    width:100%;
+  }
+  body.hub-staff-ui .staff-context-drawer__header {
+    padding:11px 15px;
+  }
+  body.hub-staff-ui .staff-context-drawer__body {
+    padding:12px 12px calc(18px + env(safe-area-inset-bottom));
+  }
+}
+@media(prefers-reduced-motion:reduce) {
+  body.hub-staff-ui .staff-context-drawer {scroll-behavior:auto}
+}
