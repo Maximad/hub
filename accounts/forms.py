@@ -117,6 +117,12 @@ class StaffUserBaseForm(forms.ModelForm):
         user.is_superuser = bool(self.cleaned_data.get('make_superuser', False)) if self.actor and self.actor.is_superuser else bool(getattr(user, 'is_superuser', False))
         if user.is_superuser:
             user.is_staff = True
+            admin_profile = AccessProfile.objects.filter(
+                base_role=AccessProfile.BaseRole.ADMIN,
+                is_active=True,
+            ).order_by('-is_system', 'pk').first()
+            if admin_profile is not None:
+                user.access_profile = admin_profile
             user.role = User.Role.ADMIN
         elif user.role == User.Role.INTERNET_PROVIDER:
             # Provider authentication has its own portal and must never imply
@@ -268,7 +274,15 @@ class CustomUserCreationForm(UserCreationForm):
 
     def save(self, commit=True):
         user = super().save(commit=False)
-        if user.access_profile_id:
+        if user.is_superuser:
+            admin_profile = AccessProfile.objects.filter(
+                base_role=AccessProfile.BaseRole.ADMIN,
+                is_active=True,
+            ).order_by('-is_system', 'pk').first()
+            if admin_profile is not None:
+                user.access_profile = admin_profile
+            user.role = User.Role.ADMIN
+        elif user.access_profile_id:
             user.role = user.access_profile.base_role
         if commit:
             user.save()
@@ -300,7 +314,15 @@ class CustomUserChangeForm(UserChangeForm):
 
     def save(self, commit=True):
         user = super().save(commit=False)
-        if user.access_profile_id:
+        if user.is_superuser:
+            admin_profile = AccessProfile.objects.filter(
+                base_role=AccessProfile.BaseRole.ADMIN,
+                is_active=True,
+            ).order_by('-is_system', 'pk').first()
+            if admin_profile is not None:
+                user.access_profile = admin_profile
+            user.role = User.Role.ADMIN
+        elif user.access_profile_id:
             user.role = user.access_profile.base_role
         if commit:
             user.save()
