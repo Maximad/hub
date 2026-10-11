@@ -43,7 +43,7 @@
             {% if order.remaining_syp > 0 %}<strong>متبقي {{ order.remaining_syp|format_syp }}</strong>{% else %}<span>مدفوع</span>{% endif %}
           </div>
           <div class="staff-visit-panel__order-links">
-            {% if visit_caps.order_edit %}<a href="{% url 'staff_order_edit' order.public_code %}" data-staff-context-url="{% url 'staff_order_edit' order.public_code %}?panel=context" data-context-title="تفاصيل الطلب" aria-haspopup="dialog">عرض</a><a href="{% url 'staff_order_edit' order.public_code %}">تعديل</a>{% endif %}
+            {% if visit_caps.order_edit %}<a href="{% url 'staff_order_edit' order.public_code %}" data-staff-context-url="{% url 'staff_order_edit' order.public_code %}?panel=context" data-context-title="تفاصيل الطلب" aria-haspopup="dialog">عرض</a><a href="{% url 'staff_order_edit' order.public_code %}">تعديل متقدم</a>{% endif %}
             {% if visit_caps.cashier and order.remaining_syp > 0 %}<a href="{% url 'staff_cashier_order' visit.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' visit.public_code %}?panel=payment" data-context-title="الدفع وإغلاق الحساب" aria-haspopup="dialog">دفع</a>{% endif %}
           </div>
         </article>
