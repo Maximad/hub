@@ -32,9 +32,9 @@
         <p id="staff-notification-status" class="hub-visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>
       </div>
       <a class="staff-app-header__tool staff-app-header__help" href="{% url 'staff_home' %}#staff-more" aria-label="المساعدة">{% include "includes/staff_icon.html" with name="help" %}</a>
-      <div class="staff-app-header__user" title="{{ request.user.get_role_display }}">
+      <div class="staff-app-header__user" title="{{ request.user.job_title|default:request.user.access_label }}">
         <span class="staff-app-header__avatar">{{ request.user.username|slice:":1"|upper }}</span>
-        <span class="staff-app-header__user-copy"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><span>{{ request.user.get_role_display }}</span></span>
+        <span class="staff-app-header__user-copy"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><span>{% if request.user.job_title %}{{ request.user.job_title }}{% else %}{{ request.user.access_label }}{% endif %}</span></span>
       </div>
     </div>
   </div>
