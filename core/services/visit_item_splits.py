@@ -8,6 +8,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from core.models import ActivityLog, HubVisit, Order, OrderItem, Payment, StockMovement
+from core.stock_recipes import deduction_settings
 
 
 @transaction.atomic
@@ -41,6 +42,9 @@ def split_unposted_order_item(
     order = Order.objects.select_for_update(of=('self',)).filter(pk=order_id).first()
     if order is None or order.visit_id != source_visit_id:
         raise ValidationError('الطلب تغيّر منذ فتح الصفحة. أعد تحميل الحساب.')
+    _stock_settings, automatic_stock_deduction = deduction_settings()
+    if automatic_stock_deduction:
+        raise ValidationError('التقسيم غير متاح عند تفعيل خصم المخزون التلقائي. استخدم مساراً مخزونياً معتمداً.')
     if order.status != Order.Status.NEW:
         raise ValidationError('التقسيم متاح فقط قبل استلام الطلب أو بدء التحضير.')
     if order.fulfillment_mode not in {
@@ -118,7 +122,9 @@ def split_unposted_order_item(
             'estimated_line_cost_syp_snapshot', 'estimated_line_margin_syp_snapshot',
             'updated_at',
         ])
-        moved_item = OrderItem.objects.create(
+        # bulk_create intentionally preserves original nullable snapshot fields
+        # without recalculating costs from today's product configuration.
+        moved_item = OrderItem.objects.bulk_create([OrderItem(
             order=destination_order,
             product=item.product,
             quantity=quantity,
@@ -140,7 +146,7 @@ def split_unposted_order_item(
             prep_station=item.prep_station,
             prep_status=item.prep_status,
             stock_deducted=False,
-        )
+        )])[0]
 
     now = timezone.now()
     for visit in visits.values():
