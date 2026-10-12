@@ -1,1 +1,38 @@
-{% extends "staff/inventory_base.html" %}{% block inventory_content %}<div class="hub-grid hub-grid-3"><div class="hub-card">المواد النشطة: <strong>{{ active_count }}</strong></div><div class="hub-card">مواد منخفضة: <strong>{{ low_items|length }}</strong></div><div class="hub-card">الهدر: <strong>{{ waste_value }}</strong></div></div><p><a class="hub-button" href="{% url 'staff_inventory_item_new' %}">مادة مخزون جديدة</a> <a class="hub-button" href="{% url 'staff_inventory_purchase_new' %}">شراء جديد</a> <a class="hub-button" href="{% url 'staff_inventory_movement_new' %}">تعديل/هدر</a></p><h3 class="hub-page-header__title">مشتريات غير مدفوعة</h3><ul>{% for p in unpaid_purchases %}<li><a href="{% url 'staff_inventory_purchase_detail' p.pk %}">{{ p }}</a> - المتبقي {{ p.remaining_syp }}</li>{% empty %}<li>لا يوجد</li>{% endfor %}</ul><h3>آخر حركات المخزون</h3><ul>{% for m in recent_movements %}<li>{{ m.business_date }} - {{ m }}</li>{% empty %}<li>لا يوجد</li>{% endfor %}</ul>{% endblock %}
+{% extends "staff/inventory_base.html" %}
+{% load hub_numbers %}
+{% block inventory_content %}
+<section aria-labelledby="inventory-today-title">
+  <h2 id="inventory-today-title" class="hub-section-title">ما يحتاج متابعة</h2>
+  <div class="hub-ux5-kpis">
+    <a class="hub-ux5-kpi" href="{% url 'staff_inventory_items' %}" aria-label="عرض مواد المخزون النشطة">
+      <span>المواد النشطة</span><strong>{{ active_count }}</strong>
+    </a>
+    <a class="hub-ux5-kpi" href="{% url 'staff_inventory_low_stock' %}" aria-label="عرض المواد منخفضة المخزون">
+      <span>مواد تحتاج شراء</span><strong>{{ low_items|length }}</strong>
+    </a>
+    <a class="hub-ux5-kpi" href="{% url 'staff_waste_report' %}" aria-label="عرض تقرير الهدر">
+      <span>الهدر المسجل</span><strong>{{ waste_value|format_syp }}</strong>
+    </a>
+  </div>
+  <nav class="hub-ux5-actions" aria-label="عمليات المخزون">
+    <a class="hub-button hub-button-primary" href="{% url 'staff_inventory_purchase_new' %}">تسجيل شراء</a>
+    <a class="hub-button" href="{% url 'staff_inventory_item_new' %}">مادة جديدة</a>
+    <a class="hub-button" href="{% url 'staff_inventory_movement_new' %}">تسجيل حركة أو هدر</a>
+  </nav>
+</section>
+<section aria-labelledby="inventory-unpaid-title" class="hub-card">
+  <h2 id="inventory-unpaid-title" class="hub-section-title">مشتريات غير مدفوعة</h2>
+  <ul>{% for p in unpaid_purchases %}
+    <li><a href="{% url 'staff_inventory_purchase_detail' p.pk %}">{{ p }}</a> · المتبقي {{ p.remaining_syp|format_syp }}</li>
+    {% empty %}<li>لا توجد مشتريات غير مدفوعة في القائمة الحالية.</li>{% endfor %}
+  </ul>
+</section>
+<details class="hub-ux5-module__more">
+  <summary>آخر حركات المخزون</summary>
+  <ul>{% for m in recent_movements %}
+    <li>{{ m.business_date }} · {{ m }}</li>
+    {% empty %}<li>لا توجد حركات مسجلة.</li>{% endfor %}
+  </ul>
+  <a class="hub-button" href="{% url 'staff_inventory_movements' %}">جميع الحركات</a>
+</details>
+{% endblock %}
