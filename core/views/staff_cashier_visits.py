@@ -15,6 +15,7 @@ from core.models import ActivityLog, HubVisit, InternetSession, Order, Payment
 from core.notifications import create_notification
 from core.services.internet_access import end_usage_session
 from core.services.posting.context import PostingContext
+from core.services.posting.policy import is_finance_user
 from core.services.visit_internet import finalize_visit_metered_session
 from core.services.visit_settlement import (
     COLLECTIBLE_PAYMENT_METHODS,
@@ -128,6 +129,7 @@ def _visit_detail_context(request, visit):
         'visit': visit,
         **financial,
         'payments': payments,
+        'can_reverse_payments': is_finance_user(request.user),
         'active_internet_sessions': active_sessions,
         'methods': COLLECTIBLE_PAYMENT_METHODS,
         'payment_amount_default': financial['remaining'],
