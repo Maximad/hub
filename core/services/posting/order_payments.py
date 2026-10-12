@@ -85,6 +85,11 @@ def reverse(payment, context, reason, *, reason_code=CancellationReason.OTHER):
         raise InvalidTransition('سبب عكس الدفعة مطلوب (3 أحرف على الأقل).')
     if reason_code not in CancellationReason.values:
         raise InvalidTransition('صنف سبب عكس الدفعة غير صالح.')
+    refund_reference = str(context.request_metadata.get('refund_reference') or '').strip()
+    if len(refund_reference) < 3 or len(refund_reference) > 240:
+        raise InvalidTransition('إثبات إعادة المبلغ مطلوب (مرجع تحويل أو محضر تسليم نقدي).')
+    if context.request_metadata.get('refund_completed') is not True:
+        raise InvalidTransition('يلزم تأكيد تنفيذ إعادة المبلغ قبل تسجيل عكس الدفعة.')
 
     def handle(source):
         if source.is_reversed or not source.is_active or source.reversed_at:
@@ -123,6 +128,8 @@ def reverse(payment, context, reason, *, reason_code=CancellationReason.OTHER):
             raise InvalidTransition('مبلغ قيد التحصيل لا يطابق الدفعة.')
         if credit.account.account_type != FinancialAccount.AccountType.REVENUE:
             raise InvalidTransition('حساب الإيراد الأصلي غير صالح.')
+        if debit.account.currency != 'SYP' or credit.account.currency != 'SYP':
+            raise InvalidTransition('عملة الحسابات الأصلية لا تطابق عملة الدفعة.')
         if source.method == Payment.Method.CASH:
             if debit.account.scope != 'cashbox':
                 raise InvalidTransition('حساب النقد الأصلي غير صالح.')
@@ -141,7 +148,8 @@ def reverse(payment, context, reason, *, reason_code=CancellationReason.OTHER):
                 direction=CashMovement.Direction.IN,
                 financial_account=debit.account,
                 amount_syp=source.amount_syp,
-                is_generated=True,
+                is_generated=True, related_order=source.order,
+                movement_type=CashMovement.MovementType.OTHER,
             ))
             if len(matches) != 1 or active_cash.count() != 1:
                 raise InvalidTransition('حركة الصندوق الأصلية غير قابلة للتحقق.')
@@ -161,7 +169,8 @@ def reverse(payment, context, reason, *, reason_code=CancellationReason.OTHER):
             reason=reason, channel=context.channel,
             metadata={**dict(context.request_metadata),
                       'original_posting_batch_id': str(original_batch.pk),
-                      'payment_method': source.method},
+                      'payment_method': source.method,
+                      'refund_reference': refund_reference},
         )
         PostingEntry.objects.bulk_create([
             PostingEntry(batch=batch, account=entry.account,
@@ -207,6 +216,7 @@ def reverse(payment, context, reason, *, reason_code=CancellationReason.OTHER):
                 'original_batch_id': str(original_batch.pk),
                 'reversal_batch_id': str(batch.pk),
                 'approver_id': approver.pk,
+                'refund_reference': refund_reference,
             },
         )
         return source
