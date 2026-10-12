@@ -93,6 +93,8 @@ def staff_customer_payment_reverse(request, payment_id):
                 request_metadata={
                     'payment_id': payment.pk, 'path': request.path,
                     'remote_addr': request.META.get('REMOTE_ADDR', ''),
+                    'refund_reference': request.POST.get('refund_reference', '').strip(),
+                    'refund_completed': True,
                 },
             )
             order_payment_posting.reverse(
