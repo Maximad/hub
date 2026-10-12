@@ -170,10 +170,11 @@ def reverse(payment, context, reason, *, reason_code=CancellationReason.OTHER):
                          description=f'عكس تحصيل {source.order.display_number}')
             for entry in original_entries
         ])
-        # A DRAFT batch can be balanced and validated before becoming immutable.
+        # The database forbids reversal_of on DRAFT batches. Post the
+        # balanced journal first, then link it within this same transaction.
+        post_balanced_batch(batch)
         batch.reversal_of = original_batch
         batch.save(update_fields=['reversal_of', 'updated_at'])
-        post_balanced_batch(batch)
 
         source.is_reversed = True
         source.is_active = False
