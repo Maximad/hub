@@ -245,3 +245,146 @@ class CustomerPaymentReversalTests(TestCase):
         self.client.force_login(self.cashier)
         page = self.client.get(url, {'panel': 'payment'})
         self.assertNotContains(page, 'مراجعة / عكس الدفعة')
+
+    def test_reversing_one_partial_collection_preserves_other_payment(self):
+        first = order_payments.collect(
+            self.order, self.context('collect:partial-one'),
+            200, Payment.Method.CASH,
+        )
+        second = order_payments.collect(
+            self.order, self.context('collect:partial-two'),
+            300, Payment.Method.CASH,
+        )
+        self.assertEqual(self.order.paid_syp, Decimal('500'))
+        order_payments.reverse(
+            first, self.context('refund:partial-one'), 'تصحيح الدفعة الجزئية',
+        )
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertTrue(first.is_reversed)
+        self.assertTrue(second.is_active)
+        self.assertFalse(second.is_reversed)
+        self.assertEqual(self.order.paid_syp, Decimal('300'))
+        self.assertEqual(
+            CashMovement.objects.get(
+                related_payment=first, direction=CashMovement.Direction.OUT,
+            ).amount_syp, Decimal('200'),
+        )
+        self.assertEqual(
+            PostingBatch.objects.filter(operation_type='order_payment.reverse').count(), 1,
+        )
+
+    def test_downstream_lifecycle_exception_rolls_back_entire_reversal(self):
+        from unittest.mock import patch
+
+        payment = self.collected()
+        original = self.original(payment)
+        original_entries = list(original.entries.order_by('pk').values(
+            'account_id', 'debit', 'credit',
+        ))
+        with patch(
+            'core.services.internet_lifecycle.apply_payment_reversal',
+            side_effect=RuntimeError('test lifecycle failure'),
+        ):
+            with self.assertRaisesRegex(RuntimeError, 'test lifecycle failure'):
+                order_payments.reverse(
+                    payment, self.context('refund:failed-lifecycle'),
+                    'اختبار التراجع عند فشل التسويات',
+                )
+        payment.refresh_from_db()
+        original.refresh_from_db()
+        self.assertTrue(payment.is_active)
+        self.assertFalse(payment.is_reversed)
+        self.assertEqual(original.status, PostingBatch.Status.POSTED)
+        self.assertEqual(
+            list(original.entries.order_by('pk').values('account_id', 'debit', 'credit')),
+            original_entries,
+        )
+        self.assertFalse(
+            PostingBatch.objects.filter(operation_type='order_payment.reverse').exists(),
+        )
+        self.assertFalse(
+            PostingCommand.objects.filter(key='refund:failed-lifecycle').exists(),
+        )
+        self.assertFalse(CashMovement.objects.filter(
+            related_payment=payment, direction=CashMovement.Direction.OUT,
+        ).exists())
+        self.assertFalse(ActivityLog.objects.filter(
+            action='payment_reversed', details__payment_id=payment.pk,
+        ).exists())
+
+    def test_inactive_financial_account_blocks_reversal_without_side_effects(self):
+        payment = self.collected()
+        FinancialAccount.objects.filter(pk=self.revenue.pk).update(is_active=False)
+        with self.assertRaises(InvalidTransition):
+            order_payments.reverse(
+                payment, self.context('refund:inactive-account'), 'حساب مالي غير فعّال',
+            )
+        payment.refresh_from_db()
+        self.assertFalse(payment.is_reversed)
+        self.assertFalse(PostingBatch.objects.filter(
+            operation_type='order_payment.reverse',
+        ).exists())
+        self.assertFalse(PostingCommand.objects.filter(
+            key='refund:inactive-account',
+        ).exists())
+
+    def test_closed_original_day_can_be_reversed_on_new_open_day(self):
+        from datetime import timedelta
+
+        payment = self.collected()
+        DailyClose.objects.create(
+            business_date=self.day, account=self.cash,
+            status=DailyClose.Status.CLOSED, is_finalized=True,
+        )
+        new_day = self.day + timedelta(days=1)
+        order_payments.reverse(
+            payment, self.context('refund:next-open-day', day=new_day),
+            'إعادة المبلغ بتاريخ عمل مفتوح',
+        )
+        batch = PostingBatch.objects.get(operation_type='order_payment.reverse')
+        self.assertEqual(batch.business_date, new_day)
+        self.assertEqual(self.original(payment).business_date, self.day)
+        self.assertEqual(
+            CashMovement.objects.get(
+                related_payment=payment, direction=CashMovement.Direction.OUT,
+            ).business_date, new_day,
+        )
+
+    def test_malformed_original_posted_journal_fails_closed(self):
+        payment = self.collected()
+        original = self.original(payment)
+        # Simulate historical data corruption via a fixture-only direct update.
+        original.entries.filter(credit__isnull=False).update(credit=Decimal('499'))
+        with self.assertRaises(InvalidTransition):
+            order_payments.reverse(
+                payment, self.context('refund:malformed-journal'),
+                'قيد أصلي غير متوازن',
+            )
+        payment.refresh_from_db()
+        self.assertFalse(payment.is_reversed)
+        self.assertFalse(
+            PostingBatch.objects.filter(operation_type='order_payment.reverse').exists(),
+        )
+
+    def test_csrf_protected_finance_confirmation_rejects_untokened_post(self):
+        from django.test import Client
+
+        payment = self.collected()
+        strict_client = Client(enforce_csrf_checks=True)
+        strict_client.force_login(self.admin)
+        url = reverse('staff_customer_payment_reverse', kwargs={'payment_id': payment.pk})
+        response = strict_client.post(url, {
+            'idempotency_key': str(uuid4()),
+            'reason': 'تصحيح دفعة مسجلة',
+            'reason_code': CancellationReason.OTHER,
+            'refund_completed': '1',
+            'refund_reference': 'إيصال معتمد 42',
+        })
+        self.assertEqual(response.status_code, 403)
+        payment.refresh_from_db()
+        self.assertFalse(payment.is_reversed)
+        self.assertFalse(
+            PostingBatch.objects.filter(operation_type='order_payment.reverse').exists(),
+        )
+
