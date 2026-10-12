@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -44,6 +46,7 @@ class UnpostedBillSplittingTests(TestCase):
         self.settings = SystemSetting.objects.create(auto_deduct_inventory_on_sale=False)
         get_system_settings.cache_clear()
         self.client.force_login(self.admin)
+        self.request_token = str(uuid4())
         self.url = reverse('staff_visit_detail', kwargs={'public_code': self.source.public_code})
 
     def tearDown(self):
@@ -52,6 +55,7 @@ class UnpostedBillSplittingTests(TestCase):
     def payload(self, **kwargs):
         data = {
             'action': 'split_item',
+            'split_request_token': self.request_token,
             'order_id': self.order.pk,
             'item_id': self.item.pk,
             'quantity': '1',
@@ -74,6 +78,7 @@ class UnpostedBillSplittingTests(TestCase):
         self.assertContains(page, 'name="action" value="split_item"')
         self.assertContains(page, 'name="destination_visit"')
         self.assertContains(page, 'name="quantity"')
+        self.assertContains(page, 'name="split_request_token"')
         self.assertContains(page, 'hx-target="#staff-context-drawer-body"')
 
     def test_partial_split_keeps_unit_snapshots_margin_and_total_balanced(self):
@@ -133,6 +138,23 @@ class UnpostedBillSplittingTests(TestCase):
         second = self.client.post(self.url, self.payload(quantity='2'))
         self.assertEqual(second.status_code, 302)
         self.assertEqual(Order.objects.count(), count)
+        self.assertEqual(ActivityLog.objects.filter(action='visit.order_item_split').count(), 1)
+
+    def test_repeated_request_token_is_idempotent_even_when_quantity_still_available(self):
+        self.client.post(self.url, self.payload(quantity='1'))
+        self.assertEqual(Order.objects.count(), 2)
+        self.client.post(self.url, self.payload(quantity='1'))
+        self.assertEqual(Order.objects.count(), 2)
+        self.assertEqual(ActivityLog.objects.filter(action='visit.order_item_split').count(), 1)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.quantity, 2)
+
+    def test_token_reused_for_different_request_is_rejected(self):
+        self.client.post(self.url, self.payload(quantity='1'))
+        self.client.post(self.url, self.payload(quantity='2'))
+        self.assertEqual(Order.objects.count(), 2)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.quantity, 2)
         self.assertEqual(ActivityLog.objects.filter(action='visit.order_item_split').count(), 1)
 
     def test_paid_and_reversed_payment_history_remain_blocked(self):
