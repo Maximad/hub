@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
@@ -43,6 +45,7 @@ def _visit_context(request, visit):
     return {
         'can_transfer_orders': can_transfer,
         'can_split_items': can_split,
+        'split_request_token': str(uuid4()),
         'transfer_targets': transfer_targets,
         'visit': visit,
         'tables': TableArea.objects.select_related('room'),
@@ -165,6 +168,7 @@ def staff_visit_detail(request, public_code):
                         item_id=int(item_id),
                         quantity=request.POST.get('quantity'),
                         reason=request.POST.get('reason'),
+                        request_token=request.POST.get('split_request_token'),
                     )
                     messages.success(request, f'تم تقسيم العنصر في طلب جديد {new_order.display_number}.')
                 elif action == 'transfer_order':
