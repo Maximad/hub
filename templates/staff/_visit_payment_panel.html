@@ -56,6 +56,21 @@
     {% for order in orders %}<div><span>{{ order.display_number }}</span><strong>متبقي {{ order.remaining_syp|format_syp }}</strong></div>{% endfor %}
   </section>
 
+  {% if can_reverse_payments and payments %}
+  <section class="staff-payment-panel__history" aria-label="الدفعات المالية">
+    <div class="staff-order-panel__section-head">
+      <h4>سجل الدفعات</h4><span>{{ payments|length }}</span>
+    </div>
+    <p class="hub-help-text">عكس دفعة محصّلة يتطلب استرجاع المبلغ فعلياً وتأكيداً من الإدارة أو المالية.</p>
+    {% for payment in payments %}
+    <div class="staff-payment-panel__history-row">
+      <span>{{ payment.order.display_number }} · {{ payment.get_method_display }} · {{ payment.amount_syp|format_syp }}</span>
+      <a href="{% url 'staff_customer_payment_reverse' payment.pk %}">مراجعة / عكس الدفعة</a>
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
   <footer class="staff-payment-panel__footer">
     <a href="{% url 'staff_cashier_order' visit.public_code %}">تفاصيل الدفع المتقدمة</a>
   </footer>

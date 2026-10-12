@@ -1,4 +1,6 @@
 import csv
+from uuid import UUID, uuid4
+
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -12,8 +14,11 @@ from catalog.models import MediaAsset
 from core.finance import finance_summary_for_date, current_business_date
 from core.currency_forms import CurrencyEntryFormService
 from core.services.posting.context import PostingContext
+from core.services.posting import order_payments as order_payment_posting
+from core.services.posting.policy import is_finance_user
+from core.services.posting.exceptions import InvalidTransition, ClosedPeriodError, IdempotencyConflict
 from core.services.posting import expenses as expense_posting, purchases as purchase_posting, closing as closing_posting, transfers as transfer_posting
-from core.models import ActivityLog, CashMovement, DailyClose, Expense, ExpenseCategory, FinanceReviewItem, FinancialAccount, InventoryItem, PostingCommand, Purchase, PurchaseItem, PurchasePayment, StockMovement, Transfer
+from core.models import ActivityLog, CancellationReason, CashMovement, DailyClose, Expense, ExpenseCategory, FinanceReviewItem, FinancialAccount, InventoryItem, Payment, PostingBatch, PostingCommand, Purchase, PurchaseItem, PurchasePayment, StockMovement, Transfer
 from core.views_legacy import DAMASCUS_TZ, _build_day_report, _parse_report_date
 from vendors.models import Vendor
 
@@ -55,6 +60,63 @@ def _posting_context(request, business_date=None, approver=None):
     return PostingContext(actor=request.user,approver=approver,business_date=business_date,
         idempotency_key=supplied or f'{request.path}:{request.user.pk}:{digest}',channel='staff',
         request_metadata={'path':request.path,'remote_addr':request.META.get('REMOTE_ADDR','')})
+
+
+@require_staff_capability('finance')
+def staff_customer_payment_reverse(request, payment_id):
+    """D03 finance-only, explicit confirmation for a posted customer refund."""
+    if not is_finance_user(request.user):
+        raise PermissionDenied('عكس الدفعات يحتاج صلاحية الإدارة أو المالية.')
+    payment = get_object_or_404(
+        Payment.objects.select_related('order', 'order__visit', 'created_by'), pk=payment_id,
+    )
+    original = PostingBatch.objects.filter(
+        operation_type='order_payment.collect',
+        source_content_type__app_label='core',
+        source_content_type__model='payment',
+        source_object_id=str(payment.pk),
+        status=PostingBatch.Status.POSTED,
+    ).first()
+    errors = []
+    if request.method == 'POST':
+        raw_token = request.POST.get('idempotency_key', '')
+        try:
+            token = str(UUID(raw_token))
+            if request.POST.get('refund_completed') != '1':
+                raise ValidationError('يجب تأكيد تنفيذ إعادة المبلغ فعلياً إلى الزبون أولاً.')
+            code = request.POST.get('reason_code') or CancellationReason.OTHER
+            context = PostingContext(
+                actor=request.user, approver=request.user,
+                business_date=timezone.localdate(),
+                idempotency_key=f'customer-refund:{payment.pk}:{token}',
+                channel='staff-finance',
+                request_metadata={
+                    'payment_id': payment.pk, 'path': request.path,
+                    'remote_addr': request.META.get('REMOTE_ADDR', ''),
+                    'refund_reference': request.POST.get('refund_reference', '').strip(),
+                    'refund_completed': True,
+                },
+            )
+            order_payment_posting.reverse(
+                payment, context, request.POST.get('reason', ''), reason_code=code,
+            )
+        except (ValidationError, InvalidTransition, ClosedPeriodError,
+                IdempotencyConflict, ValueError) as error:
+            errors.extend(_validation_messages(error))
+        else:
+            messages.success(request, 'تم تسجيل عكس الدفعة والقيد المالي المقابل بنجاح.')
+            if payment.order.visit_id:
+                return redirect('staff_cashier_order', public_code=payment.order.visit.public_code)
+            return redirect('staff_cashier_order', public_code=payment.order.public_code)
+
+    return render(request, 'staff/finance_payment_reverse.html', {
+        'payment': payment, 'original': original,
+        'reason_codes': CancellationReason.choices,
+        'errors': errors,
+        'idempotency_key': request.POST.get('idempotency_key') or str(uuid4()),
+        'business_date': timezone.localdate(),
+    })
+
 
 @require_staff_capability('finance')
 def staff_finance_home(request):

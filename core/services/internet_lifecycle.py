@@ -280,11 +280,13 @@ def apply_payment_reversal(payment, *, actor=None):
     payment = Payment.objects.select_for_update().get(pk=payment.pk)
     if not payment.is_reversed:
         raise ValidationError('Payment has not been reversed.')
-    shares = InternetRevenueShare.objects.select_for_update().filter(
-        Q(payment=payment) | Q(subscription__payment=payment))
+    share_ids = list(InternetRevenueShare.objects.filter(
+        Q(payment=payment) | Q(subscription__payment=payment)
+    ).values_list('pk', flat=True).distinct())
+    shares = InternetRevenueShare.objects.select_for_update().filter(pk__in=share_ids).order_by('pk')
     # Membership shares were snapshotted from the subscription allocation and legacy
     # rows may not carry a payment FK; provenance through subscription is authoritative.
-    for share in shares.distinct():
+    for share in shares:
         adjustment = record_payment_reversal_adjustment(share, payment=payment)
         cancel_internet_entitlement(share.entitlement, actor=actor,
                                     reason='payment_reversed', effective_at=payment.reversed_at)

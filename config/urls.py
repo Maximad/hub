@@ -154,6 +154,7 @@ urlpatterns = [
     path('staff/cashier/<uuid:public_code>/pay/', menu.staff_cashier_pay, name='staff_cashier_pay'),
     path('staff/cashier/<uuid:public_code>/discount/', menu.staff_cashier_discount, name='staff_cashier_discount'),
     path('staff/finance/', staff_finance_home, name='staff_finance_home'),
+    path('staff/finance/payments/<int:payment_id>/reverse/', staff_customer_payment_reverse, name='staff_customer_payment_reverse'),
     path('staff/finance/daily-closes/', staff_daily_closes, name='staff_daily_closes'),
     path('staff/finance/daily-closes/<int:close_id>/', staff_daily_close_detail, name='staff_daily_close_detail'),
     path('staff/finance/daily-closes/<int:close_id>/reopen/', staff_daily_close_reopen, name='staff_daily_close_reopen'),
