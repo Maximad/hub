@@ -139,3 +139,102 @@ class PostgreSQLConcurrentPostingTests(TransactionTestCase):
         self.assertEqual(PostingCommand.objects.filter(key='order:duplicate').count(), 1)
         self.assertEqual(Payment.objects.filter(order=order).count(), 1)
         self.assertEqual(CashMovement.objects.filter(related_order=order).count(), 1)
+
+    def refund_context(self, key):
+        return PostingContext(
+            actor=self.approver, approver=self.approver,
+            business_date=self.day, idempotency_key=key,
+            channel='finance-concurrent-test',
+            request_metadata={
+                'refund_completed': True,
+                'refund_reference': f'confirmed-refund-{key}',
+            },
+        )
+
+    def test_two_finance_workers_cannot_reverse_the_same_payment_twice(self):
+        order = self.order()
+        payment = order_payments.collect(
+            order, self.context('collect:refund-race'), 600, Payment.Method.CASH,
+        )
+        results = self.concurrently(
+            lambda: order_payments.reverse(
+                payment, self.refund_context('refund:race-one'),
+                'إعادة دفعة نقدية موثقة',
+            ),
+            lambda: order_payments.reverse(
+                payment, self.refund_context('refund:race-two'),
+                'إعادة دفعة نقدية موثقة',
+            ),
+        )
+        self.assertEqual([state for state, _ in results].count('ok'), 1)
+        loser = next(value for state, value in results if state == 'error')
+        self.assertIsInstance(loser, InvalidTransition)
+        payment.refresh_from_db()
+        self.assertTrue(payment.is_reversed)
+        reversal = PostingBatch.objects.get(operation_type='order_payment.reverse')
+        original = PostingBatch.objects.get(operation_type='order_payment.collect')
+        self.assertEqual(reversal.reversal_of_id, original.pk)
+        self.assertTrue(reversal.is_balanced())
+        self.assertEqual(CashMovement.objects.filter(
+            related_payment=payment, direction=CashMovement.Direction.OUT,
+        ).count(), 1)
+        self.assertEqual(PostingCommand.objects.filter(
+            command='order_payment.reverse',
+        ).count(), 1)
+
+    def test_concurrent_same_key_refund_replays_one_posted_result(self):
+        order = self.order()
+        payment = order_payments.collect(
+            order, self.context('collect:refund-duplicate'), 600, Payment.Method.CASH,
+        )
+        results = self.concurrently(
+            lambda: order_payments.reverse(
+                payment, self.refund_context('refund:duplicate'),
+                'إعادة دفعة نقدية موثقة',
+            ),
+            lambda: order_payments.reverse(
+                payment, self.refund_context('refund:duplicate'),
+                'إعادة دفعة نقدية موثقة',
+            ),
+        )
+        self.assertEqual([state for state, _ in results], ['ok', 'ok'])
+        self.assertEqual(results[0][1].pk, results[1][1].pk)
+        self.assertEqual(PostingBatch.objects.filter(
+            operation_type='order_payment.reverse',
+        ).count(), 1)
+        self.assertEqual(CashMovement.objects.filter(
+            related_payment=payment, direction=CashMovement.Direction.OUT,
+        ).count(), 1)
+        self.assertEqual(PostingCommand.objects.filter(
+            key='refund:duplicate',
+        ).count(), 1)
+
+    def test_refund_persists_after_connection_reopen_and_replay(self):
+        order = self.order()
+        payment = order_payments.collect(
+            order, self.context('collect:refund-reopen'), 600, Payment.Method.CASH,
+        )
+        order_payments.reverse(
+            payment, self.refund_context('refund:reopen'),
+            'إعادة دفعة نقدية موثقة',
+        )
+        original = PostingBatch.objects.get(operation_type='order_payment.collect')
+        # Reopen the ORM connection: this exercises persisted records, not an
+        # actual PostgreSQL process restart (that remains operational QA).
+        connection.close()
+        payment = Payment.objects.get(pk=payment.pk)
+        self.assertTrue(payment.is_reversed)
+        reversal = PostingBatch.objects.get(operation_type='order_payment.reverse')
+        self.assertEqual(reversal.reversal_of_id, original.pk)
+        result = order_payments.reverse(
+            payment, self.refund_context('refund:reopen'),
+            'إعادة دفعة نقدية موثقة',
+        )
+        self.assertEqual(result.pk, payment.pk)
+        self.assertEqual(PostingBatch.objects.filter(
+            operation_type='order_payment.reverse',
+        ).count(), 1)
+        self.assertEqual(CashMovement.objects.filter(
+            related_payment=payment, direction=CashMovement.Direction.OUT,
+        ).count(), 1)
+
