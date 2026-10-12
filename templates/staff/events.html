@@ -1,7 +1,29 @@
 {% extends "base.html" %}
 {% block title %}الفعاليات{% endblock %}
 {% block content %}
-<h2 class="hub-page-header__title">الفعاليات</h2><a href="{% url 'staff_event_new' %}">إضافة فعالية</a>
-<div class="hub-table-wrap"><table class="hub-table"><tr><th>الاسم</th><th>البداية</th><th>الحالة</th><th>الموقع</th><th>السعة</th><th></th></tr>
-{% for e in events %}<tr><td>{{ e.title_ar }}</td><td>{{ e.starts_at }}</td><td>{{ e.get_status_display }}</td><td>{{ e.room|default:'-' }}</td><td>{{ e.capacity|default:'-' }}</td><td><a href="{% url 'staff_event_detail' e.id %}">عرض</a></td></tr>{% empty %}<tr><td colspan="6">لا توجد فعاليات</td></tr>{% endfor %}
-</table></div>{% endblock %}
+<section class="hub-section hub-ux5-module" dir="rtl">
+  <header class="hub-page-header">
+    <div>
+      <p class="staff-workspace__eyebrow">برنامج هَبّ</p>
+      <h1 class="hub-page-header__title">الفعاليات</h1>
+      <p class="hub-page-header__meta">استعراض الفعاليات وتحديثها من ملف كل فعالية.</p>
+    </div>
+    <a class="hub-button hub-button-primary" href="{% url 'staff_event_new' %}">+ فعالية جديدة</a>
+  </header>
+  <div class="hub-list">
+    {% for e in events %}
+      <article class="hub-list-card">
+        <div class="hub-list-card__main">
+          <strong>{{ e.title_ar }}</strong>
+          <span class="hub-badge">{{ e.get_status_display }}</span>
+          <p class="hub-page-header__meta">موعد البدء: {{ e.starts_at|date:"Y-m-d H:i" }} · {{ e.room|default:"الموقع غير محدد" }}</p>
+          <p class="hub-page-header__meta">السعة: {{ e.capacity|default:"غير محددة" }}</p>
+        </div>
+        <a class="hub-button" href="{% url 'staff_event_detail' e.id %}">تفاصيل الفعالية</a>
+      </article>
+    {% empty %}
+      <p class="hub-message">لا توجد فعاليات مسجلة. يمكنك إضافة فعالية جديدة.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
