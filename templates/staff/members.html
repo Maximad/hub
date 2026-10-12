@@ -1,20 +1,34 @@
 {% extends "base.html" %}
+{% load hub_numbers %}
 {% block title %}الأعضاء{% endblock %}
 {% block content %}
-<h2 class="hub-page-header__title">الأعضاء</h2>
-<form class="hub-form-section" method="get" style="display:flex; gap:.5rem; margin-bottom:1rem; flex-wrap:wrap;">
-  <input type="text" name="q" value="{{ query }}" placeholder="ابحث بالاسم أو الهاتف أو الكود" style="flex:1; min-width:220px; padding:.5rem;">
-  <button type="submit">بحث</button>
-  <a href="{% url 'staff_member_new' %}">عضو جديد</a>
-  <a href="{% url 'staff_member_invitation_new' %}">دعوة عضو</a>
-</form>
-<div class="hub-table-wrap"><table class="hub-table" style="width:100%; border-collapse:collapse;">
-  <tr><th>الاسم</th><th>الهاتف</th><th>الرصيد</th><th>الاشتراك الفعال</th><th>الدقائق المتبقية</th><th></th></tr>
-  {% for row in rows %}<tr>
-    <td>{{ row.member.name_ar }}</td><td>{{ row.member.phone }}</td><td>{{ row.member.balance_syp }}</td>
-    <td>{% if row.active_subscription %}{{ row.active_subscription.plan.name_ar }}{% else %}-{% endif %}</td>
-    <td>{% if row.active_subscription and row.active_subscription.remaining_internet_minutes != None %}{{ row.active_subscription.remaining_internet_minutes }}{% else %}-{% endif %}</td>
-    <td><a href="{% url 'staff_member_detail' row.member.public_code %}">تفاصيل</a></td>
-  </tr>{% empty %}<tr><td colspan="6">لا يوجد أعضاء.</td></tr>{% endfor %}
-</table></div>
+<section class="hub-section hub-ux5-module" dir="rtl">
+  <header class="hub-page-header">
+    <div>
+      <p class="staff-workspace__eyebrow">العلاقات والاشتراكات</p>
+      <h1 class="hub-page-header__title">الأعضاء</h1>
+      <p class="hub-page-header__meta">البحث عن عضو أو مراجعة اشتراكه ورصيده.</p>
+    </div>
+    <a class="hub-button hub-button-primary" href="{% url 'staff_member_new' %}">+ عضو جديد</a>
+  </header>
+  <form class="hub-form-section hub-ux5-actions" method="get" role="search">
+    <label for="member-search">اسم العضو أو هاتفه أو رمزه</label>
+    <input id="member-search" class="hub-input" type="search" name="q" value="{{ query }}" placeholder="البحث عن عضو" autocomplete="off">
+    <button class="hub-button hub-button-primary" type="submit">بحث</button>
+    <a class="hub-button" href="{% url 'staff_member_invitation_new' %}">دعوة عضو</a>
+  </form>
+  <div class="hub-table-wrap">
+    <table class="hub-table">
+      <thead><tr><th scope="col">الاسم</th><th scope="col">الهاتف</th><th scope="col">الرصيد</th><th scope="col">الاشتراك الفعّال</th><th scope="col">الدقائق المتبقية</th><th scope="col">الإجراء</th></tr></thead>
+      <tbody>{% for row in rows %}<tr>
+        <td>{{ row.member.name_ar }}</td>
+        <td>{{ row.member.phone }}</td>
+        <td>{{ row.member.balance_syp|format_syp }}</td>
+        <td>{% if row.active_subscription %}{{ row.active_subscription.plan.name_ar }}{% else %}—{% endif %}</td>
+        <td>{% if row.active_subscription and row.active_subscription.remaining_internet_minutes != None %}{{ row.active_subscription.remaining_internet_minutes }}{% else %}—{% endif %}</td>
+        <td><a href="{% url 'staff_member_detail' row.member.public_code %}">عرض التفاصيل</a></td>
+      </tr>{% empty %}<tr><td colspan="6">لا يوجد أعضاء مطابقون للبحث.</td></tr>{% endfor %}</tbody>
+    </table>
+  </div>
+</section>
 {% endblock %}
