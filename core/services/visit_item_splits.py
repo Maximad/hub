@@ -138,10 +138,13 @@ def split_unposted_order_item(
         remaining_quantity = original_quantity - quantity
         item.quantity = remaining_quantity
         item.line_total_syp_snapshot = remaining_quantity * item.unit_price_syp_snapshot
-        if item.estimated_unit_cost_syp_snapshot is not None:
-            item.estimated_line_cost_syp_snapshot = remaining_quantity * item.estimated_unit_cost_syp_snapshot
-            item.estimated_line_margin_syp_snapshot = (
-                item.line_total_syp_snapshot - item.estimated_line_cost_syp_snapshot
+        if item.estimated_line_cost_syp_snapshot is not None:
+            item.estimated_line_cost_syp_snapshot = (
+                remaining_quantity * item.estimated_unit_cost_syp_snapshot
+            )
+        if item.estimated_line_margin_syp_snapshot is not None:
+            item.estimated_line_margin_syp_snapshot = remaining_quantity * (
+                item.unit_price_syp_snapshot - (item.estimated_unit_cost_syp_snapshot or 0)
             )
         OrderItem.objects.filter(pk=item.pk).update(
             quantity=item.quantity,
@@ -168,7 +171,7 @@ def split_unposted_order_item(
                 if item.estimated_unit_cost_syp_snapshot is not None else None
             ),
             estimated_line_margin_syp_snapshot=(
-                quantity * (item.unit_price_syp_snapshot - item.estimated_unit_cost_syp_snapshot)
+                quantity * (item.unit_price_syp_snapshot - (item.estimated_unit_cost_syp_snapshot or 0))
                 if item.estimated_line_margin_syp_snapshot is not None else None
             ),
             prep_station=item.prep_station,
