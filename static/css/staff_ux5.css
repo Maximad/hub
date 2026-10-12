@@ -1,0 +1,73 @@
+/* Hub Suite 3.1 / Phase 5 — staff navigation and information hierarchy.
+ * Progressive enhancement only: routes, permissions and full pages remain intact. */
+.hub-skip-to-content {
+  position:fixed; z-index:210; inset-block-start:.5rem; inset-inline-start:.75rem;
+  transform:translateY(-160%); padding:.65rem 1rem; border-radius:.65rem;
+  background:var(--hub-surface-main, #fff); color:var(--hub-text, #222);
+  border:2px solid var(--hub-primary, #176b5a); font-weight:700;
+}
+.hub-skip-to-content:focus {transform:translateY(0)}
+.hub-staff-ui .hub-ux5-directory {scroll-margin-top:6rem; min-width:0}
+.hub-staff-ui .hub-ux5-directory .staff-v2-panel-head {margin-block-end:.6rem}
+.hub-staff-ui .hub-ux5-directory__links {display:flex; flex-wrap:wrap; gap:.5rem}
+.hub-staff-ui .hub-ux5-directory__links a {
+  display:inline-flex; align-items:center; min-height:44px; padding:.55rem .9rem;
+  font-size:.88rem; font-weight:650; line-height:1.45; white-space:normal;
+  background:var(--hub-surface-main,#fff); color:var(--hub-text,#262626);
+  border:1px solid var(--staff-soft-border,var(--hub-border,#ddd));
+  border-radius:11px; text-decoration:none;
+}
+.hub-staff-ui .hub-ux5-directory__links a:hover,
+.hub-staff-ui .hub-ux5-module__nav a:hover {border-color:var(--hub-primary,#176b5a)}
+.hub-staff-ui .hub-ux5-module .hub-page-header {margin-block-end:.65rem}
+.hub-staff-ui .hub-ux5-module__nav {
+  display:flex; align-items:center; flex-wrap:wrap; gap:.45rem;
+  margin:0 0 .6rem; padding:0;
+}
+.hub-staff-ui .hub-ux5-module__nav a {
+  display:inline-flex; align-items:center; justify-content:center;
+  min-height:42px; padding:.45rem .75rem; border-radius:10px;
+  font-size:.88rem; font-weight:650; text-decoration:none;
+  color:var(--hub-text,#262626);
+  background:var(--hub-surface-main,#fff);
+  border:1px solid var(--staff-soft-border,var(--hub-border,#ddd));
+}
+.hub-staff-ui .hub-ux5-module__nav a[aria-current="page"] {
+  background:var(--hub-primary,#176b5a);color:#fff;
+  border-color:var(--hub-primary,#176b5a);
+}
+.hub-staff-ui .hub-ux5-module__more {
+  max-width:100%; margin:.2rem 0 1.1rem;
+  border-bottom:1px solid var(--staff-soft-border,var(--hub-border,#ddd));
+}
+.hub-staff-ui .hub-ux5-module__more summary {
+  width:max-content; max-width:100%; min-height:42px; padding:.6rem .35rem;
+  font-size:.87rem; font-weight:650; cursor:pointer;
+  color:var(--hub-primary,#176b5a);
+}
+.hub-staff-ui .hub-ux5-module__more[open] {padding-block-end:.65rem}
+.hub-staff-ui .hub-ux5-kpis {display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.65rem}
+.hub-staff-ui .hub-ux5-kpi {
+  display:grid;gap:.25rem;min-width:0;padding:.8rem;
+  background:var(--hub-surface-main,#fff);
+  border:1px solid var(--staff-soft-border,var(--hub-border,#ddd));border-radius:13px;
+}
+.hub-staff-ui .hub-ux5-kpi > span {font-size:.8rem;color:var(--hub-muted,#666)}
+.hub-staff-ui .hub-ux5-kpi > strong {font-size:clamp(1.05rem,1.8vw,1.35rem);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.hub-staff-ui .hub-ux5-kpi[aria-label] {text-decoration:none;color:inherit}
+.hub-staff-ui .hub-ux5-actions {display:flex;flex-wrap:wrap;align-items:center;gap:.55rem;margin-block:.65rem 1rem}
+.hub-staff-ui .hub-ux5-actions a {min-height:42px;display:inline-flex;align-items:center}
+.hub-staff-ui .hub-ux5-caution {font-size:.85rem;color:var(--hub-muted,#666)}
+.hub-staff-ui :is(.hub-ux5-directory__links a,.hub-ux5-module__nav a,.hub-ux5-module__more summary):focus-visible {
+  outline:3px solid #236aa9;outline-offset:2px;
+}
+@media(max-width:700px) {
+  .hub-staff-ui .hub-ux5-module__nav {flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;padding-block:.2rem}
+  .hub-staff-ui .hub-ux5-module__nav a {flex:0 0 auto;min-height:44px}
+  .hub-staff-ui .hub-ux5-directory__links {display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .hub-staff-ui .hub-ux5-directory__links a {min-width:0;justify-content:center;text-align:center}
+  .hub-staff-ui .hub-ux5-kpis {grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(prefers-reduced-motion: reduce) {
+  .hub-skip-to-content {transition:none}
+}
