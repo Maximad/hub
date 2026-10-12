@@ -15,7 +15,7 @@
     <a class="hub-button" href="{% url 'staff_product_margin_report' %}">المنتجات والهامش</a>
     <a class="hub-button" href="{% url 'staff_home' %}">العمليات</a>
   </nav>
-  <div class="hub-ux5-kpis" aria-label="مؤشرات اليوم">
+  <div class="hub-ux5-kpis hub-reports-v3__metrics" aria-label="مؤشرات اليوم">
     <div class="hub-ux5-kpi"><span>مبيعات اليوم</span><strong>{{ sums.order_total|format_syp }}</strong></div>
     <div class="hub-ux5-kpi"><span>عدد الطلبات</span><strong>{{ sums.orders_count }}</strong></div>
     <div class="hub-ux5-kpi"><span>المدفوع نقداً</span><strong>{{ sums.cash_total|format_syp }}</strong></div>
