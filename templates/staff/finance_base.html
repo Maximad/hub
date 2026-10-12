@@ -5,7 +5,7 @@
     <div class="hub-page-header__main">
       <p class="staff-workspace__eyebrow">إدارة هَبّ</p>
       <h1 class="hub-page-header__title">المالية</h1>
-      <p class="hub-page-header__meta">تاريخ العمل: <strong class="hub-number">{% if business_date %}{{ business_date }}{% else %}{{ today }}{% endif %}</strong></p>
+      <p class="hub-page-header__meta">تاريخ العمل: <strong class="hub-number">{% if business_date %}{{ business_date }}{% elif report_date %}{{ report_date }}{% else %}{{ today }}{% endif %}</strong></p>
     </div>
   </header>
   <nav class="hub-ux5-module__nav" aria-label="الأعمال المالية اليومية">
