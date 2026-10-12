@@ -1,0 +1,52 @@
+{% extends "staff/finance_base.html" %}
+{% load hub_numbers %}
+{% block finance_content %}
+<section class="hub-card hub-section" dir="rtl">
+  <header class="hub-page-header">
+    <div>
+      <p class="staff-workspace__eyebrow">تصحيح مالي · D03</p>
+      <h2 class="hub-page-header__title">عكس دفعة زبون</h2>
+      <p class="hub-page-header__meta">الطلب {{ payment.order.display_number }} · الدفعة #{{ payment.pk }}</p>
+    </div>
+    <a class="hub-button" href="{% url 'staff_finance_home' %}">المالية</a>
+  </header>
+  {% if messages %}{% for message in messages %}<p class="hub-message">{{ message }}</p>{% endfor %}{% endif %}
+  {% for error in errors %}<p class="hub-message hub-message-error" role="alert">{{ error }}</p>{% endfor %}
+  <dl class="staff-payment-panel__history">
+    <div><dt>المبلغ</dt><dd><strong>{{ payment.amount_syp|format_syp }}</strong></dd></div>
+    <div><dt>طريقة التحصيل</dt><dd>{{ payment.get_method_display }}</dd></div>
+    <div><dt>المحصّل</dt><dd>{{ payment.created_by|default:"غير محدّد" }}</dd></div>
+    <div><dt>تاريخ التصحيح</dt><dd>{{ business_date }}</dd></div>
+  </dl>
+  {% if not original %}
+    <div class="hub-message hub-message-warning">
+      لا يوجد قيد تحصيل مالي مرحّل وقابل للتحقق. هذه الدفعة تحتاج مراجعة مالية متخصصة ولا يمكن عكسها من هنا.
+    </div>
+  {% elif payment.is_reversed or not payment.is_active %}
+    <div class="hub-message hub-message-warning">هذه الدفعة غير فعّالة أو عُكست سابقاً. لن يُنشأ عكس إضافي.</div>
+  {% else %}
+    <p class="hub-message hub-message-warning">
+      لا تنفّذ هذا الإجراء قبل إرجاع المبلغ فعلياً إلى الزبون عبر نفس وسيلة الدفع.
+      سيُنشئ النظام قيداً عكسياً مرتبطاً بالتحصيل الأصلي وسيسجّل حركة خروج من الصندوق للدفع النقدي.
+      إذا كان يوم العمل أو أحد الحسابات المالية مغلقاً، سيرفض النظام العملية.
+    </p>
+    <form method="post" class="hub-form hub-form-section">
+      {% csrf_token %}
+      <input type="hidden" name="idempotency_key" value="{{ idempotency_key }}">
+      <label>تصنيف السبب
+        <select class="hub-input" name="reason_code" required>
+          {% for value,label in reason_codes %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>تفاصيل سبب عكس الدفعة
+        <textarea class="hub-input" name="reason" minlength="3" maxlength="2000" rows="3" required>{{ request.POST.reason }}</textarea>
+      </label>
+      <label class="hub-form__checkbox">
+        <input type="checkbox" name="refund_completed" value="1" required {% if request.POST.refund_completed == '1' %}checked{% endif %}>
+        أؤكد أن إعادة المبلغ إلى الزبون تمت فعلياً، وأنني مخوّل لتسجيلها.
+      </label>
+      <button class="hub-button hub-button-danger" type="submit">تأكيد العكس المالي للدفعة</button>
+    </form>
+  {% endif %}
+</section>
+{% endblock %}
