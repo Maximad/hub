@@ -1,6 +1,8 @@
 # Hub Suite 3.1 — Phase 4c / D03 customer payment reversals
 
-Status: feature branch; **not deployed**.
+Status: merged into `main` in PR #265 (`0dc7312`) on 2026-10-12. The
+PostgreSQL CI run passed 886 Django tests. **Production deployment has not
+been independently verified** and is not part of this follow-up.
 
 ## Why this is a standalone finance milestone
 
@@ -74,7 +76,11 @@ to ordinary POS collection were introduced.
 
 ## Validation before deployment
 
-Full Django/PostgreSQL CI, particularly finance regression cases for:
+The merged 2026-10-12 Django/PostgreSQL CI passed 886 tests. The follow-up
+regression suite additionally exercises partial collections, downstream
+lifecycle rollback, inactive accounts, malformed original journals,
+reversals on a new open day, and CSRF rejection. Run full CI for the
+follow-up before merging. Existing baseline coverage includes:
 balanced opposite postings, original immutability, cash vs clearing,
 idempotent repeat, closed-day rejection, cashier role denial, unposted
 legacy payment rejection, missing original cash evidence, invalid reason,
