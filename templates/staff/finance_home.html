@@ -1,8 +1,43 @@
-{% extends "staff/finance_base.html" %}{% block title %}المالية{% endblock %}{% block finance_content %}
-<h2 class="hub-page-header__title">المالية</h2><p><a href="{% url 'staff_home' %}">العودة</a> | <a href="{% url 'staff_finance_expenses' %}">المصاريف</a> | <a href="{% url 'staff_finance_cashbox' %}">الصندوق</a> | <a href="{% url 'staff_finance_expenses_csv' %}">تصدير CSV المصاريف</a> | <a href="{% url 'staff_finance_cashbox_csv' %}">تصدير CSV الصندوق</a></p>
-<form class="hub-form-section"><label>تاريخ العمل <input class="hub-input" type="date" name="date" value="{{ report_date|date:'Y-m-d' }}"></label><button class="hub-button">عرض</button></form>
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem">
-<div class="hub-card"><b>مبيعات نقدية</b><div>{{ sums.cash_total }} ل.س</div></div><div class="hub-card"><b>مبيعات غير نقدية</b><div>{{ sums.non_cash_sales_syp }} ل.س</div></div><div class="hub-card"><b>رصيد افتتاحي</b><div>{{ finance.opening_cash_syp }} ل.س</div></div><div class="hub-card"><b>الداخل</b><div>{{ finance.non_sales_cash_in_syp }} ل.س</div></div><div class="hub-card"><b>الخارج</b><div>{{ finance.cash_out_syp }} ل.س</div></div><div class="hub-card"><b>المصاريف النقدية</b><div>{{ finance.cash_expenses_syp }} ل.س</div></div><div class="hub-card"><b>النقد المتوقع</b><div>{{ finance.expected_cash_syp }} ل.س</div></div><div class="hub-card"><b>الفرق</b><div>{{ finance.cash_difference_syp|default:'—' }}</div></div>
-</div><h3>المعادلة</h3><p>النقد المتوقع = الرصيد الافتتاحي + دفعات الطلبات النقدية + الداخل غير البيعي - المصاريف/الخارج - الاسترجاعات النقدية.</p>
-<h3>حسب التصنيف</h3><ul>{% for row in finance.expenses_by_category %}<li>{{ row.category__name_ar }}: {{ row.total }} ل.س</li>{% empty %}<li>لا توجد مصاريف.</li>{% endfor %}</ul>
+{% extends "staff/finance_base.html" %}
+{% load hub_numbers %}
+{% block title %}المالية{% endblock %}
+{% block finance_content %}
+<section aria-labelledby="finance-summary-title">
+  <header class="hub-page-header">
+    <div>
+      <h2 id="finance-summary-title" class="hub-section-title">ملخص الصندوق والمبيعات</h2>
+      <p class="hub-page-header__meta">أرقام تاريخ العمل المحدد، وليس بالضرورة رصيد الصندوق الحالي.</p>
+    </div>
+  </header>
+  <form method="get" class="hub-form-section hub-ux5-actions" aria-label="اختيار تاريخ تقرير المالية">
+    <label>تاريخ العمل
+      <input class="hub-input" type="date" name="date" value="{{ report_date|date:'Y-m-d' }}" required>
+    </label>
+    <button class="hub-button hub-button-primary" type="submit">عرض التقرير</button>
+  </form>
+  <div class="hub-ux5-kpis">
+    <div class="hub-ux5-kpi"><span>مبيعات نقدية</span><strong>{{ sums.cash_total|format_syp }}</strong></div>
+    <div class="hub-ux5-kpi"><span>مبيعات غير نقدية</span><strong>{{ sums.non_cash_sales_syp|format_syp }}</strong></div>
+    <div class="hub-ux5-kpi"><span>الرصيد الافتتاحي</span><strong>{{ finance.opening_cash_syp|format_syp }}</strong></div>
+    <div class="hub-ux5-kpi"><span>الداخل غير البيعي</span><strong>{{ finance.non_sales_cash_in_syp|format_syp }}</strong></div>
+    <div class="hub-ux5-kpi"><span>المصاريف النقدية</span><strong>{{ finance.cash_expenses_syp|format_syp }}</strong></div>
+    <div class="hub-ux5-kpi"><span>الخارج</span><strong>{{ finance.cash_out_syp|format_syp }}</strong></div>
+    <div class="hub-ux5-kpi"><span>النقد المتوقع</span><strong>{{ finance.expected_cash_syp|format_syp }}</strong></div>
+    <div class="hub-ux5-kpi"><span>فرق الصندوق</span><strong>{% if finance.cash_difference_syp is not None %}{{ finance.cash_difference_syp|format_syp }}{% else %}غير محدد{% endif %}</strong></div>
+  </div>
+  <nav class="hub-ux5-actions" aria-label="متابعة التصحيحات والمستندات">
+    <a class="hub-button hub-button-primary" href="{% url 'staff_daily_closes' %}">مراجعة إغلاق الحسابات</a>
+    <a class="hub-button" href="{% url 'staff_finance_cashbox' %}">تفاصيل الصندوق</a>
+    <a class="hub-button" href="{% url 'staff_finance_expenses_csv' %}">تصدير المصاريف CSV</a>
+    <a class="hub-button" href="{% url 'staff_finance_cashbox_csv' %}">تصدير الصندوق CSV</a>
+  </nav>
+  <details class="hub-ux5-module__more">
+    <summary>كيف يُحسب النقد المتوقع؟</summary>
+    <p class="hub-ux5-caution">الرصيد الافتتاحي + الدفعات النقدية + الداخل غير البيعي - المصاريف والخارج والاسترجاعات النقدية. هذا ملخص للقراءة فقط، ولا يقوم بإغلاق الحسابات أو تصحيح القيود.</p>
+  </details>
+  <section aria-labelledby="finance-expense-categories">
+    <h3 id="finance-expense-categories">المصاريف حسب التصنيف</h3>
+    <ul>{% for row in finance.expenses_by_category %}<li>{{ row.category__name_ar }}: {{ row.total|format_syp }}</li>{% empty %}<li>لا توجد مصاريف مسجلة لهذا التاريخ.</li>{% endfor %}</ul>
+  </section>
+</section>
 {% endblock %}

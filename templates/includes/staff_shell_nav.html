@@ -9,12 +9,12 @@
     <nav class="staff-shell-nav" aria-label="التنقل التشغيلي">
       <div class="staff-shell-nav__inner">
         <a{% if request.path == '/staff/' %} class="staff-shell-nav__primary" aria-current="page"{% endif %} href="{% url 'staff_home' %}">العمليات</a>
-        <a{% if request.path == '/staff/close-day/' %} class="staff-shell-nav__primary" aria-current="page"{% endif %} href="{% url 'staff_close_day' %}">اليوم</a>
-        <a{% if request.path|slice:":24" == '/staff/operations/tasks/' %} class="staff-shell-nav__primary" aria-current="page"{% endif %} href="{% url 'staff_operational_tasks' %}">المهام</a>
+        {% if staff_caps.pos %}<a{% if request.path|slice:":11" == '/staff/pos/' %} class="staff-shell-nav__primary" aria-current="page"{% endif %} href="{% url 'staff_pos' %}">طلب جديد</a>{% endif %}
         {% if staff_caps.kitchen_board %}<a{% if request.path|slice:":15" == '/staff/kitchen/' or request.path|slice:":12" == '/staff/prep/' %} class="staff-shell-nav__primary" aria-current="page"{% endif %} href="{% url 'staff_kitchen' %}">التحضير</a>{% endif %}
-        {% if staff_caps.inventory %}<a{% if request.path|slice:":17" == '/staff/inventory/' %} class="staff-shell-nav__primary" aria-current="page"{% endif %} href="{% url 'staff_inventory_home' %}">المخزون</a>{% endif %}
+        {% if staff_caps.cashier %}<a{% if request.path|slice:":15" == '/staff/cashier/' %} class="staff-shell-nav__primary" aria-current="page"{% endif %} href="{% url 'staff_cashier' %}">الكاشير</a>{% endif %}
         {% if staff_caps.internet_billing %}<a{% if request.path|slice:":16" == '/staff/internet/' %} class="staff-shell-nav__primary" aria-current="page"{% endif %} href="{% url 'staff_internet' %}">الإنترنت</a>{% endif %}
         {% if staff_caps.finance %}<a{% if request.path|slice:":15" == '/staff/finance/' %} class="staff-shell-nav__primary" aria-current="page"{% endif %} href="{% url 'staff_finance_home' %}">المالية</a>{% endif %}
+        <a href="{% url 'staff_home' %}#staff-today">اليوم</a>
         <a href="{% url 'staff_home' %}#staff-more">المزيد</a>
       </div>
     </nav>

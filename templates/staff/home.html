@@ -65,11 +65,32 @@
     </aside>
   </div>
 
-  <section id="staff-more" class="staff-v2-panel">
-    <div class="staff-v2-panel-head"><div><h3>المساحات المتخصصة</h3><p>أدوات الإدارة التي لا تحتاجها في كل عملية بيع.</p></div></div>
-    <nav class="staff-workspace__secondary-links" aria-label="المساحات المتخصصة">
-      <a href="{% url 'staff_close_day' %}">اليوم التشغيلي</a><a href="{% url 'staff_operational_tasks' %}">مهام اليوم</a>
-      {% if staff_caps.kitchen_board %}<a href="{% url 'staff_kitchen' %}">المطبخ والتحضير</a>{% endif %}{% if staff_caps.reservations %}<a href="{% url 'staff_reservations' %}">الحجوزات</a>{% endif %}{% if staff_caps.events %}<a href="{% url 'staff_events' %}">الفعاليات</a>{% endif %}{% if workspace_caps.internet_billing %}<a href="{% url 'staff_members' %}">الأعضاء</a><a href="{% url 'staff_internet' %}">الإنترنت والجلسات</a>{% endif %}{% if workspace_caps.inventory %}<a href="{% url 'staff_inventory_home' %}">المخزون</a>{% endif %}{% if workspace_caps.finance %}<a href="{% url 'staff_finance_home' %}">المالية</a>{% endif %}{% if workspace_caps.reports %}<a href="{% url 'staff_reports_home' %}">التقارير</a>{% endif %}{% if staff_caps.order_edit %}<a href="{% url 'staff_orders' %}">الطلبات</a>{% endif %}{% if staff_caps.visit_manage %}<a href="{% url 'staff_visits' %}">الجلسات / الحسابات</a>{% endif %}{% if staff_caps.orders %}<a href="{% url 'staff_menu_tools' %}">إدارة القائمة</a>{% endif %}{% if workspace_caps.settings %}<a href="{% url 'staff_users_list' %}">المستخدمون والصلاحيات</a>{% endif %}
+  <section id="staff-today" class="staff-v2-panel hub-ux5-directory" aria-labelledby="staff-today-title">
+    <div class="staff-v2-panel-head"><div><h3 id="staff-today-title">اليوم</h3><p>المتابعة الدورية خلال الوردية.</p></div></div>
+    <nav class="staff-workspace__secondary-links hub-ux5-directory__links" aria-label="متابعة اليوم">
+      <a href="{% url 'staff_operational_tasks' %}">مهام الفريق</a>
+      <a href="{% url 'staff_close_day' %}">ملخص اليوم</a>
+      {% if staff_caps.reservations %}<a href="{% url 'staff_reservations' %}">الحجوزات والوصول</a>{% endif %}
+      {% if staff_caps.events %}<a href="{% url 'staff_events' %}">الفعاليات</a>{% endif %}
+      {% if staff_caps.internet_billing %}<a href="{% url 'staff_internet' %}">الإنترنت والجلسات</a>{% endif %}
+      {% if staff_caps.visit_manage %}<a href="{% url 'staff_visits' %}">كل الحسابات</a>{% endif %}
+      {% if staff_caps.order_edit %}<a href="{% url 'staff_orders' %}">كل الطلبات</a>{% endif %}
+    </nav>
+  </section>
+
+  <section id="staff-more" class="staff-v2-panel hub-ux5-directory" aria-labelledby="staff-more-title">
+    <div class="staff-v2-panel-head"><div><h3 id="staff-more-title">الإدارة والمساحات المتخصصة</h3><p>إعدادات وتقارير وأعمال لا تحتاجها مع كل طلب.</p></div></div>
+    <nav class="staff-workspace__secondary-links hub-ux5-directory__links" aria-label="الإدارة والمساحات المتخصصة">
+      {% if staff_caps.inventory %}<a href="{% url 'staff_inventory_home' %}">المخزون والمشتريات</a>{% endif %}
+      {% if staff_caps.finance %}<a href="{% url 'staff_finance_home' %}">المالية والحسابات</a>{% endif %}
+      {% if staff_caps.reports %}<a href="{% url 'staff_reports_home' %}">تقارير الإدارة</a>{% endif %}
+      {% if staff_caps.internet_billing %}<a href="{% url 'staff_members' %}">الأعضاء</a>{% endif %}
+      {% if staff_caps.orders %}<a href="{% url 'staff_menu_tools' %}">إدارة القائمة</a>{% endif %}
+      {% if staff_caps.settings %}<a href="{% url 'staff_vendors' %}">الموردون والشركاء</a><a href="{% url 'staff_food_lab' %}">سُفرة والمشاركات</a>{% endif %}
+      {% if staff_caps.settings %}<a href="{% url 'staff_users_list' %}">المستخدمون والصلاحيات</a><a href="{% url 'staff_qr_links' %}">رموز QR</a>{% endif %}
+      {% if staff_caps.imports %}<a href="{% url 'staff_import_home' %}">الاستيراد</a>{% endif %}
+      {% if staff_caps.modifiers %}<a href="{% url 'staff_modifiers' %}">خيارات المنتجات</a>{% endif %}
+      {% if staff_caps.internet_billing and staff_caps.settings %}<a href="{% url 'staff_internet_settings' %}">إعدادات الإنترنت</a>{% endif %}
     </nav>
   </section>
 </section>

@@ -1,25 +1,31 @@
 {% extends "base.html" %}
+{% load hub_numbers %}
 {% block title %}تقارير التشغيل{% endblock %}
 {% block content %}
-<section class="hub-reports-v3" dir="rtl">
-<header class="hub-page-header">
-  <div class="hub-page-header__main"><h2 class="hub-page-header__title">تقارير التشغيل اليومية</h2></div>
-  <nav class="hub-reports-v3__links" aria-label="تنقل التقارير">
-    <a class="hub-button hub-button-secondary" href="{% url 'staff_home' %}">العودة للفريق</a>
+<section class="hub-section hub-ux5-module" dir="rtl">
+  <header class="hub-page-header">
+    <div>
+      <p class="staff-workspace__eyebrow">متابعة الإدارة</p>
+      <h1 class="hub-page-header__title">ملخص التشغيل</h1>
+      <p class="hub-page-header__meta">مؤشرات يوم {{ report_date }} من السجلات الحالية.</p>
+    </div>
+  </header>
+  <nav class="hub-ux5-actions" aria-label="تفاصيل التقارير">
     <a class="hub-button hub-button-primary" href="{% url 'staff_reports_day' %}?date={{ report_date|date:'Y-m-d' }}">تفاصيل اليوم</a>
-    <a class="hub-button hub-button-secondary" href="{% url 'staff_product_margin_report' %}">تقرير المنتجات والهامش</a>
+    <a class="hub-button" href="{% url 'staff_product_margin_report' %}">المنتجات والهامش</a>
+    <a class="hub-button" href="{% url 'staff_home' %}">العمليات</a>
   </nav>
-</header>
-<div class="hub-reports-v3__metrics">
-  <div class="hub-card hub-reports-v3__metric"><strong>مبيعات اليوم</strong><div>{{ sums.order_total }} ل.س</div></div>
-  <div class="hub-card hub-reports-v3__metric"><strong>عدد الطلبات اليوم</strong><div>{{ sums.orders_count }}</div></div>
-  <div class="hub-card hub-reports-v3__metric"><strong>المدفوع نقداً اليوم</strong><div>{{ sums.cash_total }} ل.س</div></div>
-  <div class="hub-card hub-reports-v3__metric"><strong>غير المدفوع</strong><div>{{ sums.remaining_total }} ل.س</div></div>
-  <div class="hub-card hub-reports-v3__metric"><strong>الطلبات الملغاة</strong><div>{{ sums.cancelled_count }}</div></div>
-  <div class="hub-card hub-reports-v3__metric"><strong>متوسط قيمة الطلب</strong><div>{{ sums.avg_order_value }} ل.س</div></div>
-  <div class="hub-card hub-reports-v3__metric"><strong>طلبات التوصيل</strong><div>{{ sums.delivery_order_count }} / {{ sums.delivery_fees_total }} ل.س</div></div>
-  <div class="hub-card hub-reports-v3__metric"><strong>الهامش التقديري</strong><div>{{ sums.estimated_gross_margin_syp }} ل.س</div></div>
-  <div class="hub-card hub-reports-v3__metric"><strong>منتجات بدون كلفة</strong><div>{{ sums.products_missing_cost_count }}</div></div>
-</div>
+  <div class="hub-ux5-kpis hub-reports-v3__metrics" aria-label="مؤشرات اليوم">
+    <div class="hub-ux5-kpi"><span>مبيعات اليوم</span><strong>{{ sums.order_total|format_syp }}</strong></div>
+    <div class="hub-ux5-kpi"><span>عدد الطلبات</span><strong>{{ sums.orders_count }}</strong></div>
+    <div class="hub-ux5-kpi"><span>المدفوع نقداً</span><strong>{{ sums.cash_total|format_syp }}</strong></div>
+    <a class="hub-ux5-kpi" href="{% url 'staff_reports_day' %}?date={{ report_date|date:'Y-m-d' }}"><span>المبالغ المتبقية</span><strong>{{ sums.remaining_total|format_syp }}</strong></a>
+    <div class="hub-ux5-kpi"><span>الطلبات الملغاة</span><strong>{{ sums.cancelled_count }}</strong></div>
+    <div class="hub-ux5-kpi"><span>متوسط قيمة الطلب</span><strong>{{ sums.avg_order_value|format_syp }}</strong></div>
+    <div class="hub-ux5-kpi"><span>طلبات التوصيل</span><strong>{{ sums.delivery_order_count }}</strong></div>
+    <div class="hub-ux5-kpi"><span>الهامش التقديري</span><strong>{{ sums.estimated_gross_margin_syp|format_syp }}</strong></div>
+    <a class="hub-ux5-kpi" href="{% url 'staff_product_margin_report' %}"><span>منتجات بلا كلفة مسجلة</span><strong>{{ sums.products_missing_cost_count }}</strong></a>
+  </div>
+  <p class="hub-ux5-caution">المؤشرات لأغراض المتابعة. تصحيح الدفعات أو إغلاق الفترة يتمان حصراً من مسارات المالية المصرح بها.</p>
 </section>
 {% endblock %}
