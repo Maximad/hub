@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
@@ -11,6 +13,7 @@ from core.services.internet_access import end_usage_session
 from core.services.visit_internet import finalize_visit_metered_session
 from core.services.visits import customer_visit_queryset
 from core.services.visit_order_corrections import move_unpaid_order
+from core.services.visit_item_splits import split_unposted_order_item
 from reservations.models import Reservation
 from reservations.services import complete_reservation_for_visit
 
@@ -33,6 +36,7 @@ def _visit_context(request, visit):
         'package', 'entitlement', 'browser_binding__credential'
     ).order_by('-start_time')
     can_transfer = user_has_capability(request.user, 'visit_manage') and user_has_capability(request.user, 'cashier')
+    can_split = can_transfer and user_has_capability(request.user, 'order_edit')
     transfer_targets = (
         HubVisit.objects.filter(status=HubVisit.Status.OPEN).exclude(pk=visit.pk)
         .select_related('table', 'table__room').order_by('-last_activity_at')[:100]
@@ -40,6 +44,8 @@ def _visit_context(request, visit):
     )
     return {
         'can_transfer_orders': can_transfer,
+        'can_split_items': can_split,
+        'split_request_token': str(uuid4()),
         'transfer_targets': transfer_targets,
         'visit': visit,
         'tables': TableArea.objects.select_related('room'),
@@ -138,11 +144,34 @@ def staff_visit_detail(request, public_code):
         action = request.POST.get('action')
         panel_response = panel in {'1', 'internet'}
 
-        if action in {'transfer_order', 'attach_order', 'detach_order'}:
+        if action in {'transfer_order', 'attach_order', 'detach_order', 'split_item'}:
             if not user_has_capability(request.user, 'cashier'):
                 raise PermissionDenied('نقل الطلبات بين الحسابات يحتاج صلاحية الكاشير وإدارة الجلسات.')
+            if action == 'split_item' and not user_has_capability(request.user, 'order_edit'):
+                raise PermissionDenied('تقسيم العناصر يحتاج صلاحية تعديل الطلبات.')
             try:
-                if action == 'transfer_order':
+                if action == 'split_item':
+                    destination = HubVisit.objects.filter(
+                        public_code=request.POST.get('destination_visit', ''),
+                    ).first()
+                    if destination is None:
+                        raise ValidationError('اختر حساب وجهة صالحاً.')
+                    order_id = request.POST.get('order_id')
+                    item_id = request.POST.get('item_id')
+                    if not str(order_id).isdigit() or not str(item_id).isdigit():
+                        raise ValidationError('اختر طلباً وعنصراً صالحين.')
+                    new_order = split_unposted_order_item(
+                        actor=request.user,
+                        source_visit_id=visit.pk,
+                        destination_visit_id=destination.pk,
+                        order_id=int(order_id),
+                        item_id=int(item_id),
+                        quantity=request.POST.get('quantity'),
+                        reason=request.POST.get('reason'),
+                        request_token=request.POST.get('split_request_token'),
+                    )
+                    messages.success(request, f'تم تقسيم العنصر في طلب جديد {new_order.display_number}.')
+                elif action == 'transfer_order':
                     destination = HubVisit.objects.filter(
                         public_code=request.POST.get('destination_visit', ''),
                     ).first()
@@ -180,7 +209,8 @@ def staff_visit_detail(request, public_code):
                         destination_visit_id=None,
                         reason=request.POST.get('reason') or 'فصل يدوي بواسطة الكاشير',
                     )
-                messages.success(request, 'تم تحديث ربط الطلب مع تسجيل السبب وسجل التدقيق.')
+                if action != 'split_item':
+                    messages.success(request, 'تم تحديث ربط الطلب مع تسجيل السبب وسجل التدقيق.')
             except ValidationError as error:
                 messages.error(request, ' '.join(error.messages))
             if panel_response:

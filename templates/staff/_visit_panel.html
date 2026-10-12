@@ -45,6 +45,39 @@
           <div class="staff-visit-panel__order-links">
             {% if visit_caps.order_edit %}<a href="{% url 'staff_order_edit' order.public_code %}" data-staff-context-url="{% url 'staff_order_edit' order.public_code %}?panel=context" data-context-title="تفاصيل الطلب" aria-haspopup="dialog">عرض</a><a href="{% url 'staff_order_edit' order.public_code %}">تعديل متقدم</a>{% endif %}
             {% if visit_caps.cashier and order.remaining_syp > 0 %}<a href="{% url 'staff_cashier_order' visit.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' visit.public_code %}?panel=payment" data-context-title="الدفع وإغلاق الحساب" aria-haspopup="dialog">دفع</a>{% endif %}
+            {% if can_split_items and visit.status == 'open' and transfer_targets and order.status == 'new' %}
+            <details class="staff-visit-panel__quick-edit staff-visit-panel__order-transfer">
+              <summary>تقسيم عناصر هذا الطلب</summary>
+              <p class="hub-help-text">للمنتجات غير المدفوعة التي لم يبدأ تحضيرها أو خصم مخزونها. اختر العنصر والكمية وحساب الوجهة.</p>
+              <form method="post" action="{% url 'staff_visit_detail' visit.public_code %}" hx-post="{% url 'staff_visit_detail' visit.public_code %}?panel=1" hx-target="#staff-context-drawer-body" hx-swap="innerHTML" class="hub-form hub-form-section" onsubmit="return confirm('نقل الكمية المحددة إلى طلب جديد في حساب آخر؟');">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="split_item">
+                <input type="hidden" name="split_request_token" value="{{ split_request_token }}">
+                <input type="hidden" name="order_id" value="{{ order.pk }}">
+                <label>عنصر الطلب
+                  <select class="hub-input" name="item_id" required>
+                    <option value="">اختر العنصر</option>
+                    {% for item in order.items.all %}
+                    <option value="{{ item.pk }}">{{ item.product_name_ar_snapshot }} × {{ item.quantity }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label>الكمية المراد نقلها
+                  <input class="hub-input" name="quantity" type="number" min="1" max="999" step="1" value="1" inputmode="numeric" required>
+                </label>
+                <label>الحساب الوجهة
+                  <select class="hub-input" name="destination_visit" required>
+                    <option value="">اختر حساباً مفتوحاً</option>
+                    {% for target in transfer_targets %}
+                    <option value="{{ target.public_code }}">{% if target.table %}{{ target.table }}{% else %}جلسة{% endif %} {{ target.display_number }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label>سبب التقسيم<input class="hub-input" type="text" name="reason" minlength="3" maxlength="255" placeholder="تقسيم الحساب بين الزبائن" required></label>
+                <button class="hub-button hub-button-secondary" type="submit">تأكيد تقسيم العنصر</button>
+              </form>
+            </details>
+            {% endif %}
             {% if can_transfer_orders and visit.status == 'open' and transfer_targets %}
             <details class="staff-visit-panel__quick-edit staff-visit-panel__order-transfer">
               <summary>نقل الطلب إلى حساب آخر</summary>
