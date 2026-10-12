@@ -41,6 +41,9 @@
       <label>تفاصيل سبب عكس الدفعة
         <textarea class="hub-input" name="reason" minlength="3" maxlength="2000" rows="3" required>{{ request.POST.reason }}</textarea>
       </label>
+      <label>مرجع تنفيذ الاسترجاع
+        <input class="hub-input" name="refund_reference" type="text" minlength="3" maxlength="240" value="{{ request.POST.refund_reference }}" placeholder="رقم التحويل البنكي أو وصف تسليم المبلغ النقدي" required>
+      </label>
       <label class="hub-form__checkbox">
         <input type="checkbox" name="refund_completed" value="1" required {% if request.POST.refund_completed == '1' %}checked{% endif %}>
         أؤكد أن إعادة المبلغ إلى الزبون تمت فعلياً، وأنني مخوّل لتسجيلها.
