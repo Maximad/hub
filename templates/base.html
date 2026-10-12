@@ -85,6 +85,7 @@
       </div>
     </header>
   {% endif %}
+  <a class="hub-skip-to-content" href="#hub-main-content">الانتقال إلى المحتوى</a>
   <main class="hub-container" id="hub-main-content">
     {% if messages %}
       <div class="hub-messages">{% for message in messages %}<div class="hub-message hub-message-{{ message.tags|default:'info' }}" role="{% message_role message %}">{{ message }}</div>{% endfor %}</div>
