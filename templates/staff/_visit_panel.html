@@ -52,6 +52,7 @@
               <form method="post" action="{% url 'staff_visit_detail' visit.public_code %}" hx-post="{% url 'staff_visit_detail' visit.public_code %}?panel=1" hx-target="#staff-context-drawer-body" hx-swap="innerHTML" class="hub-form hub-form-section" onsubmit="return confirm('نقل الكمية المحددة إلى طلب جديد في حساب آخر؟');">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="split_item">
+                <input type="hidden" name="split_request_token" value="{{ split_request_token }}">
                 <input type="hidden" name="order_id" value="{{ order.pk }}">
                 <label>عنصر الطلب
                   <select class="hub-input" name="item_id" required>
