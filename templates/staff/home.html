@@ -72,7 +72,7 @@
       <a href="{% url 'staff_close_day' %}">ملخص اليوم</a>
       {% if staff_caps.reservations %}<a href="{% url 'staff_reservations' %}">الحجوزات والوصول</a>{% endif %}
       {% if staff_caps.events %}<a href="{% url 'staff_events' %}">الفعاليات</a>{% endif %}
-      {% if staff_caps.internet_billing %}<a href="{% url 'staff_internet' %}">جلسات الإنترنت</a>{% endif %}
+      {% if staff_caps.internet_billing %}<a href="{% url 'staff_internet' %}">الإنترنت والجلسات</a>{% endif %}
       {% if staff_caps.visit_manage %}<a href="{% url 'staff_visits' %}">كل الحسابات</a>{% endif %}
       {% if staff_caps.order_edit %}<a href="{% url 'staff_orders' %}">كل الطلبات</a>{% endif %}
     </nav>
