@@ -118,6 +118,10 @@ def split_unposted_order_item(
         raise ValidationError('هامش العنصر التاريخي يحتاج مراجعة قبل التقسيم.')
 
     original_quantity = item.quantity
+    unit_margin_snapshot = (
+        item.estimated_line_margin_syp_snapshot // original_quantity
+        if item.estimated_line_margin_syp_snapshot is not None else None
+    )
     destination_order = Order.objects.create(
         visit=destination,
         table=destination.table,
@@ -143,9 +147,7 @@ def split_unposted_order_item(
                 remaining_quantity * item.estimated_unit_cost_syp_snapshot
             )
         if item.estimated_line_margin_syp_snapshot is not None:
-            item.estimated_line_margin_syp_snapshot = remaining_quantity * (
-                item.unit_price_syp_snapshot - (item.estimated_unit_cost_syp_snapshot or 0)
-            )
+            item.estimated_line_margin_syp_snapshot = remaining_quantity * unit_margin_snapshot
         OrderItem.objects.filter(pk=item.pk).update(
             quantity=item.quantity,
             line_total_syp_snapshot=item.line_total_syp_snapshot,
@@ -171,8 +173,8 @@ def split_unposted_order_item(
                 if item.estimated_unit_cost_syp_snapshot is not None else None
             ),
             estimated_line_margin_syp_snapshot=(
-                quantity * (item.unit_price_syp_snapshot - (item.estimated_unit_cost_syp_snapshot or 0))
-                if item.estimated_line_margin_syp_snapshot is not None else None
+                quantity * unit_margin_snapshot
+                if unit_margin_snapshot is not None else None
             ),
             prep_station=item.prep_station,
             prep_status=item.prep_status,
