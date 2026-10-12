@@ -62,7 +62,7 @@ class CustomerPaymentReversalTests(TestCase):
             business_date=day or self.day,
             idempotency_key=key,
             channel='finance-test',
-            request_metadata={'case': key},
+            request_metadata={'case': key, 'refund_completed': True, 'refund_reference': f'refund-evidence-{key}'},
         )
 
     def collected(self, method=Payment.Method.CASH):
@@ -230,6 +230,7 @@ class CustomerPaymentReversalTests(TestCase):
             'reason': 'تصحيح تحصيل الزبون',
             'reason_code': CancellationReason.STAFF_MISTAKE,
             'refund_completed': '1',
+            'refund_reference': 'نقداً بموجب إيصال الاسترجاع 42',
         })
         self.assertEqual(completed.status_code, 302)
         payment.refresh_from_db()
