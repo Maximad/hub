@@ -3,6 +3,8 @@
 No payment, inventory, entitlement, or customer browser credential is moved.
 All invariants must hold at POST time; interface controls are not authority.
 """
+from uuid import UUID
+
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -14,7 +16,7 @@ from core.stock_recipes import deduction_settings
 @transaction.atomic
 def split_unposted_order_item(
     *, actor, source_visit_id, destination_visit_id, order_id, item_id,
-    quantity, reason,
+    quantity, reason, request_token,
 ):
     reason = (reason or '').strip()
     if not 3 <= len(reason) <= 255:
@@ -23,6 +25,10 @@ def split_unposted_order_item(
         quantity = int(quantity)
     except (ValueError, TypeError):
         raise ValidationError('أدخل كمية صالحة.')
+    try:
+        request_token = str(UUID(str(request_token)))
+    except (TypeError, ValueError, AttributeError):
+        raise ValidationError('انتهت صلاحية نموذج التقسيم. أعد فتح الحساب.')
     if quantity < 1:
         raise ValidationError('الكمية يجب أن تكون واحدة على الأقل.')
     if not source_visit_id or not destination_visit_id or source_visit_id == destination_visit_id:
@@ -38,6 +44,25 @@ def split_unposted_order_item(
     if len(visits) != 2 or any(v.status != HubVisit.Status.OPEN for v in visits.values()):
         raise ValidationError('الحساب المصدر والوجهة يجب أن يكونا مفتوحين.')
     destination = visits[destination_visit_id]
+    # The source visit lock serializes duplicate posts. A retry with the same
+    # token returns its prior result, not a second split.
+    previous = ActivityLog.objects.filter(
+        action='visit.order_item_split',
+        details__idempotency_key=request_token,
+    ).order_by('pk').first()
+    if previous:
+        d = previous.details
+        if (
+            previous.actor_id != getattr(actor, 'pk', None)
+            or d.get('source_visit_id') != source_visit_id
+            or d.get('destination_visit_id') != destination_visit_id
+            or d.get('source_order_id') != order_id
+            or d.get('source_item_id') != item_id
+            or d.get('moved_quantity') != quantity
+            or d.get('reason') != reason
+        ):
+            raise ValidationError('مفتاح عملية التقسيم مستخدم لطلب مختلف.')
+        return Order.objects.get(pk=d['new_order_id'])
 
     order = Order.objects.select_for_update(of=('self',)).filter(pk=order_id).first()
     if order is None or order.visit_id != source_visit_id:
@@ -105,8 +130,9 @@ def split_unposted_order_item(
     if quantity == original_quantity:
         # Preserve the original OrderItem ID and complete snapshots. No new
         # stock-deduction trigger or duplicated line.
-        item.order = destination_order
-        item.save(update_fields=['order', 'updated_at'])
+        OrderItem.objects.filter(pk=item.pk).update(
+            order=destination_order, updated_at=timezone.now()
+        )
         moved_item = item
     else:
         remaining_quantity = original_quantity - quantity
@@ -117,11 +143,13 @@ def split_unposted_order_item(
             item.estimated_line_margin_syp_snapshot = (
                 item.line_total_syp_snapshot - item.estimated_line_cost_syp_snapshot
             )
-        item.save(update_fields=[
-            'quantity', 'line_total_syp_snapshot',
-            'estimated_line_cost_syp_snapshot', 'estimated_line_margin_syp_snapshot',
-            'updated_at',
-        ])
+        OrderItem.objects.filter(pk=item.pk).update(
+            quantity=item.quantity,
+            line_total_syp_snapshot=item.line_total_syp_snapshot,
+            estimated_line_cost_syp_snapshot=item.estimated_line_cost_syp_snapshot,
+            estimated_line_margin_syp_snapshot=item.estimated_line_margin_syp_snapshot,
+            updated_at=timezone.now(),
+        )
         # bulk_create intentionally preserves original nullable snapshot fields
         # without recalculating costs from today's product configuration.
         moved_item = OrderItem.objects.bulk_create([OrderItem(
@@ -141,7 +169,7 @@ def split_unposted_order_item(
             ),
             estimated_line_margin_syp_snapshot=(
                 quantity * (item.unit_price_syp_snapshot - item.estimated_unit_cost_syp_snapshot)
-                if item.estimated_unit_cost_syp_snapshot is not None else None
+                if item.estimated_line_margin_syp_snapshot is not None else None
             ),
             prep_station=item.prep_station,
             prep_status=item.prep_status,
@@ -166,6 +194,7 @@ def split_unposted_order_item(
             'moved_quantity': quantity,
             'unit_price_syp_snapshot': item.unit_price_syp_snapshot,
             'reason': reason,
+            'idempotency_key': request_token,
         },
     )
     return destination_order
