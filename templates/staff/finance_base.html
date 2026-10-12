@@ -8,12 +8,12 @@
       <p class="hub-page-header__meta">تاريخ العمل: <strong class="hub-number">{% if business_date %}{{ business_date }}{% elif report_date %}{{ report_date }}{% else %}{{ today }}{% endif %}</strong></p>
     </div>
   </header>
-  <nav class="hub-ux5-module__nav" aria-label="الأعمال المالية اليومية">
+  <nav class="hub-nav-tabs" aria-label="الأعمال المالية اليومية"><div class="hub-ux5-module__nav">
     <a href="{% url 'staff_finance_home' %}"{% if request.resolver_match.url_name == 'staff_finance_home' %} aria-current="page"{% endif %}>نظرة عامة</a>
     <a href="{% url 'staff_daily_closes' %}"{% if request.resolver_match.url_name == 'staff_daily_closes' %} aria-current="page"{% endif %}>إغلاق الحسابات</a>
     <a href="{% url 'staff_finance_expenses' %}"{% if request.resolver_match.url_name == 'staff_finance_expenses' %} aria-current="page"{% endif %}>المصاريف</a>
     <a href="{% url 'staff_finance_cash_movements' %}"{% if request.resolver_match.url_name == 'staff_finance_cash_movements' %} aria-current="page"{% endif %}>حركات الصندوق</a>
-  </nav>
+  </div></nav>
   <details class="hub-ux5-module__more">
     <summary>عمليات مالية أخرى</summary>
     <nav aria-label="العمليات المالية المتخصصة" class="hub-ux5-module__nav">
