@@ -54,7 +54,7 @@
     <div class="staff-order-panel__section-head"><h4>سجل الدفعات</h4><span>{{ order.payments.all|length }}</span></div>
     <div class="staff-payment-panel__payments">
       {% for payment in order.payments.all %}
-        <div><span>{{ payment.get_method_display }}</span><strong>{{ payment.amount_syp|format_syp }}</strong></div>
+        <div><span>{{ payment.get_method_display }}{% if payment.is_reversed %} · معكوسة (لا تحتسب){% elif not payment.is_active or payment.method == 'unpaid' %} · غير محصّلة{% endif %}</span><strong>{{ payment.amount_syp|format_syp }}</strong></div>
       {% empty %}<p class="hub-help-text">لا توجد دفعات بعد.</p>{% endfor %}
     </div>
   </section>
