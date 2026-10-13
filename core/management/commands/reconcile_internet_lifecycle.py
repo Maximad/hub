@@ -8,6 +8,9 @@ from core.services.internet_lifecycle import (expire_internet_entitlement,
                                                expire_membership,
                                                unfreeze_membership)
 from core.services.internet_access import end_usage_session
+from core.services.staff_internet_lifecycle import (
+    disabled_staff_internet_grant_ids, revoke_disabled_staff_internet,
+)
 from core.services.network_operations import enqueue_network_operation
 from internet.models import InternetSessionNetworkOperation
 from internet.session_network_operations import enqueue_session_network_operation
@@ -36,14 +39,17 @@ class Command(BaseCommand):
         entitlement_ids = list(InternetEntitlement.objects.filter(
             status__in=(InternetEntitlement.Status.ACTIVE, InternetEntitlement.Status.PENDING),
             valid_until__lte=now).order_by('valid_until').values_list('pk', flat=True)[:limit])
+        disabled_grants = disabled_staff_internet_grant_ids(limit=limit)
         overdue = list(InternetSession.objects.filter(
             status=InternetSession.Status.ACTIVE, authorized_until__lte=now
         ).order_by('authorized_until').values_list('pk', flat=True)[:limit])
         result = {'subscriptions_to_expire': expiring, 'freezes_to_thaw': thawing,
                   'entitlements_to_expire': entitlement_ids,
+                  'inactive_staff_grants_to_revoke': disabled_grants,
                   'overdue_sessions_to_close': overdue,
-                  'network_operations_to_enqueue': len(set(entitlement_ids)) + len(overdue)}
+                  'network_operations_to_enqueue': len(set(entitlement_ids)) + len(overdue) + len(disabled_grants)}
         if not options['dry_run']:
+            revoke_disabled_staff_internet(limit=limit)
             for pk in thawing:
                 unfreeze_membership(MembershipSubscription(pk=pk), at=now)
             for pk in expiring:

@@ -403,10 +403,7 @@ def _retire_legacy_staff_wifi_visit(request, *, actor):
 
 def _start_staff_wifi(request):
     """Connect internal staff Internet without creating a customer visit/session."""
-    if not self_service_enabled(get_system_settings()):
-        messages.error(request, 'خدمة الإنترنت الذاتية غير متاحة حالياً.')
-        return redirect(_wifi_internet_path())
-
+    # Internal grants are independent of customer visits and internet sales.
     staff_user = request.user if request.user.is_authenticated else None
     entitlement = usable_internal_grant_for_user(staff_user)
     if entitlement is None:
@@ -667,7 +664,7 @@ def wifi_entry(request):
         'active_guest_wifi_network_ready': _session_network_ready(active_guest_session),
         'active_fast_wifi_network_ready': _session_network_ready(active_fast_session),
         'active_fast_wifi_is_internal': active_fast_is_internal,
-        'staff_internal_access_available': bool(staff_internal_entitlement and internet_options_available),
+        'staff_internal_access_available': bool(staff_internal_entitlement),
         'staff_internal_access_kind': (
             staff_internal_entitlement.origin_type if staff_internal_entitlement else ''
         ),

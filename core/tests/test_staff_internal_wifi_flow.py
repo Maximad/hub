@@ -221,3 +221,28 @@ class StaffInternalWifiFlowTests(TestCase):
         destination = build_payload.call_args.kwargs['destination_url']
         self.assertEqual(urlsplit(destination).path, reverse('staff_home'))
         self.assertContains(response, 'جارٍ توصيلك بالشبكة')
+
+    @patch('core.views.wifi._entitlement_hotspot_relay_response')
+    @patch('core.views.wifi.one_tap_connect_configured', return_value=True)
+    def test_staff_wifi_survives_customer_self_service_disablement(self, _configured, relay):
+        setting = SystemSetting.objects.get()
+        setting.customer_visits_enabled = False
+        setting.customer_internet_self_service_enabled = False
+        setting.save(update_fields=[
+            'customer_visits_enabled', 'customer_internet_self_service_enabled', 'updated_at',
+        ])
+        get_system_settings.cache_clear()
+        self.client.force_login(self.staff_user)
+
+        page = self.client.get(reverse('wifi_entry'), {'mode': 'internet'})
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, 'value="start_staff_wifi"')
+        self.assertNotContains(page, 'value="start_fast_wifi"')
+        relay.return_value = HttpResponseRedirect(reverse('staff_home'))
+        connected = self.client.post(reverse('wifi_entry'), {'wifi_action': 'start_staff_wifi'})
+        self.assertRedirects(connected, reverse('staff_home'))
+        relay.assert_called_once()
+        self.assertEqual(HubVisit.objects.count(), 0)
+        self.assertEqual(InternetSession.objects.count(), 0)
+        self.assertEqual(Order.objects.count(), 0)
+        self.assertEqual(Payment.objects.count(), 0)
