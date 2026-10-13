@@ -43,6 +43,7 @@ run_phase() (
     fail_migration="${2:-false}"
     fail_readiness="${3:-false}"
     allow_data="${4:-false}"
+    fail_release="${5:-false}"
     PROJECT_DIR="/opt/hub"
 
     log() { printf 'LOG %s\n' "$*" >>"$events"; }
@@ -63,6 +64,9 @@ run_phase() (
                 fi
                 if [[ "$fail_readiness" == true && "${!next}" == launch_readiness ]]; then
                     exit 43
+                fi
+                if [[ "$fail_release" == true && "${!next}" == internet_release_audit ]]; then
+                    exit 44
                 fi
             fi
         done
@@ -137,6 +141,22 @@ fi
 grep -Fq '<manage.py> <launch_readiness> <--json>' "$readiness_failed_events"
 if grep -Fq 'DC <up> <-d> <--no-deps> <--force-recreate> <web> <management-mcp> <internet-worker> <notification-worker>' "$readiness_failed_events"; then
     echo "application replacement ran after a failed launch readiness gate" >&2
+    exit 1
+fi
+
+# A failing Internet release audit must stop before any container replacement.
+release_failed_events="$tmp/release-failure.events"
+set +e
+run_phase "$release_failed_events" false false false true
+release_failure_status=$?
+set -e
+if (( release_failure_status == 0 )); then
+    echo "Internet release audit FAIL unexpectedly allowed deployment to continue" >&2
+    exit 1
+fi
+grep -Fq '<manage.py> <internet_release_audit> <--json>' "$release_failed_events"
+if grep -Fq 'DC <up> <-d> <--no-deps> <--force-recreate> <web> <management-mcp> <internet-worker> <notification-worker>' "$release_failed_events"; then
+    echo "application replacement ran after failed Internet release audit" >&2
     exit 1
 fi
 
