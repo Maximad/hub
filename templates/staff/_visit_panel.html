@@ -6,6 +6,7 @@
       <h3>{% if visit.table %}{{ visit.table }}{% else %}جلسة {{ visit.display_number }}{% endif %}</h3>
       <p class="staff-visit-panel__meta">{{ visit.get_status_display }} · آخر نشاط منذ {{ visit.last_activity_at|ar_since }}</p>
     </div>
+    {% if visit.guest_name and not visit.member %}<p class="staff-visit-panel__meta">{{ visit.guest_name }}{% if visit.guest_phone %} · {{ visit.guest_phone }}{% endif %}</p>{% endif %}
     {% if visit.member %}
       <div class="staff-visit-panel__member">
         <span>العضو</span>

@@ -16,6 +16,7 @@ from django.utils import timezone
 
 from core.models import ActivityLog, HubVisit, InternetEntitlement, InternetPackage, InternetSession, Payment
 from core.services.internet_access import create_commercial_sale, start_usage_session
+from core.services.fast_internet_identity import ensure_fast_visit_identity
 from core.services.visit_internet import (
     _apply_customer_bandwidth_profile,
     _customer_bandwidth_profile_code,
@@ -110,10 +111,11 @@ def _active_for_fast_start(visit, credential, *, actor=None, at=None):
 
 @transaction.atomic
 def create_visit_internet_sale_and_start(*, visit, credential, package, request_key,
-                                         member=None, actor=None, at=None):
+                                         member=None, guest_name='', guest_phone='', actor=None, at=None):
     """Purchase/start one package for this browser while sharing the visit bill."""
     visit = HubVisit.objects.select_for_update().get(pk=visit.pk)
     _validate_open_visit_credential(visit, credential)
+    ensure_fast_visit_identity(visit, guest_name=guest_name, guest_phone=guest_phone, member=member)
     package = InternetPackage.objects.select_for_update().get(pk=package.pk)
     error = package_customer_error(package, member, at)
     if error:
@@ -167,7 +169,7 @@ def create_visit_internet_sale_and_start(*, visit, credential, package, request_
 
 
 @transaction.atomic
-def start_visit_metered_session(*, visit, credential, member=None, guest_phone='', actor=None, at=None):
+def start_visit_metered_session(*, visit, credential, member=None, guest_name='', guest_phone='', actor=None, at=None):
     """Start/reuse this browser's package-less metered session on a shared bill."""
     visit = HubVisit.objects.select_for_update().get(pk=visit.pk)
     _validate_open_visit_credential(visit, credential)
@@ -176,9 +178,6 @@ def start_visit_metered_session(*, visit, credential, member=None, guest_phone='
     error = metered_customer_error(settings_obj, member)
     if error:
         raise ValidationError(error)
-    if member is None and settings_obj.require_phone_for_guest_session and not (guest_phone or '').strip():
-        raise ValidationError('رقم الهاتف مطلوب لبدء الإنترنت.')
-
     active = _active_for_fast_start(visit, credential, actor=actor, at=at)
     if active:
         if (active.entitlement_id is None and active.package_id is None
@@ -186,6 +185,11 @@ def start_visit_metered_session(*, visit, credential, member=None, guest_phone='
             return _apply_customer_bandwidth_profile(active), False
         raise ValidationError('لديك جلسة إنترنت سريعة فعالة على هذا الجهاز. أنهِها قبل بدء جلسة أخرى.')
 
+    name, phone = ensure_fast_visit_identity(
+        visit, guest_name=guest_name, guest_phone=guest_phone, member=member,
+    )
+    if member is None and settings_obj.require_phone_for_guest_session and not (phone or (guest_phone or '').strip()):
+        raise ValidationError('رقم الهاتف مطلوب لبدء الإنترنت.')
     requested = at or timezone.now()
     network_provider = _metered_network_provider()
     session = InternetSession.objects.create(
@@ -194,8 +198,10 @@ def start_visit_metered_session(*, visit, credential, member=None, guest_phone='
         visit=visit,
         package=None,
         entitlement=None,
-        guest_phone=(guest_phone or '').strip(),
-        customer_phone=(guest_phone or '').strip(),
+        guest_name=name,
+        customer_name=name,
+        guest_phone=phone or (guest_phone or '').strip(),
+        customer_phone=phone or (guest_phone or '').strip(),
         billing_mode=InternetSession.BillingMode.OPEN_METERED,
         started_at=requested,
         start_time=requested,

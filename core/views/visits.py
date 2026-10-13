@@ -127,6 +127,10 @@ def current_visit(request):
     if active_internet_session:
         _decorate_session_network_state(active_internet_session)
     internet_enabled = self_service_enabled(system_settings)
+    internet_identity_required = bool(
+        not visit.table_id and not (visit.guest_name and visit.guest_phone)
+        and not (visit.member_id and visit.member.name_ar and visit.member.phone)
+    )
     context = {
         'visit': visit,
         'orders': orders,
@@ -141,6 +145,7 @@ def current_visit(request):
             )
         ),
         'internet_self_service_enabled': internet_enabled,
+        'internet_identity_required': internet_identity_required,
         'focus_internet': internet_enabled and request.GET.get('focus') == 'internet',
     }
     if internet_enabled:
@@ -272,6 +277,8 @@ def visit_internet_purchase_start(request):
         )
         credential = resolve_visit_credential(request)
         member_context = resolve_member_from_request(request)
+        if credential is None and table is not None:
+            return redirect(reverse('menu_table', kwargs={'qr_token': table.qr_token}) + '?choose=1')
         package = None
         session = None
         metered_created = False
@@ -287,33 +294,8 @@ def visit_internet_purchase_start(request):
                 if table and visit.table_id != table.pk:
                     raise ValidationError('الجلسة مرتبطة بطاولة أخرى. يرجى طلب المساعدة من الفريق.')
             else:
-                if not table:
-                    raise ValidationError('الجلسة مغلقة.')
-                # Compatibility fallback for callers outside the normal guarded table
-                # flow. New customer table starts are expected to arrive already
-                # bound to a visit/browser credential by the account-selection step.
-                table = TableArea.objects.select_for_update().get(pk=table.pk)
-                visit = (
-                    HubVisit.objects.select_for_update()
-                    .filter(table=table, status=HubVisit.Status.OPEN)
-                    .order_by('pk')
-                    .first()
-                )
-                created_visit = visit is None
-                if created_visit:
-                    visit = HubVisit.objects.create(
-                        table=table,
-                        member=member_context.member if member_context else None,
-                    )
-                    ActivityLog.objects.create(action='visit.created', details={
-                        'visit_id': visit.pk,
-                        'source': 'public_internet',
-                    })
-                credential, raw_cookie = issue_visit_credential(visit)
-                ActivityLog.objects.create(action='visit.browser_bound', details={
-                    'visit_id': visit.pk,
-                    'joined_existing_table_visit': not created_visit,
-                })
+                # A table location must not select an existing bill on its own.
+                raise ValidationError('اختر حساب الطاولة أولاً قبل بدء الإنترنت.')
 
             member = visit.member
             if member_context and visit.member_id is None:
@@ -331,6 +313,7 @@ def visit_internet_purchase_start(request):
                     visit=visit,
                     credential=credential,
                     member=member,
+                    guest_name=request.POST.get('guest_name', ''),
                     guest_phone=request.POST.get('guest_phone', ''),
                 )
             else:
@@ -340,6 +323,8 @@ def visit_internet_purchase_start(request):
                     package=package,
                     request_key=request.POST.get('request_key', ''),
                     member=member,
+                    guest_name=request.POST.get('guest_name', ''),
+                    guest_phone=request.POST.get('guest_phone', ''),
                 )
 
         network_ready = True

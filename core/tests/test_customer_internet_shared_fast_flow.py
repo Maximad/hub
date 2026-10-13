@@ -188,11 +188,16 @@ class FastCustomerProfileTests(CustomerInternetFlowMixin, TestCase):
     ):
         self.make_customer_setup()
 
-        opened = self.client.post(reverse('wifi_entry'), {'wifi_action': 'internet_options'})
+        opened = self.client.post(reverse('wifi_entry'), {
+            'wifi_action': 'internet_options',
+            'guest_name': 'رنا شمس', 'guest_phone': '0999123456',
+        })
         self.assertEqual(opened.status_code, 302)
         visit = HubVisit.objects.get()
         self.assertIsNone(visit.table_id)
         self.assertIsNone(visit.member_id)
+        self.assertEqual(visit.guest_name, 'رنا شمس')
+        self.assertEqual(visit.guest_phone, '0999123456')
 
         response = self.client.post(reverse('visit_internet_start'), {'mode': 'metered'})
 

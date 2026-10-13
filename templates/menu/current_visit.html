@@ -7,7 +7,7 @@
   <header class="hub-card current-visit__header current-visit__header--compact">
     <div>
       <p class="menu-public__brand">جلستي في هَبّ</p>
-      <h1 class="hub-section-title">{% if visit.table %}{{ visit.table.display_name }}{% else %}جلسة {{ visit.display_number }}{% endif %}</h1>
+      <h1 class="hub-section-title">{% if visit.table %}{{ visit.table.display_name }}{% else %}جلسة {{ visit.display_number }}{% if visit.guest_name %} · {{ visit.guest_name }}{% endif %}{% endif %}</h1>
       {% if visit.table %}
         <p>{% if visit.table.room_display_name %}{{ visit.table.room_display_name }} · {% endif %}جلستك وطلباتك والإنترنت وحسابك في مكان واحد.</p>
       {% else %}
@@ -118,7 +118,7 @@
         <form method="post" action="{% url 'visit_internet_start' %}" class="current-visit__internet-choice">{% csrf_token %}<input type="hidden" name="mode" value="metered">{% if visit.table %}<input type="hidden" name="table" value="{{ visit.table.qr_token }}">{% endif %}
           <h3>إنترنت سريع حسب الوقت</h3>
           <p><strong>{{ internet_metered_rate_syp|format_syp }} / ساعة</strong>{% if internet_metered_minimum_minutes %} · حد أدنى {{ internet_metered_minimum_minutes }} دقيقة{% endif %}</p>
-          {% if internet_metered_requires_phone %}<label for="session-internet-phone">رقم الهاتف</label><input class="hub-input" id="session-internet-phone" name="guest_phone" type="tel" inputmode="tel" autocomplete="tel" required>{% endif %}
+          {% if internet_identity_required %}<label for="session-internet-name">الاسم</label><input class="hub-input" id="session-internet-name" name="guest_name" maxlength="120" autocomplete="name" required><label for="session-internet-phone">رقم الهاتف</label><input class="hub-input" id="session-internet-phone" name="guest_phone" type="tel" inputmode="tel" maxlength="30" required>{% elif internet_metered_requires_phone and not visit.guest_phone %}<label for="session-internet-phone">رقم الهاتف</label><input class="hub-input" id="session-internet-phone" name="guest_phone" type="tel" inputmode="tel" required>{% endif %}
           <button class="hub-button hub-button-primary" type="submit">ابدأ الآن</button>
         </form>
       {% endif %}
@@ -126,7 +126,7 @@
       {% if internet_packages %}
         <details class="current-visit__internet-choice">
           <summary><strong>باقات أخرى</strong></summary>
-          <form method="post" action="{% url 'visit_internet_start' %}" style="margin-top:1rem;">{% csrf_token %}<input type="hidden" name="mode" value="package">{% if visit.table %}<input type="hidden" name="table" value="{{ visit.table.qr_token }}">{% endif %}<input type="hidden" name="request_key" value="{{ internet_request_key }}"><label for="session-internet-package">الباقة</label><select class="hub-input" id="session-internet-package" name="package" required>{% for package in internet_packages %}<option value="{{ package.public_code }}">{{ package.name_ar }} — {{ package.customer_price_syp|format_syp }}</option>{% endfor %}</select><button class="hub-button hub-button-primary" type="submit">ابدأ الباقة</button></form>
+          <form method="post" action="{% url 'visit_internet_start' %}" style="margin-top:1rem;">{% csrf_token %}<input type="hidden" name="mode" value="package">{% if visit.table %}<input type="hidden" name="table" value="{{ visit.table.qr_token }}">{% endif %}<input type="hidden" name="request_key" value="{{ internet_request_key }}"><label for="session-internet-package">الباقة</label><select class="hub-input" id="session-internet-package" name="package" required>{% for package in internet_packages %}<option value="{{ package.public_code }}">{{ package.name_ar }} — {{ package.customer_price_syp|format_syp }}</option>{% endfor %}</select>{% if internet_identity_required %}<label for="package-guest-name">الاسم</label><input class="hub-input" id="package-guest-name" name="guest_name" maxlength="120" required><label for="package-guest-phone">رقم الهاتف</label><input class="hub-input" id="package-guest-phone" name="guest_phone" type="tel" maxlength="30" required>{% endif %}<button class="hub-button hub-button-primary" type="submit">ابدأ الباقة</button></form>
         </details>
       {% endif %}
 

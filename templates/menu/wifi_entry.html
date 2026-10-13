@@ -138,6 +138,28 @@
       <a class="wifi-sheet__secondary" href="{{ menu_url }}">افتح المنيو</a>
     {% endif %}
 
+  {% elif fast_registration_required and fast_registration_mode %}
+    <div class="wifi-sheet__heading">
+      <h2 id="wifi-sheet-title">الإنترنت السريع · تسجيل الحساب</h2>
+      <p>اختر طاولتك أو سجل اسمك ورقم هاتفك للاتصال بدون طاولة.</p>
+    </div>
+    <form method="get" action="{% url 'wifi_entry' %}" class="wifi-sheet__code-form">
+      <label for="fast-table-number">أنا على طاولة</label>
+      <input class="hub-input" id="fast-table-number" name="table_number" inputmode="numeric" placeholder="رقم الطاولة" required>
+      <button class="wifi-sheet__secondary" type="submit">اختيار حساب الطاولة</button>
+      <small>بعد اختيار الطاولة، افتح حساباً مستقلاً أو انضم إلى الحساب الموجود برمزه، ثم ابدأ الإنترنت من حسابك.</small>
+    </form>
+    <form method="post" action="{% url 'wifi_entry' %}" class="wifi-sheet__code-form">
+      {% csrf_token %}
+      <input type="hidden" name="wifi_action" value="{% if fast_registration_next == 'options' %}internet_options{% else %}start_fast_wifi{% endif %}">
+      <label for="fast-guest-name">بدون طاولة · الاسم</label>
+      <input class="hub-input" id="fast-guest-name" name="guest_name" maxlength="120" autocomplete="name" required>
+      <label for="fast-guest-phone">رقم الهاتف</label>
+      <input class="hub-input" id="fast-guest-phone" name="guest_phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="30" required>
+      <button class="wifi-sheet__primary" type="submit">{% if fast_registration_next == 'options' %}فتح خيارات الإنترنت{% else %}ابدأ الإنترنت السريع{% endif %}</button>
+    </form>
+    <p class="wifi-sheet__primary-note">{% if fast_registration_next == 'options' %}سترى تفاصيل الباقات قبل الشراء.{% else %}{{ internet_metered_rate_syp|format_syp }} / ساعة · يبدأ الاحتساب بعد جاهزية الشبكة ويستمر حتى إيقاف الجلسة.{% endif %}</p>
+
   {% else %}
     <div class="wifi-sheet__heading">
       <h2 id="wifi-sheet-title">الاتصال بالإنترنت</h2>
@@ -208,12 +230,19 @@
     {% elif internet_metered_available %}
       <form method="post" action="{% url 'wifi_entry' %}" class="wifi-sheet__code-form">
         {% csrf_token %}<input type="hidden" name="wifi_action" value="start_fast_wifi">
-        {% if internet_metered_requires_phone %}
+        {% if fast_registration_required %}
+          <p>لتفعيل الإنترنت السريع، سجّل اسمك ورقم هاتفك أو اختر حساب طاولتك.</p>
+          <label for="wifi-fast-name">الاسم</label>
+          <input class="hub-input" id="wifi-fast-name" name="guest_name" maxlength="120" autocomplete="name" required>
+          <label for="wifi-fast-phone">رقم الهاتف</label>
+          <input class="hub-input" id="wifi-fast-phone" name="guest_phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="30" required>
+        {% elif internet_metered_requires_phone %}
           <label for="wifi-fast-phone">رقم الهاتف</label>
           <input class="hub-input" id="wifi-fast-phone" name="guest_phone" type="tel" inputmode="tel" autocomplete="tel" required>
         {% endif %}
         <button class="wifi-sheet__primary" type="submit"><span>ابدأ الإنترنت السريع</span><span aria-hidden="true">‹</span></button>
       </form>
+      {% if fast_registration_required %}<a class="wifi-sheet__secondary" href="{% url 'wifi_entry' %}?mode=fast">أنا على طاولة · اختر حسابك</a>{% endif %}
       <p class="wifi-sheet__primary-note">{{ internet_metered_rate_syp|format_syp }} / ساعة · يبدأ الاحتساب بعد نجاح الاتصال.</p>
 
     {% elif internet_options_available and first_internet_package %}
