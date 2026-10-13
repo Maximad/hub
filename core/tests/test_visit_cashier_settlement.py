@@ -1,6 +1,9 @@
+import json
 from datetime import timedelta
+from io import StringIO
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -305,6 +308,32 @@ class VisitCashierSettlementTests(TestCase):
         self.assertEqual(food_order.remaining_syp, 0)
         self.assertEqual(internet_order.remaining_syp, 0)
         self.assertEqual(visit.remaining_syp, 0)
+
+        # Integration gate: reconcile the exact real cashier path, including
+        # metered Internet materialization, without modifying any records.
+        before = (
+            Payment.objects.filter(order__visit=visit).count(),
+            CashMovement.objects.filter(related_order__visit=visit).count(),
+            PostingCommand.objects.count(),
+        )
+        output = StringIO()
+        call_command(
+            'audit_customer_payments', visit_code=str(visit.public_code),
+            as_json=True, stdout=output,
+        )
+        audit = json.loads(output.getvalue())
+        self.assertEqual(audit['status'], 'PASS', audit['findings'])
+        self.assertTrue(audit['read_only'])
+        self.assertEqual(audit['accounts'][0]['remaining_syp'], 0)
+        self.assertEqual(audit['accounts'][0]['status'], HubVisit.Status.CLOSED)
+        self.assertEqual(audit['internet'][0]['session_status'], InternetSession.Status.BILLED)
+        self.assertEqual(audit['internet'][0]['order_payment_status'], 'paid')
+        self.assertTrue(audit['payments'])
+        self.assertEqual(before, (
+            Payment.objects.filter(order__visit=visit).count(),
+            CashMovement.objects.filter(related_order__visit=visit).count(),
+            PostingCommand.objects.count(),
+        ))
 
     def test_invalid_settle_rolls_back_metered_finalization_and_never_writes_off_balance(self):
         visit = self.visit()
