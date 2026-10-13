@@ -1404,7 +1404,7 @@ def staff_cashier_pay(request, public_code):
             details={
                 'order_display_number': order.display_number,
                 'order_public_code': str(order.public_code),
-                'payment_amount': amount_val,
+                'payment_amount': str(amount_val),
                 'remaining_before_payment': remaining,
                 'approving_manager_username': approving_manager.username,
                 'cashier_username': request.user.username,
