@@ -50,12 +50,6 @@
 
     if (search) {
       search.addEventListener('input', applyFilters);
-      document.addEventListener('keydown', function (event) {
-        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-          event.preventDefault();
-          search.focus();
-        }
-      });
     }
 
     filters.forEach(function (button) {
@@ -121,6 +115,22 @@
       dialog.addEventListener('click', function (event) {
         if (event.target === dialog) closeDialog(dialog);
       });
+    });
+
+    // Resolve the search input at keypress time: the Operations cards and
+    // controls can be refreshed without reloading or closing the cashier drawer.
+    document.addEventListener('keydown', function (event) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        var currentSearch = document.querySelector('[data-operations-v2] [data-ops-search]');
+        if (currentSearch) {
+          event.preventDefault();
+          currentSearch.focus();
+        }
+      }
+    });
+
+    document.addEventListener('hub:operations-refreshed', function (event) {
+      setupOperations(event.detail && event.detail.root);
     });
 
     setupOperations(document.querySelector('[data-operations-v2]'));

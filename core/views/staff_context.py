@@ -5,6 +5,8 @@ provide progressive UI fragments only; mutations remain owned by the existing
 legacy staff handlers and posting services.
 """
 
+import uuid
+
 from django.shortcuts import get_object_or_404, render
 
 from accounts.permissions import user_has_capability
@@ -67,6 +69,7 @@ def render_payment_panel(request, public_code):
         "methods": Payment.Method.choices,
         "discount_types": OrderDiscount.DiscountType.choices,
         "payment_amount_default": financial["remaining"],
+        "collection_request_key": f'order-pay:{order.pk}:{uuid.uuid4().hex}',
         "currency_component": CurrencyEntryFormService(
             request,
             operation="payment",

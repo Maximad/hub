@@ -1,4 +1,5 @@
 import hashlib
+import uuid
 
 from django.contrib import messages
 from django.contrib.auth import authenticate
@@ -130,6 +131,10 @@ def _visit_detail_context(request, visit):
         **financial,
         'payments': payments,
         'can_reverse_payments': is_finance_user(request.user),
+        # Fresh form tokens distinguish separate, legitimate same-value collections.
+        # Retries of the original form retain their token for exactly-once posting.
+        'collection_request_key': f'visit-pay:{visit.pk}:{uuid.uuid4().hex}',
+        'settlement_request_key': f'visit-settle:{visit.pk}:{uuid.uuid4().hex}',
         'active_internet_sessions': active_sessions,
         'methods': COLLECTIBLE_PAYMENT_METHODS,
         'payment_amount_default': financial['remaining'],

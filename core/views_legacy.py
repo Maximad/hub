@@ -1357,7 +1357,7 @@ def staff_cashier_order(request, public_code):
     order = get_object_or_404(Order.objects.select_related('table', 'table__room').prefetch_related('items', 'payments', 'discounts'), public_code=public_code)
     total, paid, remaining, payment_label = _order_financials(order)
     methods = Payment.Method.choices
-    return render(request, 'staff/cashier_order.html', {'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods, 'discount_types': OrderDiscount.DiscountType.choices, 'can_manage_discounts': _can_approve_partial_payment(request.user), 'payment_amount_default': remaining, 'qr_url': reverse('order_qr', kwargs={'public_code': order.public_code}), 'currency_component': CurrencyEntryFormService(request, operation='payment').context})
+    return render(request, 'staff/cashier_order.html', {'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods, 'discount_types': OrderDiscount.DiscountType.choices, 'can_manage_discounts': _can_approve_partial_payment(request.user), 'payment_amount_default': remaining, 'collection_request_key': f'order-pay:{order.pk}:{uuid.uuid4().hex}', 'qr_url': reverse('order_qr', kwargs={'public_code': order.public_code}), 'currency_component': CurrencyEntryFormService(request, operation='payment').context})
 
 
 @require_staff_capability('cashier')
@@ -1404,7 +1404,7 @@ def staff_cashier_pay(request, public_code):
             details={
                 'order_display_number': order.display_number,
                 'order_public_code': str(order.public_code),
-                'payment_amount': amount_val,
+                'payment_amount': str(amount_val),
                 'remaining_before_payment': remaining,
                 'approving_manager_username': approving_manager.username,
                 'cashier_username': request.user.username,
@@ -1428,7 +1428,7 @@ def staff_cashier_pay(request, public_code):
     if order.remaining_syp > 0:
         create_notification('payment_pending', f'الدفع بانتظار الكاشير {order.display_number}', f'المتبقي {order.remaining_syp} ل.س', order=order, target_role='cashier', created_by=request.user)
     try:
-        ActivityLog.objects.create(actor=request.user, action='payment_added', details={'order_public_code': str(order.public_code), 'payment_id': payment.id, 'amount_syp': amount_val, 'method': method})
+        ActivityLog.objects.create(actor=request.user, action='payment_added', details={'order_public_code': str(order.public_code), 'payment_id': payment.id, 'amount_syp': str(amount_val), 'method': method})
     except Exception:
         pass
     return redirect('staff_cashier_order', public_code=order.public_code)

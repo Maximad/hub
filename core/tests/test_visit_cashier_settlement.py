@@ -1,6 +1,9 @@
+import json
 from datetime import timedelta
+from io import StringIO
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -306,6 +309,32 @@ class VisitCashierSettlementTests(TestCase):
         self.assertEqual(internet_order.remaining_syp, 0)
         self.assertEqual(visit.remaining_syp, 0)
 
+        # Integration gate: reconcile the exact real cashier path, including
+        # metered Internet materialization, without modifying any records.
+        before = (
+            Payment.objects.filter(order__visit=visit).count(),
+            CashMovement.objects.filter(related_order__visit=visit).count(),
+            PostingCommand.objects.count(),
+        )
+        output = StringIO()
+        call_command(
+            'audit_customer_payments', visit_code=str(visit.public_code),
+            as_json=True, stdout=output,
+        )
+        audit = json.loads(output.getvalue())
+        self.assertEqual(audit['status'], 'PASS', audit['findings'])
+        self.assertTrue(audit['read_only'])
+        self.assertEqual(audit['accounts'][0]['remaining_syp'], 0)
+        self.assertEqual(audit['accounts'][0]['status'], HubVisit.Status.CLOSED)
+        self.assertEqual(audit['internet'][0]['session_status'], InternetSession.Status.BILLED)
+        self.assertEqual(audit['internet'][0]['order_payment_status'], 'paid')
+        self.assertTrue(audit['payments'])
+        self.assertEqual(before, (
+            Payment.objects.filter(order__visit=visit).count(),
+            CashMovement.objects.filter(related_order__visit=visit).count(),
+            PostingCommand.objects.count(),
+        ))
+
     def test_invalid_settle_rolls_back_metered_finalization_and_never_writes_off_balance(self):
         visit = self.visit()
         self.order(100, visit=visit)
@@ -334,6 +363,147 @@ class VisitCashierSettlementTests(TestCase):
         self.assertGreater(visit.remaining_syp, 0)
         self.assertEqual(session.status, InternetSession.Status.ACTIVE)
         self.assertFalse(Order.objects.filter(visit=visit, items__product=self.internet_product).exists())
+
+    def test_cashier_sees_collected_visit_payments_without_refund_permission(self):
+        visit = self.visit()
+        order = self.order(200, visit=visit)
+        paid = self.payment_post(visit, 100, key='visit:cashier-visible').status_code
+        self.assertEqual(paid, 302)
+
+        self.client.force_login(self.cashier)
+        response = self.client.get(
+            reverse('staff_cashier_order', kwargs={'public_code': visit.public_code}),
+            {'panel': 'payment'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'سجل الدفعات')
+        self.assertContains(response, order.display_number)
+        self.assertContains(response, '100')
+        self.assertNotContains(response, 'مراجعة / عكس الدفعة')
+        self.assertNotContains(response, reverse(
+            'staff_customer_payment_reverse',
+            args=[Payment.objects.get(order=order).pk],
+        ))
+        self.assertFalse(response.context['can_reverse_payments'])
+
+    def test_new_cashier_form_keys_allow_two_real_identical_partial_payments(self):
+        visit = self.visit()
+        self.order(300, visit=visit)
+        cashier_url = reverse('staff_cashier_order', kwargs={'public_code': visit.public_code})
+        pay_url = reverse('staff_cashier_pay', kwargs={'public_code': visit.public_code})
+
+        first_form = self.client.get(cashier_url, {'panel': 'payment'})
+        first_key = first_form.context['collection_request_key']
+        self.assertNotEqual(first_key, first_form.context['settlement_request_key'])
+        self.assertContains(first_form, 'name="idempotency_key" value="' + first_key + '"')
+
+        first = self.client.post(
+            pay_url + '?panel=payment',
+            {'amount_syp': '100', 'method': Payment.Method.CASH,
+             'idempotency_key': first_key},
+        )
+        self.assertEqual(first.status_code, 200)
+        second_key = first.context['collection_request_key']
+        self.assertNotEqual(second_key, first_key)
+        self.assertContains(first, 'name="idempotency_key" value="' + second_key + '"')
+
+        second = self.client.post(
+            pay_url + '?panel=payment',
+            {'amount_syp': '100', 'method': Payment.Method.CASH,
+             'idempotency_key': second_key},
+        )
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(visit.remaining_syp, 100)
+        self.assertEqual(Payment.objects.filter(order__visit=visit).count(), 2)
+        self.assertEqual(PostingCommand.objects.filter(
+            command='visit_payment.collect', key__in=[first_key, second_key],
+        ).count(), 2)
+
+        # A retry of the original form is recognized as the first payment,
+        # not another collection or a payment on the next unpaid order.
+        retry = self.client.post(
+            pay_url + '?panel=payment',
+            {'amount_syp': '100', 'method': Payment.Method.CASH,
+             'idempotency_key': first_key},
+        )
+        self.assertEqual(retry.status_code, 200)
+        self.assertEqual(visit.remaining_syp, 100)
+        self.assertEqual(Payment.objects.filter(order__visit=visit).count(), 2)
+        self.assertEqual(CashMovement.objects.filter(related_order__visit=visit).count(), 2)
+
+    def test_cashier_can_view_history_when_visit_is_fully_settled(self):
+        visit = self.visit()
+        self.order(100, visit=visit)
+        self.payment_post(visit, 100, key='visit:cashier-fully-paid')
+
+        self.client.force_login(self.cashier)
+        response = self.client.get(
+            reverse('staff_cashier_order', kwargs={'public_code': visit.public_code}),
+            {'panel': 'payment'},
+        )
+        self.assertEqual(response.context['remaining'], 0)
+        self.assertContains(response, 'سجل الدفعات')
+        self.assertNotContains(response, 'مراجعة / عكس الدفعة')
+
+    def test_standalone_cashier_forms_support_separate_same_value_payments(self):
+        order = self.order(300, name='منفرد')
+        detail_url = reverse('staff_cashier_order', kwargs={'public_code': order.public_code})
+        pay_url = reverse('staff_cashier_pay', kwargs={'public_code': order.public_code})
+
+        full_page = self.client.get(detail_url)
+        original_key = full_page.context['collection_request_key']
+        self.assertContains(full_page, 'name="idempotency_key" value="' + original_key + '"')
+
+        drawer_page = self.client.get(detail_url + '?panel=payment')
+        first_key = drawer_page.context['collection_request_key']
+        self.assertNotEqual(original_key, first_key)
+        self.assertContains(drawer_page, 'name="idempotency_key" value="' + first_key + '"')
+
+        first = self.client.post(
+            pay_url + '?panel=payment',
+            {'amount_syp': '100', 'method': Payment.Method.CASH,
+             'idempotency_key': first_key},
+        )
+        self.assertEqual(first.status_code, 200)
+        next_key = first.context['collection_request_key']
+        self.assertNotEqual(first_key, next_key)
+
+        second = self.client.post(
+            pay_url + '?panel=payment',
+            {'amount_syp': '100', 'method': Payment.Method.CASH,
+             'idempotency_key': next_key},
+        )
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(order.remaining_syp, 100)
+        self.assertEqual(Payment.objects.filter(order=order).count(), 2)
+
+        retry = self.client.post(
+            pay_url + '?panel=payment',
+            {'amount_syp': '100', 'method': Payment.Method.CASH,
+             'idempotency_key': first_key},
+        )
+        self.assertEqual(retry.status_code, 200)
+        self.assertEqual(Payment.objects.filter(order=order).count(), 2)
+        self.assertEqual(CashMovement.objects.filter(related_order=order).count(), 2)
+
+    def test_standalone_payment_history_marks_reversals_as_not_collected(self):
+        standalone = self.order(100, name='منفرد')
+        Payment.objects.create(
+            order=standalone, amount_syp=100, method=Payment.Method.CASH,
+            is_active=False, is_reversed=True,
+            reversed_at=timezone.now(), reversed_by=self.admin,
+            reversal_reason='other',
+        )
+
+        url = reverse('staff_cashier_order', kwargs={'public_code': standalone.public_code})
+        full_page = self.client.get(url)
+        drawer = self.client.get(url + '?panel=payment')
+
+        self.assertEqual(standalone.paid_syp, 0)
+        self.assertEqual(standalone.remaining_syp, 100)
+        self.assertContains(full_page, 'معكوسة (لا تحتسب ضمن المدفوع)')
+        self.assertContains(drawer, 'معكوسة (لا تحتسب)')
 
     def test_standalone_order_keeps_legacy_cashier_flow(self):
         standalone = self.order(70, name='منفرد')
