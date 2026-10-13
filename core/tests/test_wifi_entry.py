@@ -189,14 +189,23 @@ class WifiEntryTests(TestCase):
         )
         get_system_settings.cache_clear()
 
-        response = self.client.post(reverse('wifi_entry'), {'wifi_action': 'internet_options'})
+        anonymous = self.client.post(reverse('wifi_entry'), {'wifi_action': 'internet_options'})
+        self.assertEqual(anonymous.status_code, 302)
+        self.assertEqual(anonymous['Location'], reverse('wifi_entry') + '?mode=fast&next=options')
+        self.assertFalse(HubVisit.objects.exists())
 
+        response = self.client.post(reverse('wifi_entry'), {
+            'wifi_action': 'internet_options',
+            'guest_name': 'رنا سليمان', 'guest_phone': '0999123456',
+        })
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response['Location'], reverse('current_visit') + '?focus=internet')
         self.assertIn('hub_visit', self.client.cookies)
         visit = HubVisit.objects.get()
         self.assertIsNone(visit.table_id)
         self.assertIsNone(visit.member_id)
+        self.assertEqual(visit.guest_name, 'رنا سليمان')
+        self.assertEqual(visit.guest_phone, '0999123456')
         self.assertEqual(visit.notes, 'wifi_internet_options')
         self.assertEqual(HubVisitBrowserCredential.objects.get().visit_id, visit.pk)
 
@@ -254,13 +263,18 @@ class WifiEntryTests(TestCase):
         self.assertNotContains(sheet, 'name="table_number"')
 
         response = self.client.post(
-            reverse('wifi_entry'), {'wifi_action': 'start_fast_wifi'},
+            reverse('wifi_entry'), {
+                'wifi_action': 'start_fast_wifi',
+                'guest_name': 'سامي خوري', 'guest_phone': '0999456123',
+            },
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'menu/hotspot_connect.html')
         self.assertIn('hub_visit', self.client.cookies)
         self.assertEqual(InternetSession.objects.count(), 1)
+        self.assertEqual(InternetSession.objects.get().guest_name, 'سامي خوري')
+        self.assertEqual(InternetSession.objects.get().guest_phone, '0999456123')
         destination = build_payload.call_args.kwargs['destination_url']
         self.assertEqual(urlsplit(destination).path, reverse('menu_public'))
 
@@ -314,7 +328,10 @@ class WifiEntryTests(TestCase):
             customer_internet_self_service_enabled=True,
         )
         get_system_settings.cache_clear()
-        opened = self.client.post(reverse('wifi_entry'), {'wifi_action': 'internet_options'})
+        opened = self.client.post(reverse('wifi_entry'), {
+            'wifi_action': 'internet_options',
+            'guest_name': 'مايا شمس', 'guest_phone': '0999567890',
+        })
         self.assertEqual(opened.status_code, 302)
         visit = HubVisit.objects.get()
         credential = HubVisitBrowserCredential.objects.get(visit=visit)
@@ -391,7 +408,11 @@ class WifiEntryTests(TestCase):
         self.assertEqual(basic_start.status_code, 302)
         first_basic = InternetSession.objects.get(billing_mode=InternetSession.BillingMode.FREE)
 
-        fast_start = self.client.post(reverse('visit_internet_start'), {'mode': 'metered'})
+        fast_start = self.client.post(reverse('visit_internet_start'), {
+            'mode': 'metered',
+            'guest_name': 'رنا شمس',
+            'guest_phone': '0999123456',
+        })
         self.assertEqual(fast_start.status_code, 302)
         first_basic.refresh_from_db()
         self.assertEqual(first_basic.status, InternetSession.Status.ENDED)

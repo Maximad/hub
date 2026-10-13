@@ -5,6 +5,7 @@ from django.contrib import messages
 from django.contrib.auth import login as auth_login
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -13,6 +14,7 @@ from django.utils import timezone
 from catalog.models import MediaAsset
 from core.models import ActivityLog, HubVisit, InternetEntitlement, InternetSession
 from core.services.hotspot_connect import one_tap_connect_configured, one_tap_session_connect_configured
+from core.services.fast_internet_identity import selected_fast_identity, ensure_fast_visit_identity
 from core.services.internet_internal_access import INTERNAL_ORIGINS, usable_internal_grant_for_user
 from core.services.table_visit_access import resolve_table_number
 from core.services.visit_internet import (customer_packages, metered_customer_error,
@@ -173,19 +175,40 @@ def _ensure_wifi_visit(request, *, source='wifi_access'):
     return visit, credential, raw_cookie, member_context
 
 
+def _fast_registration_path(*, next_step='fast'):
+    return reverse('wifi_entry') + '?mode=fast' + ('&next=options' if next_step == 'options' else '')
+
+
 def _open_internet_options(request):
     """Open the existing Internet storefront for a visitor or member, table optional."""
     if not self_service_enabled(get_system_settings()):
         messages.error(request, 'خدمة الإنترنت الذاتية غير متاحة حالياً.')
         return redirect(_wifi_internet_path())
+    existing = resolve_visit_credential(request, touch=False)
+    member_context = resolve_member_from_request(request, touch=False)
+    member = member_context.member if member_context else None
     try:
-        _visit, _credential, raw_cookie, _member_context = _ensure_wifi_visit(
-            request,
-            source='wifi_internet_options',
-        )
+        if not existing or not existing.visit.table_id:
+            selected_fast_identity(
+                existing.visit if existing else HubVisit(table=None),
+                guest_name=request.POST.get('guest_name', ''),
+                guest_phone=request.POST.get('guest_phone', ''), member=member,
+            )
+    except ValidationError:
+        return redirect(_fast_registration_path(next_step='options'))
+    try:
+        with transaction.atomic():
+            visit, _credential, raw_cookie, member_context = _ensure_wifi_visit(
+                request, source='wifi_internet_options',
+            )
+            ensure_fast_visit_identity(
+                visit, guest_name=request.POST.get('guest_name', ''),
+                guest_phone=request.POST.get('guest_phone', ''),
+                member=member_context.member if member_context else None,
+            )
     except ValidationError as exc:
         messages.error(request, _validation_message(exc))
-        return redirect(_wifi_internet_path())
+        return redirect(_fast_registration_path(next_step='options'))
     response = redirect(reverse('current_visit') + '?focus=internet')
     return set_visit_cookie(response, raw_cookie) if raw_cookie else response
 
@@ -273,6 +296,18 @@ def _start_fast_wifi(request):
         messages.error(request, error)
         return redirect(_wifi_internet_path())
 
+    existing = resolve_visit_credential(request, touch=False)
+    try:
+        if not existing or not existing.visit.table_id:
+            selected_fast_identity(
+                existing.visit if existing else HubVisit(table=None),
+                guest_name=request.POST.get('guest_name', ''),
+                guest_phone=request.POST.get('guest_phone', ''), member=member,
+            )
+    except ValidationError as exc:
+        messages.error(request, _validation_message(exc))
+        return redirect(_fast_registration_path())
+
     raw_cookie = None
     try:
         visit, credential, raw_cookie, member_context = _ensure_wifi_visit(
@@ -284,6 +319,7 @@ def _start_fast_wifi(request):
             visit=visit,
             credential=credential,
             member=member,
+            guest_name=request.POST.get('guest_name', ''),
             guest_phone=request.POST.get('guest_phone', ''),
         )
         network_ready = prepare_visit_metered_session_network(session)
@@ -526,6 +562,12 @@ def wifi_entry(request):
     internet_member = visit.member if visit and visit.member_id else (
         member_context.member if member_context else None
     )
+    fast_registration_required = bool(
+        not visit or (not visit.table_id and not (
+            (visit.guest_name and visit.guest_phone)
+            or (internet_member and internet_member.name_ar and internet_member.phone)
+        ))
+    )
     system_settings = get_system_settings()
     policy = get_guest_wifi_policy()
     guest_error = guest_wifi_policy_error(policy)
@@ -571,6 +613,7 @@ def wifi_entry(request):
         request.GET.get('mode') == 'internet'
         or active_guest_session
         or active_fast_session
+        or request.GET.get('mode') == 'fast'
     )
     header_media = _portal_header_media()
     brand_logo_media = getattr(system_settings, 'brand_logo_media', None)
@@ -594,6 +637,9 @@ def wifi_entry(request):
         'current_table_url': current_table_url,
         'menu_url': menu_url,
         'internet_panel_open': internet_panel_open,
+        'fast_registration_required': fast_registration_required,
+        'fast_registration_mode': request.GET.get('mode') == 'fast',
+        'fast_registration_next': ('options' if request.GET.get('next') == 'options' else 'fast'),
         'came_from_free_access': request.GET.get('free') == '1' and bool(active_guest_session),
         'member_context': member_context,
         'internet_options_available': internet_options_available,

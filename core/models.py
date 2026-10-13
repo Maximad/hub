@@ -196,6 +196,8 @@ class HubVisit(TimeStampedModel, PublicCodeModel):
 
     table = models.ForeignKey(TableArea, on_delete=models.PROTECT, related_name='visits', null=True, blank=True)
     member = models.ForeignKey('Member', on_delete=models.PROTECT, related_name='visits', null=True, blank=True)
+    guest_name = models.CharField(max_length=120, blank=True)
+    guest_phone = models.CharField(max_length=30, blank=True)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN, db_index=True)
     opened_at = models.DateTimeField(default=timezone.now)
     closed_at = models.DateTimeField(null=True, blank=True)

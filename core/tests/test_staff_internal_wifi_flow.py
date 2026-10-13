@@ -144,7 +144,7 @@ class StaffInternalWifiFlowTests(TestCase):
         self.client.force_login(self.other_user)
         opened = self.client.post(
             reverse('wifi_entry'),
-            {'wifi_action': 'internet_options'},
+            {'wifi_action': 'internet_options', 'guest_name': 'اختبار موظف', 'guest_phone': '0999123456'},
         )
         self.assertEqual(opened.status_code, 302)
 

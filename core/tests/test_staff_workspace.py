@@ -112,6 +112,8 @@ class StaffWorkspaceTests(TestCase):
         session, created = start_visit_metered_session(
             visit=visit,
             credential=credential,
+            guest_name='زبون اختبار',
+            guest_phone='0999123456',
         )
         self.assertTrue(created)
         started = timezone.now() - timedelta(minutes=31)
