@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from accounts.permissions import is_owner_or_admin, user_has_capability
 from core.models import InternetBandwidthProfile, InternetEntitlement, InternetPackage
+from internet.models import StaffInternetDeviceEvidence
 from core.services.staff_internet_observation import (
     observation_is_fresh, observed_concurrent_limit_state,
 )
@@ -134,6 +135,7 @@ def _internal_access_page(request, form=None):
             'member', 'internal_staff_grant__user',
         ).order_by('-created_at')[:60]
     )
+    recent_device_cutoff = timezone.now() - timedelta(days=30)
     for entitlement in grants:
         entitlement.internal_kind_label = (
             'الإدارة' if entitlement.origin_type == 'internal_owner_grant' else 'الفريق'
@@ -163,6 +165,17 @@ def _internal_access_page(request, form=None):
         )
         entitlement.internal_device_count = (
             snapshot.distinct_device_count if entitlement.internal_observation_current else None
+        )
+        entitlement.internal_observed_devices_30d = (
+            StaffInternetDeviceEvidence.objects.filter(
+                grant=staff_target, last_seen_at__gte=recent_device_cutoff,
+            ).count()
+            if staff_target and snapshot and snapshot.last_success_at else None
+        )
+        entitlement.internal_registered_device_excess_observed = bool(
+            entitlement.internal_observed_devices_30d is not None
+            and entitlement.max_registered_devices
+            and entitlement.internal_observed_devices_30d > entitlement.max_registered_devices
         )
     active_count = sum(
         1 for entitlement in grants
