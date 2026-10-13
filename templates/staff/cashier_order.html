@@ -49,5 +49,5 @@
 </form>{% else %}<p class="hub-help-text">إضافة الخصم تحتاج موافقة المدير.</p>{% endif %}
 <ul>{% for d in order.discounts.all %}{% if d.is_active %}<li>{{ d.get_discount_type_display }} - {{ d.amount_syp }} ل.س - {{ d.reason }} - موافقة المدير: {% if d.approved_by %}{{ d.approved_by }}{% else %}—{% endif %}</li>{% endif %}{% empty %}<li>لا توجد خصومات.</li>{% endfor %}</ul>
 <h3>سجل الدفعات</h3>
-<ul>{% for p in order.payments.all %}<li>{{ p.get_method_display }} - {{ p.amount_syp }} ل.س - {{ p.created_at }}</li>{% empty %}<li>لا توجد دفعات بعد.</li>{% endfor %}</ul>
+<ul>{% for p in order.payments.all %}<li>{{ p.get_method_display }} - {{ p.amount_syp }} ل.س - {{ p.created_at }}{% if p.is_reversed %} · معكوسة (لا تحتسب ضمن المدفوع){% elif not p.is_active or p.method == 'unpaid' %} · غير محصّلة{% endif %}</li>{% empty %}<li>لا توجد دفعات بعد.</li>{% endfor %}</ul>
 {% endblock %}
