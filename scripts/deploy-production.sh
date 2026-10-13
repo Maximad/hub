@@ -89,7 +89,7 @@ check_route() {
 
     for ((i=1; i<=attempts; i++)); do
         code="$(
-            curl -k -sS \
+            curl -sS \
                 --connect-timeout 8 \
                 --max-time 20 \
                 -o /dev/null \
@@ -141,12 +141,19 @@ command -v docker >/dev/null || die "docker is missing."
 command -v curl >/dev/null || die "curl is missing."
 command -v flock >/dev/null || die "flock is missing."
 command -v find >/dev/null || die "find is missing."
+command -v python3 >/dev/null || die "python3 is missing."
 
 docker info >/dev/null 2>&1 ||
     die "Docker is unavailable to the deploy user."
 
 dc config --quiet ||
     die "Combined production Docker Compose configuration is invalid."
+
+if mikrotik_enabled; then
+    # Inspect the resolved Compose stack; do not print credentials or touch the router.
+    dc config --format json | python3 scripts/check_mikrotik_compose_mounts.py ||
+        die "MikroTik TLS / CA mounts failed production preflight."
+fi
 
 if allow_operational_data; then
     log "Operational-data retention explicitly approved for this deployment"
@@ -247,6 +254,9 @@ else
         web python manage.py launch_readiness --json
 fi
 
+log "Checking consolidated Internet release invariants"
+dc run --rm -T web python manage.py internet_release_audit --json
+
 log "Replacing web + management integration + background worker containers"
 
 dc up -d --no-deps --force-recreate web management-mcp internet-worker notification-worker
@@ -280,6 +290,7 @@ if mikrotik_enabled; then
 fi
 
 dc exec -T web python manage.py internet_readiness --json
+dc exec -T web python manage.py internet_release_audit --json
 
 log "Checking routes"
 
