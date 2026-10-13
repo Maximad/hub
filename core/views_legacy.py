@@ -26,7 +26,7 @@ from core.internet_billing import calculate_billable_minutes, calculate_metered_
 from core.services.bulk_edit import BulkEditValidationError
 from core.services.menu_tools import ALLOWED_ACTIONS, apply_product_bulk_action, preview_product_bulk_action
 from accounts.permissions import (
-    ACCESS_DENIED_MESSAGE, can_approve_partial_payment,
+    ACCESS_DENIED_MESSAGE, can_approve_partial_payment, is_owner_or_admin,
     require_staff_capability, user_has_capability,
 )
 from core.stock_recipes import deduct_order_item_stock
@@ -661,6 +661,7 @@ LEGACY_CAPABILITY_MAP = {
     'orders': 'orders',
     'order_edit': 'order_edit',
     'modifiers': 'modifiers',
+    'members/internet': 'members/internet',
 }
 
 
@@ -1854,6 +1855,10 @@ def staff_internet(request):
         )
         active_rows.append({'session': session, 'elapsed_minutes': duration, 'estimated_total': estimated_total})
     return render(request, 'staff/internet.html', {
+        'can_manage_internal_internet': (
+            is_owner_or_admin(request.user)
+            and user_has_capability(request.user, 'internal_internet_manage')
+        ),
         'active_sessions': active_sessions,
         'active_entitlements': active_entitlements,
         'recent_entitlements': recent_entitlements,

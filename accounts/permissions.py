@@ -24,6 +24,7 @@ CAPABILITY_LABELS = {
     'modifiers': 'إضافات وخيارات المنتجات',
     'internet_billing': 'فوترة الإنترنت',
     'members/internet': 'الأعضاء والإنترنت',
+    'internal_internet_manage': 'منح وإلغاء إنترنت الفريق',
     'kitchen_board': 'لوحة التحضير',
     'partial_payment_approval': 'الموافقات الإدارية',
     'order_edit': 'تعديل الطلبات',
@@ -150,6 +151,10 @@ def _default_internet_billing(user):
     return is_owner_or_admin(user) or is_cashier(user)
 
 
+def _default_internal_internet_manage(user):
+    return is_owner_or_admin(user)
+
+
 def _default_kitchen_board(user):
     # Kitchen and bar are first-class preparation roles. Cashier access remains
     # for launch compatibility with existing non-kitchen prep workflows.
@@ -194,6 +199,7 @@ CAPABILITY_CHECKS = {
     'modifiers': _default_modifiers,
     'internet_billing': _default_internet_billing,
     'members/internet': _default_internet_billing,
+    'internal_internet_manage': _default_internal_internet_manage,
     'kitchen_board': _default_kitchen_board,
     'partial_payment_approval': _default_partial_payment_approval,
     'order_edit': _default_order_edit,

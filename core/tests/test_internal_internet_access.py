@@ -1,6 +1,8 @@
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from accounts.models import AccessProfile, UserCapabilityOverride
+from accounts.permissions import user_has_capability
 from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -247,4 +249,129 @@ class InternalInternetAccessTests(TestCase):
                 member=self.customer_member,
                 origin_type__in=(INTERNAL_OWNER_ORIGIN, INTERNAL_TEAM_ORIGIN),
             ).exists()
+        )
+
+    def test_internal_management_requires_manager_and_dedicated_capability(self):
+        User = get_user_model()
+        cashier = User.objects.create_user(
+            username='internet-sales-cashier', password='pass',
+            phone='+963900009005', role=User.Role.CASHIER,
+        )
+        self.assertTrue(user_has_capability(cashier, 'members/internet'))
+        self.assertFalse(user_has_capability(cashier, 'internal_internet_manage'))
+        self.client.force_login(cashier)
+        page = self.client.get(reverse('staff_internet'))
+        self.assertEqual(page.status_code, 200)
+        self.assertNotContains(page, reverse('staff_internet_sale') + '?internal=1')
+        self.assertEqual(
+            self.client.get(reverse('staff_internet_sale') + '?internal=1').status_code, 403
+        )
+        self.assertEqual(
+            self.client.post(reverse('staff_internet_sale'), {'internet_action': 'internal_grant'}).status_code,
+            403,
+        )
+        entitlement = self.grant()
+        self.assertEqual(
+            self.client.post(reverse('staff_internet_sale'), {
+                'internet_action': 'internal_revoke', 'entitlement_id': entitlement.pk,
+            }).status_code, 403,
+        )
+        entitlement.refresh_from_db()
+        self.assertEqual(entitlement.status, InternetEntitlement.Status.ACTIVE)
+
+    def test_non_manager_cannot_gain_internal_management_using_capability_override(self):
+        User = get_user_model()
+        cashier = User.objects.create_user(
+            username='internal-forged-manager', password='pass',
+            phone='+963900009006', role=User.Role.CASHIER,
+        )
+        UserCapabilityOverride.objects.create(
+            user=cashier, capability='internal_internet_manage', allowed=True,
+        )
+        self.assertTrue(user_has_capability(cashier, 'internal_internet_manage'))
+        self.client.force_login(cashier)
+        self.assertEqual(
+            self.client.get(reverse('staff_internet_sale') + '?internal=1').status_code, 403
+        )
+        self.assertEqual(
+            self.client.post(reverse('staff_internet_sale'), {
+                'internet_action': 'internal_grant',
+            }).status_code, 403,
+        )
+
+    def test_management_denial_override_restricts_non_superuser_admin(self):
+        User = get_user_model()
+        admin = User.objects.create_user(
+            username='internet-restricted-admin', password='pass',
+            phone='+963900009007', role=User.Role.ADMIN,
+        )
+        UserCapabilityOverride.objects.create(
+            user=admin, capability='internal_internet_manage', allowed=False,
+        )
+        self.assertFalse(user_has_capability(admin, 'internal_internet_manage'))
+        self.client.force_login(admin)
+        page = self.client.get(reverse('staff_internet'))
+        self.assertEqual(page.status_code, 200)
+        self.assertNotContains(page, reverse('staff_internet_sale') + '?internal=1')
+        self.assertEqual(
+            self.client.get(reverse('staff_internet_sale') + '?internal=1').status_code, 403
+        )
+        self.assertEqual(
+            self.client.post(reverse('staff_internet_sale'), {
+                'internet_action': 'internal_revoke', 'entitlement_id': self.grant().pk,
+            }).status_code, 403,
+        )
+
+    def test_full_admin_profile_receives_internal_management_capability(self):
+        User = get_user_model()
+        profile = AccessProfile.objects.get(code='full-admin')
+        self.assertIn('internal_internet_manage', profile.capabilities)
+        admin = User.objects.create_user(
+            username='profile-internet-admin', password='pass',
+            phone='+963900009008', role=User.Role.ADMIN, access_profile=profile,
+        )
+        self.assertTrue(user_has_capability(admin, 'internal_internet_manage'))
+        self.client.force_login(admin)
+        page = self.client.get(reverse('staff_internet'))
+        self.assertContains(page, reverse('staff_internet_sale') + '?internal=1')
+        self.assertEqual(
+            self.client.get(reverse('staff_internet_sale') + '?internal=1').status_code, 200
+        )
+
+    def test_internet_sales_obey_profile_and_individual_denial(self):
+        User = get_user_model()
+        profile = AccessProfile.objects.get(code='general-staff')
+        cashier = User.objects.create_user(
+            username='profile-restricted-cashier', password='pass',
+            phone='+963900009009', role=User.Role.CASHIER, access_profile=profile,
+        )
+        self.assertFalse(user_has_capability(cashier, 'members/internet'))
+        self.client.force_login(cashier)
+        self.assertEqual(self.client.get(reverse('staff_internet')).status_code, 403)
+        self.assertEqual(
+            self.client.post(reverse('staff_internet_sale'), {
+                'idempotency_key': 'sales-blocked-by-profile',
+            }).status_code, 403
+        )
+        cashier.access_profile = None
+        cashier.save(update_fields=['access_profile'])
+        UserCapabilityOverride.objects.create(
+            user=cashier, capability='members/internet', allowed=False,
+        )
+        self.assertFalse(user_has_capability(cashier, 'members/internet'))
+        self.assertEqual(self.client.get(reverse('staff_internet')).status_code, 403)
+
+    def test_internal_management_remains_separate_from_sales_permission(self):
+        User = get_user_model()
+        admin = User.objects.create_user(
+            username='manager-no-sales', password='pass',
+            phone='+963900009010', role=User.Role.ADMIN,
+        )
+        UserCapabilityOverride.objects.create(
+            user=admin, capability='members/internet', allowed=False,
+        )
+        self.client.force_login(admin)
+        self.assertEqual(self.client.get(reverse('staff_internet')).status_code, 403)
+        self.assertEqual(
+            self.client.get(reverse('staff_internet_sale') + '?internal=1').status_code, 200
         )
