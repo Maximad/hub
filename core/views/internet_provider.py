@@ -8,6 +8,7 @@ import csv
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 from functools import wraps
+from types import SimpleNamespace
 
 from django import forms
 from django.contrib import messages
@@ -35,6 +36,7 @@ from core.models import (
     InternetEntitlement,
     InternetNetworkOperation,
     InternetPackage,
+    InternetPartner,
     InternetPartnerUser,
     InternetRevenueShare,
     InternetRevenueShareAdjustment,
@@ -51,6 +53,7 @@ from internet.models import GuestWifiPolicy, InternetOperationsState, WifiNetwor
 from members.models import MembershipSubscription
 
 
+ADMIN_PROVIDER_PARTNER_SESSION_KEY = 'hub_admin_provider_partner_id'
 MAX_REPORTING_DAYS = 366
 PROVIDER_CAPABILITIES = (
     'provider_dashboard',
@@ -138,6 +141,33 @@ def _active_association(user):
     )
 
 
+def _admin_provider_access(user):
+    """An administrator needs an explicit portal capability, not an ISP account."""
+    return is_owner_or_admin(user) and user_has_capability(user, 'provider_dashboard')
+
+
+def _admin_provider_association(request):
+    """Ephemeral partner scope for admin; never create or modify provider users."""
+    partners = InternetPartner.objects.filter(active=True)
+    selected = request.session.get(ADMIN_PROVIDER_PARTNER_SESSION_KEY)
+    # Only trusted integer primary keys may influence the partner query.
+    partner = partners.filter(pk=int(selected)).first() if (
+        isinstance(selected, int) and not isinstance(selected, bool) and selected > 0
+    ) else None
+    if partner is None:
+        partner = partners.filter(is_default=True).first() or partners.order_by('pk').first()
+    if partner is None:
+        return None
+    # Admin has local financial/customer permissions, unlike external ISPs.
+    return SimpleNamespace(partner=partner, can_view_customer_phone=True)
+
+
+def _portal_association(request):
+    if _admin_provider_access(request.user):
+        return _admin_provider_association(request)
+    return _active_association(request.user)
+
+
 def provider_capability_required(capability):
     def decorator(view_func):
         @wraps(view_func)
@@ -145,7 +175,7 @@ def provider_capability_required(capability):
             if not request.user.is_authenticated:
                 login_url = reverse('internet_provider_login')
                 return redirect(f'{login_url}?next={request.get_full_path()}')
-            association = _active_association(request.user)
+            association = _portal_association(request)
             if association is None or not user_has_capability(request.user, capability):
                 raise PermissionDenied('لا تملك صلاحية الوصول إلى بوابة مزوّد الإنترنت.')
             request.internet_partner_association = association
@@ -268,13 +298,18 @@ def _base_context(request, **extra):
         'association': association,
         'provider_partner': association.partner,
         'provider_caps': capabilities,
+        'provider_admin_mode': _admin_provider_access(request.user),
+        'provider_admin_partners': (
+            list(InternetPartner.objects.filter(active=True).order_by('-is_default', 'name'))
+            if _admin_provider_access(request.user) else []
+        ),
     }
     context.update(extra)
     return context
 
 
 def internet_provider_login(request):
-    association = _active_association(request.user)
+    association = _portal_association(request)
     if association and user_has_capability(request.user, 'provider_dashboard'):
         return redirect('internet_provider_dashboard')
     form = ProviderAuthenticationForm(request, data=request.POST or None)
@@ -291,8 +326,29 @@ def internet_provider_login(request):
 
 @require_POST
 def internet_provider_logout(request):
+    if _admin_provider_access(request.user):
+        # Admins leave the provider workspace without losing their Hub session.
+        return redirect('staff_home')
     auth_logout(request)
     return redirect('internet_provider_login')
+
+
+@require_POST
+def internet_provider_select_partner(request):
+    """Admin-only scope selector; requires normal session auth + CSRF protection."""
+    if not _admin_provider_access(request.user):
+        raise PermissionDenied('لا تملك صلاحية تبديل مزوّد الإنترنت.')
+    raw = request.POST.get('partner_id', '')
+    if not raw.isdecimal() or len(raw) > 12:
+        return HttpResponseBadRequest('اختيار مزوّد غير صالح.')
+    partner = get_object_or_404(InternetPartner, pk=int(raw), active=True)
+    request.session[ADMIN_PROVIDER_PARTNER_SESSION_KEY] = partner.pk
+    ActivityLog.objects.create(
+        actor=request.user,
+        action='internet.provider_admin_scope_selected',
+        details={'partner_id': partner.pk},
+    )
+    return redirect('internet_provider_dashboard')
 
 
 @provider_capability_required('provider_dashboard')

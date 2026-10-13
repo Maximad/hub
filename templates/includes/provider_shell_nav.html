@@ -13,9 +13,23 @@
       {% if provider_caps.internet_view_network %}<a{% if '/provider/network/' in request.path %} aria-current="page"{% endif %} href="{% url 'internet_provider_network' %}">الشبكة</a>{% endif %}
       {% if provider_caps.internet_view_reports %}<a{% if '/provider/reports' in request.path %} aria-current="page"{% endif %} href="{% url 'internet_provider_reports' %}">التقارير</a>{% endif %}
     </nav>
+    {% if provider_admin_mode %}
+    <div class="provider-app-header__scope">
+      <form method="post" action="{% url 'internet_provider_select_partner' %}">
+        {% csrf_token %}
+        <label for="provider-admin-partner">المزوّد</label>
+        <select id="provider-admin-partner" name="partner_id" aria-label="اختر مزوّد الإنترنت">
+          {% for partner in provider_admin_partners %}
+          <option value="{{ partner.pk }}"{% if provider_partner.pk == partner.pk %} selected{% endif %}>{{ partner.name }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit">عرض</button>
+      </form>
+    </div>
+    {% endif %}
     <div class="provider-app-header__user">
       <span><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><small>{{ request.user.get_role_display }}</small></span>
-      <form method="post" action="{% url 'internet_provider_logout' %}">{% csrf_token %}<button type="submit">خروج</button></form>
+      {% if provider_admin_mode %}<a href="{% url 'staff_internet' %}">العودة إلى إدارة هَبّ</a>{% else %}<form method="post" action="{% url 'internet_provider_logout' %}">{% csrf_token %}<button type="submit">خروج</button></form>{% endif %}
     </div>
   </div>
 </header>
