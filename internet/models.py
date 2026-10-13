@@ -202,6 +202,32 @@ class InternalStaffInternetGrant(models.Model):
         return f'{self.user} → {self.entitlement_id}'
 
 
+class StaffInternetConnectionSnapshot(models.Model):
+    """Last read-only RouterOS observation of one private staff grant.
+
+    Counts only; no remote login identifiers, MACs, passwords or traffic logs.
+    Router observations do not constitute a usage meter or enforce device caps.
+    """
+    class State(models.TextChoices):
+        OBSERVED = 'observed', 'تم الفحص'
+        MISSING = 'missing', 'لم يُعثر على حساب شبكة'
+        ERROR = 'error', 'تعذر الفحص'
+
+    grant = models.OneToOneField(
+        'InternalStaffInternetGrant', on_delete=models.CASCADE,
+        related_name='connection_snapshot',
+    )
+    state = models.CharField(max_length=16, choices=State.choices, default=State.ERROR)
+    active_login_count = models.PositiveSmallIntegerField(null=True, blank=True)
+    distinct_device_count = models.PositiveSmallIntegerField(null=True, blank=True)
+    checked_at = models.DateTimeField(null=True, blank=True)
+    last_success_at = models.DateTimeField(null=True, blank=True)
+    error_code = models.CharField(max_length=40, blank=True)
+
+    def __str__(self):
+        return f'Staff Internet observation for grant {self.grant_id}'
+
+
 class GuestWifiPolicy(models.Model):
     """Compact venue policy for complimentary/basic captive-portal Internet.
 

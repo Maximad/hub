@@ -18,7 +18,7 @@
 
 <section class="hub-section ops-section-card">
   <div class="ops-section-head">
-    <div><h2>منح وصول لموظف</h2><p>اختر حساب الموظف، المدة وحدود الأجهزة. الإعدادات التقنية المتقدمة جاهزة بقيمها المعتادة ويمكن فتحها عند الحاجة.</p></div>
+    <div><h2>منح وصول لموظف</h2><p>اختر حساب الموظف ومدة الصلاحية. حدود الأجهزة والدقائق المعروضة حالياً إعدادات مطلوبة وليست مضمونة التنفيذ حتى اكتمال اختبارات التطبيق على الأجهزة.</p></div>
   </div>
   <form method="post" action="{% url 'staff_internet_sale' %}" class="hub-form internal-access-form">
     {% csrf_token %}<input type="hidden" name="internet_action" value="internal_grant">
@@ -49,14 +49,15 @@
 </section>
 
 <section class="hub-section ops-section-card">
-  <div class="ops-section-head"><div><h2>المنح الداخلية</h2><p>هذه سجلات وصول في هَبّ، وليست عداداً للأجهزة المتصلة الآن.</p></div></div>
+  <div class="ops-section-head"><div><h2>المنح الداخلية</h2><p>الاتصال الحالي نتيجة قراءة فعلية من MikroTik عندما يكون الفحص حديثاً. عدد الأجهزة ودقائق الاستخدام ليست حدوداً مضمونة التنفيذ بعد.</p></div></div>
   <div class="internal-grant-list">
     {% for e in internal_grants %}
     <article class="internal-grant">
       <div class="internal-grant__person"><strong>{{ e.internal_subject_label }}</strong><small>{% if e.internal_subject_role %}{{ e.internal_subject_role }} · {% endif %}{{ e.internal_kind_label }}</small></div>
       <div><small>الحالة</small><br><strong>{{ e.get_status_display }}</strong></div>
       <div><small>الصلاحية</small><br><strong>{{ e.valid_until|ar_date }}</strong></div>
-      <div><small>الأجهزة</small><br><strong>{{ e.max_concurrent_devices }} / {{ e.max_registered_devices }}</strong></div>
+      <div><small>السقف المطلوب</small><br><strong>{{ e.max_concurrent_devices }} / {{ e.max_registered_devices }}</strong><small>لم يُتحقق من تطبيقه</small></div>
+      <div><small>اتصالات الشبكة الآن</small><br>{% if e.internal_observation_current %}<strong>{{ e.internal_online_count }}</strong>{% if e.internal_device_count != None %}<small>أجهزة مميزة: {{ e.internal_device_count }}</small>{% else %}<small>عدد الأجهزة غير متاح</small>{% endif %}{% else %}<strong>غير معروف</strong><small>{% if e.internal_observation %}فحص غير مكتمل أو قديم{% else %}لم يُفحص بعد{% endif %}</small>{% endif %}{% if e.internal_observation and e.internal_observation.checked_at %}<small>آخر فحص: {{ e.internal_observation.checked_at|date:'Y-m-d H:i' }}</small>{% endif %}</div>
       <div>
         {% if e.status == 'active' or e.status == 'pending' or e.status == 'suspended' %}
         <form method="post" action="{% url 'staff_internet_sale' %}" onsubmit="return confirm('إلغاء الوصول الداخلي لهذا الموظف؟');">{% csrf_token %}<input type="hidden" name="internet_action" value="internal_revoke"><input type="hidden" name="entitlement_id" value="{{ e.pk }}"><button class="ops-action ops-action--danger" type="submit">إلغاء</button></form>

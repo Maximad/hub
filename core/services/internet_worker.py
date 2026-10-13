@@ -1,12 +1,14 @@
 """Production worker cycle for Internet lifecycle and durable network outboxes."""
 from io import StringIO
 
+from django.conf import settings
 from django.core.management import call_command
 from django.db import close_old_connections
 from django.utils import timezone
 
 from core.services.internet_readiness import get_operations_state
 from core.services.network_operations import process_ready_network_operations
+from core.services.staff_internet_observation import observe_staff_internet_connections
 from internet.session_network_operations import process_ready_session_network_operations
 
 
@@ -86,6 +88,13 @@ def run_internet_worker_cycle(*, lifecycle_limit=200, network_limit=100,
         }
     except Exception as exc:  # worker boundary: retry next cycle
         errors.append(('session_network', _safe_exception(exc)))
+
+    if run_lifecycle and settings.MIKROTIK_ENABLED:
+        try:
+            summary['staff_connections'] = observe_staff_internet_connections(limit=20)
+        except Exception:
+            # Do not persist arbitrary exception text from RouterOS or its client.
+            errors.append(('staff_connections', 'Read-only staff connection observation unavailable'))
 
     try:
         _record_heartbeat(summary, errors, lifecycle_ran=run_lifecycle)
