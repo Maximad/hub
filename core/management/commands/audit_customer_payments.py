@@ -107,6 +107,8 @@ class Command(BaseCommand):
                 if options['visit_code'] is None:
                     if options['payment_id'] is not None and payment.pk != options['payment_id']:
                         continue
+                    if options['order_id'] is not None and order.pk != options['order_id']:
+                        continue
                     if recent is not None and payment.pk not in target_payment_ids:
                         continue
                 seen_payments.add(payment.pk)
