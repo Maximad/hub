@@ -236,3 +236,159 @@ class InternetProviderPortalTests(TestCase):
         )
         other_response = self.client.get(reverse('internet_provider_sessions'))
         self.assertNotContains(other_response, mikrotik.public_code)
+
+    def _admin_user(self):
+        return get_user_model().objects.create_user(
+            username='hub-admin-provider-access', phone='090-admin-provider',
+            password='admin-pass', role=get_user_model().Role.ADMIN,
+        )
+
+    def test_admin_opens_provider_dashboard_without_partner_association(self):
+        admin = self._admin_user()
+        self.client.force_login(admin)
+        self.assertFalse(InternetPartnerUser.objects.filter(user=admin).exists())
+        response = self.client.get(reverse('internet_provider_dashboard'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.partner.name)
+        self.assertContains(response, self.entitlement.access_code)
+        self.assertNotContains(response, self.other_entitlement.access_code)
+        self.assertContains(response, reverse('internet_provider_select_partner'))
+        self.assertContains(response, 'العودة إلى إدارة هَبّ')
+        self.assertFalse(InternetPartnerUser.objects.filter(user=admin).exists())
+
+        members = self.client.get(reverse('internet_provider_members'))
+        self.assertEqual(members.status_code, 200)
+        # Hub administrators retain legitimate access to customer contact data.
+        self.assertContains(members, self.member.phone)
+        self.assertNotContains(members, self.other_member.name_ar)
+        self.assertRedirects(
+            self.client.get(reverse('internet_provider_login')),
+            reverse('internet_provider_dashboard'),
+        )
+
+    def test_admin_partner_switch_remains_scoped_across_pages_and_actions(self):
+        admin = self._admin_user()
+        self.client.force_login(admin)
+        switch = self.client.post(reverse('internet_provider_select_partner'), {
+            'partner_id': str(self.other_partner.pk),
+        })
+        self.assertRedirects(switch, reverse('internet_provider_dashboard'))
+        self.assertTrue(ActivityLog.objects.filter(
+            actor=admin, action='internet.provider_admin_scope_selected',
+            details__partner_id=self.other_partner.pk,
+        ).exists())
+
+        dashboard = self.client.get(reverse('internet_provider_dashboard'))
+        self.assertContains(dashboard, self.other_partner.name)
+        self.assertContains(dashboard, self.other_entitlement.access_code)
+        self.assertNotContains(dashboard, self.entitlement.access_code)
+        self.assertEqual(self.client.get(reverse(
+            'internet_provider_subscription_detail', args=[self.entitlement.public_code],
+        )).status_code, 404)
+        self.assertEqual(self.client.get(reverse(
+            'internet_provider_subscription_detail', args=[self.other_entitlement.public_code],
+        )).status_code, 200)
+        self.assertEqual(self.client.get(reverse(
+            'internet_provider_package_edit', args=[self.package.public_code],
+        )).status_code, 404)
+        self.assertEqual(self.client.get(reverse(
+            'internet_provider_package_edit', args=[self.other_package.public_code],
+        )).status_code, 200)
+        # The selected scope persists across navigation within the same session.
+        self.assertContains(self.client.get(reverse('internet_provider_reports')),
+                            self.other_partner.name)
+
+    def test_only_admins_with_capability_can_select_an_active_partner(self):
+        response = self.client.post(reverse('internet_provider_select_partner'), {
+            'partner_id': self.other_partner.pk,
+        })
+        self.assertEqual(response.status_code, 403)
+        admin = self._admin_user()
+        self.client.force_login(admin)
+        for value in ('', 'oops', '-1', '1.5', '9' * 50):
+            self.assertEqual(self.client.post(
+                reverse('internet_provider_select_partner'),
+                {'partner_id': value},
+            ).status_code, 400)
+        self.other_partner.active = False
+        self.other_partner.save(update_fields=['active'])
+        self.assertEqual(self.client.post(
+            reverse('internet_provider_select_partner'),
+            {'partner_id': self.other_partner.pk},
+        ).status_code, 404)
+        self.assertContains(self.client.get(reverse('internet_provider_dashboard')),
+                            self.partner.name)
+        self.assertFalse(ActivityLog.objects.filter(
+            actor=admin, action='internet.provider_admin_scope_selected',
+        ).exists())
+
+    def test_admin_stale_partner_selection_falls_back_to_active_default(self):
+        admin = self._admin_user()
+        self.client.force_login(admin)
+        self.client.post(reverse('internet_provider_select_partner'), {
+            'partner_id': self.other_partner.pk,
+        })
+        self.other_partner.active = False
+        self.other_partner.save(update_fields=['active'])
+        response = self.client.get(reverse('internet_provider_dashboard'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.partner.name)
+        self.assertNotContains(response, self.other_entitlement.access_code)
+
+    def test_admin_without_default_uses_single_active_partner_and_without_any_fails_closed(self):
+        admin = self._admin_user()
+        self.client.force_login(admin)
+        self.partner.is_default = False
+        self.partner.save(update_fields=['is_default'])
+        self.assertEqual(self.client.get(reverse('internet_provider_dashboard')).status_code, 200)
+        self.partner.active = False
+        self.partner.save(update_fields=['active'])
+        self.other_partner.active = False
+        self.other_partner.save(update_fields=['active'])
+        self.assertEqual(self.client.get(reverse('internet_provider_dashboard')).status_code, 403)
+
+    def test_staff_user_and_denied_admin_cannot_use_admin_partner_switch(self):
+        waiter = get_user_model().objects.create_user(
+            username='portal-waiter', phone='090-portal-waiter',
+            password='pass', role=get_user_model().Role.WAITER,
+        )
+        self.client.force_login(waiter)
+        self.assertEqual(self.client.get(reverse('internet_provider_dashboard')).status_code, 403)
+        self.assertEqual(self.client.post(
+            reverse('internet_provider_select_partner'), {'partner_id': self.partner.pk},
+        ).status_code, 403)
+
+        admin = self._admin_user()
+        UserCapabilityOverride.objects.create(
+            user=admin, capability='provider_dashboard', allowed=False,
+        )
+        self.client.force_login(admin)
+        self.assertEqual(self.client.get(reverse('internet_provider_dashboard')).status_code, 403)
+        self.assertEqual(self.client.post(
+            reverse('internet_provider_select_partner'), {'partner_id': self.partner.pk},
+        ).status_code, 403)
+
+    def test_provider_cannot_select_partner_or_see_admin_selector(self):
+        dashboard = self.client.get(reverse('internet_provider_dashboard'))
+        self.assertNotContains(dashboard, reverse('internet_provider_select_partner'))
+        response = self.client.post(reverse('internet_provider_select_partner'), {
+            'partner_id': self.other_partner.pk,
+        })
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self.client.get(reverse('internet_provider_dashboard')).status_code, 200)
+        self.assertFalse(ActivityLog.objects.filter(
+            action='internet.provider_admin_scope_selected',
+        ).exists())
+
+    def test_admin_return_to_hub_does_not_end_authenticated_session(self):
+        admin = self._admin_user()
+        self.client.force_login(admin)
+        response = self.client.post(reverse('internet_provider_logout'))
+        self.assertRedirects(response, reverse('staff_home'))
+        self.assertEqual(int(self.client.session['_auth_user_id']), admin.pk)
+        self.assertEqual(self.client.get(reverse('internet_provider_dashboard')).status_code, 200)
+
+    def test_external_provider_logout_still_ends_authenticated_session(self):
+        response = self.client.post(reverse('internet_provider_logout'))
+        self.assertRedirects(response, reverse('internet_provider_login'))
+        self.assertNotIn('_auth_user_id', self.client.session)

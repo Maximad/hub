@@ -4,6 +4,7 @@
 <div class="hub-toolbar" style="gap:.5rem;flex-wrap:wrap;">
   {% if staff_caps.settings %}<a class="hub-button" href="{% url 'staff_internet_settings' %}">إعدادات الإنترنت</a>{% endif %}
   {% if can_manage_internal_internet %}<a class="hub-button hub-button-primary" href="{% url 'staff_internet_sale' %}?internal=1">إنترنت الإدارة والفريق</a>{% endif %}
+  {% if staff_caps.provider_dashboard %}<a class="hub-button" href="{% url 'internet_provider_dashboard' %}">بوابة تشغيل الإنترنت</a>{% endif %}
 </div>
 <section class="hub-section">
   <h2 class="hub-section-title hub-page-header__title">الإنترنت والعمل</h2>
