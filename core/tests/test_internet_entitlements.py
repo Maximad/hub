@@ -97,7 +97,12 @@ class EntitlementWorkflowTests(TestCase):
             daily_minutes_limit=40, session_minutes_limit=60, max_concurrent_devices=2,
             max_registered_devices=2)
         ent = create_entitlement(package)
-        now = timezone.now().replace(second=0, microsecond=0)
+        # This test checks validity-vs-session limits, not the daily midnight
+        # cutoff. Use a future local noon so running CI near midnight cannot
+        # correctly reduce the reservation to fewer than 25 minutes.
+        now = timezone.localtime(timezone.now() + timedelta(days=1)).replace(
+            hour=12, minute=0, second=0, microsecond=0,
+        )
         ent.valid_until = now + timedelta(minutes=25, seconds=30)
         ent.save(update_fields=['valid_until'])
         session = start_usage_session(ent, at=now)
