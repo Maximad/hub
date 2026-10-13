@@ -29,6 +29,7 @@
           hx-swap="innerHTML"
           class="hub-form hub-form-section staff-payment-panel__form">
       {% csrf_token %}
+      <input type="hidden" name="idempotency_key" value="{{ collection_request_key }}">
       {% include "components/currency_entry.html" %}
       <p class="hub-help-text">المبلغ يبدأ بالرصيد المتبقي. إذا أدخلت مبلغاً أقل، تطبق قواعد الدفع الجزئي وموافقة المدير الحالية دون تغيير.</p>
 
