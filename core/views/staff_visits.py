@@ -125,16 +125,17 @@ def staff_visits(request):
     if status in HubVisit.Status.values:
         visits = visits.filter(status=status)
     query = request.GET.get('q', '').strip()[:120]
+    can_see_contact = user_has_capability(request.user, 'cashier') or user_has_capability(request.user, 'internet_billing')
     if query:
-        visits = visits.filter(
-            Q(guest_name__icontains=query) | Q(guest_phone__icontains=query)
-            | Q(member__name_ar__icontains=query) | Q(member__phone__icontains=query)
-        )
+        lookup = Q(guest_name__icontains=query) | Q(member__name_ar__icontains=query)
+        if can_see_contact:
+            lookup |= Q(guest_phone__icontains=query) | Q(member__phone__icontains=query)
+        visits = visits.filter(lookup)
     if request.GET.get('table'):
         visits = visits.filter(table_id=request.GET['table'])
     if request.GET.get('member'):
         visits = visits.filter(member_id=request.GET['member'])
-    return render(request, 'staff/visits.html', {'visits': visits, 'status_filter': status, 'search_query': query, 'tables': TableArea.objects.select_related('room'), 'members': Member.objects.order_by('name_ar')[:200]})
+    return render(request, 'staff/visits.html', {'visits': visits, 'status_filter': status, 'search_query': query, 'can_see_contact': can_see_contact, 'tables': TableArea.objects.select_related('room'), 'members': Member.objects.order_by('name_ar')[:200]})
 
 
 @require_staff_capability('visit_manage')

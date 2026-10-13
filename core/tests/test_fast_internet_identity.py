@@ -158,6 +158,19 @@ class FastInternetIdentityTests(TestCase):
         self.assertEqual(self.client.get(reverse('menu_public')).status_code, 200)
         self.assertFalse(HubVisit.objects.exists())
 
+    @patch('core.views.wifi.prepare_guest_wifi_session_network', return_value=False)
+    def test_fast_registration_form_remains_available_with_active_basic_session(self, _network):
+        from internet.models import GuestWifiPolicy
+        policy = GuestWifiPolicy.objects.get(key='default')
+        policy.enabled = True
+        policy.require_venue_code = False
+        policy.save()
+        self.client.post(reverse('wifi_entry'), {'wifi_action': 'start_guest_wifi'})
+        response = self.client.get(reverse('wifi_entry') + '?mode=fast')
+        self.assertContains(response, 'name="guest_name"')
+        self.assertContains(response, 'name="guest_phone"')
+        self.assertContains(response, 'أنا على طاولة')
+
     def test_contact_normalization_accepts_local_and_international_numbers(self):
         self.assertEqual(
             normalize_standalone_identity('  رنا   شمس ', '+963 999 111 222'),

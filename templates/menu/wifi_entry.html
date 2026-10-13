@@ -102,7 +102,7 @@
       <a class="wifi-sheet__secondary" href="{{ menu_url }}">افتح المنيو</a>
     {% endif %}
 
-  {% elif active_guest_wifi_session %}
+  {% elif active_guest_wifi_session and not fast_registration_mode %}
     <div class="wifi-sheet__heading">
       {% if active_guest_wifi_network_ready %}
         <h2 id="wifi-sheet-title">تم الاتصال</h2>
