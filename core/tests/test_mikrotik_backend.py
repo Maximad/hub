@@ -1,5 +1,9 @@
+from datetime import timedelta
+from unittest.mock import patch
+
 from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
+from django.utils import timezone
 
 from core.models import InternetBandwidthProfile, InternetEntitlement, InternetPackage
 from core.services.internet_access import create_entitlement
@@ -60,7 +64,13 @@ class MikroTikBackendTests(TestCase):
     def test_plan_uses_tighter_authoritative_daily_allowance(self):
         self.entitlement.daily_minutes_limit = 20
         self.entitlement.save(update_fields=['daily_minutes_limit'])
-        self.assertEqual(self.backend.plan(self.entitlement)['limit-uptime'], '0:20:00')
+        # The real allowance legitimately tightens near local midnight. Keep
+        # this daily-cap test at a controlled noon, away from that separate gate.
+        local_noon = timezone.localtime(timezone.now() + timedelta(days=1)).replace(
+            hour=12, minute=0, second=0, microsecond=0,
+        )
+        with patch('core.services.internet_access.timezone.now', return_value=local_noon):
+            self.assertEqual(self.backend.plan(self.entitlement)['limit-uptime'], '0:20:00')
 
     def test_collision_refused_and_commercial_state_preserved(self):
         name = self.backend.username(self.entitlement)
