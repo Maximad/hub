@@ -1,4 +1,6 @@
 """Internet sessions and Wi‑Fi management views for staff workflows."""
+from datetime import timedelta
+
 from django import forms
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -6,9 +8,11 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 
 from accounts.permissions import is_owner_or_admin, user_has_capability
 from core.models import InternetBandwidthProfile, InternetEntitlement, InternetPackage
+from core.services.staff_internet_observation import observation_is_fresh
 from core.services.internet_internal_access import (
     INTERNAL_ORIGINS,
     grant_internal_access,
@@ -140,6 +144,17 @@ def _internal_access_page(request, form=None):
         )
         entitlement.internal_subject_role = (
             staff_target.user.get_role_display() if staff_target else ''
+        )
+        snapshot = getattr(staff_target, 'connection_snapshot', None) if staff_target else None
+        entitlement.internal_observation = snapshot
+        entitlement.internal_observation_current = observation_is_fresh(snapshot)
+        # Counts are shown only when verified recently, never inferred from a
+        # login relay request or a stale/failed REST read.
+        entitlement.internal_online_count = (
+            snapshot.active_login_count if entitlement.internal_observation_current else None
+        )
+        entitlement.internal_device_count = (
+            snapshot.distinct_device_count if entitlement.internal_observation_current else None
         )
     active_count = sum(
         1 for entitlement in grants

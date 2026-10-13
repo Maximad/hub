@@ -104,6 +104,16 @@ class RouterOSClient:
             }),
         )
 
+    def active_session_details(self, name):
+        """Read-only active login evidence. Never print/store session IDs or MACs."""
+        return self._call(
+            'GET',
+            'ip/hotspot/active?' + parse.urlencode({
+                '.proplist': '.id,user,mac-address,uptime',
+                'user': name,
+            }),
+        )
+
     def remove_active(self, remote_id):
         return self._call(
             'DELETE',

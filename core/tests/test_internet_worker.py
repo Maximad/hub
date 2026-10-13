@@ -5,7 +5,7 @@ from unittest.mock import patch
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from core.services.internet_worker import run_internet_worker_cycle
 from internet.models import InternetOperationsState
@@ -77,6 +77,46 @@ class InternetWorkerCycleTests(SimpleTestCase):
         lifecycle.assert_not_called()
         self.assertEqual(summary['lifecycle'], 'skipped')
         self.assertEqual(errors, [])
+
+
+
+@override_settings(MIKROTIK_ENABLED=True)
+class StaffConnectionWorkerTests(SimpleTestCase):
+    @patch('core.services.internet_worker.close_old_connections')
+    @patch('core.services.internet_worker._record_heartbeat')
+    @patch('core.services.internet_worker.observe_staff_internet_connections')
+    @patch('core.services.internet_worker.process_ready_session_network_operations', return_value=(0, 0))
+    @patch('core.services.internet_worker.process_ready_network_operations', return_value=(0, 0))
+    @patch('core.services.internet_worker.call_command')
+    def test_read_only_poll_runs_only_during_lifecycle_cycle(
+        self, lifecycle, entitlement_jobs, session_jobs, observer, heartbeat, close,
+    ):
+        observer.return_value = {'checked': 2, 'observed': 2, 'failed': 0}
+        result, errors = run_internet_worker_cycle(run_lifecycle=True)
+        observer.assert_called_once_with(limit=20)
+        self.assertEqual(result['staff_connections']['observed'], 2)
+        self.assertEqual(errors, [])
+        observer.reset_mock()
+        result, errors = run_internet_worker_cycle(run_lifecycle=False)
+        observer.assert_not_called()
+        self.assertNotIn('staff_connections', result)
+        self.assertEqual(errors, [])
+
+    @patch('core.services.internet_worker.close_old_connections')
+    @patch('core.services.internet_worker._record_heartbeat')
+    @patch('core.services.internet_worker.observe_staff_internet_connections', side_effect=Exception('authorization token=PRIVATE'))
+    @patch('core.services.internet_worker.process_ready_session_network_operations', return_value=(0, 0))
+    @patch('core.services.internet_worker.process_ready_network_operations', return_value=(0, 0))
+    @patch('core.services.internet_worker.call_command')
+    def test_observer_exception_is_sanitized_and_network_queues_still_run(
+        self, lifecycle, entitlement_jobs, session_jobs, observer, heartbeat, close,
+    ):
+        result, errors = run_internet_worker_cycle(run_lifecycle=True)
+        self.assertEqual(result['lifecycle'], 'ok')
+        self.assertEqual([name for name, _ in errors], ['staff_connections'])
+        self.assertNotIn('PRIVATE', str(errors))
+        entitlement_jobs.assert_called_once()
+        session_jobs.assert_called_once()
 
 
 class InternetWorkerHeartbeatTests(TestCase):
