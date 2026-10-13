@@ -417,6 +417,47 @@ class VisitCashierSettlementTests(TestCase):
         self.assertContains(response, 'سجل الدفعات')
         self.assertNotContains(response, 'مراجعة / عكس الدفعة')
 
+    def test_standalone_cashier_forms_support_separate_same_value_payments(self):
+        order = self.order(300, name='منفرد')
+        detail_url = reverse('staff_cashier_order', kwargs={'public_code': order.public_code})
+        pay_url = reverse('staff_cashier_pay', kwargs={'public_code': order.public_code})
+
+        full_page = self.client.get(detail_url)
+        original_key = full_page.context['collection_request_key']
+        self.assertContains(full_page, 'name="idempotency_key" value="' + original_key + '"')
+
+        drawer_page = self.client.get(detail_url + '?panel=payment')
+        first_key = drawer_page.context['collection_request_key']
+        self.assertNotEqual(original_key, first_key)
+        self.assertContains(drawer_page, 'name="idempotency_key" value="' + first_key + '"')
+
+        first = self.client.post(
+            pay_url + '?panel=payment',
+            {'amount_syp': '100', 'method': Payment.Method.CASH,
+             'idempotency_key': first_key},
+        )
+        self.assertEqual(first.status_code, 200)
+        next_key = first.context['collection_request_key']
+        self.assertNotEqual(first_key, next_key)
+
+        second = self.client.post(
+            pay_url + '?panel=payment',
+            {'amount_syp': '100', 'method': Payment.Method.CASH,
+             'idempotency_key': next_key},
+        )
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(order.remaining_syp, 100)
+        self.assertEqual(Payment.objects.filter(order=order).count(), 2)
+
+        retry = self.client.post(
+            pay_url + '?panel=payment',
+            {'amount_syp': '100', 'method': Payment.Method.CASH,
+             'idempotency_key': first_key},
+        )
+        self.assertEqual(retry.status_code, 200)
+        self.assertEqual(Payment.objects.filter(order=order).count(), 2)
+        self.assertEqual(CashMovement.objects.filter(related_order=order).count(), 2)
+
     def test_standalone_order_keeps_legacy_cashier_flow(self):
         standalone = self.order(70, name='منفرد')
 
