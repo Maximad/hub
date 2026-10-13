@@ -3,10 +3,11 @@ from django import forms
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
+from accounts.permissions import is_owner_or_admin, user_has_capability
 from core.models import InternetBandwidthProfile, InternetEntitlement, InternetPackage
 from core.services.internet_internal_access import (
     INTERNAL_ORIGINS,
@@ -15,7 +16,6 @@ from core.services.internet_internal_access import (
     revoke_internal_access,
 )
 from core.views_legacy import (
-    _assert_staff_capability,
     staff_internet as _legacy_staff_internet,
     staff_internet_cancel,
     staff_internet_end,
@@ -115,6 +115,13 @@ def _internal_access_url():
     return reverse('staff_internet_sale') + '?internal=1'
 
 
+def _assert_internal_access_manager(user):
+    # Both a managerial identity and the dedicated capability are necessary.
+    # In particular, an internet-sales permission or a cashier role is insufficient.
+    if not (is_owner_or_admin(user) and user_has_capability(user, 'internal_internet_manage')):
+        raise PermissionDenied('إدارة إنترنت الفريق مخصصة للإدارة المخوّلة.')
+
+
 def _internal_access_page(request, form=None):
     grants = list(
         internal_grants().select_related(
@@ -155,12 +162,14 @@ def staff_internet(request):
 
 @login_required
 def staff_internet_sale(request):
-    _assert_staff_capability(request.user, 'members/internet')
-
-    if request.method == 'GET' and request.GET.get('internal') == '1':
-        return _internal_access_page(request)
-
     action = request.POST.get('internet_action', '').strip() if request.method == 'POST' else ''
+    internal_get = request.method == 'GET' and request.GET.get('internal') == '1'
+    internal_post = action in {'internal_grant', 'internal_revoke'}
+    if internal_get or internal_post:
+        _assert_internal_access_manager(request.user)
+
+    if internal_get:
+        return _internal_access_page(request)
     if action == 'internal_grant':
         form = InternalAccessGrantForm(request.POST)
         if not form.is_valid():
