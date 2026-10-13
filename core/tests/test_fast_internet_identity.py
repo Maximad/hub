@@ -161,7 +161,7 @@ class FastInternetIdentityTests(TestCase):
     @patch('core.views.wifi.prepare_guest_wifi_session_network', return_value=False)
     def test_fast_registration_form_remains_available_with_active_basic_session(self, _network):
         from internet.models import GuestWifiPolicy
-        policy = GuestWifiPolicy.objects.get(key='default')
+        policy, _created = GuestWifiPolicy.objects.get_or_create(key='default')
         policy.enabled = True
         policy.require_venue_code = False
         policy.save()
