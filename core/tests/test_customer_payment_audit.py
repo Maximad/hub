@@ -163,8 +163,9 @@ class CustomerPaymentAuditTests(TestCase):
     def test_order_inspection_for_visit_order_reports_consolidated_visit(self):
         visit = HubVisit.objects.create(created_by=self.user)
         order = self.order(100, visit=visit)
-        self.order(200, visit=visit)
+        other = self.order(200, visit=visit)
         self.collect_cash(order, 100, key='customer-audit-selected-order')
+        self.collect_cash(other, 50, key='customer-audit-other-order')
 
         result = self.audit(order_id=order.pk)
 
@@ -173,7 +174,8 @@ class CustomerPaymentAuditTests(TestCase):
         self.assertEqual(result['selected_order']['visit_code'], str(visit.public_code))
         self.assertEqual(result['selected_order']['paid_syp'], 100)
         self.assertEqual(result['accounts'][0]['total_syp'], 300)
-        self.assertEqual(result['accounts'][0]['remaining_syp'], 200)
+        self.assertEqual(result['accounts'][0]['paid_syp'], 150)
+        self.assertEqual(result['accounts'][0]['remaining_syp'], 150)
         self.assertEqual(len(result['payments']), 1)
         self.assertEqual(result['payments'][0]['order_id'], order.pk)
 
