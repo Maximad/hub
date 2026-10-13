@@ -123,7 +123,9 @@ class CustomerPaymentAuditTests(TestCase):
         order = self.order(100)
         payment = Payment.objects.create(
             order=order, amount_syp=100, method=Payment.Method.CASH,
-            is_reversed=True,
+            is_active=False, is_reversed=True,
+            reversal_reason='other', reversed_at=timezone.now(),
+            reversed_by=self.user,
         )
         result = self.audit(payment_id=payment.pk)
         self.assertEqual(result['standalone_orders'][0]['remaining_syp'], 100)
