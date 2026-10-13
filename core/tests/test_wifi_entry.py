@@ -408,7 +408,11 @@ class WifiEntryTests(TestCase):
         self.assertEqual(basic_start.status_code, 302)
         first_basic = InternetSession.objects.get(billing_mode=InternetSession.BillingMode.FREE)
 
-        fast_start = self.client.post(reverse('visit_internet_start'), {'mode': 'metered'})
+        fast_start = self.client.post(reverse('visit_internet_start'), {
+            'mode': 'metered',
+            'guest_name': 'رنا شمس',
+            'guest_phone': '0999123456',
+        })
         self.assertEqual(fast_start.status_code, 302)
         first_basic.refresh_from_db()
         self.assertEqual(first_basic.status, InternetSession.Status.ENDED)
