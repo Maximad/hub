@@ -25,7 +25,7 @@
       <form method="post" action="{% url 'staff_cashier_pay' visit.public_code %}" hx-post="{% url 'staff_cashier_pay' visit.public_code %}?panel=payment" hx-target="#staff-context-drawer-body" hx-swap="innerHTML" class="hub-form hub-form-section staff-payment-panel__form">
         {% csrf_token %}
         <input type="hidden" name="idempotency_key" value="{{ collection_request_key }}">
-        {% include "components/currency_entry.html" %>
+        {% include "components/currency_entry.html" %}
         <p class="hub-help-text">توزّع الدفعة تلقائياً على طلبات الحساب غير المسددة، الأقدم أولاً.</p>
         <div class="hub-manager-approval" data-manager-approval hidden>
           <label>اسم المدير<input class="hub-input" type="text" name="manager_username" autocomplete="username"></label>
