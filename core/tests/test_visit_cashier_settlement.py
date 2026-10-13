@@ -458,6 +458,24 @@ class VisitCashierSettlementTests(TestCase):
         self.assertEqual(Payment.objects.filter(order=order).count(), 2)
         self.assertEqual(CashMovement.objects.filter(related_order=order).count(), 2)
 
+    def test_standalone_payment_history_marks_reversals_as_not_collected(self):
+        standalone = self.order(100, name='منفرد')
+        Payment.objects.create(
+            order=standalone, amount_syp=100, method=Payment.Method.CASH,
+            is_active=False, is_reversed=True,
+            reversed_at=timezone.now(), reversed_by=self.admin,
+            reversal_reason='other',
+        )
+
+        url = reverse('staff_cashier_order', kwargs={'public_code': standalone.public_code})
+        full_page = self.client.get(url)
+        drawer = self.client.get(url + '?panel=payment')
+
+        self.assertEqual(standalone.paid_syp, 0)
+        self.assertEqual(standalone.remaining_syp, 100)
+        self.assertContains(full_page, 'معكوسة (لا تحتسب ضمن المدفوع)')
+        self.assertContains(drawer, 'معكوسة (لا تحتسب)')
+
     def test_standalone_order_keeps_legacy_cashier_flow(self):
         standalone = self.order(70, name='منفرد')
 
