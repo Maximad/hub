@@ -29,6 +29,7 @@
           hx-swap="innerHTML"
           class="hub-form hub-form-section staff-payment-panel__form">
       {% csrf_token %}
+      <input type="hidden" name="idempotency_key" value="{{ collection_request_key }}">
       {% include "components/currency_entry.html" %}
       <p class="hub-help-text">المبلغ يبدأ بالرصيد المتبقي. إذا أدخلت مبلغاً أقل، تطبق قواعد الدفع الجزئي وموافقة المدير الحالية دون تغيير.</p>
 
@@ -53,7 +54,7 @@
     <div class="staff-order-panel__section-head"><h4>سجل الدفعات</h4><span>{{ order.payments.all|length }}</span></div>
     <div class="staff-payment-panel__payments">
       {% for payment in order.payments.all %}
-        <div><span>{{ payment.get_method_display }}</span><strong>{{ payment.amount_syp|format_syp }}</strong></div>
+        <div><span>{{ payment.get_method_display }}{% if payment.is_reversed %} · معكوسة (لا تحتسب){% elif not payment.is_active or payment.method == 'unpaid' %} · غير محصّلة{% endif %}</span><strong>{{ payment.amount_syp|format_syp }}</strong></div>
       {% empty %}<p class="hub-help-text">لا توجد دفعات بعد.</p>{% endfor %}
     </div>
   </section>

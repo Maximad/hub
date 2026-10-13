@@ -12,6 +12,8 @@ from core.models import (
     HubVisitBrowserCredential,
     InternetSession,
     Order,
+    OrderItem,
+    Payment,
     Product,
     Room,
     SystemSetting,
@@ -123,6 +125,54 @@ class StaffWorkspaceTests(TestCase):
         )
         session.refresh_from_db()
         return session
+
+    def test_operations_snapshot_reflects_cash_payment_on_next_read(self):
+        OrderItem.objects.create(
+            order=self.order, product=self.internet_product, quantity=1,
+            product_name_ar_snapshot='خدمة تجريبية',
+            unit_price_syp_snapshot=400, line_total_syp_snapshot=400,
+        )
+        self.client.force_login(self.admin)
+        before = self.client.get(reverse('staff_home'))
+        self.assertEqual(before.context['workspace_stats']['unpaid_orders'], 1)
+        self.assertEqual(before.context['visit_rows'][0]['remaining_syp'], 400)
+
+        collected = self.client.post(
+            reverse('staff_cashier_pay', kwargs={'public_code': self.visit.public_code}),
+            {'amount_syp': '400', 'method': Payment.Method.CASH},
+            HTTP_IDEMPOTENCY_KEY='ops-refresh-collect',
+        )
+        self.assertEqual(collected.status_code, 302)
+
+        refreshed = self.client.get(reverse('staff_home'))
+        self.assertEqual(refreshed.context['workspace_stats']['unpaid_orders'], 0)
+        self.assertEqual(refreshed.context['visit_rows'][0]['remaining_syp'], 0)
+        self.assertContains(refreshed, 'data-operations-v2')
+        self.assertContains(refreshed, 'data-unpaid="0"')
+
+    def test_operations_snapshot_removes_account_after_settle_and_close(self):
+        OrderItem.objects.create(
+            order=self.order, product=self.internet_product, quantity=1,
+            product_name_ar_snapshot='خدمة تجريبية',
+            unit_price_syp_snapshot=200, line_total_syp_snapshot=200,
+        )
+        self.client.force_login(self.admin)
+        before = self.client.get(reverse('staff_home'))
+        self.assertEqual(before.context['workspace_stats']['open_visits'], 1)
+
+        closed = self.client.post(
+            reverse('staff_cashier_pay', kwargs={'public_code': self.visit.public_code}),
+            {'action': 'settle_close', 'method': Payment.Method.CASH},
+            HTTP_IDEMPOTENCY_KEY='ops-refresh-close',
+        )
+        self.assertEqual(closed.status_code, 302)
+        self.visit.refresh_from_db()
+        self.assertEqual(self.visit.status, HubVisit.Status.CLOSED)
+
+        refreshed = self.client.get(reverse('staff_home'))
+        self.assertEqual(refreshed.context['workspace_stats']['open_visits'], 0)
+        self.assertEqual(refreshed.context['workspace_stats']['unpaid_orders'], 0)
+        self.assertNotContains(refreshed, 'data-search="' + self.visit.display_number)
 
     def test_staff_home_is_unified_front_of_house_workspace(self):
         self.client.force_login(self.admin)
