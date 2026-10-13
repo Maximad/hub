@@ -1357,7 +1357,7 @@ def staff_cashier_order(request, public_code):
     order = get_object_or_404(Order.objects.select_related('table', 'table__room').prefetch_related('items', 'payments', 'discounts'), public_code=public_code)
     total, paid, remaining, payment_label = _order_financials(order)
     methods = Payment.Method.choices
-    return render(request, 'staff/cashier_order.html', {'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods, 'discount_types': OrderDiscount.DiscountType.choices, 'can_manage_discounts': _can_approve_partial_payment(request.user), 'payment_amount_default': remaining, 'qr_url': reverse('order_qr', kwargs={'public_code': order.public_code}), 'currency_component': CurrencyEntryFormService(request, operation='payment').context})
+    return render(request, 'staff/cashier_order.html', {'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods, 'discount_types': OrderDiscount.DiscountType.choices, 'can_manage_discounts': _can_approve_partial_payment(request.user), 'payment_amount_default': remaining, 'collection_request_key': f'order-pay:{order.pk}:{uuid.uuid4().hex}', 'qr_url': reverse('order_qr', kwargs={'public_code': order.public_code}), 'currency_component': CurrencyEntryFormService(request, operation='payment').context})
 
 
 @require_staff_capability('cashier')
