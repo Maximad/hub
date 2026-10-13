@@ -16,6 +16,7 @@
 <p><strong>المجموع قبل الخصم:</strong> {{ order.subtotal_syp }} ل.س</p>{% if order.delivery_fee_syp %}<p><strong>رسوم التوصيل:</strong> {{ order.delivery_fee_syp }} ل.س</p>{% endif %}<p><strong>الخصم:</strong> {{ order.discount_syp }} ل.س</p><p><strong>المجموع بعد الخصم:</strong> {{ total }} ل.س</p><p><strong>المدفوع:</strong> {{ paid }} ل.س</p><p><strong>المتبقي:</strong> {{ remaining }} ل.س</p><p><strong>حالة الدفع:</strong> {{ payment_label }}</p>
 <h3>إضافة دفعة</h3>
 <form method="post" action="{% url 'staff_cashier_pay' order.public_code %}" class="hub-form hub-form-section" id="cashier-payment-form">{% csrf_token %}
+<input type="hidden" name="idempotency_key" value="{{ collection_request_key }}">
 {% include "components/currency_entry.html" %}
 <p class="hub-help-text">الحقل مملوء تلقائياً بالمبلغ المتبقي. لتسجيل دفعة جزئية، أدخل مبلغاً أقل مع موافقة المدير.</p>
 <div class="hub-manager-approval" id="manager-approval" hidden>
@@ -48,5 +49,5 @@
 </form>{% else %}<p class="hub-help-text">إضافة الخصم تحتاج موافقة المدير.</p>{% endif %}
 <ul>{% for d in order.discounts.all %}{% if d.is_active %}<li>{{ d.get_discount_type_display }} - {{ d.amount_syp }} ل.س - {{ d.reason }} - موافقة المدير: {% if d.approved_by %}{{ d.approved_by }}{% else %}—{% endif %}</li>{% endif %}{% empty %}<li>لا توجد خصومات.</li>{% endfor %}</ul>
 <h3>سجل الدفعات</h3>
-<ul>{% for p in order.payments.all %}<li>{{ p.get_method_display }} - {{ p.amount_syp }} ل.س - {{ p.created_at }}</li>{% empty %}<li>لا توجد دفعات بعد.</li>{% endfor %}</ul>
+<ul>{% for p in order.payments.all %}<li>{{ p.get_method_display }} - {{ p.amount_syp }} ل.س - {{ p.created_at }}{% if p.is_reversed %} · معكوسة (لا تحتسب ضمن المدفوع){% elif not p.is_active or p.method == 'unpaid' %} · غير محصّلة{% endif %}</li>{% empty %}<li>لا توجد دفعات بعد.</li>{% endfor %}</ul>
 {% endblock %}
