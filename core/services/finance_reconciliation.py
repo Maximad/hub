@@ -69,13 +69,53 @@ class FinanceReconciler:
                          vendor_id=expense.vendor_id, supplier_name=expense.supplier_name)
 
     def _payments(self):
-        for payment in Payment.objects.select_related('order').prefetch_related('cash_movements'):
-            movements = [m for m in payment.cash_movements.all() if not m.is_cancelled]
-            if payment.is_active and not payment.is_reversed and payment.method == Payment.Method.CASH and len(movements) != 1:
-                self.add('payment_missing_movement', payment, 'Active cash payment must have one cash movement.', count=len(movements))
-            # The legacy order-payment workflow has no ledger batch: report it explicitly.
-            if payment.is_active and not payment.is_reversed:
-                self.add('payment_missing_posting', payment, 'Active order payment has no ledger posting batch.')
+        payments = list(
+            Payment.objects.select_related('order').prefetch_related('cash_movements')
+        )
+        # Only actual collections have an order_payment.collect journal. Unpaid,
+        # complimentary and member-discount records are not cash receipts.
+        collectible_methods = {Payment.Method.CASH, Payment.Method.MANUAL_TRANSFER}
+        collectible = [
+            payment for payment in payments
+            if payment.is_active and not payment.is_reversed
+            and payment.method in collectible_methods
+        ]
+
+        # A read-only finance scan must never create a missing ContentType.
+        payment_type_id = ContentType.objects.filter(
+            app_label=Payment._meta.app_label, model=Payment._meta.model_name,
+        ).values_list('pk', flat=True).first()
+        posted_payment_ids = set()
+        if collectible and payment_type_id:
+            posted_payment_ids = set(
+                PostingBatch.objects.filter(
+                    operation_type='order_payment.collect',
+                    status=PostingBatch.Status.POSTED,
+                    source_content_type_id=payment_type_id,
+                    source_object_id__in=[str(payment.pk) for payment in collectible],
+                ).values_list('source_object_id', flat=True)
+            )
+
+        for payment in payments:
+            if not payment.is_active or payment.is_reversed:
+                continue
+            if payment.method == Payment.Method.CASH:
+                movements = [
+                    movement for movement in payment.cash_movements.all()
+                    if not movement.is_cancelled
+                ]
+                if len(movements) != 1:
+                    self.add(
+                        'payment_missing_movement', payment,
+                        'Active cash payment must have one cash movement.',
+                        count=len(movements),
+                    )
+            if (payment.method in collectible_methods
+                    and str(payment.pk) not in posted_payment_ids):
+                self.add(
+                    'payment_missing_posting', payment,
+                    'Active collected payment has no posted order-payment journal.',
+                )
 
     def _keys_and_batches(self):
         key_rows = []
