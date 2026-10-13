@@ -1428,7 +1428,7 @@ def staff_cashier_pay(request, public_code):
     if order.remaining_syp > 0:
         create_notification('payment_pending', f'الدفع بانتظار الكاشير {order.display_number}', f'المتبقي {order.remaining_syp} ل.س', order=order, target_role='cashier', created_by=request.user)
     try:
-        ActivityLog.objects.create(actor=request.user, action='payment_added', details={'order_public_code': str(order.public_code), 'payment_id': payment.id, 'amount_syp': amount_val, 'method': method})
+        ActivityLog.objects.create(actor=request.user, action='payment_added', details={'order_public_code': str(order.public_code), 'payment_id': payment.id, 'amount_syp': str(amount_val), 'method': method})
     except Exception:
         pass
     return redirect('staff_cashier_order', public_code=order.public_code)
