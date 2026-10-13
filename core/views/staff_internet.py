@@ -12,7 +12,9 @@ from django.utils import timezone
 
 from accounts.permissions import is_owner_or_admin, user_has_capability
 from core.models import InternetBandwidthProfile, InternetEntitlement, InternetPackage
-from core.services.staff_internet_observation import observation_is_fresh
+from core.services.staff_internet_observation import (
+    observation_is_fresh, observed_concurrent_limit_state,
+)
 from core.services.internet_internal_access import (
     INTERNAL_ORIGINS,
     grant_internal_access,
@@ -148,6 +150,12 @@ def _internal_access_page(request, form=None):
         snapshot = getattr(staff_target, 'connection_snapshot', None) if staff_target else None
         entitlement.internal_observation = snapshot
         entitlement.internal_observation_current = observation_is_fresh(snapshot)
+        entitlement.internal_limit_observation = observed_concurrent_limit_state(entitlement, snapshot)
+        entitlement.internal_longest_login_minutes = (
+            snapshot.longest_active_uptime_seconds // 60
+            if entitlement.internal_observation_current and snapshot.longest_active_uptime_seconds is not None
+            else None
+        )
         # Counts are shown only when verified recently, never inferred from a
         # login relay request or a stale/failed REST read.
         entitlement.internal_online_count = (

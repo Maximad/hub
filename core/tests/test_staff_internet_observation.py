@@ -14,6 +14,7 @@ from core.services.internet_internal_access import grant_internal_access
 from core.services.network_backends import MikroTikNetworkBackend
 from core.services.staff_internet_observation import (
     observation_is_fresh, observe_staff_internet_connections,
+    observed_concurrent_limit_state, parse_routeros_uptime,
 )
 from internet.models import StaffInternetConnectionSnapshot
 
@@ -85,6 +86,8 @@ class StaffInternetObservationTests(TestCase):
         self.assertEqual(snapshot.state, 'observed')
         self.assertEqual(snapshot.active_login_count, 3)
         self.assertEqual(snapshot.distinct_device_count, 2)
+        self.assertEqual(snapshot.longest_active_uptime_seconds, 300)
+        self.assertEqual(observed_concurrent_limit_state(self.grant, snapshot), 'within_observed_limit')
         self.assertTrue(observation_is_fresh(snapshot))
         self.assertNotIn('AA:BB:CC:DD:EE', str(snapshot.__dict__))
         self.assertNotIn('*A', str(snapshot.__dict__))
@@ -100,6 +103,7 @@ class StaffInternetObservationTests(TestCase):
         )
         self.assertEqual(snapshot.active_login_count, 0)
         self.assertEqual(snapshot.distinct_device_count, 0)
+        self.assertEqual(snapshot.longest_active_uptime_seconds, 0)
         self.assertTrue(observation_is_fresh(snapshot))
 
     def test_missing_mac_is_unknown_distinct_device_count(self):
@@ -166,6 +170,86 @@ class StaffInternetObservationTests(TestCase):
         output = observe_staff_internet_connections(client=self.router)
         self.assertEqual(output['disabled'], True)
         self.assertEqual(StaffInternetConnectionSnapshot.objects.count(), 0)
+
+    def test_distinct_devices_over_limit_detected_without_router_mutation(self):
+        name = MikroTikNetworkBackend.username(self.grant)
+        self.router.sessions[name] = [
+            {'.id': '*1', 'user': name, 'mac-address': 'AA:BB:CC:DD:EE:01', 'uptime': '35s'},
+            {'.id': '*2', 'user': name, 'mac-address': 'AA:BB:CC:DD:EE:02', 'uptime': '1m5s'},
+            {'.id': '*3', 'user': name, 'mac-address': 'AA:BB:CC:DD:EE:03', 'uptime': '2m'},
+        ]
+        result = observe_staff_internet_connections(limit=5, client=self.router)
+        snapshot = StaffInternetConnectionSnapshot.objects.get(grant=self.grant.internal_staff_grant)
+        self.assertEqual(observed_concurrent_limit_state(self.grant, snapshot), 'exceeded')
+        self.assertEqual(snapshot.distinct_device_count, 3)
+        self.assertEqual(snapshot.longest_active_uptime_seconds, 120)
+        self.assertEqual(result['observed'], 2)
+        self.assertTrue(all(action in ('get-user', 'get-active') for action, _ in self.router.operations))
+        self.grant.refresh_from_db()
+        self.assertEqual(self.grant.status, InternetEntitlement.Status.ACTIVE)
+
+    def test_duplicate_logins_same_mac_do_not_trigger_device_excess(self):
+        name = MikroTikNetworkBackend.username(self.grant)
+        self.router.sessions[name] = [
+            {'user': name, 'mac-address': 'AA:BB:CC:DD:EE:01', 'uptime': '59s'},
+            {'user': name, 'mac-address': 'AA:BB:CC:DD:EE:01', 'uptime': '1m1s'},
+        ]
+        observe_staff_internet_connections(limit=5, client=self.router)
+        snapshot = StaffInternetConnectionSnapshot.objects.get(grant=self.grant.internal_staff_grant)
+        self.assertEqual(snapshot.active_login_count, 2)
+        self.assertEqual(snapshot.distinct_device_count, 1)
+        self.assertEqual(observed_concurrent_limit_state(self.grant, snapshot), 'within_observed_limit')
+
+    def test_missing_mac_and_old_observations_never_imply_compliance(self):
+        name = MikroTikNetworkBackend.username(self.grant)
+        self.router.sessions[name] = [{'user': name, 'uptime': '10s'}]
+        observe_staff_internet_connections(limit=5, client=self.router)
+        snapshot = StaffInternetConnectionSnapshot.objects.get(grant=self.grant.internal_staff_grant)
+        self.assertEqual(observed_concurrent_limit_state(self.grant, snapshot), 'unknown')
+        self.router.sessions[name] = [
+            {'user': name, 'mac-address': 'AA:BB:CC:DD:EE:01', 'uptime': '10s'},
+        ]
+        observe_staff_internet_connections(limit=5, client=self.router)
+        snapshot.refresh_from_db()
+        self.assertEqual(observed_concurrent_limit_state(
+            self.grant, snapshot, at=snapshot.checked_at + timedelta(minutes=4)), 'unknown')
+
+    def test_missing_uptime_prevents_false_longest_session(self):
+        name = MikroTikNetworkBackend.username(self.grant)
+        self.router.sessions[name] = [
+            {'user': name, 'mac-address': 'AA:BB:CC:DD:EE:01', 'uptime': '1m20s'},
+            {'user': name, 'mac-address': 'AA:BB:CC:DD:EE:02'},
+        ]
+        observe_staff_internet_connections(limit=5, client=self.router)
+        snapshot = StaffInternetConnectionSnapshot.objects.get(grant=self.grant.internal_staff_grant)
+        self.assertIsNone(snapshot.longest_active_uptime_seconds)
+        self.assertEqual(snapshot.distinct_device_count, 2)
+
+    def test_supported_uptime_formats_and_bad_input(self):
+        for value, expected in (
+            ('0s', 0), ('59s', 59), ('1m4s', 64), ('2h3m4s', 7384),
+            ('1d00:00:05', 86405), ('1:02:03', 3723),
+            ('1w2d3h4m5s', 788645), ('48:00:00', 172800),
+        ):
+            with self.subTest(value=value):
+                self.assertEqual(parse_routeros_uptime(value), expected)
+        for value in ('', None, 12, '1h0h', '3x', '0:99:01',
+                      '2d24:00:00', 'forever', '400d'):
+            with self.subTest(value=value):
+                self.assertIsNone(parse_routeros_uptime(value))
+
+    def test_failed_observation_clears_old_duration_and_verdict(self):
+        name = MikroTikNetworkBackend.username(self.grant)
+        self.router.sessions[name] = [
+            {'user': name, 'mac-address': 'AA:BB:CC:DD:EE:01', 'uptime': '1m'}
+        ]
+        observe_staff_internet_connections(limit=5, client=self.router)
+        self.router.users[name]['comment'] = 'not-hub'
+        observe_staff_internet_connections(limit=5, client=self.router)
+        snapshot = StaffInternetConnectionSnapshot.objects.get(grant=self.grant.internal_staff_grant)
+        self.assertIsNone(snapshot.longest_active_uptime_seconds)
+        self.assertIsNone(snapshot.distinct_device_count)
+        self.assertEqual(observed_concurrent_limit_state(self.grant, snapshot), 'unknown')
 
     def test_invalid_router_results_do_not_count_as_online(self):
         name = MikroTikNetworkBackend.username(self.grant)
