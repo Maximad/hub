@@ -16,7 +16,7 @@ from core.services.staff_internet_observation import (
     observation_is_fresh, observe_staff_internet_connections,
     observed_concurrent_limit_state, parse_routeros_uptime,
 )
-from internet.models import StaffInternetConnectionSnapshot
+from internet.models import StaffInternetConnectionSnapshot, StaffInternetDeviceEvidence
 
 
 class FakeReadOnlyRouter:
@@ -261,3 +261,95 @@ class StaffInternetObservationTests(TestCase):
             grant=self.grant.internal_staff_grant,
         )
         self.assertIsNone(snap.active_login_count)
+
+    def test_pseudonymous_device_history_is_grant_scoped_and_deduplicated(self):
+        name = MikroTikNetworkBackend.username(self.grant)
+        second = MikroTikNetworkBackend.username(self.second_grant)
+        self.router.sessions[name] = [
+            {'user': name, 'mac-address': 'AA:BB:CC:DD:EE:01', 'uptime': '60s'},
+            {'user': name, 'mac-address': 'aa:bb:cc:dd:ee:01', 'uptime': '62s'},
+        ]
+        self.router.sessions[second] = [
+            {'user': second, 'mac-address': 'AA:BB:CC:DD:EE:01', 'uptime': '20s'},
+        ]
+        observe_staff_internet_connections(client=self.router)
+        first = StaffInternetDeviceEvidence.objects.get(grant=self.grant.internal_staff_grant)
+        other = StaffInternetDeviceEvidence.objects.get(grant=self.second_grant.internal_staff_grant)
+        self.assertEqual(StaffInternetDeviceEvidence.objects.count(), 2)
+        self.assertEqual(first.last_active_uptime_seconds, 62)
+        self.assertNotEqual(first.device_token, other.device_token)
+        self.assertEqual(len(first.device_token), 64)
+        self.assertNotIn('AA:BB:CC:DD:EE:01', str(first.__dict__))
+        self.assertNotIn('*A', str(first.__dict__))
+        self.assertEqual(InternetSession.objects.count(), 0)
+        self.assertEqual((Order.objects.count(), Payment.objects.count(),
+                          InternetRevenueShare.objects.count()), (0, 0, 0))
+
+    def test_subsequent_poll_updates_last_seen_but_does_not_create_new_device(self):
+        name = MikroTikNetworkBackend.username(self.grant)
+        self.router.sessions[name] = [
+            {'user': name, 'mac-address': 'AA:BB:CC:DD:EE:01', 'uptime': '60s'},
+        ]
+        at = timezone.now()
+        observe_staff_internet_connections(client=self.router, at=at)
+        evidence = StaffInternetDeviceEvidence.objects.get(grant=self.grant.internal_staff_grant)
+        seen_first = evidence.first_seen_at
+        self.router.sessions[name][0]['uptime'] = '121s'
+        observe_staff_internet_connections(client=self.router, at=at + timedelta(seconds=61))
+        evidence.refresh_from_db()
+        self.assertEqual(evidence.first_seen_at, seen_first)
+        self.assertEqual(evidence.last_seen_at, at + timedelta(seconds=61))
+        self.assertEqual(evidence.last_active_uptime_seconds, 121)
+        self.assertEqual(StaffInternetDeviceEvidence.objects.filter(grant=self.grant.internal_staff_grant).count(), 1)
+
+    def test_missing_or_malformed_mac_does_not_write_partial_identity_history(self):
+        name = MikroTikNetworkBackend.username(self.grant)
+        self.router.sessions[name] = [
+            {'user': name, 'mac-address': 'AA:BB:CC:DD:EE:01', 'uptime': '1m'},
+            {'user': name, 'mac-address': 'not-a-mac', 'uptime': '1m'},
+        ]
+        observe_staff_internet_connections(client=self.router)
+        snap = StaffInternetConnectionSnapshot.objects.get(grant=self.grant.internal_staff_grant)
+        self.assertEqual(snap.active_login_count, 2)
+        self.assertIsNone(snap.distinct_device_count)
+        self.assertFalse(StaffInternetDeviceEvidence.objects.filter(grant=self.grant.internal_staff_grant).exists())
+        self.assertFalse(StaffInternetDeviceEvidence.objects.exists())
+
+    def test_failed_observation_never_updates_last_seen(self):
+        name = MikroTikNetworkBackend.username(self.grant)
+        self.router.sessions[name] = [
+            {'user': name, 'mac-address': 'AA:BB:CC:DD:EE:01', 'uptime': '1m'},
+        ]
+        first = timezone.now()
+        observe_staff_internet_connections(client=self.router, at=first)
+        observed = StaffInternetDeviceEvidence.objects.get(grant=self.grant.internal_staff_grant)
+        self.router.users[name]['comment'] = 'not-ours'
+        observe_staff_internet_connections(client=self.router, at=first + timedelta(seconds=60))
+        observed.refresh_from_db()
+        self.assertEqual(observed.last_seen_at, first)
+        snap = StaffInternetConnectionSnapshot.objects.get(grant=self.grant.internal_staff_grant)
+        self.assertEqual(snap.state, 'error')
+
+    def test_device_records_expire_after_thirty_days_without_new_login(self):
+        name = MikroTikNetworkBackend.username(self.grant)
+        self.router.sessions[name] = [
+            {'user': name, 'mac-address': 'AA:BB:CC:DD:EE:01', 'uptime': '1m'},
+        ]
+        first = timezone.now()
+        observe_staff_internet_connections(client=self.router, at=first)
+        self.assertEqual(StaffInternetDeviceEvidence.objects.count(), 1)
+        self.router.sessions[name] = []
+        observe_staff_internet_connections(client=self.router, at=first + timedelta(days=29))
+        self.assertEqual(StaffInternetDeviceEvidence.objects.count(), 1)
+        observe_staff_internet_connections(client=self.router, at=first + timedelta(days=31))
+        self.assertEqual(StaffInternetDeviceEvidence.objects.count(), 0)
+
+    @override_settings(MIKROTIK_ENABLED=False)
+    def test_disabled_network_integration_never_records_new_device_evidence(self):
+        name = MikroTikNetworkBackend.username(self.grant)
+        self.router.sessions[name] = [
+            {'user': name, 'mac-address': 'AA:BB:CC:DD:EE:01', 'uptime': '1m'},
+        ]
+        result = observe_staff_internet_connections(client=self.router)
+        self.assertTrue(result['disabled'])
+        self.assertFalse(StaffInternetDeviceEvidence.objects.exists())

@@ -229,6 +229,33 @@ class StaffInternetConnectionSnapshot(models.Model):
         return f'Staff Internet observation for grant {self.grant_id}'
 
 
+class StaffInternetDeviceEvidence(models.Model):
+    """Short-lived pseudonymous device evidence, not verified hardware identity.
+
+    A grant-scoped keyed digest prevents storing the RouterOS MAC address.
+    Reconnects and randomized device addresses may change this identity.
+    """
+    grant = models.ForeignKey(
+        'InternalStaffInternetGrant', on_delete=models.CASCADE,
+        related_name='observed_devices',
+    )
+    device_token = models.CharField(max_length=64)
+    first_seen_at = models.DateTimeField()
+    last_seen_at = models.DateTimeField(db_index=True)
+    last_active_uptime_seconds = models.PositiveIntegerField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=('grant', 'device_token'),
+                name='unique_staff_wifi_device_evidence',
+            ),
+        ]
+
+    def __str__(self):
+        return f'Private device observation for grant {self.grant_id}'
+
+
 class GuestWifiPolicy(models.Model):
     """Compact venue policy for complimentary/basic captive-portal Internet.
 

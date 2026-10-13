@@ -4,18 +4,25 @@ A successful REST response establishes online-login counts at that moment only.
 The snapshot stores no MAC addresses, remote session IDs or credentials.
 """
 from datetime import timedelta
+import hashlib
+import hmac
 import re
 
 from django.conf import settings
+from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 
 from core.models import InternetEntitlement
 from core.services.network_backends import MikroTikNetworkBackend
-from internet.models import InternalStaffInternetGrant, StaffInternetConnectionSnapshot
+from internet.models import (
+    InternalStaffInternetGrant, StaffInternetConnectionSnapshot, StaffInternetDeviceEvidence,
+)
 
 
 STALE_AFTER = timedelta(minutes=3)
+DEVICE_EVIDENCE_RETENTION = timedelta(days=30)
+_MAC_ADDRESS = re.compile(r'[0-9A-F]{2}(?::[0-9A-F]{2}){5}\Z')
 _MAX_SAMPLE_SECONDS = 366 * 24 * 3600
 _ROUTEROS_UNITS = re.compile(
     r'(?:(?P<w>\d+)w)?(?:(?P<d>\d+)d)?(?:(?P<h>\d+)h)?'
@@ -65,6 +72,32 @@ def observed_concurrent_limit_state(entitlement, snapshot, *, at=None):
 
 
 
+def _device_token(grant_id, canonical_mac):
+    """Grant-scoped keyed digest; callers never persist raw hardware addresses."""
+    source = f'hub:staff-wifi-device:v1:{grant_id}:{canonical_mac}'.encode('ascii')
+    return hmac.new(settings.SECRET_KEY.encode('utf-8'), source, hashlib.sha256).hexdigest()
+
+
+def _record_device_evidence(grant, device_uptimes, *, at):
+    """Persist only verified-address observations; serialize per grant."""
+    if not device_uptimes:
+        return
+    InternalStaffInternetGrant.objects.select_for_update().get(pk=grant.pk)
+    for mac, uptime in device_uptimes.items():
+        token = _device_token(grant.pk, mac)
+        record, created = StaffInternetDeviceEvidence.objects.get_or_create(
+            grant=grant, device_token=token,
+            defaults={
+                'first_seen_at': at, 'last_seen_at': at,
+                'last_active_uptime_seconds': uptime,
+            },
+        )
+        if not created and at >= record.last_seen_at:
+            record.last_seen_at = at
+            record.last_active_uptime_seconds = uptime
+            record.save(update_fields=('last_seen_at', 'last_active_uptime_seconds'))
+
+
 def observation_is_fresh(snapshot, *, at=None):
     return bool(snapshot and snapshot.checked_at
                 and snapshot.checked_at >= (at or timezone.now()) - STALE_AFTER
@@ -76,7 +109,7 @@ def _read_owned_sessions(backend, entitlement):
     username = backend.username(entitlement)
     owner = backend._owned_user(entitlement)
     if owner is None or owner.get('disabled') == 'true':
-        return StaffInternetConnectionSnapshot.State.MISSING, None, None, None
+        return StaffInternetConnectionSnapshot.State.MISSING, None, None, None, {}
     rows = backend.client.active_session_details(username)
     if not isinstance(rows, list):
         raise ValueError('invalid RouterOS active session response')
@@ -84,13 +117,27 @@ def _read_owned_sessions(backend, entitlement):
     if len(sessions) != len(rows):
         raise ValueError('RouterOS active session response contained unexpected users')
     macs = [str(row.get('mac-address') or '').strip().upper() for row in sessions]
-    # A session count is trustworthy without MAC; a distinct-device count is not.
-    devices = len(set(macs)) if all(macs) else None
+    # A session count is trustworthy without MAC; only complete *valid* address
+    # evidence may identify distinct network addresses or extend device history.
+    addresses_complete = all(_MAC_ADDRESS.fullmatch(mac) for mac in macs)
+    devices = len(set(macs)) if addresses_complete else None
     # Missing or unparseable uptime means the longest active duration is unknown.
     durations = [parse_routeros_uptime(row.get('uptime')) for row in sessions]
     longest = (max(durations) if durations and all(value is not None for value in durations)
                else (0 if not durations else None))
-    return StaffInternetConnectionSnapshot.State.OBSERVED, len(sessions), devices, longest
+    device_uptimes = {}
+    if addresses_complete:
+        for mac, duration in zip(macs, durations):
+            if mac not in device_uptimes:
+                device_uptimes[mac] = duration
+            elif duration is None or device_uptimes[mac] is None:
+                device_uptimes[mac] = None
+            else:
+                device_uptimes[mac] = max(device_uptimes[mac], duration)
+    return (
+        StaffInternetConnectionSnapshot.State.OBSERVED,
+        len(sessions), devices, longest, device_uptimes,
+    )
 
 
 def observe_staff_internet_connections(*, limit=20, client=None, at=None):
@@ -104,6 +151,10 @@ def observe_staff_internet_connections(*, limit=20, client=None, at=None):
     if not settings.MIKROTIK_ENABLED:
         return {'checked': 0, 'observed': 0, 'failed': 0, 'disabled': True}
     now = at or timezone.now()
+    # A short retention ceiling applies even if all later router observations fail.
+    StaffInternetDeviceEvidence.objects.filter(
+        last_seen_at__lt=now - DEVICE_EVIDENCE_RETENTION,
+    ).delete()
     grants = list(
         InternalStaffInternetGrant.objects.filter(
             user__is_active=True,
@@ -123,12 +174,15 @@ def observe_staff_internet_connections(*, limit=20, client=None, at=None):
     for grant in grants:
         state = StaffInternetConnectionSnapshot.State.ERROR
         count = devices = longest_uptime = None
+        device_uptimes = {}
         code = ''
         if backend is None:
             code = 'backend_unavailable'
         else:
             try:
-                state, count, devices, longest_uptime = _read_owned_sessions(backend, grant.entitlement)
+                state, count, devices, longest_uptime, device_uptimes = _read_owned_sessions(
+                    backend, grant.entitlement,
+                )
                 if state == StaffInternetConnectionSnapshot.State.MISSING:
                     code = 'owned_user_unavailable'
             except Exception:
@@ -139,16 +193,19 @@ def observe_staff_internet_connections(*, limit=20, client=None, at=None):
             observed += 1
         elif state == StaffInternetConnectionSnapshot.State.ERROR:
             failed += 1
-        StaffInternetConnectionSnapshot.objects.update_or_create(
-            grant_id=grant.pk,
-            defaults={
-                'state': state, 'active_login_count': count,
-                'distinct_device_count': devices,
-                'longest_active_uptime_seconds': longest_uptime, 'checked_at': now,
-                'last_success_at': now if state == StaffInternetConnectionSnapshot.State.OBSERVED
-                    else StaffInternetConnectionSnapshot.objects.filter(grant_id=grant.pk)
-                        .values_list('last_success_at', flat=True).first(),
-                'error_code': code,
-            },
-        )
+        with transaction.atomic():
+            StaffInternetConnectionSnapshot.objects.update_or_create(
+                grant_id=grant.pk,
+                defaults={
+                    'state': state, 'active_login_count': count,
+                    'distinct_device_count': devices,
+                    'longest_active_uptime_seconds': longest_uptime, 'checked_at': now,
+                    'last_success_at': now if state == StaffInternetConnectionSnapshot.State.OBSERVED
+                        else StaffInternetConnectionSnapshot.objects.filter(grant_id=grant.pk)
+                            .values_list('last_success_at', flat=True).first(),
+                    'error_code': code,
+                },
+            )
+            if state == StaffInternetConnectionSnapshot.State.OBSERVED:
+                _record_device_evidence(grant, device_uptimes, at=now)
     return {'checked': len(grants), 'observed': observed, 'failed': failed}
