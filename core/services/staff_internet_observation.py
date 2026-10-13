@@ -88,7 +88,8 @@ def _read_owned_sessions(backend, entitlement):
     devices = len(set(macs)) if all(macs) else None
     # Missing or unparseable uptime means the longest active duration is unknown.
     durations = [parse_routeros_uptime(row.get('uptime')) for row in sessions]
-    longest = max(durations) if all(value is not None for value in durations) else None
+    longest = (max(durations) if durations and all(value is not None for value in durations)
+               else (0 if not durations else None))
     return StaffInternetConnectionSnapshot.State.OBSERVED, len(sessions), devices, longest
 
 
