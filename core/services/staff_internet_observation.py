@@ -17,11 +17,14 @@ from core.models import InternetEntitlement
 from core.services.network_backends import MikroTikNetworkBackend
 from internet.models import (
     InternalStaffInternetGrant, StaffInternetConnectionSnapshot, StaffInternetDeviceEvidence,
+    StaffInternetObservedInterval,
 )
 
 
 STALE_AFTER = timedelta(minutes=3)
 DEVICE_EVIDENCE_RETENTION = timedelta(days=30)
+MAX_CONTINUITY_GAP = timedelta(seconds=120)
+MAX_CLOCK_DIFFERENCE_SECONDS = 5
 _MAC_ADDRESS = re.compile(r'[0-9A-F]{2}(?::[0-9A-F]{2}){5}\Z')
 _MAX_SAMPLE_SECONDS = 366 * 24 * 3600
 _ROUTEROS_UNITS = re.compile(
@@ -78,11 +81,40 @@ def _device_token(grant_id, canonical_mac):
     return hmac.new(settings.SECRET_KEY.encode('utf-8'), source, hashlib.sha256).hexdigest()
 
 
-def _record_device_evidence(grant, device_uptimes, *, at):
-    """Persist only verified-address observations; serialize per grant."""
+def sampled_continuity_seconds(previous_at, current_at, previous_uptime, current_uptime):
+    """Return conservative evidence between adjacent samples, or unknown.
+
+    Connection duration must increase approximately with the wall clock. Router
+    reboot, reconnect, dropped polls, missing metadata and duplicate timestamps
+    all yield unknown rather than estimated or billable minutes.
+    """
+    if previous_at is None or not isinstance(previous_uptime, int) or not isinstance(current_uptime, int):
+        return None
+    elapsed = (current_at - previous_at).total_seconds()
+    if not 0 < elapsed <= MAX_CONTINUITY_GAP.total_seconds():
+        return None
+    delta = current_uptime - previous_uptime
+    if delta <= 0 or abs(delta - elapsed) > MAX_CLOCK_DIFFERENCE_SECONDS:
+        return None
+    credited = int(min(delta, elapsed))
+    return credited if credited > 0 else None
+
+
+def _record_device_evidence(grant, device_uptimes, *, at, previous_snapshot):
+    """Update keyed device observations and append only credible short intervals.
+
+    Caller must hold the grant row lock and be inside a transaction. A previous
+    complete RouterOS sample is required to accept any new continuity evidence.
+    """
     if not device_uptimes:
         return
-    InternalStaffInternetGrant.objects.select_for_update().get(pk=grant.pk)
+    preceding_complete = bool(
+        previous_snapshot
+        and previous_snapshot.state == StaffInternetConnectionSnapshot.State.OBSERVED
+        and previous_snapshot.distinct_device_count is not None
+        and previous_snapshot.longest_active_uptime_seconds is not None
+    )
+    current_complete = all(uptime is not None for uptime in device_uptimes.values())
     for mac, uptime in device_uptimes.items():
         token = _device_token(grant.pk, mac)
         record, created = StaffInternetDeviceEvidence.objects.get_or_create(
@@ -92,10 +124,23 @@ def _record_device_evidence(grant, device_uptimes, *, at):
                 'last_active_uptime_seconds': uptime,
             },
         )
-        if not created and at >= record.last_seen_at:
-            record.last_seen_at = at
-            record.last_active_uptime_seconds = uptime
-            record.save(update_fields=('last_seen_at', 'last_active_uptime_seconds'))
+        if created or at <= record.last_seen_at:
+            continue
+        if (
+            preceding_complete and current_complete
+            and record.last_seen_at == previous_snapshot.checked_at
+        ):
+            seconds = sampled_continuity_seconds(
+                record.last_seen_at, at, record.last_active_uptime_seconds, uptime,
+            )
+            if seconds is not None:
+                StaffInternetObservedInterval.objects.create(
+                    device=record, start_at=record.last_seen_at,
+                    end_at=at, observed_seconds=seconds,
+                )
+        record.last_seen_at = at
+        record.last_active_uptime_seconds = uptime
+        record.save(update_fields=('last_seen_at', 'last_active_uptime_seconds'))
 
 
 def observation_is_fresh(snapshot, *, at=None):
@@ -155,6 +200,9 @@ def observe_staff_internet_connections(*, limit=20, client=None, at=None):
     StaffInternetDeviceEvidence.objects.filter(
         last_seen_at__lt=now - DEVICE_EVIDENCE_RETENTION,
     ).delete()
+    StaffInternetObservedInterval.objects.filter(
+        end_at__lt=now - DEVICE_EVIDENCE_RETENTION,
+    ).delete()
     grants = list(
         InternalStaffInternetGrant.objects.filter(
             user__is_active=True,
@@ -194,6 +242,19 @@ def observe_staff_internet_connections(*, limit=20, client=None, at=None):
         elif state == StaffInternetConnectionSnapshot.State.ERROR:
             failed += 1
         with transaction.atomic():
+            # Remote REST reads happened outside the transaction. Serialize
+            # writes by grant to avoid duplicate intervals or stale overwrites
+            # when two worker instances observe in different orders.
+            InternalStaffInternetGrant.objects.select_for_update().get(pk=grant.pk)
+            previous_snapshot = StaffInternetConnectionSnapshot.objects.filter(
+                grant_id=grant.pk,
+            ).first()
+            if previous_snapshot and previous_snapshot.checked_at and now <= previous_snapshot.checked_at:
+                continue
+            if state == StaffInternetConnectionSnapshot.State.OBSERVED:
+                _record_device_evidence(
+                    grant, device_uptimes, at=now, previous_snapshot=previous_snapshot,
+                )
             StaffInternetConnectionSnapshot.objects.update_or_create(
                 grant_id=grant.pk,
                 defaults={
@@ -206,6 +267,4 @@ def observe_staff_internet_connections(*, limit=20, client=None, at=None):
                     'error_code': code,
                 },
             )
-            if state == StaffInternetConnectionSnapshot.State.OBSERVED:
-                _record_device_evidence(grant, device_uptimes, at=now)
     return {'checked': len(grants), 'observed': observed, 'failed': failed}

@@ -14,9 +14,12 @@ from core.services.internet_internal_access import grant_internal_access
 from core.services.network_backends import MikroTikNetworkBackend
 from core.services.staff_internet_observation import (
     observation_is_fresh, observe_staff_internet_connections,
-    observed_concurrent_limit_state, parse_routeros_uptime,
+    observed_concurrent_limit_state, parse_routeros_uptime, sampled_continuity_seconds,
 )
-from internet.models import StaffInternetConnectionSnapshot, StaffInternetDeviceEvidence
+from internet.models import (
+    StaffInternetConnectionSnapshot, StaffInternetDeviceEvidence,
+    StaffInternetObservedInterval,
+)
 
 
 class FakeReadOnlyRouter:
@@ -353,3 +356,130 @@ class StaffInternetObservationTests(TestCase):
         result = observe_staff_internet_connections(client=self.router)
         self.assertTrue(result['disabled'])
         self.assertFalse(StaffInternetDeviceEvidence.objects.exists())
+
+
+    def test_adjacent_observations_append_durable_interval_once(self):
+        name = MikroTikNetworkBackend.username(self.grant)
+        self.router.sessions[name] = [
+            {'user': name, 'mac-address': 'AA:BB:CC:DD:EE:01', 'uptime': '60s'},
+        ]
+        first = timezone.now()
+        observe_staff_internet_connections(client=self.router, at=first)
+        self.assertFalse(StaffInternetObservedInterval.objects.exists())
+        self.router.sessions[name][0]['uptime'] = '121s'
+        observe_staff_internet_connections(client=self.router, at=first + timedelta(seconds=61))
+        interval = StaffInternetObservedInterval.objects.get()
+        self.assertEqual(interval.observed_seconds, 61)
+        self.assertEqual(interval.start_at, first)
+        self.assertEqual(interval.end_at, first + timedelta(seconds=61))
+        self.assertEqual(StaffInternetDeviceEvidence.objects.count(), 1)
+        # Idempotency includes repeat polls and stale out-of-order observations.
+        observe_staff_internet_connections(client=self.router, at=first + timedelta(seconds=61))
+        observe_staff_internet_connections(client=self.router, at=first + timedelta(seconds=20))
+        self.assertEqual(StaffInternetObservedInterval.objects.count(), 1)
+        snap = StaffInternetConnectionSnapshot.objects.get(grant=self.grant.internal_staff_grant)
+        self.assertEqual(snap.checked_at, first + timedelta(seconds=61))
+        self.assertEqual((Order.objects.count(), Payment.objects.count(),
+                          InternetRevenueShare.objects.count()), (0, 0, 0))
+
+    def test_restart_or_reconnect_does_not_backfill_missing_time(self):
+        name = MikroTikNetworkBackend.username(self.grant)
+        self.router.sessions[name] = [
+            {'user': name, 'mac-address': 'AA:BB:CC:DD:EE:01', 'uptime': '300s'},
+        ]
+        first = timezone.now()
+        observe_staff_internet_connections(client=self.router, at=first)
+        # Simulated RouterOS restart or a new login with lower uptime.
+        self.router.sessions[name][0]['uptime'] = '10s'
+        observe_staff_internet_connections(client=self.router, at=first + timedelta(seconds=60))
+        self.assertFalse(StaffInternetObservedInterval.objects.exists())
+        self.router.sessions[name][0]['uptime'] = '70s'
+        observe_staff_internet_connections(client=self.router, at=first + timedelta(seconds=120))
+        intervals = list(StaffInternetObservedInterval.objects.all())
+        self.assertEqual(len(intervals), 1)
+        self.assertEqual(intervals[0].observed_seconds, 60)
+        self.assertEqual(intervals[0].start_at, first + timedelta(seconds=60))
+
+    def test_missing_poll_does_not_credit_long_unobserved_gap(self):
+        name = MikroTikNetworkBackend.username(self.grant)
+        self.router.sessions[name] = [
+            {'user': name, 'mac-address': 'AA:BB:CC:DD:EE:01', 'uptime': '100s'},
+        ]
+        first = timezone.now()
+        observe_staff_internet_connections(client=self.router, at=first)
+        self.router.sessions[name][0]['uptime'] = '400s'
+        observe_staff_internet_connections(client=self.router, at=first + timedelta(minutes=5))
+        self.assertFalse(StaffInternetObservedInterval.objects.exists())
+        self.router.sessions[name][0]['uptime'] = '460s'
+        observe_staff_internet_connections(client=self.router, at=first + timedelta(minutes=6))
+        self.assertEqual(StaffInternetObservedInterval.objects.count(), 1)
+        self.assertEqual(StaffInternetObservedInterval.objects.get().observed_seconds, 60)
+
+    def test_failed_or_incomplete_sample_breaks_continuity(self):
+        name = MikroTikNetworkBackend.username(self.grant)
+        self.router.sessions[name] = [
+            {'user': name, 'mac-address': 'AA:BB:CC:DD:EE:01', 'uptime': '100s'},
+        ]
+        first = timezone.now()
+        observe_staff_internet_connections(client=self.router, at=first)
+        self.router.users[name]['comment'] = 'foreign-ownership'
+        observe_staff_internet_connections(client=self.router, at=first + timedelta(minutes=1))
+        self.router.users[name]['comment'] = MikroTikNetworkBackend.ownership(self.grant)
+        self.router.sessions[name][0]['uptime'] = '220s'
+        observe_staff_internet_connections(client=self.router, at=first + timedelta(minutes=2))
+        self.assertFalse(StaffInternetObservedInterval.objects.exists())
+        self.router.sessions[name][0]['uptime'] = '280s'
+        observe_staff_internet_connections(client=self.router, at=first + timedelta(minutes=3))
+        self.assertEqual(StaffInternetObservedInterval.objects.count(), 1)
+        self.router.sessions[name][0].pop('uptime')
+        observe_staff_internet_connections(client=self.router, at=first + timedelta(minutes=4))
+        self.router.sessions[name][0]['uptime'] = '400s'
+        observe_staff_internet_connections(client=self.router, at=first + timedelta(minutes=5))
+        self.assertEqual(StaffInternetObservedInterval.objects.count(), 1)
+
+    def test_two_devices_have_separate_rows_without_duplicate_login_inflation(self):
+        name = MikroTikNetworkBackend.username(self.grant)
+        self.router.sessions[name] = [
+            {'user': name, 'mac-address': 'AA:BB:CC:DD:EE:01', 'uptime': '100s'},
+            {'user': name, 'mac-address': 'AA:BB:CC:DD:EE:01', 'uptime': '95s'},
+            {'user': name, 'mac-address': 'AA:BB:CC:DD:EE:02', 'uptime': '50s'},
+        ]
+        first = timezone.now()
+        observe_staff_internet_connections(client=self.router, at=first)
+        self.router.sessions[name][0]['uptime'] = '160s'
+        self.router.sessions[name][1]['uptime'] = '155s'
+        self.router.sessions[name][2]['uptime'] = '110s'
+        observe_staff_internet_connections(client=self.router, at=first + timedelta(seconds=60))
+        self.assertEqual(StaffInternetObservedInterval.objects.count(), 2)
+        self.assertEqual(sum(StaffInternetObservedInterval.objects.values_list(
+            'observed_seconds', flat=True)), 120)
+        self.assertEqual(StaffInternetDeviceEvidence.objects.filter(
+            grant=self.grant.internal_staff_grant).count(), 2)
+
+    def test_30_day_prune_removes_device_and_interval_history(self):
+        name = MikroTikNetworkBackend.username(self.grant)
+        self.router.sessions[name] = [
+            {'user': name, 'mac-address': 'AA:BB:CC:DD:EE:01', 'uptime': '10s'},
+        ]
+        first = timezone.now()
+        observe_staff_internet_connections(client=self.router, at=first)
+        self.router.sessions[name][0]['uptime'] = '70s'
+        observe_staff_internet_connections(client=self.router, at=first + timedelta(seconds=60))
+        self.assertEqual(StaffInternetObservedInterval.objects.count(), 1)
+        self.router.sessions[name] = []
+        observe_staff_internet_connections(client=self.router, at=first + timedelta(days=31))
+        self.assertFalse(StaffInternetDeviceEvidence.objects.exists())
+        self.assertFalse(StaffInternetObservedInterval.objects.exists())
+
+    def test_interval_inference_boundaries(self):
+        first = timezone.now()
+        last = first + timedelta(seconds=60)
+        self.assertEqual(sampled_continuity_seconds(first, last, 100, 161), 60)
+        self.assertIsNone(sampled_continuity_seconds(first, first, 100, 101))
+        self.assertIsNone(sampled_continuity_seconds(last, first, 100, 161))
+        self.assertIsNone(sampled_continuity_seconds(first, last, 100, None))
+        self.assertIsNone(sampled_continuity_seconds(first, last, 100, 105))
+        self.assertIsNone(sampled_continuity_seconds(first, last, 100, 95))
+        self.assertIsNone(sampled_continuity_seconds(first, last, 100, 180))
+        self.assertIsNone(sampled_continuity_seconds(
+            first, first + timedelta(seconds=121), 100, 221))

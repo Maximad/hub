@@ -6,13 +6,14 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db.models import Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 
 from accounts.permissions import is_owner_or_admin, user_has_capability
 from core.models import InternetBandwidthProfile, InternetEntitlement, InternetPackage
-from internet.models import StaffInternetDeviceEvidence
+from internet.models import StaffInternetDeviceEvidence, StaffInternetObservedInterval
 from core.services.staff_internet_observation import (
     observation_is_fresh, observed_concurrent_limit_state,
 )
@@ -135,7 +136,9 @@ def _internal_access_page(request, form=None):
             'member', 'internal_staff_grant__user',
         ).order_by('-created_at')[:60]
     )
-    recent_device_cutoff = timezone.now() - timedelta(days=30)
+    now = timezone.now()
+    recent_device_cutoff = now - timedelta(days=30)
+    one_day_ago = now - timedelta(days=1)
     for entitlement in grants:
         entitlement.internal_kind_label = (
             'الإدارة' if entitlement.origin_type == 'internal_owner_grant' else 'الفريق'
@@ -171,6 +174,16 @@ def _internal_access_page(request, form=None):
                 grant=staff_target, last_seen_at__gte=recent_device_cutoff,
             ).count()
             if staff_target and snapshot and snapshot.last_success_at else None
+        )
+        # Sum sampled *device-seconds* only; not total real Internet usage.
+        sampled = (
+            StaffInternetObservedInterval.objects.filter(
+                device__grant=staff_target, end_at__gte=one_day_ago,
+            ).aggregate(seconds=Sum('observed_seconds'))['seconds']
+            if staff_target else None
+        )
+        entitlement.internal_sampled_device_minutes_24h = (
+            sampled // 60 if sampled is not None else None
         )
         entitlement.internal_registered_device_excess_observed = bool(
             entitlement.internal_observed_devices_30d is not None

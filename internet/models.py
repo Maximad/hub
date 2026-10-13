@@ -256,6 +256,34 @@ class StaffInternetDeviceEvidence(models.Model):
         return f'Private device observation for grant {self.grant_id}'
 
 
+class StaffInternetObservedInterval(models.Model):
+    """Append-only sampled continuity evidence, NOT a metered usage ledger.
+
+    Each accepted row compares two complete read-only observations of the same
+    pseudonymous address under one staff grant, close in time. Missing polls,
+    reconnects, user credential sharing, MAC changes and outages are not
+    reconstructed, and the accumulated value must never enforce a quota.
+    """
+    device = models.ForeignKey(
+        'StaffInternetDeviceEvidence', on_delete=models.CASCADE,
+        related_name='sampled_intervals',
+    )
+    start_at = models.DateTimeField()
+    end_at = models.DateTimeField(db_index=True)
+    observed_seconds = models.PositiveSmallIntegerField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=('device', 'end_at'),
+                name='unique_staff_wifi_sampled_interval',
+            ),
+        ]
+
+    def __str__(self):
+        return f'Sampled continuity interval for device evidence {self.device_id}'
+
+
 class GuestWifiPolicy(models.Model):
     """Compact venue policy for complimentary/basic captive-portal Internet.
 
