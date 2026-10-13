@@ -8,6 +8,7 @@ from decimal import Decimal
 
 from django.contrib.contenttypes.models import ContentType
 from django.core.management.base import BaseCommand, CommandError
+from django.db.models import Q
 
 from core.models import (
     CashMovement, HubVisit, InternetSession, Order, Payment,
@@ -59,6 +60,7 @@ class Command(BaseCommand):
             app_label='core', model='payment',
         ).values_list('pk', flat=True).first()
         order_ids = sorted({order.pk for order in orders})
+        target_payment_ids = {payment.pk for payment in latest} if recent is not None else set()
         order_rows = list(
             Order.objects.filter(pk__in=order_ids)
             .select_related('visit')
@@ -66,6 +68,8 @@ class Command(BaseCommand):
             .order_by('pk')
         )
         visit_ids = {row.visit_id for row in order_rows if row.visit_id}
+        if options['visit_code'] is not None:
+            visit_ids.add(visit.pk)
         visits = list(HubVisit.objects.filter(pk__in=visit_ids).order_by('pk'))
         # A visit inspection must include every order, not only those selected
         # through the recent-payment or individual-payment entry points.
@@ -86,7 +90,6 @@ class Command(BaseCommand):
             findings.append({'code': code, 'payment_id': payment_id, 'order_id': order_id})
 
         payment_rows = []
-        selected_order_ids = {row.pk for row in order_rows}
         for order in sorted(all_orders.values(), key=lambda row: row.pk):
             for payment in sorted(order.payments.all(), key=lambda row: row.pk):
                 if payment.pk in seen_payments:
@@ -96,7 +99,7 @@ class Command(BaseCommand):
                 if options['visit_code'] is None:
                     if options['payment_id'] is not None and payment.pk != options['payment_id']:
                         continue
-                    if recent is not None and payment.pk not in {p.pk for p in latest}:
+                    if recent is not None and payment.pk not in target_payment_ids:
                         continue
                 seen_payments.add(payment.pk)
                 collectible = payment.is_active and not payment.is_reversed and payment.method in (
@@ -176,20 +179,27 @@ class Command(BaseCommand):
                     'paid_syp': order.paid_syp,
                     'remaining_syp': order.remaining_syp,
                 })
-        internet = list(InternetSession.objects.filter(
-            linked_order_id__in=all_orders,
-        ).select_related('linked_order').order_by('pk').values(
-            'pk', 'linked_order_id', 'status', 'billing_mode',
-        ))
+        internet = list(
+            InternetSession.objects.filter(
+                Q(visit_id__in=visit_ids) | Q(linked_order_id__in=all_orders)
+            ).distinct().order_by('pk').values(
+                'pk', 'visit_id', 'linked_order_id', 'status',
+                'billing_mode', 'network_status',
+            )
+        )
         internet_rows = []
         for session in internet:
-            linked = all_orders[session['linked_order_id']]
+            linked = all_orders.get(session['linked_order_id'])
             internet_rows.append({
                 'session_id': session['pk'],
-                'order_id': linked.pk,
+                'linked_order_id': session['linked_order_id'],
                 'session_status': session['status'],
                 'billing_mode': session['billing_mode'],
-                'order_payment_status': 'paid' if linked.remaining_syp == 0 else 'unpaid',
+                'network_status': session['network_status'],
+                'order_payment_status': (
+                    'paid' if linked and linked.remaining_syp == 0 else
+                    'unpaid' if linked else 'not_billed'
+                ),
             })
 
         output = {
