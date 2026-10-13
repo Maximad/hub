@@ -55,6 +55,63 @@
     if (!supportsDialog(dialog) || !body) return;
     var requestVersion = 0;
     var drawerChanged = false;
+    var workspaceRefreshVersion = 0;
+
+    // Re-render read-only Operations summaries after a contextual mutation
+    // without closing the drawer. No extra API or payment write is involved.
+    // If the refresh fails, closing the drawer still reloads the full screen.
+    function refreshOperations() {
+      var current = document.querySelector('[data-operations-v2]');
+      if (!current || !dialog.open) return;
+
+      var search = current.querySelector('[data-ops-search]');
+      var activeFilter = current.querySelector('[data-ops-filter].is-active');
+      var activeTab = current.querySelector('[data-ops-tab].is-active');
+      var activeView = current.querySelector('[data-ops-view].is-active');
+      var saved = {
+        search: search ? search.value : '',
+        filter: activeFilter ? activeFilter.getAttribute('data-ops-filter') : 'all',
+        tab: activeTab ? activeTab.getAttribute('data-ops-tab') : 'all',
+        view: activeView ? activeView.getAttribute('data-ops-view') : 'grid'
+      };
+      var version = ++workspaceRefreshVersion;
+      fetch(window.location.pathname + window.location.search, {
+        credentials: 'same-origin',
+        cache: 'no-store',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      })
+        .then(function (response) {
+          if (!response.ok) throw new Error('operations-refresh-' + response.status);
+          return response.text();
+        })
+        .then(function (html) {
+          if (version !== workspaceRefreshVersion || !current.isConnected || !dialog.open) return;
+          var parsed = new DOMParser().parseFromString(html, 'text/html');
+          var next = parsed.querySelector('[data-operations-v2]');
+          if (!next) throw new Error('operations-refresh-missing-root');
+
+          current.replaceWith(next);
+          document.dispatchEvent(new CustomEvent('hub:operations-refreshed', {
+            detail: { root: next }
+          }));
+
+          var nextSearch = next.querySelector('[data-ops-search]');
+          if (nextSearch) {
+            nextSearch.value = saved.search;
+            nextSearch.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+
+          [['filter', 'data-ops-filter'], ['tab', 'data-ops-tab'], ['view', 'data-ops-view']]
+            .forEach(function (entry) {
+              var chosen = next.querySelector('[' + entry[1] + '="' + saved[entry[0]] + '"]');
+              if (chosen) chosen.click();
+            });
+          drawerChanged = false;
+        })
+        .catch(function () {
+          // Keep the canonical full reload as the safe fallback on drawer close.
+        });
+    }
 
     // Keep the current specialist screen visible after each inline mutation.
     // Refresh its counts only when the staff member closes the drawer.
@@ -129,6 +186,7 @@
         if (event.detail && event.detail.requestConfig &&
             String(event.detail.requestConfig.verb).toLowerCase() === 'post') {
           drawerChanged = true;
+          refreshOperations();
         }
       }
     });
