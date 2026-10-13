@@ -220,6 +220,7 @@ class StaffInternetConnectionSnapshot(models.Model):
     state = models.CharField(max_length=16, choices=State.choices, default=State.ERROR)
     active_login_count = models.PositiveSmallIntegerField(null=True, blank=True)
     distinct_device_count = models.PositiveSmallIntegerField(null=True, blank=True)
+    longest_active_uptime_seconds = models.PositiveIntegerField(null=True, blank=True)
     checked_at = models.DateTimeField(null=True, blank=True)
     last_success_at = models.DateTimeField(null=True, blank=True)
     error_code = models.CharField(max_length=40, blank=True)

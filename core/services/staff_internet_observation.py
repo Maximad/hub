@@ -4,6 +4,7 @@ A successful REST response establishes online-login counts at that moment only.
 The snapshot stores no MAC addresses, remote session IDs or credentials.
 """
 from datetime import timedelta
+import re
 
 from django.conf import settings
 from django.db.models import F
@@ -15,6 +16,53 @@ from internet.models import InternalStaffInternetGrant, StaffInternetConnectionS
 
 
 STALE_AFTER = timedelta(minutes=3)
+_MAX_SAMPLE_SECONDS = 366 * 24 * 3600
+_ROUTEROS_UNITS = re.compile(
+    r'(?:(?P<w>\d+)w)?(?:(?P<d>\d+)d)?(?:(?P<h>\d+)h)?'
+    r'(?:(?P<m>\d+)m)?(?:(?P<s>\d+)s)?'
+)
+_ROUTEROS_CLOCK = re.compile(
+    r'(?:(?P<days>\d+)d)?(?P<hours>\d+):(?P<minutes>\d{2}):(?P<seconds>\d{2})'
+)
+
+
+def parse_routeros_uptime(value):
+    """Parse a RouterOS uptime for the current login, not cumulative usage.
+
+    Unknown or malformed durations are not misreported as zero.
+    """
+    if not isinstance(value, str) or not value:
+        return None
+    clock = _ROUTEROS_CLOCK.fullmatch(value)
+    if clock:
+        hours, minutes, seconds = (int(clock.group(n)) for n in ('hours', 'minutes', 'seconds'))
+        if minutes > 59 or seconds > 59 or (clock.group('days') and hours > 23):
+            return None
+        total = (int(clock.group('days') or 0) * 86400
+                 + hours * 3600 + minutes * 60 + seconds)
+    else:
+        parts = _ROUTEROS_UNITS.fullmatch(value)
+        if not parts or not any(parts.group(x) is not None for x in ('w', 'd', 'h', 'm', 's')):
+            return None
+        total = sum(int(parts.group(unit) or 0) * seconds for unit, seconds in (
+            ('w', 604800), ('d', 86400), ('h', 3600), ('m', 60), ('s', 1),
+        ))
+    return total if 0 <= total <= _MAX_SAMPLE_SECONDS else None
+
+
+def observed_concurrent_limit_state(entitlement, snapshot, *, at=None):
+    """Compare fresh distinct-device evidence to configured concurrent limit only.
+
+    Never treat registered-device history or missing MAC metadata as verified.
+    """
+    if not observation_is_fresh(snapshot, at=at):
+        return 'unknown'
+    observed = snapshot.distinct_device_count
+    limit = entitlement.max_concurrent_devices
+    if observed is None or not limit or int(limit) < 1:
+        return 'unknown'
+    return 'exceeded' if observed > limit else 'within_observed_limit'
+
 
 
 def observation_is_fresh(snapshot, *, at=None):
@@ -28,7 +76,7 @@ def _read_owned_sessions(backend, entitlement):
     username = backend.username(entitlement)
     owner = backend._owned_user(entitlement)
     if owner is None or owner.get('disabled') == 'true':
-        return StaffInternetConnectionSnapshot.State.MISSING, None, None
+        return StaffInternetConnectionSnapshot.State.MISSING, None, None, None
     rows = backend.client.active_session_details(username)
     if not isinstance(rows, list):
         raise ValueError('invalid RouterOS active session response')
@@ -38,7 +86,10 @@ def _read_owned_sessions(backend, entitlement):
     macs = [str(row.get('mac-address') or '').strip().upper() for row in sessions]
     # A session count is trustworthy without MAC; a distinct-device count is not.
     devices = len(set(macs)) if all(macs) else None
-    return StaffInternetConnectionSnapshot.State.OBSERVED, len(sessions), devices
+    # Missing or unparseable uptime means the longest active duration is unknown.
+    durations = [parse_routeros_uptime(row.get('uptime')) for row in sessions]
+    longest = max(durations) if all(value is not None for value in durations) else None
+    return StaffInternetConnectionSnapshot.State.OBSERVED, len(sessions), devices, longest
 
 
 def observe_staff_internet_connections(*, limit=20, client=None, at=None):
@@ -70,13 +121,13 @@ def observe_staff_internet_connections(*, limit=20, client=None, at=None):
     observed = failed = 0
     for grant in grants:
         state = StaffInternetConnectionSnapshot.State.ERROR
-        count = devices = None
+        count = devices = longest_uptime = None
         code = ''
         if backend is None:
             code = 'backend_unavailable'
         else:
             try:
-                state, count, devices = _read_owned_sessions(backend, grant.entitlement)
+                state, count, devices, longest_uptime = _read_owned_sessions(backend, grant.entitlement)
                 if state == StaffInternetConnectionSnapshot.State.MISSING:
                     code = 'owned_user_unavailable'
             except Exception:
@@ -91,7 +142,8 @@ def observe_staff_internet_connections(*, limit=20, client=None, at=None):
             grant_id=grant.pk,
             defaults={
                 'state': state, 'active_login_count': count,
-                'distinct_device_count': devices, 'checked_at': now,
+                'distinct_device_count': devices,
+                'longest_active_uptime_seconds': longest_uptime, 'checked_at': now,
                 'last_success_at': now if state == StaffInternetConnectionSnapshot.State.OBSERVED
                     else StaffInternetConnectionSnapshot.objects.filter(grant_id=grant.pk)
                         .values_list('last_success_at', flat=True).first(),
