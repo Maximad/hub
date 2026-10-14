@@ -71,12 +71,12 @@
         {% csrf_token %}
         {% include "components/currency_entry.html" %}
         <p class="hub-help-text">المبلغ الافتراضي هو كامل الرصيد الحالي. إدخال مبلغ أقل يعتبر دفعة جزئية ويحتاج موافقة مدير عندما لا يملك الكاشير الصلاحية.</p>
-        <div class="hub-manager-approval" id="visit-manager-approval" hidden>
+        <div class="hub-manager-approval" id="visit-manager-approval">
           <label>اسم المدير<input class="hub-input" type="text" name="manager_username" autocomplete="username"></label>
           <label>كلمة المرور<input class="hub-input" type="password" name="manager_password" autocomplete="current-password"></label>
         </div>
         <label>طريقة الدفع<select class="hub-input" name="method" required>{% for value,label in methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
-        <label>ملاحظات<textarea class="hub-input" name="notes" rows="2"></textarea></label>
+        <details class="hub-ux5-module__more"><summary>ملاحظات الدفعة (اختياري)</summary><label>ملاحظات<textarea class="hub-input" name="notes" rows="2"></textarea></label></details>
         <button class="hub-button hub-button-primary" type="submit">حفظ الدفعة</button>
       </form>
       <script>(function(){const form=document.getElementById('visit-payment-form');if(!form)return;const amount=form.querySelector('[data-currency-amount]');const currency=form.querySelector('[data-currency-select]');const approval=document.getElementById('visit-manager-approval');const remaining=Number(form.dataset.remaining||'0');if(amount&&!amount.value)amount.value=form.dataset.defaultAmount||'';function toggle(){if(!amount||!approval)return;const entered=Number(amount.value||'0');const isSyp=!currency||currency.value==='SYP_NEW';approval.hidden=isSyp?!(entered>0&&entered<remaining):false;}amount?.addEventListener('input',toggle);currency?.addEventListener('change',toggle);toggle();})();</script>
