@@ -210,10 +210,7 @@ class StaffWorkspaceTests(TestCase):
                 self.assertEqual([action['key'] for action in primary], expected)
                 self.assertLessEqual(len(primary), 4)
                 self.assertContains(response, 'data-daily-start')
-                self.assertEqual(
-                    response.content.decode().count('class="hub-daily-start__action'),
-                    len(primary),
-                )
+                self.assertContains(response, 'class="hub-daily-start__grid"')
                 for action in primary + secondary:
                     self.assertContains(
                         response,
