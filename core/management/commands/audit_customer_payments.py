@@ -23,6 +23,7 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         scope = parser.add_mutually_exclusive_group(required=True)
         scope.add_argument('--payment-id', type=int)
+        scope.add_argument('--order-id', type=int)
         scope.add_argument('--visit-code')
         scope.add_argument('--recent', type=int, metavar='N')
         parser.add_argument('--json', action='store_true', dest='as_json')
@@ -33,6 +34,8 @@ class Command(BaseCommand):
             raise CommandError('--recent must be between 1 and 30.')
         if options['payment_id'] is not None and options['payment_id'] < 1:
             raise CommandError('--payment-id must be positive.')
+        if options['order_id'] is not None and options['order_id'] < 1:
+            raise CommandError('--order-id must be positive.')
 
         if options['payment_id'] is not None:
             payment = Payment.objects.select_related('order', 'order__visit').filter(
@@ -41,6 +44,11 @@ class Command(BaseCommand):
             if payment is None:
                 raise CommandError('Payment not found.')
             orders = [payment.order]
+        elif options['order_id'] is not None:
+            order = Order.objects.select_related('visit').filter(pk=options['order_id']).first()
+            if order is None:
+                raise CommandError('Order not found.')
+            orders = [order]
         elif options['visit_code'] is not None:
             visit = HubVisit.objects.filter(public_code=options['visit_code']).first()
             if visit is None:
@@ -98,6 +106,8 @@ class Command(BaseCommand):
                 # collections; visit totals are still computed from ALL payments.
                 if options['visit_code'] is None:
                     if options['payment_id'] is not None and payment.pk != options['payment_id']:
+                        continue
+                    if options['order_id'] is not None and order.pk != options['order_id']:
                         continue
                     if recent is not None and payment.pk not in target_payment_ids:
                         continue
@@ -169,6 +179,20 @@ class Command(BaseCommand):
                 'remaining_syp': financial['remaining'],
                 'orders': len(children),
             })
+        selected_order = None
+        if options['order_id'] is not None:
+            target = next(row for row in order_rows if row.pk == options['order_id'])
+            selected_order = {
+                'order_id': target.pk,
+                'display_number': target.display_number,
+                'cashier_group': 'visit' if target.visit_id else 'standalone',
+                'visit_code': str(target.visit.public_code) if target.visit_id else None,
+                'table_assigned': bool(target.table_id),
+                'status': target.status,
+                'total_syp': target.total_syp,
+                'paid_syp': target.paid_syp,
+                'remaining_syp': target.remaining_syp,
+            }
         standalone_rows = []
         for order in order_rows:
             if order.visit_id is None:
@@ -205,7 +229,9 @@ class Command(BaseCommand):
         output = {
             'status': 'WARN' if findings else 'PASS',
             'mode': ('payment' if options['payment_id'] is not None else
+                     'order' if options['order_id'] is not None else
                      'visit' if options['visit_code'] is not None else 'recent'),
+            'selected_order': selected_order,
             'accounts': account_rows,
             'standalone_orders': standalone_rows,
             'payments': payment_rows,
@@ -217,6 +243,8 @@ class Command(BaseCommand):
             self.stdout.write(json.dumps(output, ensure_ascii=False, sort_keys=True))
         else:
             self.stdout.write('CUSTOMER PAYMENT AUDIT: ' + output['status'])
+            if selected_order is not None:
+                self.stdout.write('Selected order: ' + str(selected_order))
             self.stdout.write('Accounts: ' + str(account_rows))
             self.stdout.write('Standalone orders: ' + str(standalone_rows))
             self.stdout.write('Payments: ' + str(payment_rows))

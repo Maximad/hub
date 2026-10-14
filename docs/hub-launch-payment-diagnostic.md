@@ -30,6 +30,7 @@ appropriately deployed. For example, from the Hub deployment directory:
 ```bash
 docker compose exec web python manage.py audit_customer_payments --recent 10 --json
 docker compose exec web python manage.py audit_customer_payments --payment-id 123 --json
+docker compose exec web python manage.py audit_customer_payments --order-id 24 --json
 docker compose exec web python manage.py audit_customer_payments --visit-code <visit-public-code> --json
 ```
 
@@ -38,7 +39,14 @@ not bypass the deployment's Internet TLS/CA preflight. A production host can
 have multiple Compose overlays.
 
 Options are mutually exclusive. `--recent` accepts 1–30 collections; start
-with 10 and locate the payment ID or visit code. Do not publish the output
+with 10 and locate the payment ID or visit code. `--order-id` accepts the numeric
+part of the cashier's displayed order number, for example `#00024` becomes `24`.
+It works even for an unpaid order with no Payment records. Its `selected_order`
+section shows `cashier_group` (`visit` or `standalone`) and `table_assigned`.
+A table can be assigned even when no visit account is linked: that is a genuine
+standalone order, not proof of a missing payment. Verify actual visit assignment
+before deciding whether an order requires an authorized correction.
+Do not publish the output
 because it contains operational financial amounts and identifiers, although
 it deliberately omits names, phone numbers, IP addresses, MACs and secrets.
 

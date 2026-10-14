@@ -35,8 +35,8 @@
 
 {% if standalone_rows %}
 <section class="hub-section">
-  <h3>طلبات منفردة خارج الجلسات</h3>
-  <p class="hub-help-text">هذه الطلبات فقط تبقى على مستوى الطلب لأنها غير مرتبطة بجلسة/طاولة.</p>
+  <h3>طلبات دون حساب جلسة</h3>
+  <p class="hub-help-text">هذه الطلبات غير مرتبطة بحساب جلسة، حتى لو كانت لها طاولة أو مساحة محددة. يُقبض كل طلب منها على حدة.</p>
   <div class="hub-grid hub-grid-2">
     {% for row in standalone_rows %}{% with order=row.order %}
       <article class="hub-card">

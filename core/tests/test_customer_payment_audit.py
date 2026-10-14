@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from core.models import (
     CashMovement, Category, FinancialAccount, HubVisit, InternetSession,
-    Order, OrderItem, Payment, PostingBatch, PostingEntry, Product,
+    Order, OrderItem, Payment, PostingBatch, PostingEntry, Product, Room, TableArea,
 )
 from core.services.posting.context import PostingContext
 from core.services.posting.order_payments import collect
@@ -130,6 +130,60 @@ class CustomerPaymentAuditTests(TestCase):
         result = self.audit(payment_id=payment.pk)
         self.assertEqual(result['standalone_orders'][0]['remaining_syp'], 100)
         self.assertFalse(result['payments'][0]['counts_as_paid'])
+
+    def test_order_inspection_recognizes_table_without_visit_as_standalone(self):
+        room = Room.objects.create(name_ar='مشاريب')
+        table = TableArea.objects.create(room=room, name_ar='مكتب 1')
+        order = self.order(200)
+        order.table = table
+        order.save(update_fields=['table'])
+        before = (
+            Payment.objects.count(), CashMovement.objects.count(),
+            PostingBatch.objects.count(), PostingEntry.objects.count(),
+        )
+
+        result = self.audit(order_id=order.pk)
+
+        self.assertEqual(result['status'], 'PASS')
+        self.assertEqual(result['mode'], 'order')
+        self.assertEqual(result['selected_order']['order_id'], order.pk)
+        self.assertEqual(result['selected_order']['display_number'], order.display_number)
+        self.assertEqual(result['selected_order']['cashier_group'], 'standalone')
+        self.assertTrue(result['selected_order']['table_assigned'])
+        self.assertIsNone(result['selected_order']['visit_code'])
+        self.assertEqual(result['selected_order']['remaining_syp'], 200)
+        self.assertEqual(result['standalone_orders'][0]['order_id'], order.pk)
+        self.assertEqual(result['payments'], [])
+        self.assertTrue(result['read_only'])
+        self.assertEqual(before, (
+            Payment.objects.count(), CashMovement.objects.count(),
+            PostingBatch.objects.count(), PostingEntry.objects.count(),
+        ))
+
+    def test_order_inspection_for_visit_order_reports_consolidated_visit(self):
+        visit = HubVisit.objects.create(created_by=self.user)
+        order = self.order(100, visit=visit)
+        other = self.order(200, visit=visit)
+        self.collect_cash(order, 100, key='customer-audit-selected-order')
+        self.collect_cash(other, 50, key='customer-audit-other-order')
+
+        result = self.audit(order_id=order.pk)
+
+        self.assertEqual(result['status'], 'PASS', result['findings'])
+        self.assertEqual(result['selected_order']['cashier_group'], 'visit')
+        self.assertEqual(result['selected_order']['visit_code'], str(visit.public_code))
+        self.assertEqual(result['selected_order']['paid_syp'], 100)
+        self.assertEqual(result['accounts'][0]['total_syp'], 300)
+        self.assertEqual(result['accounts'][0]['paid_syp'], 150)
+        self.assertEqual(result['accounts'][0]['remaining_syp'], 150)
+        self.assertEqual(len(result['payments']), 1)
+        self.assertEqual(result['payments'][0]['order_id'], order.pk)
+
+    def test_order_inspection_rejects_invalid_ids(self):
+        with self.assertRaises(CommandError):
+            self.audit(order_id=0)
+        with self.assertRaises(CommandError):
+            self.audit(order_id=99999999)
 
     def test_recent_is_bounded_and_empty_visit_remains_visible(self):
         self.collect_cash(self.order(100), 100, key='customer-audit-recent-1')

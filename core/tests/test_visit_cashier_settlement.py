@@ -128,6 +128,33 @@ class VisitCashierSettlementTests(TestCase):
         self.assertEqual([row['order'].pk for row in response.context['standalone_rows']], [standalone.pk])
         self.assertContains(response, '<p><strong>2</strong> طلبات مرتبطة بهذه الجلسة</p>', html=True)
 
+    def test_table_assigned_order_without_visit_remains_standalone(self):
+        # A table is a physical location, not proof of a shared visit account.
+        # The cashier must neither hide this order nor silently group its bill.
+        standalone = self.order(200, name='طلب المكتب')
+        standalone.table = self.table
+        standalone.save(update_fields=['table'])
+        visit = self.visit()
+        attached = self.order(100, visit=visit)
+
+        response = self.client.get(reverse('staff_cashier'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [row['order'].pk for row in response.context['standalone_rows']],
+            [standalone.pk],
+        )
+        self.assertEqual(
+            [row['visit'].pk for row in response.context['visit_rows']],
+            [visit.pk],
+        )
+        self.assertContains(response, 'طلبات دون حساب جلسة')
+        self.assertContains(
+            response, 'حتى لو كانت لها طاولة أو مساحة محددة',
+        )
+        self.assertContains(response, standalone.display_number)
+        self.assertContains(response, attached.display_number, count=0)
+
     def test_cashier_hides_legacy_internal_staff_wifi_visits(self):
         customer_visit = self.visit()
         self.order(100, visit=customer_visit)
