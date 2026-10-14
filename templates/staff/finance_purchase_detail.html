@@ -15,13 +15,17 @@
 <form class="hub-form-section" method="post">{% csrf_token %}<fieldset><legend>الكميات الفعلية المستلمة (عدّلها عند الاستلام الجزئي)</legend>{% for i in purchase.items.all %}<label>{{ i.inventory_item }} <input type="number" min="0" step="0.001" name="quantity_{{ i.pk }}" value="{{ i.quantity }}"></label>{% endfor %}</fieldset><button name="action" value="receive" class="hub-btn" type="submit">تأكيد استلام الشراء</button></form>
 
 <h4>دفعة / تسوية مورد</h4>
-<form class="hub-form-section" method="post">{% csrf_token %}
-  <label>المبلغ <input type="number" min="0.01" step="0.01" name="amount_syp" required></label>
+<p class="hub-help-text">أدخل المبلغ الفعلي ثم اختر مصدر السداد. تظهر موافقة المدير عند تجاوز حد الموافقة المقرر، ولا تُحفظ أي دفعة قبل التأكيد.</p>
+<form class="hub-form-section" method="post" data-purchase-payment-form data-approval-threshold="{{ approval_limit }}">{% csrf_token %}
+  <label>المبلغ <input type="number" min="0.01" step="0.01" name="amount_syp" inputmode="decimal" data-purchase-payment-amount required></label>
   <label>العملة <select name="currency_currency">{% for value,label in currency_component.currencies %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
   <label><input type="checkbox" name="currency_acknowledged"> أقر بصحة الرقم الكبير المدخل</label>
   <label>تاريخ التسوية <input type="date" name="business_date" value="{{ business_date|date:'Y-m-d' }}" required></label>
   <label>مصدر التسوية <select name="source_account" required><option value="">—</option>{% for account in settlement_accounts %}<option value="{{ account.pk }}">{% if account.code == 'payable:owner' %}دفعه المالك — مستحق للمالك{% elif account.code == 'equity:owner_contribution' %}دفعه المالك — مساهمة دائمة{% else %}{{ account }}{% endif %}</option>{% endfor %}</select></label>
-  <label>المعتمد (إلزامي عند {{ approval_limit }} فأكثر) <select name="approver"><option value="">اعتماد ذاتي للمبلغ الأدنى</option>{% for user in approvers %}<option value="{{ user.pk }}">{{ user }}</option>{% endfor %}</select></label>
+  <details class="hub-ux5-module__more" data-purchase-approval><summary>اعتماد المدير (مطلوب عند {{ approval_limit }} ل.س أو أكثر)</summary>
+    <p class="hub-help-text" data-purchase-approval-note>إذا تجاوزت الدفعة الحد، اختر مديراً مخولاً مختلفاً عن منفذ الدفع.</p>
+    <label>المعتمد <select name="approver"><option value="">اختر عند الحاجة</option>{% for user in approvers %}<option value="{{ user.pk }}">{{ user }}</option>{% endfor %}</select></label>
+  </details>
   <button name="action" value="pay" class="hub-btn" type="submit">ترحيل دفعة المورد</button>
 </form>
 

@@ -15,7 +15,8 @@
     </a>
   </div>
   <nav class="hub-ux5-actions" aria-label="عمليات المخزون">
-    <a class="hub-button hub-button-primary" href="{% url 'staff_inventory_purchase_new' %}">تسجيل شراء</a>
+    {% if staff_caps.inventory_stock_count %}<a class="hub-button hub-button-primary" href="{% url 'staff_inventory_stock_count' %}">جرد الكميات الموجودة</a>{% endif %}
+    <a class="hub-button" href="{% url 'staff_inventory_purchase_new' %}">تسجيل شراء</a>
     <a class="hub-button" href="{% url 'staff_inventory_item_new' %}">مادة جديدة</a>
     <a class="hub-button" href="{% url 'staff_inventory_movement_new' %}">تسجيل حركة أو هدر</a>
   </nav>
