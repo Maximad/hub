@@ -143,6 +143,8 @@ def staff_expense_new(request):
     errors=[]
     if request.method=='POST':
         requested_status=request.POST.get('status') or Expense.Status.DRAFT
+        if requested_status not in {Expense.Status.DRAFT, Expense.Status.PAID, Expense.Status.APPROVED}:
+            errors.append('اختر حالة مصروف مدعومة. إلغاء المصروف يتطلب مسار الإلغاء المخوّل.')
         business_date=_parse_report_date(request.POST.get('business_date'))
         currency_service=CurrencyEntryFormService(request, operation='expense', business_date=business_date)
         try: currency_entry=currency_service.clean(request.POST.get('amount_syp'))
