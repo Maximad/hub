@@ -1,4 +1,5 @@
-{# Shared between Inventory and Finance. Quantities reflect still receivable units, not the original order. #}
+{% load l10n %}
+{# Shared between Inventory and Finance. Number-input attributes must be unlocalized. #}
 <fieldset>
   <legend>الكميات التي استلمتها الآن (بعد خصم الاستلام السابق)</legend>
   <p class="hub-help-text">الكميات الظاهرة هي المتبقية غير المستلمة. عند الاستلام الجزئي عدّلها إلى الكمية التي وصلت فعلياً، واكتب صفرًا للبنود التي لم تصل.</p>
@@ -6,9 +7,9 @@
   <label>
     <strong>{{ row.item.inventory_item }}</strong>
     <span class="hub-help-text">المطلوب: {{ row.ordered }} {{ row.item.get_unit_display }} · المستلم سابقاً: {{ row.received }} · المتبقي: {{ row.remaining }}</span>
-    <input type="number" min="0" max="{{ row.remaining }}" step="0.001"
+    <input type="number" min="0" max="{{ row.remaining|unlocalize }}" step="0.001"
            inputmode="decimal" name="quantity_{{ row.item.pk }}"
-           value="{{ row.remaining }}" aria-label="الكمية المستلمة الآن: {{ row.item.inventory_item }}">
+           value="{{ row.remaining|unlocalize }}" aria-label="الكمية المستلمة الآن: {{ row.item.inventory_item }}">
   </label>
   {% endfor %}
 </fieldset>
