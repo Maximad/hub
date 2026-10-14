@@ -2,7 +2,7 @@
 <form class="hub-form-section" method="post" action="{% url 'staff_inventory_purchase_receive' purchase.pk %}">
 {% csrf_token %}
 {% include "staff/_purchase_receipt_fields.html" %}
-<button class="hub-button hub-button-primary" type="submit">تأكيد استلام الكميات وتحديث المخزون</button>
+<button class="hub-button hub-button-primary" type="submit">تأكيد الاستلام وتحديث المخزون</button>
 </form>
 {% elif purchase.status == "cancelled" %}
 <p class="hub-help-text">هذا الشراء ملغى ولا يمكن استلامه.</p>
