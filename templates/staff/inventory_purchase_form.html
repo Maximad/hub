@@ -4,6 +4,7 @@
 <section class="hub-card hub-section" dir="rtl" aria-labelledby="purchase-draft-title">
   <h2 id="purchase-draft-title" class="hub-section-title">تسجيل شراء</h2>
   <p class="hub-help-text">اختر المواد والكميات والكلفة ثم احفظ الشراء. الاستلام ودفع المورد خطوتان مستقلتان تظهران بعد الحفظ.</p>
+  <p class="hub-help-text">الحفظ وحده لا يضيف كمية إلى المخزون ولا يسجل دفعاً للمورد.</p>
 </section>
 <form class="hub-form-section" method="post" data-hub-purchase-draft dir="rtl">
   {% for error in errors %}<p class="hub-alert hub-alert--warning" role="alert">{{ error }}</p>{% endfor %}
