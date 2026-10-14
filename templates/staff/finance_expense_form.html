@@ -1,1 +1,109 @@
-{% extends "base.html" %}{% block title %}مصروف جديد{% endblock %}{% block content %}<h2 class="hub-page-header__title">مصروف جديد</h2>{% for e in errors %}<div class="hub-message hub-message-error">{{ e }}</div>{% endfor %}<form method="post" class="hub-form hub-form-section">{% csrf_token %}<label>تاريخ العمل<input class="hub-input" type="date" name="business_date" value="{{ form_values.business_date|default:today|date:'Y-m-d' }}"></label><label>تصنيف المصروف<select data-hub-searchable-select="true" name="category" required>{% for c in categories %}<option value="{{ c.id }}">{{ c }}</option>{% endfor %}</select></label><label>العنوان<input class="hub-input" name="title" required></label>{% include "components/currency_entry.html" %}<label>نوع المستفيد<select name="payee_type">{% for v,l in payee_types %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select></label><label>المورد<select data-hub-searchable-select="true" name="vendor"><option value="">—</option>{% for v in vendors %}<option value="{{ v.id }}">{{ v }}</option>{% endfor %}</select></label><label>اسم مورد بديل<input class="hub-input" name="supplier_name"></label><label>طريقة الدفع<select name="payment_method"><option value="">—</option>{% for v,l in methods %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select></label><label>الحساب المالي<select name="financial_account"><option value="">—</option>{% for account in financial_accounts %}<option value="{{ account.pk }}">{{ account }}</option>{% endfor %}</select></label><label>حساب الالتزام<select name="liability_account"><option value="">—</option>{% for account in liability_accounts %}<option value="{{ account.pk }}">{{ account }}</option>{% endfor %}</select></label><label>الحالة<select name="status">{% for v,l in statuses %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select></label><label>رقم الفاتورة<input class="hub-input" name="receipt_number"></label><label>إيصال<select name="receipt_media"><option value="">—</option>{% for m in media_assets %}<option value="{{ m.id }}">{{ m }}</option>{% endfor %}</select></label><label>ملاحظات<textarea class="hub-input" name="description"></textarea></label><button class="hub-button hub-button-primary">حفظ</button></form>{% endblock %}
+{% extends "base.html" %}
+{% load static %}
+{% block title %}مصروف جديد{% endblock %}
+{% block content %}
+<section class="hub-section" dir="rtl">
+  <header class="hub-page-header">
+    <div>
+      <h2 class="hub-page-header__title">تسجيل مصروف</h2>
+      <p class="hub-page-header__meta">أدخل المصروف أولاً، ثم حدّد إن كان مسودة أو دفعاً فعلياً. الحسابات والموافقات لا تُستنتج تلقائياً.</p>
+    </div>
+    <a class="hub-button" href="{% url 'staff_finance_expenses' %}">سجل المصروفات</a>
+  </header>
+  {% for error in errors %}<div class="hub-message hub-message-error" role="alert">{{ error }}</div>{% endfor %}
+  <form method="post" class="hub-form hub-form-section" data-hub-expense-form>
+    {% csrf_token %}
+    <section class="hub-card hub-section">
+      <h3 class="hub-section-title">المصروف</h3>
+      <label>تاريخ العمل
+        <input class="hub-input" type="date" name="business_date" value="{% if form_values.business_date %}{{ form_values.business_date }}{% else %}{{ today|date:'Y-m-d' }}{% endif %}" required>
+      </label>
+      <label>تصنيف المصروف
+        <select class="hub-input" data-hub-searchable-select="true" name="category" required>
+          <option value="">اختر التصنيف</option>
+          {% for category in categories %}<option value="{{ category.id }}"{% if form_values.category == category.pk|stringformat:"s" %} selected{% endif %}>{{ category }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>ماذا اشترينا أو دفعنا؟
+        <input class="hub-input" name="title" value="{{ form_values.title|default:'' }}" placeholder="مثلاً: مواد تنظيف" required>
+      </label>
+      {% include "components/currency_entry.html" %}
+    </section>
+    <section class="hub-card hub-section">
+      <h3 class="hub-section-title">كيف تريد تسجيله؟</h3>
+      <label>حالة المصروف
+        <select class="hub-input" name="status" data-expense-status required>
+          <option value="draft"{% if not form_values.status or form_values.status == 'draft' %} selected{% endif %}>حفظ كمسودة، دون دفع</option>
+          <option value="paid"{% if form_values.status == 'paid' %} selected{% endif %}>مدفوع الآن، سجّل الدفع</option>
+          <option value="approved"{% if form_values.status == 'approved' %} selected{% endif %}>طلب اعتماد التزام</option>
+        </select>
+      </label>
+      <p class="hub-help-text" data-expense-status-help aria-live="polite">
+        المسودة تحفظ المعلومات فقط، ولا تُسجل حركة نقد أو دفع.
+      </p>
+      <div data-expense-paid>
+        <label>طريقة الدفع
+          <select class="hub-input" name="payment_method" data-expense-payment-method>
+            <option value="">اختر طريقة الدفع</option>
+            {% for value,label in methods %}<option value="{{ value }}"{% if form_values.payment_method == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </label>
+        <label>الحساب الذي خرج منه المبلغ
+          <select class="hub-input" name="financial_account" data-expense-financial-account>
+            <option value="">اختر حساب التسوية الفعلي</option>
+            {% for account in financial_accounts %}<option value="{{ account.pk }}"{% if form_values.financial_account == account.pk|stringformat:"s" %} selected{% endif %}>{{ account }}</option>{% endfor %}
+          </select>
+        </label>
+        <p class="hub-help-text">يجب اختيار الحساب الذي استُخدم فعلياً. الدفع النقدي قد يُنشئ حركة صندوق. لن يحفظ النظام دفعاً دون تحقق الخادم.</p>
+      </div>
+      <div data-expense-approved>
+        <label>حساب التزام المورد
+          <select class="hub-input" name="liability_account" data-expense-liability-account>
+            <option value="">اختر حساب الالتزام</option>
+            {% for account in liability_accounts %}<option value="{{ account.pk }}"{% if form_values.liability_account == account.pk|stringformat:"s" %} selected{% endif %}>{{ account }}</option>{% endfor %}
+          </select>
+        </label>
+        <p class="hub-help-text">اعتماد الالتزامات مرهون بسياسة المالية وصلاحيات المستخدم. لا يعتبر هذا الاختيار دفعاً للمورد.</p>
+      </div>
+      <div data-expense-payee>
+        <label>المستفيد
+          <select class="hub-input" name="payee_type" data-expense-payee-type>
+            {% for value,label in payee_types %}<option value="{{ value }}"{% if form_values.payee_type == value or not form_values.payee_type and value == 'manual' %} selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </label>
+        <div data-expense-vendor>
+          <label>المورد المسجل
+            <select class="hub-input" data-hub-searchable-select="true" name="vendor">
+              <option value="">اختر المورد</option>
+              {% for vendor in vendors %}<option value="{{ vendor.pk }}"{% if form_values.vendor == vendor.pk|stringformat:"s" %} selected{% endif %}>{{ vendor }}</option>{% endfor %}
+            </select>
+          </label>
+        </div>
+        <div data-expense-manual>
+          <label>اسم المستفيد
+            <input class="hub-input" name="supplier_name" value="{{ form_values.supplier_name|default:'' }}" placeholder="اسم الشخص أو المورد">
+          </label>
+        </div>
+      </div>
+    </section>
+    <details class="hub-ux5-module__more" {% if errors or form_values.receipt_number or form_values.receipt_media or form_values.description %}open{% endif %}>
+      <summary>تفاصيل إضافية: فاتورة، إيصال، ملاحظات</summary>
+      <label>رقم الفاتورة
+        <input class="hub-input" name="receipt_number" value="{{ form_values.receipt_number|default:'' }}">
+      </label>
+      <label>إيصال
+        <select class="hub-input" name="receipt_media">
+          <option value="">لا يوجد إيصال</option>
+          {% for media in media_assets %}<option value="{{ media.pk }}"{% if form_values.receipt_media == media.pk|stringformat:"s" %} selected{% endif %}>{{ media }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>ملاحظات
+        <textarea class="hub-input" name="description" rows="2">{{ form_values.description|default:'' }}</textarea>
+      </label>
+    </details>
+    <button class="hub-button hub-button-primary" type="submit" data-expense-submit>حفظ المسودة</button>
+    <p class="hub-help-text">قبل تأكيد أي دفع، راجع المبلغ والعملة والحساب. حالات المصروفات والقيود المالية يتحقق منها الخادم.</p>
+  </form>
+</section>
+<script src="{% static 'js/hub_expense_adaptive.js' %}" defer></script>
+{% endblock %}

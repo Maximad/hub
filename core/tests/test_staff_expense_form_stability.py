@@ -73,6 +73,25 @@ class StaffExpenseFormStabilityTests(TestCase):
                     self.assertContains(response, 'ACTIVE-LEGACY')
                     self.assertNotContains(response, 'INACTIVE')
 
+    def test_expense_form_shows_dependent_actions_and_secondary_details(self):
+        response = self._get_as(self.admin)
+        self.assertEqual(response.status_code, 200)
+        for value in (
+            'data-hub-expense-form',
+            'data-expense-status',
+            'data-expense-paid',
+            'data-expense-approved',
+            'data-expense-payee-type',
+            'data-expense-vendor',
+            'data-expense-manual',
+            'hub_expense_adaptive.js',
+            'تفاصيل إضافية',
+        ):
+            with self.subTest(value=value):
+                self.assertContains(response, value)
+        self.assertContains(response, 'حفظ المسودة')
+        self.assertNotContains(response, 'value="cancelled"')
+
     def test_non_finance_users_redirect_without_server_error(self):
         for user in (self.waiter, self.kitchen):
             with self.subTest(role=user.role):
@@ -142,6 +161,37 @@ class StaffExpensePostTests(TestCase):
         if 'amount_syp' in overrides and 'currency_amount' not in overrides:
             payload['currency_amount'] = overrides['amount_syp']
         return payload
+
+    def test_invalid_expense_preserves_currency_and_payee_inputs(self):
+        response = self.client.post(
+            self.url,
+            self._payload(
+                Expense.Status.PAID, title='فاتورة تشغيل مرفوضة',
+                amount_syp='0', currency_amount='0',
+                payment_method=Expense.PaymentMethod.CASH,
+                supplier_name='مورد بيانات أصلية',
+                currency_acknowledged='on',
+            ),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['errors'])
+        self.assertContains(response, 'value="0"')
+        self.assertContains(response, 'name="currency_currency"')
+        self.assertContains(response, 'name="currency_amount"')
+        self.assertContains(response, 'مورد بيانات أصلية')
+        self.assertContains(response, 'فاتورة تشغيل مرفوضة')
+        self.assertContains(response, 'value="paid" selected')
+        self.assertEqual(Expense.objects.count(), 0)
+
+    def test_unsupported_status_cannot_be_silently_saved_as_draft(self):
+        response = self.client.post(
+            self.url, self._payload(Expense.Status.CANCELLED),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'اختر حالة مصروف مدعومة')
+        self.assertEqual(Expense.objects.count(), 0)
+        self.assertFalse(PostingCommand.objects.exists())
+        self.assertFalse(CashMovement.objects.exists())
 
     def test_draft_post_redirects_and_uses_deterministic_draft_key(self):
         response = self.client.post(
