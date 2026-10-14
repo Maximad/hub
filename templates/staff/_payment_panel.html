@@ -33,7 +33,7 @@
       {% include "components/currency_entry.html" %}
       <p class="hub-help-text">المبلغ يبدأ بالرصيد المتبقي. إذا أدخلت مبلغاً أقل، تطبق قواعد الدفع الجزئي وموافقة المدير الحالية دون تغيير.</p>
 
-      <div class="hub-manager-approval" data-manager-approval hidden>
+      <div class="hub-manager-approval" data-manager-approval>
         <label>اسم المدير<input class="hub-input" type="text" name="manager_username" autocomplete="username"></label>
         <label>كلمة المرور<input class="hub-input" type="password" name="manager_password" autocomplete="current-password"></label>
       </div>
@@ -43,7 +43,7 @@
           {% for value, label in methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
         </select>
       </label>
-      <label>ملاحظات الدفع<textarea class="hub-input" name="notes" rows="2"></textarea></label>
+      <details class="hub-ux5-module__more"><summary>ملاحظات الدفع (اختياري)</summary><label>ملاحظات الدفع<textarea class="hub-input" name="notes" rows="2"></textarea></label></details>
       <button class="hub-button hub-button-primary" type="submit">حفظ الدفعة</button>
     </form>
   {% else %}
