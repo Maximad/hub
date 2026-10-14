@@ -158,6 +158,24 @@ class StaffStockCountTests(TestCase):
         self.assertFalse(StockMovement.objects.exists())
         self.assertFalse(PostingCommand.objects.exists())
 
+    def test_supplier_payment_approval_is_progressively_disclosed(self):
+        from django.utils import timezone
+        from core.models import Purchase
+
+        purchase = Purchase.objects.create(
+            business_date=timezone.localdate(),
+            supplier_name='مورد للاختبار',
+            created_by=self.admin,
+        )
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse('staff_purchase_detail', args=[purchase.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-purchase-payment-form')
+        self.assertContains(response, 'data-purchase-payment-amount')
+        self.assertContains(response, 'data-purchase-approval')
+        self.assertContains(response, 'js/hub_adaptive_forms.js')
+        self.assertContains(response, 'name="approver"')
+
     def test_confirmation_bound_to_actor_and_original_unit(self):
         preview = self.preview()
         token = preview.context['preview']['token']
