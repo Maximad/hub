@@ -347,7 +347,7 @@ def _save_purchase_from_post(request, purchase=None):
 def staff_purchase_new(request):
     errors=[]
     if request.method=='POST':
-        try: p=_save_purchase_from_post(request); messages.success(request,'تم حفظ الشراء.'); return redirect('staff_purchase_detail', purchase_id=p.pk)
+        try: p=_save_purchase_from_post(request); messages.success(request,'حُفظ الشراء. لم يتم استلام المخزون أو تسجيل دفعة للمورد بعد.'); return redirect('staff_purchase_detail', purchase_id=p.pk)
         except Exception as e: errors.extend(_validation_messages(e))
     return render(request,'staff/finance_purchase_form.html',{'purchase':None,'items':InventoryItem.objects.filter(is_active=True),'vendors':Vendor.objects.all(),'statuses':Purchase.Status.choices,'methods':Purchase.PaymentMethod.choices,'paid_froms':Purchase.PaidFrom.choices,'units':InventoryItem.Unit.choices,'today':current_business_date(),'errors':errors,'business_date':current_business_date(),'currency_component':CurrencyEntryFormService(request, operation='purchase').context})
 
