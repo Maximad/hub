@@ -115,7 +115,7 @@ def staff_inventory_purchase_new(request):
                 if item_id and _dec(qty)>0:
                     inv=InventoryItem.objects.get(pk=item_id); PurchaseItem.objects.create(purchase=p,inventory_item=inv,quantity=_dec(qty),unit=inv.unit,unit_cost_syp=_dec(cost))
             p.recalculate_totals(); p.full_clean(); p.save()
-            messages.success(request,'تم حفظ عملية الشراء.'); return redirect('staff_inventory_purchase_detail', purchase_id=p.pk)
+            messages.success(request,'حُفظ الشراء دون استلام أو دفع. أكّد الكميات المستلمة من هذه الصفحة، ثم سجّل أي دفعة للمورد في المالية.'); return redirect('staff_inventory_purchase_detail', purchase_id=p.pk)
     return render(request,'staff/inventory_purchase_form.html',{'vendors':Vendor.objects.all(),'items':InventoryItem.objects.filter(is_active=True),'media_assets':MediaAsset.objects.order_by('-created_at')[:50],'statuses':Purchase.Status.choices,'methods':Purchase.PaymentMethod.choices,'paid_froms':Purchase.PaidFrom.choices,'today':timezone.now().date()})
 
 @inventory_required
