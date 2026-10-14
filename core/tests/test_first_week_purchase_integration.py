@@ -40,9 +40,10 @@ class FirstWeekPurchaseJourneyTests(TestCase):
             ('inventory:purchases', FinancialAccount.AccountType.ASSET),
             ('payable:suppliers', FinancialAccount.AccountType.LIABILITY),
         ):
-            FinancialAccount.objects.create(
-                code=code, name_ar=code, account_type=account_type,
-                is_active=True,
+            FinancialAccount.objects.update_or_create(
+                code=code,
+                defaults={'name_ar': code, 'account_type': account_type,
+                          'is_active': True},
             )
 
     def draft(self):
