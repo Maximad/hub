@@ -16,6 +16,7 @@ from core.finance import sync_cash_expense_movement
 from core.models import CashMovement, Expense, ExpenseCategory, InventoryItem, Purchase, PurchaseItem, StockMovement, Product, ProductRecipeItem
 from core.services.posting.context import PostingContext
 from core.services.posting import purchases as purchase_posting
+from core.services.purchase_receipt_ui import purchase_receipt_ui
 
 
 def _dec(value, default='0'):
@@ -215,7 +216,7 @@ def staff_inventory_purchase_new(request):
 @inventory_required
 def staff_inventory_purchase_detail(request,purchase_id):
     p=get_object_or_404(Purchase.objects.select_related('vendor','related_expense'),pk=purchase_id)
-    return render(request,'staff/inventory_purchase_detail.html',{'purchase':p})
+    return render(request,'staff/inventory_purchase_detail.html',{'purchase':p, **purchase_receipt_ui(p), 'inventory_can_receive': _can_manage(request.user)})
 
 @inventory_required
 def staff_inventory_purchase_receive(request,purchase_id):
