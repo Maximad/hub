@@ -80,6 +80,7 @@ def inventory_required(view):
 def staff_inventory_home(request):
     low_ids=[i.pk for i in InventoryItem.objects.filter(is_active=True, low_stock_threshold__isnull=False) if i.is_low_stock]
     ctx={'active_count':InventoryItem.objects.filter(is_active=True).count(),'low_items':InventoryItem.objects.filter(pk__in=low_ids),'recent_purchases':Purchase.objects.select_related('vendor').order_by('-business_date','-created_at')[:10],'recent_movements':StockMovement.objects.select_related('inventory_item').order_by('-business_date','-created_at')[:10],'unpaid_purchases':[p for p in Purchase.objects.exclude(status=Purchase.Status.CANCELLED) if p.remaining_syp][:10],'waste_value':StockMovement.objects.filter(movement_type=StockMovement.MovementType.WASTE,is_cancelled=False).aggregate(v=Sum('total_value_syp'))['v'] or 0}
+    ctx['inventory_can_manage'] = _can_manage(request.user)
     return render(request,'staff/inventory_home.html',ctx)
 
 
@@ -87,7 +88,7 @@ def staff_inventory_home(request):
 def staff_inventory_items(request):
     qs=InventoryItem.objects.select_related('preferred_vendor').all()
     if request.GET.get('q'): qs=qs.filter(Q(name_ar__icontains=request.GET['q'])|Q(name_en__icontains=request.GET['q'])|Q(code__icontains=request.GET['q']))
-    return render(request,'staff/inventory_items.html',{'items':qs,'types':InventoryItem.ItemType.choices,'units':InventoryItem.Unit.choices,'vendors':Vendor.objects.all()})
+    return render(request,'staff/inventory_items.html',{'items':qs,'types':InventoryItem.ItemType.choices,'units':InventoryItem.Unit.choices,'vendors':Vendor.objects.all(),'inventory_can_manage':_can_manage(request.user)})
 
 @inventory_required
 def staff_inventory_item_new(request):
@@ -104,7 +105,7 @@ def staff_inventory_purchases(request):
     for f in ['status','payment_method','paid_from']:
         if request.GET.get(f): qs=qs.filter(**{f:request.GET[f]})
     total=qs.exclude(status=Purchase.Status.CANCELLED).aggregate(v=Sum('total_syp'))['v'] or 0
-    return render(request,'staff/inventory_purchases.html',{'purchases':qs[:300],'total':total,'statuses':Purchase.Status.choices,'methods':Purchase.PaymentMethod.choices,'paid_froms':Purchase.PaidFrom.choices})
+    return render(request,'staff/inventory_purchases.html',{'purchases':qs[:300],'total':total,'statuses':Purchase.Status.choices,'methods':Purchase.PaymentMethod.choices,'paid_froms':Purchase.PaidFrom.choices,'inventory_can_manage':_can_manage(request.user)})
 
 def _purchase_draft_form_context(request, errors=None):
     values = request.POST if request.method == 'POST' else {}
