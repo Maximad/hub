@@ -6,55 +6,56 @@
   <p class="hub-help-text">اختر المواد والكميات والكلفة ثم احفظ الشراء. الاستلام ودفع المورد خطوتان مستقلتان تظهران بعد الحفظ.</p>
 </section>
 <form class="hub-form-section" method="post" data-hub-purchase-draft dir="rtl">
+  {% for error in errors %}<p class="hub-alert hub-alert--warning" role="alert">{{ error }}</p>{% endfor %}
   {% csrf_token %}
   <div class="hub-card hub-section">
     <label for="purchase-date">التاريخ</label>
-    <input class="hub-input" type="date" id="purchase-date" name="business_date" value="{{ today|date:'Y-m-d' }}" required>
+    <input class="hub-input" type="date" id="purchase-date" name="business_date" value="{% if form_values.business_date %}{{ form_values.business_date }}{% else %}{{ today|date:'Y-m-d' }}{% endif %}" required>
     <label for="purchase-vendor">المورد المسجل (اختياري)</label>
     <select class="hub-input" id="purchase-vendor" name="vendor" data-hub-searchable-select="true" data-purchase-vendor>
       <option value="">مورد آخر أو غير مسجل</option>
-      {% for vendor in vendors %}<option value="{{ vendor.pk }}">{{ vendor }}</option>{% endfor %}
+      {% for vendor in vendors %}<option value="{{ vendor.pk }}"{% if form_values.vendor == vendor.pk|stringformat:"s" %} selected{% endif %}>{{ vendor }}</option>{% endfor %}
     </select>
     <div data-purchase-manual-vendor>
       <label for="purchase-supplier-name">اسم المورد إن لم يكن مسجلاً</label>
-      <input class="hub-input" id="purchase-supplier-name" name="supplier_name" placeholder="اسم المورد" data-purchase-supplier-name>
+      <input class="hub-input" id="purchase-supplier-name" name="supplier_name" value="{{ form_values.supplier_name|default:'' }}" placeholder="اسم المورد" data-purchase-supplier-name>
     </div>
   </div>
   <section class="hub-card hub-section" aria-labelledby="purchase-lines-title">
     <h3 id="purchase-lines-title" class="hub-section-title">المواد المشتراة</h3>
-    {% for number in "12345" %}
-      {% if number == "2" %}<details class="hub-ux5-module__more" data-purchase-extra-lines><summary>إضافة مواد أخرى (حتى خمس مواد)</summary>{% endif %}
+    {% for line in purchase_lines %}
+      {% if forloop.counter == 2 %}<details class="hub-ux5-module__more" data-purchase-extra-lines{% if show_extra_lines %} open{% endif %}><summary>إضافة مواد أخرى (حتى خمس مواد)</summary>{% endif %}
       <div class="hub-card" data-purchase-line>
         <label>المادة
           <select class="hub-input" name="inventory_item" data-hub-searchable-select="true" data-purchase-item>
             <option value="">اختر مادة</option>
-            {% for item in items %}<option value="{{ item.pk }}" data-unit="{{ item.get_unit_display }}" data-estimated-cost="{{ item.estimated_unit_cost_syp|default_if_none:'' }}">{{ item }} · {{ item.get_unit_display }}</option>{% endfor %}
+            {% for item in items %}<option value="{{ item.pk }}" data-unit="{{ item.get_unit_display }}" data-estimated-cost="{{ item.estimated_unit_cost_syp|default_if_none:'' }}"{% if line.item_id == item.pk|stringformat:"s" %} selected{% endif %}>{{ item }} · {{ item.get_unit_display }}</option>{% endfor %}
           </select>
         </label>
         <p class="hub-help-text" data-purchase-unit-hint>تظهر وحدة المادة عند اختيارها.</p>
         <div class="hub-grid hub-grid-2">
           <label>الكمية
-            <input class="hub-input" type="number" name="quantity" min="0.001" step="0.001" inputmode="decimal" placeholder="الكمية" data-purchase-quantity>
+            <input class="hub-input" type="number" name="quantity" min="0.001" step="0.001" inputmode="decimal" placeholder="الكمية" value="{{ line.quantity }}" data-purchase-quantity>
           </label>
           <label>كلفة الوحدة
-            <input class="hub-input" type="number" name="unit_cost_syp" min="0" step="0.01" inputmode="decimal" placeholder="الكلفة الفعلية" data-purchase-cost>
+            <input class="hub-input" type="number" name="unit_cost_syp" min="0" step="0.01" inputmode="decimal" placeholder="الكلفة الفعلية" value="{{ line.unit_cost_syp }}" data-purchase-cost>
           </label>
         </div>
         <p class="hub-help-text">إجمالي المادة: <output data-purchase-line-total>—</output></p>
       </div>
-      {% if number == "5" %}</details>{% endif %}
+      {% if forloop.counter == 5 %}</details>{% endif %}
     {% endfor %}
     <p><strong>الإجمالي التقريبي للبنود: <output data-purchase-total aria-live="polite">يُحسب عند الحفظ</output></strong></p>
     <p class="hub-help-text">معاينة إجمالية بعملة الإدخال. تحويل العملات وإجمالي السجل النهائي يُحسبان في الخادم.</p>
   </section>
-  <details class="hub-ux5-module__more" data-purchase-optional>
+  <details class="hub-ux5-module__more" data-purchase-optional{% if form_values.invoice_number or form_values.notes %} open{% endif %}>
     <summary>تفاصيل إضافية: الفاتورة والخصم والملاحظات</summary>
     <label for="purchase-invoice">رقم الفاتورة (اختياري)</label>
-    <input class="hub-input" name="invoice_number" id="purchase-invoice">
+    <input class="hub-input" name="invoice_number" id="purchase-invoice" value="{{ form_values.invoice_number|default:'' }}">
     <label for="purchase-discount">الخصم</label>
-    <input class="hub-input" type="number" min="0" step="0.01" inputmode="decimal" name="discount_syp" id="purchase-discount" value="0">
+    <input class="hub-input" type="number" min="0" step="0.01" inputmode="decimal" name="discount_syp" id="purchase-discount" value="{{ form_values.discount_syp|default:'0' }}">
     <label for="purchase-notes">ملاحظات</label>
-    <textarea class="hub-input" name="notes" id="purchase-notes" rows="2"></textarea>
+    <textarea class="hub-input" name="notes" id="purchase-notes" rows="2">{{ form_values.notes|default:'' }}</textarea>
   </details>
   <button class="hub-button hub-button-primary" type="submit">حفظ الشراء كمسودة</button>
   <p class="hub-help-text">بعد الحفظ: أكّد الكميات المستلمة لتحديث المخزون، وسجّل أي دفعة مورد من المالية بشكل منفصل.</p>
