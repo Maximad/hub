@@ -32,7 +32,7 @@ Unchanged quantities create no adjustment.
 
 **This changes operational physical quantities only.** It does not create a
 purchase, supplier payment, cash movement, opening stock valuation journal
-or automatic owner contribution. Estimated movement cost is informational;
+or automatic owner contribution. Stock-count correction movements have no financial unit cost or total value;
 the opening-balance accounting/valuation policy still needs separate owner
 approval before any journal/backfill implementation.
 
