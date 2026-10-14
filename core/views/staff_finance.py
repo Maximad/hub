@@ -324,6 +324,7 @@ def staff_purchases(request):
     return render(request,'staff/finance_purchases.html',{'purchases':qs[:300],'business_date':current_business_date()})
 
 def _save_purchase_from_post(request, purchase=None):
+    creating = purchase is None
     purchase = purchase or Purchase(created_by=request.user)
     purchase.business_date=_parse_report_date(request.POST.get('business_date')); purchase.invoice_date=_parse_report_date(request.POST.get('invoice_date')) if request.POST.get('invoice_date') else None
     purchase.vendor_id=request.POST.get('vendor') or None; purchase.supplier_name=request.POST.get('supplier_name','').strip(); purchase.invoice_number=request.POST.get('invoice_number','').strip(); purchase.status=request.POST.get('status') or Purchase.Status.DRAFT; purchase.payment_method=request.POST.get('payment_method') or Purchase.PaymentMethod.CREDIT; purchase.paid_from=request.POST.get('paid_from') or Purchase.PaidFrom.UNPAID; purchase.discount_syp=_dec(request.POST.get('discount_syp')); purchase.notes=request.POST.get('notes','')
