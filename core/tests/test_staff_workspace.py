@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from accounts.models import UserCapabilityOverride
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -190,6 +191,100 @@ class StaffWorkspaceTests(TestCase):
         self.assertContains(response, 'data-context-title="الدفع وإغلاق الحساب"')
         self.assertContains(response, 'data-context-title="إنترنت الحساب"')
         self.assertNotContains(response, 'وصول سريع إلى مساحات التشغيل اليومية حسب صلاحياتك.')
+
+    def test_quick_start_is_role_aware_and_bounded(self):
+        expectations = {
+            'admin': ['order', 'cashier', 'count', 'purchase'],
+            'cashier': ['cashier', 'order', 'count', 'purchase'],
+            'waiter': ['order', 'tasks', 'visits', 'reservations'],
+            'kitchen': ['prep', 'tasks', 'inventory'],
+            'bartender': ['prep', 'tasks', 'inventory'],
+        }
+        for role, expected in expectations.items():
+            with self.subTest(role=role):
+                self.client.force_login(getattr(self, role))
+                response = self.client.get(reverse('staff_home'))
+                self.assertEqual(response.status_code, 200)
+                primary = response.context['workspace_primary_actions']
+                secondary = response.context['workspace_more_actions']
+                self.assertEqual([action['key'] for action in primary], expected)
+                self.assertLessEqual(len(primary), 4)
+                self.assertContains(response, 'data-daily-start')
+                self.assertEqual(
+                    response.content.decode().count('class="hub-daily-start__action'),
+                    len(primary),
+                )
+                for action in primary + secondary:
+                    self.assertContains(
+                        response,
+                        'href="{}" data-daily-action="{}"'.format(
+                            action['url'], action['key'],
+                        ),
+                    )
+
+    def test_cashier_can_reach_purchase_stock_and_expense_without_admin_settings(self):
+        self.client.force_login(self.cashier)
+        response = self.client.get(reverse('staff_home'))
+        self.assertEqual(response.status_code, 200)
+        keys = [action['key'] for action in response.context['workspace_primary_actions']]
+        other = [action['key'] for action in response.context['workspace_more_actions']]
+        self.assertIn('count', keys)
+        self.assertIn('purchase', keys)
+        self.assertIn('expense', other)
+        self.assertNotIn('settings', keys + other)
+        self.assertContains(response, 'مهام أخرى حسب صلاحياتك')
+
+    def test_kitchen_gets_preparation_without_cashier_or_purchase_shortcuts(self):
+        self.client.force_login(self.kitchen)
+        response = self.client.get(reverse('staff_home'))
+        keys = [a['key'] for a in (
+            response.context['workspace_primary_actions'] +
+            response.context['workspace_more_actions']
+        )]
+        self.assertEqual(keys[0], 'prep')
+        self.assertNotIn('cashier', keys)
+        self.assertNotIn('purchase', keys)
+        self.assertNotIn('count', keys)
+        self.assertNotIn('expense', keys)
+
+    def test_stock_count_shortcut_uses_explicit_capability_and_respects_deny(self):
+        UserCapabilityOverride.objects.create(
+            user=self.kitchen, capability='inventory_stock_count', allowed=True,
+        )
+        self.client.force_login(self.kitchen)
+        allowed = self.client.get(reverse('staff_home'))
+        all_keys = [a['key'] for a in (
+            allowed.context['workspace_primary_actions'] +
+            allowed.context['workspace_more_actions']
+        )]
+        self.assertIn('count', all_keys)
+        self.assertNotIn('purchase', all_keys)
+
+        UserCapabilityOverride.objects.create(
+            user=self.cashier, capability='inventory_stock_count', allowed=False,
+        )
+        self.client.force_login(self.cashier)
+        denied = self.client.get(reverse('staff_home'))
+        keys = [a['key'] for a in (
+            denied.context['workspace_primary_actions'] +
+            denied.context['workspace_more_actions']
+        )]
+        self.assertNotIn('count', keys)
+        self.assertIn('purchase', keys)
+
+    def test_open_account_button_requires_visit_permission_as_well_as_orders(self):
+        UserCapabilityOverride.objects.create(
+            user=self.waiter, capability='visit_manage', allowed=False,
+        )
+        self.client.force_login(self.waiter)
+        response = self.client.get(reverse('staff_home'))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'data-dialog-open="new-account-dialog"')
+        self.assertNotContains(response, '<dialog id="new-account-dialog"')
+        self.assertNotIn(
+            'visits',
+            [a['key'] for a in response.context['workspace_primary_actions']],
+        )
 
     def test_visit_card_progressively_opens_unified_account_drawer(self):
         self.client.force_login(self.admin)
