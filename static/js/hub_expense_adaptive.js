@@ -23,20 +23,22 @@
 
       // Hide irrelevant field groups without clearing selections or disabling
       // supplementary values that the server may need for validation feedback.
-      const show = (group, active, controls) => {
+      const show = (group, active, controls, requiredWhenActive = false) => {
         if (!group) return;
         group.hidden = !active;
         (controls || []).forEach(control => {
-          if (control) control.disabled = !active;
+          if (!control) return;
+          control.disabled = !active;
+          control.required = active && requiredWhenActive;
         });
       };
       const update = () => {
         const choice = status?.value || 'draft';
-        show(paid, choice === 'paid', [paymentMethod, financialAccount]);
-        show(approved, choice === 'approved', [liabilityAccount]);
+        show(paid, choice === 'paid', [paymentMethod, financialAccount], true);
+        show(approved, choice === 'approved', [liabilityAccount], true);
         const registered = (payee?.value || 'manual') === 'vendor';
-        show(vendor, registered, [vendor?.querySelector('select')]);
-        show(manual, !registered, [manual?.querySelector('input')]);
+        show(vendor, registered, [vendor?.querySelector('select')], true);
+        show(manual, !registered, [manual?.querySelector('input')], true);
         if (help) {
           help.textContent = choice === 'paid' ?
             'سيُسجّل دفع حقيقي عند الحفظ فقط بعد تحقق المبلغ والحساب والصلاحيات.' :
