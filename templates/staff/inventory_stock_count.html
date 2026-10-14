@@ -1,0 +1,80 @@
+{% extends "staff/inventory_base.html" %}
+{% load hub_numbers %}
+{% block inventory_content %}
+<section class="hub-card hub-section" dir="rtl" data-hub-adaptive-form>
+  <header class="hub-page-header">
+    <div>
+      <h2 class="hub-section-title">جرد المخزون</h2>
+      <p class="hub-help-text">ابحث عن مادة، أدخل الكمية الموجودة فعلياً، راجع الفرق ثم أكّد. الصفر يعني أن المادة نفدت، والخانة الفارغة لا تعني صفراً.</p>
+    </div>
+  </header>
+  {% if error %}<div class="hub-alert hub-alert--warning" role="alert">{{ error }}</div>{% endif %}
+
+  <form method="get" class="hub-form-section">
+    <label for="stock-count-search">ابحث عن مادة</label>
+    <div class="hub-toolbar">
+      <input class="hub-input" id="stock-count-search" type="search" name="q" value="{{ q }}" placeholder="اسم المادة أو الرمز" autocomplete="off">
+      <button class="hub-button" type="submit">بحث</button>
+    </div>
+  </form>
+
+  {% if items %}
+  <nav aria-label="اختيار مادة للجرد" class="hub-ux5-module__nav" style="max-height:220px;overflow-y:auto">
+    {% for inventory_item in items %}
+      <a href="{% url 'staff_inventory_stock_count' %}?item={{ inventory_item.pk }}{% if q %}&amp;q={{ q|urlencode }}{% endif %}"{% if item.pk == inventory_item.pk %} aria-current="page"{% endif %}>
+        {{ inventory_item.name_ar }} · {{ inventory_item.current_quantity }} {{ inventory_item.get_unit_display }}
+      </a>
+    {% endfor %}
+  </nav>
+  {% else %}<p class="hub-help-text">لا توجد مواد مطابقة. يمكنك البحث باسم آخر أو مراجعة قائمة المواد.</p>{% endif %}
+</section>
+
+{% if item %}
+<section class="hub-card hub-section" dir="rtl">
+  <h3 class="hub-section-title">{{ item.name_ar }}</h3>
+  <p>المسجّل في النظام: <strong>{{ item.current_quantity }} {{ item.get_unit_display }}</strong></p>
+
+  {% if preview %}
+  <div class="hub-card" aria-label="مراجعة فرق الجرد">
+    <h4>راجع قبل التأكيد</h4>
+    <p>الكمية السابقة: <strong>{{ preview.before }} {{ preview.unit }}</strong></p>
+    <p>الكمية التي وجدتها: <strong>{{ preview.after }} {{ preview.unit }}</strong></p>
+    <p>الفرق: <strong>{{ preview.difference }} {{ preview.unit }}</strong></p>
+    {% if preview.difference %}
+      <p>سبب التصحيح: {{ preview.reason }}</p>
+      <p class="hub-help-text">سيُسجل الفرق كحركة تصحيح مخزون باسمك. هذا لا ينشئ فاتورة شراء، ولا دفعة مورد، ولا قيد تقييم افتتاحي مالي.</p>
+    {% else %}
+      <p class="hub-help-text">الكمية مطابقة، لذلك لن تُنشأ حركة مخزون إضافية.</p>
+    {% endif %}
+    <form method="post" class="hub-form-section">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="confirm">
+      <input type="hidden" name="confirmation_token" value="{{ preview.token }}">
+      <button class="hub-button hub-button-primary" type="submit">تأكيد الجرد</button>
+      <a class="hub-button" href="{% url 'staff_inventory_stock_count' %}?item={{ item.pk }}">تعديل الكمية</a>
+    </form>
+  </div>
+  {% else %}
+  <form method="post" class="hub-form-section" data-stock-count-form>
+    {% csrf_token %}
+    <input type="hidden" name="action" value="preview">
+    <input type="hidden" name="item" value="{{ item.pk }}">
+    <input type="hidden" name="q" value="{{ q }}">
+    <label for="stock-count-quantity">الكمية الموجودة فعلياً ({{ item.get_unit_display }})</label>
+    <input class="hub-input" id="stock-count-quantity" type="number" name="count"
+           min="0" step="0.001" inputmode="decimal" placeholder="مثال: 2.500"
+           value="{{ values.count|default_if_none:'' }}" required
+           data-count-value data-recorded="{{ item.current_quantity }}">
+    <p class="hub-help-text" data-count-preview aria-live="polite">أدخل الكمية لرؤية الفرق قبل المراجعة.</p>
+    <details class="hub-ux5-module__more" data-count-reason-section{% if error and values.count %} open{% endif %}>
+      <summary>سبب الاختلاف وملاحظات الجرد</summary>
+      <label for="stock-count-reason">سبب الاختلاف (مطلوب عند تغير الكمية)</label>
+      <textarea class="hub-input" id="stock-count-reason" name="reason" rows="2"
+                placeholder="مثلاً: جرد افتتاحي تشغيلي، تلف، أو فرق جرد">{{ values.reason|default:'' }}</textarea>
+    </details>
+    <button class="hub-button hub-button-primary" type="submit">مراجعة الفروقات</button>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}
