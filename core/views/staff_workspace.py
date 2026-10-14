@@ -10,9 +10,10 @@ from datetime import datetime, time
 from django.conf import settings
 from django.db.models import Prefetch, Q
 from django.shortcuts import render
+from django.urls import reverse
 from django.utils import timezone
 
-from accounts.permissions import require_staff_capability, user_has_capability
+from accounts.permissions import get_staff_capabilities, is_cashier, is_owner_or_admin, require_staff_capability
 from core.models import HubVisit, InternetSession, Member, Order, Payment, TableArea
 from operations.services import current_business_date
 from core.services.visits import customer_visit_queryset
@@ -24,6 +25,48 @@ ACTIVE_ORDER_STATUSES = (
     Order.Status.PREPARING,
     Order.Status.READY,
 )
+
+
+# Navigation only: use existing routes and effective capabilities. Each route also
+# enforces its own authorization, which remains the security boundary.
+DAILY_ACTIONS = {
+    "order": ("+ طلب جديد", "تسجيل طلب للزبون", "staff_pos", "pos"),
+    "cashier": ("قبض ودفع", "تحصيل المدفوعات ومراجعة المتبقي", "staff_cashier", "cashier"),
+    "prep": ("فتح لوحة التحضير", "طلبات المطبخ والبار", "staff_kitchen", "kitchen_board"),
+    "count": ("جرد المخزون", "أدخل الكمية الموجودة فعلياً", "staff_inventory_stock_count", "inventory_stock_count"),
+    "purchase": ("تسجيل شراء", "مواد مشتراة ثم استلامها", "staff_inventory_purchase_new", "inventory"),
+    "expense": ("تسجيل مصروف", "مسودة أو دفع فعلي", "staff_finance_expense_new", "finance"),
+    "tasks": ("مهام الفريق", "ما يحتاج متابعة اليوم", "staff_operational_tasks", "staff_home"),
+    "inventory": ("المواد والنواقص", "عرض المخزون المسجل", "staff_inventory_home", "inventory"),
+    "internet": ("الإنترنت", "الباقات والجلسات", "staff_internet", "internet_billing"),
+    "visits": ("الجلسات", "عرض الحسابات المفتوحة", "staff_visits", "visit_manage"),
+    "reservations": ("الحجوزات", "تنسيق وصول الزبائن", "staff_reservations", "reservations"),
+}
+
+
+def _daily_workspace_actions(user, capabilities):
+    """At most four top tasks; remaining permitted links stay discoverable.
+
+    This is a presentation-only shortlist. Do not equate generic 'inventory'
+    read access with permission to create purchases or approve stock counts.
+    """
+    if capabilities.get("kitchen_board") and not capabilities.get("pos"):
+        order = ("prep", "tasks", "inventory", "count", "cashier", "internet")
+    elif is_cashier(user):
+        order = ("cashier", "order", "count", "purchase", "expense", "prep", "tasks", "internet", "visits")
+    else:
+        order = ("order", "cashier", "count", "purchase", "prep", "tasks",
+                 "expense", "inventory", "internet", "visits", "reservations")
+
+    actions = []
+    for key in order:
+        title, hint, url_name, capability = DAILY_ACTIONS[key]
+        if not capabilities.get(capability):
+            continue
+        if key == "purchase" and not (is_owner_or_admin(user) or is_cashier(user)):
+            continue
+        actions.append({"key": key, "title": title, "hint": hint, "url": reverse(url_name)})
+    return actions[:4], actions[4:]
 
 
 def _payment_prefetch():
@@ -120,19 +163,8 @@ def staff_home(request):
     unpaid_standalone_accounts = sum(order.remaining_syp > 0 for order in standalone_orders)
     unpaid_count = unpaid_visit_accounts + unpaid_standalone_accounts
 
-    capabilities = {
-        name: user_has_capability(request.user, name)
-        for name in (
-            "pos",
-            "orders",
-            "cashier",
-            "internet_billing",
-            "inventory",
-            "finance",
-            "reports",
-            "settings",
-        )
-    }
+    capabilities = get_staff_capabilities(request.user)
+    primary_actions, more_actions = _daily_workspace_actions(request.user, capabilities)
 
     return render(
         request,
@@ -149,6 +181,8 @@ def staff_home(request):
                 "unpaid_orders": unpaid_count,
             },
             "workspace_caps": capabilities,
+            "workspace_primary_actions": primary_actions,
+            "workspace_more_actions": more_actions,
             "workspace_business_day_start": day_start,
             # Used by the inline new-account form. Routine staff should not have
             # to leave Operations simply to create a customer account.
