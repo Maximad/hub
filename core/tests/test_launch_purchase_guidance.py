@@ -77,6 +77,20 @@ class LaunchPurchaseGuidanceTests(TestCase):
                 self.assertEqual(Purchase.objects.count(), 0)
                 self.assertEqual(StockMovement.objects.count(), 0)
 
+    def test_finance_edit_does_not_expose_fake_received_or_paid_controls(self):
+        from django.utils import timezone
+
+        draft = Purchase.objects.create(
+            business_date=timezone.localdate(), supplier_name='مورد',
+            created_by=self.user,
+        )
+        response = self.client.get(reverse('staff_purchase_edit', args=[draft.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'الحالة الحالية')
+        self.assertNotContains(response, 'name="status"')
+        self.assertNotContains(response, 'name="paid_from"')
+        self.assertNotContains(response, 'name="payment_method"')
+
     def test_inventory_purchase_save_does_not_receive_stock_or_post_payment(self):
         response = self.client.post(
             reverse('staff_inventory_purchase_new'),
