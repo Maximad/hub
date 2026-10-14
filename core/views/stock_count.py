@@ -154,11 +154,10 @@ def staff_inventory_stock_count(request):
                 direction=StockMovement.Direction.IN if difference > 0 else StockMovement.Direction.OUT,
                 quantity=abs(difference),
                 unit=item.unit,
-                unit_cost_syp=item.estimated_unit_cost_syp,
-                total_value_syp=(
-                    (abs(difference) * item.estimated_unit_cost_syp).quantize(Decimal('0.01'))
-                    if item.estimated_unit_cost_syp is not None else None
-                ),
+                # Physical count records quantity only. No approved opening
+                # valuation/financial recognition is implied by the correction.
+                unit_cost_syp=None,
+                total_value_syp=None,
                 reason=reason,
                 created_by=request.user,
                 approved_by=request.user,
