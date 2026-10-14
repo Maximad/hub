@@ -161,12 +161,34 @@ class StaffStockCountTests(TestCase):
 
     def test_supplier_payment_approval_is_progressively_disclosed(self):
         from django.utils import timezone
-        from core.models import Purchase
+        from core.models import FinancialAccount, Purchase, PurchaseItem
+        from core.services.posting import purchases as purchase_posting
+        from core.services.posting.context import PostingContext
 
         purchase = Purchase.objects.create(
             business_date=timezone.localdate(),
             supplier_name='مورد للاختبار',
             created_by=self.admin,
+        )
+        PurchaseItem.objects.create(
+            purchase=purchase, inventory_item=self.item,
+            quantity=Decimal('1.000'), unit=self.item.unit,
+            unit_cost_syp=Decimal('100.00'),
+        )
+        for code, account_type in (
+            ('inventory:purchases', FinancialAccount.AccountType.ASSET),
+            ('payable:suppliers', FinancialAccount.AccountType.LIABILITY),
+        ):
+            FinancialAccount.objects.create(
+                code=code, name_ar=code,
+                account_type=account_type, is_active=True,
+            )
+        purchase_posting.receive(
+            purchase,
+            PostingContext(
+                actor=self.admin, business_date=timezone.localdate(),
+                idempotency_key='stock-count-approval-ui-test',
+            ),
         )
         self.client.force_login(self.admin)
         response = self.client.get(reverse('staff_purchase_detail', args=[purchase.pk]))
@@ -176,6 +198,7 @@ class StaffStockCountTests(TestCase):
         self.assertContains(response, 'data-purchase-approval')
         self.assertContains(response, 'js/hub_adaptive_forms.js')
         self.assertContains(response, 'name="approver"')
+
 
     def test_confirmation_bound_to_actor_and_original_unit(self):
         preview = self.preview()
