@@ -1,1 +1,28 @@
-{% extends "staff/inventory_base.html" %}{% block inventory_content %}<form class="hub-form-section" method="post">{% csrf_token %}<p><label>التاريخ <input type="date" name="business_date" value="{{ today|date:'Y-m-d' }}"></label> <label>المادة <select data-hub-searchable-select="true" name="inventory_item">{% for i in items %}<option value="{{ i.pk }}">{{ i }}</option>{% endfor %}</select></label></p><p><label>نوع الحركة <select name="movement_type">{% for v,l in types %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select></label> <label>الاتجاه <select name="direction">{% for v,l in directions %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select></label> <label>الكمية <input type="number" step="0.001" name="quantity" required></label></p><p><textarea name="reason" placeholder="سبب الحركة"></textarea></p><button class="hub-button">حفظ</button></form>{% endblock %}
+{% extends "staff/inventory_base.html" %}
+{% block inventory_content %}
+<section class="hub-card hub-section" dir="rtl" aria-labelledby="manual-movement-status">
+  <h2 id="manual-movement-status" class="hub-section-title">حركات المخزون والهدر</h2>
+  <p class="hub-help-text">
+    لا تتوفر حالياً إضافة حركة يدوية أو تسجيل هدر من هذه الشاشة لأن سياسة معالجة
+    فروقات المخزون والهدر (D10) لم تُعتمد بعد.
+  </p>
+  <p class="hub-help-text">
+    لن يؤدي فتح هذه الصفحة إلى تغيير الكميات، ولن تُنشأ قيود مالية أو حركات مخزون.
+    الحركات المسجلة سابقاً تبقى ظاهرة في سجل المخزون.
+  </p>
+  <nav class="hub-ux5-actions" aria-label="الخطوات المتاحة الآن">
+    {% if can_count_stock %}
+      <a class="hub-button hub-button-primary" href="{% url 'staff_inventory_stock_count' %}">جرد الكميات الفعلية</a>
+    {% endif %}
+    <a class="hub-button" href="{% url 'staff_inventory_movements' %}">عرض سجل الحركات</a>
+    <a class="hub-button" href="{% url 'staff_inventory_purchases' %}">المشتريات والاستلام</a>
+  </nav>
+  <details class="hub-ux5-module__more">
+    <summary>لماذا هذه الوظيفة متوقفة مؤقتاً؟</summary>
+    <p>
+      تسجيل الهدر ليس هو نفسه جرد كمية موجودة. يجب تحديد الحسابات وطريقة الاعتراف
+      والإلغاء والموافقات أولاً. هذه الشاشة لا تفترض سياسة مالية غير معتمدة.
+    </p>
+  </details>
+</section>
+{% endblock %}
