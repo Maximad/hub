@@ -18,6 +18,7 @@ from core.services.posting import order_payments as order_payment_posting
 from core.services.posting.policy import is_finance_user
 from core.services.posting.exceptions import InvalidTransition, ClosedPeriodError, IdempotencyConflict
 from core.services.posting import expenses as expense_posting, purchases as purchase_posting, closing as closing_posting, transfers as transfer_posting
+from core.services.purchase_receipt_ui import purchase_receipt_ui
 from core.models import ActivityLog, CancellationReason, CashMovement, DailyClose, Expense, ExpenseCategory, FinanceReviewItem, FinancialAccount, InventoryItem, Payment, PostingBatch, PostingCommand, Purchase, PurchaseItem, PurchasePayment, StockMovement, Transfer
 from core.views_legacy import DAMASCUS_TZ, _build_day_report, _parse_report_date
 from vendors.models import Vendor
@@ -388,7 +389,7 @@ def staff_purchase_detail(request,purchase_id):
     accounts=FinancialAccount.objects.filter(is_active=True,business_unit='',code__in=purchase_posting.SETTLEMENT_CODES).order_by('code')
     reviews=FinanceReviewItem.objects.filter(resolved_at__isnull=True).filter(Q(record_type=p._meta.label,record_id=str(p.pk))|Q(details__purchase_id=p.pk))
     approvers=get_user_model().objects.filter(is_active=True).filter(Q(is_superuser=True)|Q(role='admin'))
-    return render(request,'staff/finance_purchase_detail.html',{'purchase':p,'business_date':current_business_date(),'financial_state':state,'settlement_accounts':accounts,'approvers':approvers,'finance_reviews':reviews,'approval_limit':purchase_posting.approval_limit(),'currency_component':CurrencyEntryFormService(request,operation='purchase_payment').context})
+    return render(request,'staff/finance_purchase_detail.html',{'purchase':p,'business_date':current_business_date(),'financial_state':state,'settlement_accounts':accounts,'approvers':approvers,'finance_reviews':reviews,'approval_limit':purchase_posting.approval_limit(),'currency_component':CurrencyEntryFormService(request,operation='purchase_payment').context,**purchase_receipt_ui(p)})
 
 @require_staff_capability('finance')
 def staff_purchase_edit(request,purchase_id):
