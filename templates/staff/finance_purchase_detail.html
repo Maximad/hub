@@ -25,7 +25,8 @@
 {% endif %}
 
 <h4>دفعة / تسوية مورد</h4>
-<p class="hub-help-text">أدخل المبلغ الفعلي ثم اختر مصدر السداد. تظهر موافقة المدير عند تجاوز حد الموافقة المقرر، ولا تُحفظ أي دفعة قبل التأكيد.</p>
+{% if purchase.status != "cancelled" and financial_state.outstanding > 0 %}
+<p class="hub-help-text">المستحق المعترف به للمورد: <strong>{{ financial_state.outstanding }}</strong> ل.س. أدخل المبلغ المدفوع فعلياً وحدّد مصدر التسوية. تظهر الموافقة الإدارية عند الحاجة.</p>
 <form class="hub-form-section" method="post" data-purchase-payment-form data-approval-threshold="{{ approval_limit }}">{% csrf_token %}
   <label>المبلغ <input type="number" min="0.01" step="0.01" name="amount_syp" inputmode="decimal" data-purchase-payment-amount required></label>
   <label>العملة <select name="currency_currency">{% for value,label in currency_component.currencies %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
@@ -38,10 +39,15 @@
   </details>
   <button name="action" value="pay" class="hub-btn" type="submit">ترحيل دفعة المورد</button>
 </form>
+{% elif purchase.status == "cancelled" %}
+<p class="hub-help-text">الشراء ملغى. لا يمكن تسجيل دفعة مورد جديدة عليه.</p>
+{% else %}
+<p class="hub-help-text">لا يوجد حالياً التزام مورد مستحق للدفع. استلم المواد أولاً أو راجع التسويات السابقة.</p>
+{% endif %}
 
 <h4>دفعات المورد</h4><div class="hub-table-wrap"><table class="hub-table"><tr><th>المبلغ</th><th>التاريخ</th><th>المصدر</th><th>المنفذ</th><th>المعتمد</th><th>الحالة / العكس</th></tr>
 {% for payment in purchase.payments.all %}<tr><td>{{ payment.amount_syp }}</td><td>{{ payment.business_date }}</td><td>{{ payment.source_account }}</td><td>{{ payment.actor|default:'—' }}</td><td>{{ payment.approver|default:'—' }}</td><td>{% if payment.reversed_at %}معكوسة {{ payment.reversed_at }}{% else %}<form method="post">{% csrf_token %}<input type="hidden" name="payment_id" value="{{ payment.pk }}"><input type="date" name="reversal_business_date" value="{{ business_date|date:'Y-m-d' }}" required><input name="reversal_reason" placeholder="سبب العكس" required><button name="action" value="reverse_payment">عكس الدفعة</button></form>{% endif %}</td></tr>{% empty %}<tr><td colspan="6">لا توجد تسويات.</td></tr>{% endfor %}</table></div>
 
-<form class="hub-form-section" method="post">{% csrf_token %}<label>سبب الإلغاء <textarea name="reason"></textarea></label><button name="action" value="cancel" class="hub-btn" type="submit">تأكيد إلغاء الشراء</button></form>
+{% if purchase.status != "cancelled" %}<form class="hub-form-section" method="post">{% csrf_token %}<label>سبب الإلغاء <textarea name="reason"></textarea></label><button name="action" value="cancel" class="hub-btn" type="submit">تأكيد إلغاء الشراء</button></form>{% endif %}
 <h4>حركات المخزون</h4><ul>{% for m in purchase.stock_movements.all %}<li>{{ m.get_movement_type_display }} — {{ m.get_direction_display }} — {{ m.inventory_item }} — {{ m.quantity }}</li>{% empty %}<li>لا توجد حركات</li>{% endfor %}</ul>
 {% endblock %}
