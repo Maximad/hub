@@ -2,7 +2,7 @@
 {% block inventory_content %}
 <div class="hub-toolbar">
   {% if staff_caps.inventory_stock_count %}<a class="hub-button hub-button-primary" href="{% url 'staff_inventory_stock_count' %}">جرد المخزون</a>{% endif %}
-  <a class="hub-button" href="{% url 'staff_inventory_item_new' %}">إضافة مادة</a>
+  {% if inventory_can_manage %}<a class="hub-button" href="{% url 'staff_inventory_item_new' %}">إضافة مادة</a>{% endif %}
   <a class="hub-button hub-button-secondary" href="{% url 'staff_inventory_items_csv' %}">CSV</a>
 </div>
 <div class="hub-table-wrap">
