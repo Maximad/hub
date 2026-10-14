@@ -105,18 +105,112 @@ def staff_inventory_purchases(request):
     total=qs.exclude(status=Purchase.Status.CANCELLED).aggregate(v=Sum('total_syp'))['v'] or 0
     return render(request,'staff/inventory_purchases.html',{'purchases':qs[:300],'total':total,'statuses':Purchase.Status.choices,'methods':Purchase.PaymentMethod.choices,'paid_froms':Purchase.PaidFrom.choices})
 
+def _purchase_draft_form_context(request, errors=None):
+    values = request.POST if request.method == 'POST' else {}
+    ids = request.POST.getlist('inventory_item') if request.method == 'POST' else []
+    quantities = request.POST.getlist('quantity') if request.method == 'POST' else []
+    costs = request.POST.getlist('unit_cost_syp') if request.method == 'POST' else []
+    lines = [
+        {
+            'item_id': ids[i] if i < len(ids) else '',
+            'quantity': quantities[i] if i < len(quantities) else '',
+            'unit_cost_syp': costs[i] if i < len(costs) else '',
+        }
+        for i in range(max(5, len(ids), len(quantities), len(costs)))
+    ]
+    return {
+        'vendors': Vendor.objects.all(),
+        'items': InventoryItem.objects.filter(is_active=True),
+        'today': timezone.localdate(),
+        'form_values': values,
+        'purchase_lines': lines,
+        'show_extra_lines': any(
+            row['item_id'] or row['quantity'] or row['unit_cost_syp']
+            for row in lines[1:]
+        ),
+        'errors': errors or [],
+    }
+
+
+def _clean_inventory_purchase_lines(request):
+    ids = request.POST.getlist('inventory_item')
+    quantities = request.POST.getlist('quantity')
+    costs = request.POST.getlist('unit_cost_syp')
+    if not (len(ids) == len(quantities) == len(costs)) or len(ids) > 5:
+        raise ValidationError('تأكد من اكتمال حقول جميع المواد.')
+    result = []
+    for index, (id_raw, qty_raw, cost_raw) in enumerate(zip(ids, quantities, costs), 1):
+        if not any((id_raw, qty_raw, cost_raw)):
+            continue
+        if not all((id_raw, qty_raw, cost_raw)):
+            raise ValidationError(f'أكمل المادة والكمية والكلفة في السطر {index}.')
+        item = InventoryItem.objects.filter(pk=id_raw, is_active=True).first() if str(id_raw).isdigit() else None
+        if not item:
+            raise ValidationError(f'اختر مادة مخزون صالحة في السطر {index}.')
+        try:
+            quantity = Decimal(str(qty_raw))
+            unit_cost = Decimal(str(cost_raw))
+        except (InvalidOperation, ValueError):
+            raise ValidationError(f'أدخل كمية وكلفة صحيحتين في السطر {index}.')
+        if not quantity.is_finite() or not unit_cost.is_finite() or quantity <= 0 or unit_cost < 0:
+            raise ValidationError(f'الكمية يجب أن تكون موجبة والكلفة غير سالبة في السطر {index}.')
+        result.append((item, quantity, unit_cost))
+    if not result:
+        raise ValidationError('اختر مادة واحدة على الأقل وأدخل الكمية وكلفة الوحدة.')
+    return result
+
+
 @inventory_required
 def staff_inventory_purchase_new(request):
-    if not _can_manage(request.user): messages.error(request,'لا تملك صلاحية إنشاء المشتريات.'); return redirect('staff_inventory_purchases')
-    if request.method=='POST':
-        with transaction.atomic():
-            p=Purchase.objects.create(business_date=request.POST.get('business_date') or timezone.now().date(),vendor_id=request.POST.get('vendor') or None,supplier_name=request.POST.get('supplier_name',''),invoice_number=request.POST.get('invoice_number',''),status=request.POST.get('status') or Purchase.Status.DRAFT,payment_method=request.POST.get('payment_method') or Purchase.PaymentMethod.CREDIT,paid_from=request.POST.get('paid_from') or Purchase.PaidFrom.UNPAID,discount_syp=_dec(request.POST.get('discount_syp')),receipt_media_id=request.POST.get('receipt_media') or None,notes=request.POST.get('notes',''),created_by=request.user)
-            for item_id, qty, cost in zip(request.POST.getlist('inventory_item'), request.POST.getlist('quantity'), request.POST.getlist('unit_cost_syp')):
-                if item_id and _dec(qty)>0:
-                    inv=InventoryItem.objects.get(pk=item_id); PurchaseItem.objects.create(purchase=p,inventory_item=inv,quantity=_dec(qty),unit=inv.unit,unit_cost_syp=_dec(cost))
-            p.recalculate_totals(); p.full_clean(); p.save()
-            messages.success(request,'تم حفظ عملية الشراء.'); return redirect('staff_inventory_purchase_detail', purchase_id=p.pk)
-    return render(request,'staff/inventory_purchase_form.html',{'vendors':Vendor.objects.all(),'items':InventoryItem.objects.filter(is_active=True),'media_assets':MediaAsset.objects.order_by('-created_at')[:50],'statuses':Purchase.Status.choices,'methods':Purchase.PaymentMethod.choices,'paid_froms':Purchase.PaidFrom.choices,'today':timezone.now().date()})
+    if not _can_manage(request.user):
+        messages.error(request, 'لا تملك صلاحية إنشاء المشتريات.')
+        return redirect('staff_inventory_purchases')
+    if request.method == 'POST':
+        try:
+            lines = _clean_inventory_purchase_lines(request)
+            with transaction.atomic():
+                purchase = Purchase(
+                    business_date=request.POST.get('business_date') or timezone.localdate(),
+                    vendor_id=request.POST.get('vendor') or None,
+                    supplier_name=request.POST.get('supplier_name', '').strip(),
+                    invoice_number=request.POST.get('invoice_number', '').strip(),
+                    status=Purchase.Status.DRAFT,
+                    payment_method=Purchase.PaymentMethod.CREDIT,
+                    paid_from=Purchase.PaidFrom.UNPAID,
+                    discount_syp=_dec(request.POST.get('discount_syp')),
+                    notes=request.POST.get('notes', '').strip(),
+                    created_by=request.user,
+                )
+                purchase.full_clean()
+                purchase.save()
+                for item, quantity, unit_cost in lines:
+                    purchase_item = PurchaseItem(
+                        purchase=purchase, inventory_item=item,
+                        quantity=quantity, unit=item.unit, unit_cost_syp=unit_cost,
+                    )
+                    purchase_item.full_clean()
+                    purchase_item.save()
+                purchase.recalculate_totals()
+                purchase.full_clean()
+                purchase.save()
+            messages.success(
+                request,
+                'حُفظ الشراء كمسودة دون استلام أو دفع. أكّد الكميات المستلمة ثم سجّل أي دفعة للمورد من المالية.',
+            )
+            return redirect('staff_inventory_purchase_detail', purchase_id=purchase.pk)
+        except ValidationError as error:
+            return render(
+                request, 'staff/inventory_purchase_form.html',
+                _purchase_draft_form_context(
+                    request, errors=getattr(error, 'messages', [str(error)])
+                ),
+                status=200,
+            )
+    return render(
+        request, 'staff/inventory_purchase_form.html',
+        _purchase_draft_form_context(request),
+    )
+
 
 @inventory_required
 def staff_inventory_purchase_detail(request,purchase_id):

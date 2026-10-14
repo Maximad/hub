@@ -324,9 +324,10 @@ def staff_purchases(request):
     return render(request,'staff/finance_purchases.html',{'purchases':qs[:300],'business_date':current_business_date()})
 
 def _save_purchase_from_post(request, purchase=None):
+    creating = purchase is None
     purchase = purchase or Purchase(created_by=request.user)
     purchase.business_date=_parse_report_date(request.POST.get('business_date')); purchase.invoice_date=_parse_report_date(request.POST.get('invoice_date')) if request.POST.get('invoice_date') else None
-    purchase.vendor_id=request.POST.get('vendor') or None; purchase.supplier_name=request.POST.get('supplier_name','').strip(); purchase.invoice_number=request.POST.get('invoice_number','').strip(); purchase.status=request.POST.get('status') or Purchase.Status.DRAFT; purchase.payment_method=request.POST.get('payment_method') or Purchase.PaymentMethod.CREDIT; purchase.paid_from=request.POST.get('paid_from') or Purchase.PaidFrom.UNPAID; purchase.discount_syp=_dec(request.POST.get('discount_syp')); purchase.notes=request.POST.get('notes','')
+    purchase.vendor_id=request.POST.get('vendor') or None; purchase.supplier_name=request.POST.get('supplier_name','').strip(); purchase.invoice_number=request.POST.get('invoice_number','').strip(); purchase.status=(Purchase.Status.DRAFT if creating else purchase.status); purchase.payment_method=(Purchase.PaymentMethod.CREDIT if creating else purchase.payment_method); purchase.paid_from=(Purchase.PaidFrom.UNPAID if creating else purchase.paid_from); purchase.discount_syp=_dec(request.POST.get('discount_syp')); purchase.notes=request.POST.get('notes','')
     currency_service=CurrencyEntryFormService(request, operation='purchase', business_date=purchase.business_date)
     entered_total=sum((_dec(qty) * _dec(cost) for qty, cost in zip(request.POST.getlist('quantity'), request.POST.getlist('unit_cost_syp'))), _dec(0))
     currency_entry=currency_service.clean(entered_total)
@@ -347,7 +348,7 @@ def _save_purchase_from_post(request, purchase=None):
 def staff_purchase_new(request):
     errors=[]
     if request.method=='POST':
-        try: p=_save_purchase_from_post(request); messages.success(request,'تم حفظ الشراء.'); return redirect('staff_purchase_detail', purchase_id=p.pk)
+        try: p=_save_purchase_from_post(request); messages.success(request,'حُفظ الشراء. لم يتم استلام المخزون أو تسجيل دفعة للمورد بعد.'); return redirect('staff_purchase_detail', purchase_id=p.pk)
         except Exception as e: errors.extend(_validation_messages(e))
     return render(request,'staff/finance_purchase_form.html',{'purchase':None,'items':InventoryItem.objects.filter(is_active=True),'vendors':Vendor.objects.all(),'statuses':Purchase.Status.choices,'methods':Purchase.PaymentMethod.choices,'paid_froms':Purchase.PaidFrom.choices,'units':InventoryItem.Unit.choices,'today':current_business_date(),'errors':errors,'business_date':current_business_date(),'currency_component':CurrencyEntryFormService(request, operation='purchase').context})
 

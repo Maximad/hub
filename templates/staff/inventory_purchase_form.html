@@ -1,1 +1,65 @@
-{% extends "staff/inventory_base.html" %}{% block inventory_content %}<form class="hub-form-section" method="post">{% csrf_token %}<p><label>التاريخ <input type="date" name="business_date" value="{{ today|date:'Y-m-d' }}"></label> <label>المورد <select data-hub-searchable-select="true" name="vendor"><option value="">—</option>{% for v in vendors %}<option value="{{ v.pk }}">{{ v }}</option>{% endfor %}</select></label> <label>مورد نصي <input name="supplier_name"></label></p><p><label>رقم الفاتورة <input name="invoice_number"></label> <label>الحالة <select name="status">{% for v,l in statuses %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select></label> <label>طريقة الدفع <select name="payment_method">{% for v,l in methods %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select></label> <label>مدفوع من <select name="paid_from">{% for v,l in paid_froms %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select></label></p><h3 class="hub-page-header__title">بنود الشراء</h3>{% for n in '12345' %}<p><select data-hub-searchable-select="true" name="inventory_item"><option value="">—</option>{% for i in items %}<option value="{{ i.pk }}">{{ i }}</option>{% endfor %}</select> <input type="number" step="0.001" name="quantity" placeholder="الكمية"> <input type="number" step="0.01" name="unit_cost_syp" placeholder="كلفة الوحدة"></p>{% endfor %}<p><label>خصم <input type="number" step="0.01" name="discount_syp" value="0"></label> <label>المبلغ المدفوع <input type="number" step="0.01" name="amount_paid_syp" value="0"></label></p><p><textarea name="notes" placeholder="ملاحظات"></textarea></p><button class="hub-button">حفظ</button></form>{% endblock %}
+{% extends "staff/inventory_base.html" %}
+{% load static %}
+{% block inventory_content %}
+<section class="hub-card hub-section" dir="rtl" aria-labelledby="purchase-draft-title">
+  <h2 id="purchase-draft-title" class="hub-section-title">تسجيل شراء</h2>
+  <p class="hub-help-text">اختر المواد والكميات والكلفة ثم احفظ الشراء. الاستلام ودفع المورد خطوتان مستقلتان تظهران بعد الحفظ.</p>
+  <p class="hub-help-text">الحفظ وحده لا يضيف كمية إلى المخزون ولا يسجل دفعاً للمورد.</p>
+</section>
+<form class="hub-form-section" method="post" data-hub-purchase-draft dir="rtl">
+  {% for error in errors %}<p class="hub-alert hub-alert--warning" role="alert">{{ error }}</p>{% endfor %}
+  {% csrf_token %}
+  <div class="hub-card hub-section">
+    <label for="purchase-date">التاريخ</label>
+    <input class="hub-input" type="date" id="purchase-date" name="business_date" value="{% if form_values.business_date %}{{ form_values.business_date }}{% else %}{{ today|date:'Y-m-d' }}{% endif %}" required>
+    <label for="purchase-vendor">المورد المسجل (اختياري)</label>
+    <select class="hub-input" id="purchase-vendor" name="vendor" data-hub-searchable-select="true" data-purchase-vendor>
+      <option value="">مورد آخر أو غير مسجل</option>
+      {% for vendor in vendors %}<option value="{{ vendor.pk }}"{% if form_values.vendor == vendor.pk|stringformat:"s" %} selected{% endif %}>{{ vendor }}</option>{% endfor %}
+    </select>
+    <div data-purchase-manual-vendor>
+      <label for="purchase-supplier-name">اسم المورد إن لم يكن مسجلاً</label>
+      <input class="hub-input" id="purchase-supplier-name" name="supplier_name" value="{{ form_values.supplier_name|default:'' }}" placeholder="اسم المورد" data-purchase-supplier-name>
+    </div>
+  </div>
+  <section class="hub-card hub-section" aria-labelledby="purchase-lines-title">
+    <h3 id="purchase-lines-title" class="hub-section-title">المواد المشتراة</h3>
+    {% for line in purchase_lines %}
+      {% if forloop.counter == 2 %}<details class="hub-ux5-module__more" data-purchase-extra-lines{% if show_extra_lines %} open{% endif %}><summary>إضافة مواد أخرى (حتى خمس مواد)</summary>{% endif %}
+      <div class="hub-card" data-purchase-line>
+        <label>المادة
+          <select class="hub-input" name="inventory_item" data-hub-searchable-select="true" data-purchase-item>
+            <option value="">اختر مادة</option>
+            {% for item in items %}<option value="{{ item.pk }}" data-unit="{{ item.get_unit_display }}" data-estimated-cost="{{ item.estimated_unit_cost_syp|default_if_none:'' }}"{% if line.item_id == item.pk|stringformat:"s" %} selected{% endif %}>{{ item }} · {{ item.get_unit_display }}</option>{% endfor %}
+          </select>
+        </label>
+        <p class="hub-help-text" data-purchase-unit-hint>تظهر وحدة المادة عند اختيارها.</p>
+        <div class="hub-grid hub-grid-2">
+          <label>الكمية
+            <input class="hub-input" type="number" name="quantity" min="0.001" step="0.001" inputmode="decimal" placeholder="الكمية" value="{{ line.quantity }}" data-purchase-quantity>
+          </label>
+          <label>كلفة الوحدة
+            <input class="hub-input" type="number" name="unit_cost_syp" min="0" step="0.01" inputmode="decimal" placeholder="الكلفة الفعلية" value="{{ line.unit_cost_syp }}" data-purchase-cost>
+          </label>
+        </div>
+        <p class="hub-help-text">إجمالي المادة: <output data-purchase-line-total>—</output></p>
+      </div>
+      {% if forloop.counter == 5 %}</details>{% endif %}
+    {% endfor %}
+    <p><strong>الإجمالي التقريبي للبنود: <output data-purchase-total aria-live="polite">يُحسب عند الحفظ</output></strong></p>
+    <p class="hub-help-text">معاينة إجمالية بعملة الإدخال. تحويل العملات وإجمالي السجل النهائي يُحسبان في الخادم.</p>
+  </section>
+  <details class="hub-ux5-module__more" data-purchase-optional{% if form_values.invoice_number or form_values.notes %} open{% endif %}>
+    <summary>تفاصيل إضافية: الفاتورة والخصم والملاحظات</summary>
+    <label for="purchase-invoice">رقم الفاتورة (اختياري)</label>
+    <input class="hub-input" name="invoice_number" id="purchase-invoice" value="{{ form_values.invoice_number|default:'' }}">
+    <label for="purchase-discount">الخصم</label>
+    <input class="hub-input" type="number" min="0" step="0.01" inputmode="decimal" name="discount_syp" id="purchase-discount" value="{{ form_values.discount_syp|default:'0' }}">
+    <label for="purchase-notes">ملاحظات</label>
+    <textarea class="hub-input" name="notes" id="purchase-notes" rows="2">{{ form_values.notes|default:'' }}</textarea>
+  </details>
+  <button class="hub-button hub-button-primary" type="submit">حفظ الشراء كمسودة</button>
+  <p class="hub-help-text">بعد الحفظ: أكّد الكميات المستلمة لتحديث المخزون، وسجّل أي دفعة مورد من المالية بشكل منفصل.</p>
+</form>
+<script src="{% static 'js/hub_purchase_draft.js' %}"></script>
+{% endblock %}
