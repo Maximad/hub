@@ -27,12 +27,12 @@
         <input type="hidden" name="idempotency_key" value="{{ collection_request_key }}">
         {% include "components/currency_entry.html" %}
         <p class="hub-help-text">توزّع الدفعة تلقائياً على طلبات الحساب غير المسددة، الأقدم أولاً.</p>
-        <div class="hub-manager-approval" data-manager-approval hidden>
+        <div class="hub-manager-approval" data-manager-approval>
           <label>اسم المدير<input class="hub-input" type="text" name="manager_username" autocomplete="username"></label>
           <label>كلمة المرور<input class="hub-input" type="password" name="manager_password" autocomplete="current-password"></label>
         </div>
         <label>طريقة الدفع<select class="hub-input" name="method" required>{% for value,label in methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
-        <label>ملاحظات الدفع<textarea class="hub-input" name="notes" rows="2"></textarea></label>
+        <details class="hub-ux5-module__more"><summary>ملاحظات الدفعة (اختياري)</summary><label>ملاحظات الدفع<textarea class="hub-input" name="notes" rows="2"></textarea></label></details>
         <button class="hub-button" type="submit">حفظ الدفعة فقط</button>
       </form>
     </section>
@@ -47,7 +47,7 @@
       <input type="hidden" name="action" value="settle_close">
       <input type="hidden" name="idempotency_key" value="{{ settlement_request_key }}">
       {% if remaining > 0 or active_internet_sessions %}<label>طريقة تسديد الرصيد النهائي<select class="hub-input" name="method" required>{% for value,label in methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>{% endif %}
-      <label>ملاحظات<textarea class="hub-input" name="notes" rows="2"></textarea></label>
+      <details class="hub-ux5-module__more"><summary>ملاحظات الإغلاق (اختياري)</summary><label>ملاحظات<textarea class="hub-input" name="notes" rows="2"></textarea></label></details>
       <button class="hub-button hub-button-primary" type="submit">تسديد المتبقي وإغلاق الحساب</button>
     </form>
   </section>
