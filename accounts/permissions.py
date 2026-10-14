@@ -16,6 +16,7 @@ CAPABILITY_LABELS = {
     'reports': 'التقارير',
     'finance': 'المالية',
     'inventory': 'المخزون',
+    'inventory_stock_count': 'جرد المخزون وتأكيد الكميات', 
     'reservations': 'الحجوزات',
     'events': 'الفعاليات',
     'settings': 'الإعدادات',
@@ -123,6 +124,11 @@ def _default_inventory(user):
     return is_owner_or_admin(user) or is_cashier(user) or is_kitchen(user)
 
 
+def _default_inventory_stock_count(user):
+    # Deliberately narrower than the inventory view permission.
+    return is_owner_or_admin(user) or is_cashier(user)
+
+
 def _default_reservations(user):
     return is_owner_or_admin(user) or is_waiter(user)
 
@@ -191,6 +197,7 @@ CAPABILITY_CHECKS = {
     'reports': _default_reports,
     'finance': _default_finance,
     'inventory': _default_inventory,
+    'inventory_stock_count': _default_inventory_stock_count,
     'reservations': _default_reservations,
     'events': _default_events,
     'settings': _default_settings,
@@ -290,6 +297,10 @@ def can_access_finance(user):
 
 def can_access_inventory(user):
     return user_has_capability(user, 'inventory')
+
+
+def can_count_inventory(user):
+    return user_has_capability(user, 'inventory_stock_count')
 
 
 def can_access_reservations(user):
