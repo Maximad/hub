@@ -43,6 +43,40 @@ class LaunchPurchaseGuidanceTests(TestCase):
         self.assertNotContains(response, 'name="payment_method"')
         self.assertNotContains(response, 'name="paid_from"')
 
+    def test_purchase_line_errors_preserve_entries_without_creating_draft(self):
+        response = self.client.post(reverse('staff_inventory_purchase_new'), {
+            'business_date': '2026-10-14',
+            'supplier_name': 'مورد الاختبار',
+            'inventory_item': [str(self.item.pk), '', '', '', ''],
+            'quantity': ['', '', '', '', ''],
+            'unit_cost_syp': ['123', '', '', '', ''],
+            'notes': 'سنسجل الكمية لاحقاً',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'أكمل المادة والكمية والكلفة')
+        self.assertContains(response, 'مورد الاختبار')
+        self.assertContains(response, 'سنسجل الكمية لاحقاً')
+        self.assertEqual(Purchase.objects.count(), 0)
+        self.assertEqual(StockMovement.objects.count(), 0)
+
+    def test_purchase_missing_item_or_invalid_cost_fails_atomically(self):
+        for items, qty, cost in [
+            (['', '', '', '', ''], ['', '', '', '', ''], ['', '', '', '', '']),
+            ([str(self.item.pk)], ['2'], ['-10']),
+            ([str(self.item.pk)], ['bad'], ['100']),
+        ]:
+            with self.subTest(items=items, qty=qty, cost=cost):
+                response = self.client.post(reverse('staff_inventory_purchase_new'), {
+                    'business_date': '2026-10-14',
+                    'inventory_item': items,
+                    'quantity': qty,
+                    'unit_cost_syp': cost,
+                })
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(response.context['errors'])
+                self.assertEqual(Purchase.objects.count(), 0)
+                self.assertEqual(StockMovement.objects.count(), 0)
+
     def test_inventory_purchase_save_does_not_receive_stock_or_post_payment(self):
         response = self.client.post(
             reverse('staff_inventory_purchase_new'),
