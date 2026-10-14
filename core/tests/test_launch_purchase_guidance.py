@@ -25,7 +25,11 @@ class LaunchPurchaseGuidanceTests(TestCase):
         response = self.client.get(reverse('staff_inventory_purchase_new'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'الحفظ وحده لا يضيف كمية إلى المخزون')
-        self.assertContains(response, 'حفظ الشراء والانتقال إلى الاستلام')
+        self.assertContains(response, 'حفظ الشراء كمسودة')
+        self.assertContains(response, 'data-hub-purchase-draft')
+        self.assertContains(response, 'data-purchase-item')
+        self.assertContains(response, 'data-purchase-total')
+        self.assertContains(response, 'hub_purchase_draft.js')
         self.assertNotContains(response, 'name="amount_paid_syp"')
         self.assertNotContains(response, 'name="status"')
         self.assertNotContains(response, 'name="payment_method"')
@@ -50,12 +54,17 @@ class LaunchPurchaseGuidanceTests(TestCase):
                 'unit_cost_syp': ['100'],
                 # A forged legacy form value must not cause a payment.
                 'amount_paid_syp': '200',
+                'status': Purchase.Status.PAID,
+                'payment_method': Purchase.PaymentMethod.CASH,
+                'paid_from': Purchase.PaidFrom.CASHBOX,
             },
         )
         self.assertEqual(response.status_code, 302)
         purchase = Purchase.objects.get()
         self.assertEqual(purchase.status, Purchase.Status.DRAFT)
         self.assertEqual(purchase.amount_paid_syp, 0)
+        self.assertEqual(purchase.payment_method, Purchase.PaymentMethod.CREDIT)
+        self.assertEqual(purchase.paid_from, Purchase.PaidFrom.UNPAID)
         self.assertEqual(purchase.items.count(), 1)
         self.assertEqual(purchase.items.first().quantity, Decimal('2'))
         self.assertEqual(PurchasePayment.objects.count(), 0)
