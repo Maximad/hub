@@ -12,7 +12,17 @@
 
 <h4>البنود</h4><div class="hub-table-wrap"><table class="hub-table"><tr><th>المادة</th><th>الكمية</th><th>الوحدة</th><th>الكلفة</th><th>الإجمالي</th></tr>{% for i in purchase.items.all %}<tr><td>{{ i.inventory_item }}</td><td>{{ i.quantity }}</td><td>{{ i.get_unit_display }}</td><td>{{ i.unit_cost_syp }}</td><td>{{ i.line_total_syp }}</td></tr>{% endfor %}</table></div>
 
-<form class="hub-form-section" method="post">{% csrf_token %}<fieldset><legend>الكميات الفعلية المستلمة (عدّلها عند الاستلام الجزئي)</legend>{% for i in purchase.items.all %}<label>{{ i.inventory_item }} <input type="number" min="0" step="0.001" name="quantity_{{ i.pk }}" value="{{ i.quantity }}"></label>{% endfor %}</fieldset><button name="action" value="receive" class="hub-btn" type="submit">تأكيد استلام الشراء</button></form>
+{% if can_receive_purchase %}
+<form class="hub-form-section" method="post">
+  {% csrf_token %}
+  {% include "staff/_purchase_receipt_fields.html" %}
+  <button name="action" value="receive" class="hub-btn" type="submit">تأكيد استلام الكميات</button>
+</form>
+{% elif purchase.status == "cancelled" %}
+<p class="hub-help-text">هذا الشراء ملغى ولا يمكن استلامه.</p>
+{% else %}
+<p class="hub-help-text">اكتمل استلام جميع المواد. لا توجد كميات متبقية للاستلام.</p>
+{% endif %}
 
 <h4>دفعة / تسوية مورد</h4>
 <p class="hub-help-text">أدخل المبلغ الفعلي ثم اختر مصدر السداد. تظهر موافقة المدير عند تجاوز حد الموافقة المقرر، ولا تُحفظ أي دفعة قبل التأكيد.</p>
