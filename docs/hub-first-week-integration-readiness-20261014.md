@@ -36,6 +36,16 @@ does not offer another receipt form. Source-of-truth posting logic is
 unchanged. A kitchen worker who may read purchase details cannot see the
 receive form without existing cashier/admin rights.
 
+**P0 — Arabic localization rendered invalid numeric HTML attributes.**
+The first full PostgreSQL test pass for this integration PR revealed that
+Arabic-localized decimals such as `3,000` were rendered into
+`<input type="number" value=... max=...>`. For HTML numeric controls, these
+attributes must use a period as decimal separator. The shared receipt
+field template now explicitly `unlocalize`s both machine-readable
+attributes while keeping Arabic-localized quantity descriptions. The
+integration assertion enforces a browser-valid `value="3.000"` and
+`max="3.000"` in both entry screens.
+
 **P0 — supplier-payment form appeared without debt.** Previously the
 Finance purchase page showed an actionable supplier-payment form even
 on a draft with no recognized payable, or after everything had been paid.
