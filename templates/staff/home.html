@@ -10,13 +10,40 @@
       <p class="staff-v2-subtitle">الطلبات، الحساب، الدفع والإنترنت من مساحة واحدة.</p>
     </div>
     <div class="staff-v2-actions">
-      {% if workspace_caps.pos %}<a class="staff-v2-button staff-v2-button--primary" href="{% url 'staff_pos' %}">{% include "includes/staff_icon.html" with name="plus" %}+ طلب جديد</a>{% endif %}
-      {% if staff_caps.orders %}<button class="staff-v2-button" type="button" data-dialog-open="new-account-dialog">{% include "includes/staff_icon.html" with name="users" %}حساب جديد</button>{% endif %}
-      {% if staff_caps.order_edit %}<a class="staff-v2-button" href="{% url 'staff_orders' %}">كل الطلبات</a>{% endif %}
-      {% if staff_caps.visit_manage %}<a class="staff-v2-button" href="{% url 'staff_visits' %}">كل الجلسات</a>{% endif %}
-      {% if not staff_caps.orders and staff_caps.kitchen_board %}<a class="staff-v2-button staff-v2-button--primary" href="{% url 'staff_kitchen' %}">فتح لوحة التحضير</a>{% endif %}
+      {% if staff_caps.orders and staff_caps.visit_manage %}
+      <button class="staff-v2-button" type="button" data-dialog-open="new-account-dialog">{% include "includes/staff_icon.html" with name="users" %}حساب جديد</button>
+      {% endif %}
     </div>
   </header>
+
+
+  <section class="hub-daily-start" aria-labelledby="hub-daily-start-heading" data-daily-start>
+    <div class="hub-daily-start__head">
+      <div><h3 id="hub-daily-start-heading">ابدأ من هنا</h3>
+        <p>اختر المهمة التي تريد تنفيذها الآن. تظهر الأدوات بحسب صلاحياتك.</p>
+      </div>
+    </div>
+    <nav class="hub-daily-start__grid" aria-label="المهام اليومية الأساسية">
+      {% for action in workspace_primary_actions %}
+        <a class="hub-daily-start__action{% if forloop.first %} hub-daily-start__action--primary{% endif %}"
+           href="{{ action.url }}" data-daily-action="{{ action.key }}">
+          <span class="hub-daily-start__index" aria-hidden="true">{{ forloop.counter|stringformat:"02d" }}</span>
+          <span class="hub-daily-start__action-copy"><strong>{{ action.title }}</strong><small>{{ action.hint }}</small></span>
+          <span class="hub-daily-start__arrow" aria-hidden="true">←</span>
+        </a>
+      {% endfor %}
+    </nav>
+    {% if workspace_more_actions %}
+    <details class="hub-daily-start__more">
+      <summary>مهام أخرى حسب صلاحياتك</summary>
+      <nav class="hub-daily-start__more-links" aria-label="مهام إضافية">
+        {% for action in workspace_more_actions %}
+          <a href="{{ action.url }}" data-daily-action="{{ action.key }}">{{ action.title }}</a>
+        {% endfor %}
+      </nav>
+    </details>
+    {% endif %}
+  </section>
 
   <div class="staff-v2-toolbar ops-v2__toolbar" aria-label="البحث والتصفية">
     <div class="ops-v2__toolbar-main">
@@ -95,7 +122,7 @@
   </section>
 </section>
 
-{% if staff_caps.orders %}
+{% if staff_caps.orders and staff_caps.visit_manage %}
 <dialog id="new-account-dialog" class="staff-v2-dialog" aria-labelledby="new-account-dialog-title">
   <header class="staff-v2-dialog__head"><h2 id="new-account-dialog-title">+ فتح حساب / جلسة جديدة</h2><button class="staff-v2-icon-button" type="button" data-dialog-close aria-label="إغلاق">{% include "includes/staff_icon.html" with name="close" %}</button></header>
   <div class="staff-v2-dialog__body"><form method="post" action="{% url 'staff_visits' %}">{% csrf_token %}<input type="hidden" name="next" value="workspace"><label>الطاولة<select name="table"><option value="">بدون طاولة</option>{% for table in workspace_tables %}<option value="{{ table.pk }}">{{ table }}</option>{% endfor %}</select></label><label>العضو — اختياري<select name="member"><option value="">ضيف</option>{% for member in workspace_members %}<option value="{{ member.pk }}">{{ member }}</option>{% endfor %}</select></label><label>ملاحظة — اختياري<textarea name="notes" rows="2"></textarea></label><button class="staff-v2-button staff-v2-button--primary" type="submit">فتح الحساب</button></form></div>
