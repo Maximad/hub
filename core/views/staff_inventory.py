@@ -9,7 +9,7 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
-from accounts.permissions import is_owner_or_admin, is_cashier, is_kitchen, require_staff_capability
+from accounts.permissions import is_owner_or_admin, is_cashier, is_kitchen, require_staff_capability, user_has_capability
 from catalog.models import MediaAsset
 from vendors.models import Vendor
 from core.finance import sync_cash_expense_movement
@@ -241,16 +241,24 @@ def staff_inventory_movements(request):
 
 @inventory_required
 def staff_inventory_movement_new(request):
-    if request.method=='POST':
-        typ=request.POST.get('movement_type'); direction=request.POST.get('direction')
-        if not (_can_manage(request.user) or (is_kitchen(request.user) and typ in {StockMovement.MovementType.WASTE,StockMovement.MovementType.INTERNAL_USE})):
-            messages.error(request,'لا تملك صلاحية تسجيل هذه الحركة.'); return redirect('staff_inventory_movements')
-        item=get_object_or_404(InventoryItem,pk=request.POST.get('inventory_item'))
-        mv=StockMovement(inventory_item=item,business_date=request.POST.get('business_date') or timezone.now().date(),movement_type=typ,direction=direction,quantity=_dec(request.POST.get('quantity')),unit=item.unit,reason=request.POST.get('reason',''),created_by=request.user)
-        try:
-            mv.total_value_syp=(item.estimated_unit_cost_syp or 0)*mv.quantity; purchase_posting.adjust_stock(mv, _posting_context(request, mv.business_date)); messages.success(request,'تم حفظ حركة المخزون.'); return redirect('staff_inventory_movements')
-        except ValidationError as e: messages.error(request,e.messages[0])
-    return render(request,'staff/inventory_movement_form.html',{'items':InventoryItem.objects.filter(is_active=True),'types':StockMovement.MovementType.choices,'directions':StockMovement.Direction.choices,'today':timezone.now().date()})
+    """Keep the retired manual-entry URL safe until D10 is approved.
+
+    D10 inventory variance/waste/production accounting is explicitly
+    unconfirmed. Do not silently write stock movements or financial entries,
+    and do not grant adjustment rights through generic inventory access.
+    """
+    if request.method == 'POST':
+        messages.error(
+            request,
+            'تسجيل الهدر أو حركة المخزون اليدوية غير مفعّل حالياً بانتظار اعتماد سياسة المعالجة. '
+            'لم تتغير أي كمية أو قيد مالي. لتصحيح كمية موجودة استخدم جرد المخزون إن كانت لديك الصلاحية.',
+        )
+        return redirect('staff_inventory_movement_new')
+    return render(
+        request,
+        'staff/inventory_movement_form.html',
+        {'can_count_stock': user_has_capability(request.user, 'inventory_stock_count')},
+    )
 
 @inventory_required
 def staff_inventory_low_stock(request):
