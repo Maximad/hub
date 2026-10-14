@@ -30,9 +30,9 @@ ACTIVE_ORDER_STATUSES = (
 # Navigation only: use existing routes and effective capabilities. Each route also
 # enforces its own authorization, which remains the security boundary.
 DAILY_ACTIONS = {
-    "order": ("طلب جديد", "تسجيل طلب للزبون", "staff_pos", "pos"),
+    "order": ("+ طلب جديد", "تسجيل طلب للزبون", "staff_pos", "pos"),
     "cashier": ("قبض ودفع", "تحصيل المدفوعات ومراجعة المتبقي", "staff_cashier", "cashier"),
-    "prep": ("التحضير", "طلبات المطبخ والبار", "staff_kitchen", "kitchen_board"),
+    "prep": ("فتح لوحة التحضير", "طلبات المطبخ والبار", "staff_kitchen", "kitchen_board"),
     "count": ("جرد المخزون", "أدخل الكمية الموجودة فعلياً", "staff_inventory_stock_count", "inventory_stock_count"),
     "purchase": ("تسجيل شراء", "مواد مشتراة ثم استلامها", "staff_inventory_purchase_new", "inventory"),
     "expense": ("تسجيل مصروف", "مسودة أو دفع فعلي", "staff_finance_expense_new", "finance"),
