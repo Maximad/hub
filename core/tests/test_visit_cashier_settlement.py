@@ -110,6 +110,40 @@ class VisitCashierSettlementTests(TestCase):
             HTTP_IDEMPOTENCY_KEY=key,
         )
 
+    def test_full_page_cashier_hides_payment_entry_after_full_collection(self):
+        order = self.order(100)
+        url = reverse('staff_cashier_order', kwargs={'public_code': order.public_code})
+        unpaid = self.client.get(url)
+        self.assertEqual(unpaid.status_code, 200)
+        self.assertContains(unpaid, 'id="cashier-payment-form"')
+        self.assertContains(unpaid, 'data-remaining="100"')
+        self.assertContains(unpaid, 'ملاحظات الدفع (اختياري)')
+        self.assertContains(unpaid, 'form.querySelector(\'[data-currency-amount]\')')
+        self.assertContains(unpaid, 'id="manager-approval"')
+
+        Payment.objects.create(order=order, amount_syp=100, method=Payment.Method.CASH)
+        paid = self.client.get(url)
+        self.assertEqual(paid.status_code, 200)
+        self.assertNotContains(paid, 'id="cashier-payment-form"')
+        self.assertContains(paid, 'لا حاجة لتسجيل دفعة إضافية')
+
+    def test_visit_cashier_and_drawer_keep_optional_notes_secondary_and_approval_accessible(self):
+        visit = self.visit()
+        self.order(180, visit=visit)
+        url = reverse('staff_cashier_order', kwargs={'public_code': visit.public_code})
+        page = self.client.get(url)
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, 'id="visit-manager-approval"')
+        self.assertNotContains(page, 'id="visit-manager-approval" hidden')
+        self.assertContains(page, 'ملاحظات الدفعة (اختياري)')
+
+        panel = self.client.get(url, {'panel': 'payment'})
+        self.assertEqual(panel.status_code, 200)
+        self.assertContains(panel, 'data-manager-approval')
+        self.assertNotContains(panel, 'data-manager-approval hidden')
+        self.assertContains(panel, 'ملاحظات الدفعة (اختياري)')
+        self.assertContains(panel, 'name="idempotency_key"')
+
     def test_cashier_groups_orders_by_open_visit_and_keeps_standalone_orders_separate(self):
         visit = self.visit()
         first = self.order(100, visit=visit, name='الأول')
