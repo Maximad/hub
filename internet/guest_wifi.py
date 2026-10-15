@@ -67,15 +67,21 @@ def guest_wifi_policy_error(policy):
         return 'السقف المجاني اليومي يجب أن يساوي أو يتجاوز الرصيد الأولي.'
     if policy.order_bonus_enabled and int(policy.order_bonus_minutes or 0) <= 0:
         return 'دقائق مكافأة الطلب غير مضبوطة.'
-    if policy.require_venue_code and int(policy.code_rotation_minutes or 0) <= 0:
-        return 'دورة رمز المكان غير مضبوطة.'
     return None
 
 
 def venue_code_slot(policy, at=None):
-    at = at or timezone.now()
-    seconds = max(int(policy.code_rotation_minutes or 0), 1) * 60
-    return int(at.timestamp()) // seconds
+    """One stable guest PIN per local business day, using the venue cutoff.
+
+    The old code_rotation_minutes column remains for historical compatibility
+    but no longer changes the guest PIN every few hours.
+    """
+    local = timezone.localtime(at or timezone.now())
+    cutoff = int(getattr(settings, 'BUSINESS_DAY_CUTOFF_HOUR', 4))
+    day = local.date()
+    if local.hour < cutoff:
+        day -= timedelta(days=1)
+    return day.toordinal()
 
 
 def venue_code_for_slot(policy, slot):
@@ -100,11 +106,16 @@ def _code_matches(policy, raw_code, at=None):
     if hmac.compare_digest(code, venue_code_for_slot(policy, slot)):
         return slot
 
-    rotation = timedelta(minutes=max(int(policy.code_rotation_minutes or 0), 1))
-    slot_started_at = timezone.datetime.fromtimestamp(
-        slot * int(rotation.total_seconds()), tz=at.tzinfo
+    # Brief tolerance after the business-day cutoff while the physical
+    # notice is being replaced. No further historical PIN is accepted.
+    local = timezone.localtime(at)
+    cutoff = int(getattr(settings, 'BUSINESS_DAY_CUTOFF_HOUR', 4))
+    start_day = local.date() if local.hour >= cutoff else local.date() - timedelta(days=1)
+    started = timezone.make_aware(
+        timezone.datetime.combine(start_day, timezone.datetime.min.time().replace(hour=cutoff)),
+        timezone.get_current_timezone(),
     )
-    if at - slot_started_at <= PREVIOUS_CODE_GRACE:
+    if local - started <= PREVIOUS_CODE_GRACE:
         previous = slot - 1
         if hmac.compare_digest(code, venue_code_for_slot(policy, previous)):
             return previous
