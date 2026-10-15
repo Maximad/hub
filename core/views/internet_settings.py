@@ -189,7 +189,6 @@ class GuestWifiPolicyForm(forms.ModelForm):
             'order_bonus_minutes',
             'qualifying_order_minimum_syp',
             'require_venue_code',
-            'code_rotation_minutes',
             'member_bypass_venue_code',
         )
         widgets = {
@@ -198,7 +197,6 @@ class GuestWifiPolicyForm(forms.ModelForm):
             'daily_complimentary_minutes': forms.NumberInput(attrs={'class': 'hub-input', 'min': 1, 'inputmode': 'numeric'}),
             'order_bonus_minutes': forms.NumberInput(attrs={'class': 'hub-input', 'min': 0, 'inputmode': 'numeric'}),
             'qualifying_order_minimum_syp': forms.NumberInput(attrs={'class': 'hub-input', 'min': 0, 'inputmode': 'numeric'}),
-            'code_rotation_minutes': forms.NumberInput(attrs={'class': 'hub-input', 'min': 1, 'inputmode': 'numeric'}),
         }
 
     def clean(self):
@@ -209,8 +207,6 @@ class GuestWifiPolicyForm(forms.ModelForm):
             self.add_error('daily_complimentary_minutes', 'السقف اليومي يجب أن يساوي أو يتجاوز الرصيد الأولي.')
         if cleaned.get('order_bonus_enabled') and int(cleaned.get('order_bonus_minutes') or 0) <= 0:
             self.add_error('order_bonus_minutes', 'حدد دقائق مكافأة أكبر من صفر أو عطّل مكافأة الطلب.')
-        if cleaned.get('require_venue_code') and int(cleaned.get('code_rotation_minutes') or 0) <= 0:
-            self.add_error('code_rotation_minutes', 'حدد مدة صالحة لتغيير رمز المكان.')
         return cleaned
 
 
