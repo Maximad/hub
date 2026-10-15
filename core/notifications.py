@@ -362,6 +362,8 @@ def visible_recipients_for(user):
     Broadcast records (user=NULL) match legacy role aliases; admins retain
     visibility of broadcast operational alerts, not other users' private notes.
     """
+    if not getattr(user, 'is_authenticated', False) or not getattr(user, 'is_active', False):
+        return NotificationRecipient.objects.none()
     audience = Q(user_id=user.pk)
     if user.is_superuser or getattr(user, 'role', '') == 'admin':
         audience |= Q(user__isnull=True)
