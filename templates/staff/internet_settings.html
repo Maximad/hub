@@ -69,7 +69,7 @@
       <label class="internet-policy-field"><span>{{ guest_wifi_form.daily_complimentary_minutes.label }}</span>{{ guest_wifi_form.daily_complimentary_minutes }}<small>أقصى مجموع مجاني في اليوم.</small></label>
       <label class="internet-policy-field"><span>{{ guest_wifi_form.order_bonus_minutes.label }}</span>{{ guest_wifi_form.order_bonus_minutes }}<small>لا تتجاوز السقف اليومي.</small></label>
       <label class="internet-policy-field"><span>{{ guest_wifi_form.qualifying_order_minimum_syp.label }}</span>{{ guest_wifi_form.qualifying_order_minimum_syp }}<small>صفر يعني أي طلب مقبول بقيمة أكبر من صفر.</small></label>
-      <label class="internet-policy-field"><span>{{ guest_wifi_form.code_rotation_minutes.label }}</span>{{ guest_wifi_form.code_rotation_minutes }}<small>يبقى الرمز السابق مقبولاً لفترة انتقال قصيرة.</small></label>
+      <p class="hub-help-text">يتغير رمز الزوار المجاني مع بداية يوم العمل بحسب ساعة النهاية المحددة. يبقى الرمز السابق صالحاً لعشر دقائق فقط.</p>
     </div>
     <div class="internet-policy-preview"><div><span>ما سيحصل عليه الزائر</span><strong>{{ guest_wifi_policy.session_minutes }} دقيقة عند الوصول</strong>{% if guest_wifi_policy.order_bonus_enabled %}<small>ثم {{ guest_wifi_policy.order_bonus_minutes }} دقيقة بعد كل طلب مؤهل، حتى {{ guest_wifi_policy.daily_complimentary_minutes }} دقيقة مجانية يومياً.</small>{% else %}<small>لا توجد مكافأة تلقائية مرتبطة بالطلب.</small>{% endif %}</div>{% if guest_wifi_current_code %}<div class="internet-policy-code"><span>رمز المكان الحالي</span><strong>{{ guest_wifi_current_code }}</strong><small>اعرضه داخل هَبّ فقط.</small></div>{% endif %}</div>
     <button class="hub-button hub-button-primary internet-policy-save" type="submit">حفظ إعدادات اتصال الزبائن</button>
