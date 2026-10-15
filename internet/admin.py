@@ -31,7 +31,7 @@ class GuestWifiPolicyAdmin(admin.ModelAdmin):
         'key', 'enabled', 'bandwidth_profile',
         'session_minutes', 'daily_complimentary_minutes',
         'order_bonus_enabled', 'order_bonus_minutes', 'qualifying_order_minimum_syp',
-        'require_venue_code', 'code_rotation_minutes', 'member_bypass_venue_code',
+        'require_venue_code', 'member_bypass_venue_code',
         'venue_code', 'created_at', 'updated_at',
     )
 
