@@ -32,7 +32,7 @@ from .models import (
     OrderItem,
     PageSetting,
     Payment,
-    NotificationEvent, NotificationRecipient, NotificationPreference, NotificationLog, PushSubscription,
+    NotificationEvent, NotificationRecipient, NotificationReadReceipt, NotificationPreference, NotificationLog, PushSubscription,
     Product,
     Room,
     Shift,
@@ -852,9 +852,28 @@ class NotificationRecipientAdmin(ReadOnlyWorkflowAdmin):
     def get_model_perms(self, request):
         return {}
 
-    list_display = ('notification_event', 'user', 'role', 'station', 'is_read', 'delivered_at', 'read_at')
+    @admin.display(boolean=True, description='Legacy shared read state')
+    def legacy_shared_read(self, obj):
+        return obj.is_read
+
+    list_display = (
+        'notification_event', 'user', 'role', 'station',
+        'legacy_shared_read', 'read_at', 'delivered_at',
+    )
     list_filter = ('role', 'station', 'is_read')
     autocomplete_fields = ('notification_event', 'user', 'station')
+
+
+@admin.register(NotificationReadReceipt)
+class NotificationReadReceiptAdmin(ReadOnlyWorkflowAdmin):
+    """Per-user read records, separate from legacy role recipient flags."""
+
+    def get_model_perms(self, request):
+        return {}
+
+    list_display = ('notification_recipient', 'user', 'read_at')
+    list_filter = ('read_at',)
+    raw_id_fields = ('notification_recipient', 'user')
 
 
 @admin.register(NotificationLog)
