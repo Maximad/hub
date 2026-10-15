@@ -7,6 +7,7 @@ unchanged. Read receipts are personal and must not mutate delivery records.
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -127,6 +128,14 @@ class NotificationRecipientIsolationTests(TestCase):
         )
         self.assertIn(f'event:{private.pk}', self.unread_keys(self.waiter_a))
         self.assertNotIn(f'event:{private.pk}', self.unread_keys(self.waiter_b))
+
+    def test_anonymous_and_inactive_users_have_no_visible_notifications(self):
+        event = self.event()
+        NotificationRecipient.objects.create(notification_event=event, role='cashier')
+        self.assertFalse(visible_recipients_for(AnonymousUser()).exists())
+        self.cashier_a.is_active = False
+        self.cashier_a.save(update_fields=['is_active'])
+        self.assertFalse(visible_recipients_for(self.cashier_a).exists())
 
     def test_missing_or_forged_read_key_never_clears_all_notifications(self):
         event = self.event()
