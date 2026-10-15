@@ -123,7 +123,6 @@ def sync_business_day_tasks(day, *, actor=None):
         if created:
             # In-app only. No browser/lock-screen push payload contains the PIN.
             # Persist once per business day; old PIN cards expire with the day.
-            from .services import business_day_bounds
             event = NotificationEvent.objects.create(
                 event_type=NotificationEvent.EventType.GUEST_WIFI_DAILY_PIN,
                 title_ar='رمز إنترنت الزوار المجاني لهذا اليوم',
