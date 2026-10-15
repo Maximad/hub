@@ -18,6 +18,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from accounts.permissions import user_has_capability
+from core.notification_audience import ROLE_TO_ACCOUNT_ROLES
 from core.models import (
     NotificationEvent,
     NotificationLog,
@@ -64,18 +65,6 @@ PUSH_ROUTES = {
         ('admin',), 'notify_manager_approvals', 'partial_payment_approval'
     ),
 }
-
-# Notification roles predate the current account role labels. Keep the mapping
-# explicit so a "service" audience resolves to waiters without inventing a new
-# account role.
-ROLE_TO_ACCOUNT_ROLES = {
-    'admin': ('admin',),
-    'cashier': ('cashier',),
-    'service': ('waiter',),
-    'waiter': ('waiter',),
-    'kitchen': ('kitchen',),
-}
-
 
 def push_route_for_event(event: NotificationEvent) -> PushRoute | None:
     route = PUSH_ROUTES.get(event.event_type)
