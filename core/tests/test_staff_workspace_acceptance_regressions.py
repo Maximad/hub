@@ -67,6 +67,15 @@ class StaffWorkspaceAcceptanceRegressionTests(TestCase):
         self.assertNotContains(response, f'action="{pay_url}?panel=payment"')
 
     def test_internet_drawer_links_keep_styled_full_page_fallback(self):
+        # Drawer actions are shown on payable cards, not on empty visits.
+        from core.models import OrderItem
+        category = Category.objects.create(name_ar='خدمات الاختبار')
+        product = Product.objects.create(category=category, name_ar='شراب تجريبي', price_syp=100)
+        OrderItem.objects.create(
+            order=self.order, product=product, quantity=1,
+            product_name_ar_snapshot=product.name_ar,
+            unit_price_syp_snapshot=100, line_total_syp_snapshot=100,
+        )
         visit_url = reverse(
             'staff_visit_detail',
             kwargs={'public_code': self.visit.public_code},

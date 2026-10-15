@@ -147,9 +147,9 @@ class StaffWorkspaceTests(TestCase):
 
         refreshed = self.client.get(reverse('staff_home'))
         self.assertEqual(refreshed.context['workspace_stats']['unpaid_orders'], 0)
-        self.assertEqual(refreshed.context['visit_rows'][0]['remaining_syp'], 0)
+        self.assertEqual(refreshed.context['visit_rows'], [])
         self.assertContains(refreshed, 'data-operations-v2')
-        self.assertContains(refreshed, 'data-unpaid="0"')
+        self.assertNotContains(refreshed, 'data-search="' + self.visit.display_number)
 
     def test_operations_snapshot_removes_account_after_settle_and_close(self):
         OrderItem.objects.create(
@@ -183,13 +183,13 @@ class StaffWorkspaceTests(TestCase):
         self.assertTemplateUsed(response, 'staff/home.html')
         self.assertContains(response, '>العمليات</h2>', html=False)
         self.assertContains(response, 'الطلبات، الحساب، الدفع والإنترنت من مساحة واحدة.')
-        self.assertContains(response, 'الحسابات النشطة اليوم')
-        self.assertContains(response, self.table.name_ar)
+        self.assertContains(response, 'الحسابات التي تحتاج متابعة مالية')
+        self.assertNotContains(response, 'data-search="' + self.visit.display_number)
         self.assertContains(response, self.order.display_number)
         self.assertContains(response, '+ طلب جديد')
         self.assertContains(response, '+ فتح حساب / جلسة جديدة')
-        self.assertContains(response, 'data-context-title="الدفع وإغلاق الحساب"')
-        self.assertContains(response, 'data-context-title="إنترنت الحساب"')
+        self.assertNotContains(response, 'data-context-title="الدفع وإغلاق الحساب"')
+        self.assertNotContains(response, 'data-context-title="إنترنت الحساب"')
         self.assertNotContains(response, 'وصول سريع إلى مساحات التشغيل اليومية حسب صلاحياتك.')
 
     def test_quick_start_is_role_aware_and_bounded(self):
@@ -360,7 +360,7 @@ class StaffWorkspaceTests(TestCase):
         self.assertNotContains(response, 'data-context-title="الدفع وإغلاق الحساب"')
         self.assertContains(response, 'كل الطلبات')
         self.assertContains(response, 'كل الجلسات')
-        self.assertContains(response, 'data-context-title="إنترنت الحساب"')
+        self.assertNotContains(response, 'data-context-title="إنترنت الحساب"')
         self.assertContains(response, '>تعديل</a>', html=False)
 
     def test_all_operational_staff_can_open_order_edit_and_visit_management(self):

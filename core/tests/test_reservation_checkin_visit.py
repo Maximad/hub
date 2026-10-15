@@ -192,5 +192,7 @@ class ReservationCheckInVisitTests(TestCase):
         response = self.client.get(reverse('staff_home'), {'visit': str(visit.public_code)})
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, str(visit.public_code))
+        # A reservation check-in without a bill is not a cashier card.
+        # The requested visit stays addressable by the URL and staff JS.
+        self.assertNotContains(response, str(visit.public_code))
         self.assertContains(response, 'js/staff_workspace.js')

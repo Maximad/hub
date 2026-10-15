@@ -6,7 +6,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from core.models import HubVisit
+from core.models import HubVisit, InternetSession
 from core.templatetags.hub_time import ar_date, ar_datetime, ar_since
 from operations.services import current_business_date
 
@@ -39,6 +39,14 @@ class FinalOperationsUxTests(TestCase):
         start = self._business_day_start()
         stale = HubVisit.objects.create(notes='stale-account-marker')
         live = HubVisit.objects.create(notes='live-account-marker')
+        # Only an active paid-by-time session creates a cashier obligation.
+        for visit in (stale, live):
+            InternetSession.objects.create(
+                visit=visit,
+                start_time=start,
+                status=InternetSession.Status.ACTIVE,
+                billing_mode=InternetSession.BillingMode.OPEN_METERED,
+            )
         HubVisit.objects.filter(pk=stale.pk).update(last_activity_at=start - timedelta(hours=2))
         HubVisit.objects.filter(pk=live.pk).update(last_activity_at=start + timedelta(hours=2))
 

@@ -17,6 +17,8 @@ from accounts.permissions import get_staff_capabilities, is_cashier, is_owner_or
 from core.models import HubVisit, InternetSession, Member, Order, Payment, TableArea
 from operations.services import current_business_date
 from core.services.visits import customer_visit_queryset
+from internet.guest_wifi import get_guest_wifi_policy, current_venue_code
+from operations.models import BusinessDayTask
 
 
 ACTIVE_ORDER_STATUSES = (
@@ -119,9 +121,18 @@ def staff_home(request):
             session.status == InternetSession.Status.ACTIVE
             for session in visit.internet_sessions.all()
         )
+        active_metered_count = sum(
+            session.status == InternetSession.Status.ACTIVE
+            and session.billing_mode == InternetSession.BillingMode.OPEN_METERED
+            for session in visit.internet_sessions.all()
+        )
         gross_syp = sum(order.total_syp for order in orders)
         remaining_syp = sum(order.remaining_syp for order in orders)
         active_order_count = sum(order.status in ACTIVE_ORDER_STATUSES for order in orders)
+        # A free Wi-Fi session is a technical record, not a payable account.
+        # Keep a paid time-metered session visible even before its final charge.
+        if remaining_syp <= 0 and active_metered_count == 0:
+            continue
         row = {
             "visit": visit,
             "gross_syp": gross_syp,
@@ -130,6 +141,7 @@ def staff_home(request):
             "order_count": len(orders),
             "active_order_count": active_order_count,
             "active_internet_count": active_internet_count,
+            "active_metered_count": active_metered_count,
             "has_unpaid": remaining_syp > 0,
         }
         if visit.last_activity_at and visit.last_activity_at < day_start:
@@ -166,7 +178,14 @@ def staff_home(request):
     capabilities = get_staff_capabilities(request.user)
     primary_actions, more_actions = _daily_workspace_actions(request.user, capabilities)
 
-    return render(
+    guest_policy = get_guest_wifi_policy()
+    guest_pin_enabled = bool(guest_policy.enabled and guest_policy.require_venue_code)
+    board_task = BusinessDayTask.objects.filter(
+        business_day__business_date=current_business_date(),
+        fingerprint="wifi:board-pin",
+    ).first() if guest_pin_enabled else None
+
+    response = render(
         request,
         "staff/home.html",
         {
@@ -184,9 +203,14 @@ def staff_home(request):
             "workspace_primary_actions": primary_actions,
             "workspace_more_actions": more_actions,
             "workspace_business_day_start": day_start,
+            "guest_wifi_pin": current_venue_code(guest_policy) if guest_pin_enabled else "",
+            "guest_wifi_board_task": board_task,
             # Used by the inline new-account form. Routine staff should not have
             # to leave Operations simply to create a customer account.
             "workspace_tables": TableArea.objects.select_related("room").order_by("room__name_ar", "name_ar"),
             "workspace_members": Member.objects.order_by("name_ar")[:200],
         },
     )
+    # PIN visible to staff only: never cache the operations response.
+    response['Cache-Control'] = 'private, no-store, max-age=0'
+    return response

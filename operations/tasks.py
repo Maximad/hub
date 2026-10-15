@@ -7,8 +7,10 @@ from django.db import transaction
 from django.db.models import F, Q
 from django.utils import timezone
 
-from core.models import ActivityLog, InventoryItem
+from core.models import ActivityLog, InventoryItem, NotificationEvent, NotificationLog, NotificationRecipient
+from accounts.permissions import user_has_capability
 from events.models import Event
+from internet.guest_wifi import get_guest_wifi_policy, venue_code_for_slot
 from reservations.models import Reservation
 
 from .config import int_setting
@@ -93,6 +95,62 @@ def sync_business_day_tasks(day, *, actor=None):
     start, end = business_day_bounds(day)
     active_fingerprints = set()
     created_count = 0
+
+    # Every Hub business day requires one physical board update, but only if
+    # free guest Internet actually requires the venue PIN. The task remains
+    # separate from cashier bills, free Internet usage and the staff login code.
+    wifi_policy = get_guest_wifi_policy()
+    if wifi_policy.enabled and wifi_policy.require_venue_code:
+        fingerprint = 'wifi:board-pin'
+        active_fingerprints.add(fingerprint)
+        _, created = _upsert_generated_task(
+            day,
+            fingerprint=fingerprint,
+            defaults={
+                'kind': BusinessDayTask.Kind.RECURRING,
+                'title_ar': 'تحديث رمز الإنترنت المجاني على اللوحة',
+                'details': 'اعرض رمز اليوم الظاهر في العمليات على اللوحة داخل هَبّ، ثم اضغط «تم».',
+                'priority': OperationalTaskTemplate.Priority.HIGH,
+                'due_at': None,
+                'is_required': True,
+                'responsibility_role': 'cashier',
+                'source_type': 'GuestWifiPolicy',
+                'source_id': str(wifi_policy.pk or ''),
+                'metadata': {'business_date': str(day.business_date)},
+            },
+        )
+        created_count += int(created)
+        if created:
+            # In-app only. No browser/lock-screen push payload contains the PIN.
+            # Persist once per business day; old PIN cards expire with the day.
+            event = NotificationEvent.objects.create(
+                event_type=NotificationEvent.EventType.GUEST_WIFI_DAILY_PIN,
+                title_ar='رمز إنترنت الزوار المجاني لهذا اليوم',
+                message_ar=(
+                    f'الرمز: {venue_code_for_slot(wifi_policy, day.business_date.toordinal())} '
+                    '— يرجى تحديثه على اللوحة داخل هَبّ.'
+                ),
+                expires_at=business_day_bounds(day)[1],
+                created_by=actor if getattr(actor, 'is_authenticated', False) else None,
+            )
+            users = [
+                user for user in get_user_model().objects.filter(is_active=True)
+                if user_has_capability(user, 'staff_home')
+            ]
+            NotificationRecipient.objects.bulk_create([
+                NotificationRecipient(
+                    notification_event=event,
+                    user=user,
+                    role=getattr(user, 'role', '') or '',
+                ) for user in users
+            ])
+            NotificationLog.objects.create(
+                notification_event=event,
+                channel=NotificationLog.Channel.SYSTEM,
+                recipient_role='staff',
+                status=NotificationLog.Status.SENT,
+                sent_at=timezone.now(),
+            )
 
     for template in OperationalTaskTemplate.objects.filter(is_active=True).order_by('pk'):
         if not _template_applies(template, day.business_date):
