@@ -188,8 +188,8 @@ class StaffWorkspaceTests(TestCase):
         self.assertContains(response, self.order.display_number)
         self.assertContains(response, '+ طلب جديد')
         self.assertContains(response, '+ فتح حساب / جلسة جديدة')
-        self.assertContains(response, 'data-context-title="الدفع وإغلاق الحساب"')
-        self.assertContains(response, 'data-context-title="إنترنت الحساب"')
+        self.assertNotContains(response, 'data-context-title="الدفع وإغلاق الحساب"')
+        self.assertNotContains(response, 'data-context-title="إنترنت الحساب"')
         self.assertNotContains(response, 'وصول سريع إلى مساحات التشغيل اليومية حسب صلاحياتك.')
 
     def test_quick_start_is_role_aware_and_bounded(self):
@@ -360,7 +360,7 @@ class StaffWorkspaceTests(TestCase):
         self.assertNotContains(response, 'data-context-title="الدفع وإغلاق الحساب"')
         self.assertContains(response, 'كل الطلبات')
         self.assertContains(response, 'كل الجلسات')
-        self.assertContains(response, 'data-context-title="إنترنت الحساب"')
+        self.assertNotContains(response, 'data-context-title="إنترنت الحساب"')
         self.assertContains(response, '>تعديل</a>', html=False)
 
     def test_all_operational_staff_can_open_order_edit_and_visit_management(self):
