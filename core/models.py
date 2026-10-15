@@ -594,6 +594,7 @@ class NotificationEvent(TimeStampedModel):
         DISCOUNT_ADDED = 'discount_added', 'تمت إضافة خصم'
         MANAGER_APPROVAL_NEEDED = 'manager_approval_needed', 'مطلوب موافقة المدير'
         CLOSE_DAY_FINALIZED = 'close_day_finalized', 'تم إغلاق اليوم'
+        GUEST_WIFI_DAILY_PIN = 'guest_wifi_daily_pin', 'رمز إنترنت الزوار اليومي'
         DELIVERY_ORDER_CREATED = 'delivery_order_created', 'طلب توصيل جديد'
 
     event_type = models.CharField(max_length=40, choices=EventType.choices)
