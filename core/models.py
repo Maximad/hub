@@ -634,6 +634,31 @@ class NotificationRecipient(TimeStampedModel):
         return str(self.notification_event)
 
 
+class NotificationReadReceipt(models.Model):
+    """One staff user's read state for an existing notification recipient.
+
+    Shared role recipients and directly addressed recipients remain immutable
+    delivery/audience records. Their legacy is_read flag is honored for history,
+    but new reads are recorded here without affecting anyone else.
+    """
+
+    notification_recipient = models.ForeignKey(
+        NotificationRecipient, on_delete=models.CASCADE, related_name='user_read_receipts'
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='notification_read_receipts'
+    )
+    read_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['notification_recipient', 'user'],
+                name='unique_notification_user_read_receipt',
+            ),
+        ]
+
+
 class NotificationPreference(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='notification_preference')
     enable_sound = models.BooleanField(default=True)
