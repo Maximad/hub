@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 PREP_EVENTS = {'new_prep_item', 'prep_item_ready', 'prep_item_cancelled'}
 PAYMENT_EVENTS = {'payment_pending', 'partial_payment_requested', 'discount_added'}
 MANAGER_EVENTS = {'manager_approval_needed'}
-DAILY_EVENTS = {'close_day_finalized'}
+DAILY_EVENTS = {'close_day_finalized', 'guest_wifi_daily_pin'}
 
 
 def role_for_station(station):
@@ -68,6 +68,8 @@ def link_for_event(event):
         return reverse('staff_prep_station', kwargs={'station_code': code}) if code else reverse('staff_prep')
     if event.event_type in PAYMENT_EVENTS or event.event_type in MANAGER_EVENTS:
         return reverse('staff_cashier_order', kwargs={'public_code': event.order.public_code}) if event.order_id else reverse('staff_cashier')
+    if event.event_type == 'guest_wifi_daily_pin':
+        return reverse('staff_home')
     if event.event_type in DAILY_EVENTS:
         return reverse('staff_close_day')
     return reverse('staff_delivery') if str(event.event_type).startswith('delivery_') else reverse('staff_orders')
@@ -270,6 +272,10 @@ def group_notification_recipients_for_user(user, *, unread_only=False, limit=50,
         'notification_event__target_station',
         'station',
     ).filter(notification_event__is_active=True)
+    qs = qs.exclude(
+        notification_event__event_type='guest_wifi_daily_pin',
+        notification_event__expires_at__lte=timezone.now(),
+    )
     if unread_only:
         qs = qs.filter(is_read=False)
     rows = list(qs.order_by('-notification_event__created_at', '-created_at')[:fetch_limit])
