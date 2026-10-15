@@ -45,6 +45,24 @@
     {% endif %}
   </section>
 
+  {% if guest_wifi_pin %}
+  <section class="hub-card" aria-label="رمز الإنترنت المجاني لليوم" style="margin-bottom:1rem;">
+    <div class="hub-toolbar" style="align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.8rem;">
+      <div><strong>رمز الإنترنت المجاني لليوم</strong><p class="hub-help-text" style="margin:.2rem 0 0;">يُحدّث مرة في بداية يوم العمل ويُكتب على اللوحة داخل هَبّ.</p></div>
+      <strong dir="ltr" style="font-size:1.6rem;letter-spacing:.14em;font-variant-numeric:tabular-nums;">{{ guest_wifi_pin }}</strong>
+      {% if guest_wifi_board_task %}
+        {% if guest_wifi_board_task.status == 'done' %}
+          <span class="hub-badge hub-badge-success">تم تحديث اللوحة</span>
+        {% else %}
+          <a class="hub-button hub-button-primary" href="{% url 'staff_operational_tasks' %}">مهمة اليوم: تحديث اللوحة</a>
+        {% endif %}
+      {% else %}
+        <a class="hub-button" href="{% url 'staff_operational_tasks' %}">المهام اليومية</a>
+      {% endif %}
+    </div>
+  </section>
+  {% endif %}
+
   <div class="staff-v2-toolbar ops-v2__toolbar" aria-label="البحث والتصفية">
     <div class="ops-v2__toolbar-main">
       <label class="staff-v2-search"><span class="hub-visually-hidden">بحث في الحسابات</span>{% include "includes/staff_icon.html" with name="search" %}<input type="search" data-ops-search placeholder="ابحث عن حساب، طاولة، عضو أو رقم..." autocomplete="off"><kbd>Ctrl K</kbd></label>
@@ -54,7 +72,7 @@
   </div>
 
   <section class="ops-v2__stats" aria-label="ملخص الوردية">
-    {% if staff_caps.visit_manage %}<a class="ops-v2__stat" href="#open-accounts"><span class="ops-v2__stat-icon">{% include "includes/staff_icon.html" with name="card" class="staff-icon--lg" %}</span><strong>{{ workspace_stats.open_visits }}</strong><span>نشطة اليوم</span></a>{% endif %}
+    {% if staff_caps.visit_manage %}<a class="ops-v2__stat" href="#open-accounts"><span class="ops-v2__stat-icon">{% include "includes/staff_icon.html" with name="card" class="staff-icon--lg" %}</span><strong>{{ workspace_stats.open_visits }}</strong><span>تحتاج متابعة مالية</span></a>{% endif %}
     <a class="ops-v2__stat" href="#active-orders"><span class="ops-v2__stat-icon">{% include "includes/staff_icon.html" with name="wifi" class="staff-icon--lg" %}</span><strong>{{ workspace_stats.active_orders }}</strong><span>الطلبات النشطة</span></a>
     <a class="ops-v2__stat" href="#active-orders"><span class="ops-v2__stat-icon">{% include "includes/staff_icon.html" with name="send" class="staff-icon--lg" %}</span><strong>{{ workspace_stats.ready_orders }}</strong><span>جاهز للتسليم</span></a>
     {% if workspace_stats.stale_visits %}<a class="ops-v2__stat" href="#stale-accounts"><span class="ops-v2__stat-icon">{% include "includes/staff_icon.html" with name="clock" class="staff-icon--lg" %}</span><strong>{{ workspace_stats.stale_visits }}</strong><span>قديم بحاجة لمراجعة</span></a>{% elif workspace_caps.cashier %}<a class="ops-v2__stat" href="#open-accounts"><span class="ops-v2__stat-icon">{% include "includes/staff_icon.html" with name="users" class="staff-icon--lg" %}</span><strong>{{ workspace_stats.unpaid_orders }}</strong><span>بحاجة إلى تسديد</span></a>{% endif %}
@@ -65,13 +83,13 @@
   <div class="ops-v2__layout">
     {% if staff_caps.visit_manage %}
     <section class="ops-v2__accounts" id="open-accounts" data-ops-section="accounts">
-      <div class="staff-v2-panel-head"><div><h3>الحسابات النشطة اليوم</h3><p>الحسابات التي شهدت نشاطاً ضمن يوم العمل الحالي.</p></div></div>
+      <div class="staff-v2-panel-head"><div><h3>الحسابات التي تحتاج متابعة مالية</h3><p>مبالغ مستحقة أو إنترنت مدفوع ما زال قيد الاحتساب. الإنترنت المجاني لا يظهر هنا.</p></div></div>
       <div class="ops-v2__account-grid" data-ops-cards>
         {% for row in visit_rows %}{% with visit=row.visit %}
-        <article class="ops-v2__account" data-ops-card data-search="{{ visit.display_number }} {{ visit.table }} {{ visit.member|default:'' }} {% if row.latest_order %}{{ row.latest_order.display_number }}{% endif %}" data-unpaid="{% if row.has_unpaid %}1{% else %}0{% endif %}" data-internet="{% if row.active_internet_count %}1{% else %}0{% endif %}">
+        <article class="ops-v2__account" data-ops-card data-search="{{ visit.display_number }} {{ visit.table }} {{ visit.member|default:'' }} {{ visit.guest_name }} {% if row.latest_order %}{{ row.latest_order.display_number }}{% endif %}" data-unpaid="{% if row.has_unpaid %}1{% else %}0{% endif %}" data-internet="{% if row.active_internet_count %}1{% else %}0{% endif %}">
           <a class="ops-v2__account-main" href="{% url 'staff_visit_detail' visit.public_code %}" data-visit-context-url="{% url 'staff_visit_detail' visit.public_code %}?panel=1" data-context-title="حساب الزبون" aria-haspopup="dialog">
-            <div class="ops-v2__account-chips">{% if row.active_internet_count %}<span class="staff-v2-badge staff-v2-badge--success">{% include "includes/staff_icon.html" with name="wifi" %}إنترنت {{ row.active_internet_count }}</span>{% endif %}{% if row.order_count %}<span class="staff-v2-badge">{% include "includes/staff_icon.html" with name="cart" %}{{ row.order_count }}</span>{% endif %}<span class="staff-v2-badge {% if row.has_unpaid %}staff-v2-badge--warning{% else %}staff-v2-badge--success{% endif %} ops-v2__status">{% if row.has_unpaid %}مفتوح{% else %}نشط{% endif %}</span></div>
-            <div class="ops-v2__account-title"><strong>{% if visit.table %}{{ visit.table }}{% else %}جلسة {{ visit.display_number }}{% endif %}</strong><span>{{ visit.display_number }}{% if visit.member %} · {{ visit.member }}{% endif %}</span></div>
+            <div class="ops-v2__account-chips">{% if row.active_internet_count %}<span class="staff-v2-badge staff-v2-badge--success">{% include "includes/staff_icon.html" with name="wifi" %}إنترنت {{ row.active_internet_count }}</span>{% endif %}{% if row.order_count %}<span class="staff-v2-badge">{% include "includes/staff_icon.html" with name="cart" %}{{ row.order_count }}</span>{% endif %}<span class="staff-v2-badge {% if row.has_unpaid %}staff-v2-badge--warning{% else %}staff-v2-badge--success{% endif %} ops-v2__status">{% if row.has_unpaid %}مطلوب التحصيل{% else %}قيد الاحتساب{% endif %}</span></div>
+            <div class="ops-v2__account-title"><strong>{% if visit.table %}{{ visit.table }}{% else %}جلسة {{ visit.display_number }}{% endif %}</strong><span>{{ visit.display_number }}{% if visit.member %} · {{ visit.member }}{% elif visit.guest_name %} · {{ visit.guest_name }}{% endif %}</span></div>
             <div class="ops-v2__account-money"><span class="ops-v2__money-cell"><span>الإجمالي</span><strong>{{ row.gross_syp|format_syp }}</strong></span><span class="ops-v2__money-cell {% if row.has_unpaid %}ops-v2__money-cell--danger{% endif %}"><span>المتبقي</span><strong>{{ row.remaining_syp|format_syp }}</strong></span></div>
             <div class="ops-v2__account-foot"><span>{% include "includes/staff_icon.html" with name="clock" %}آخر نشاط منذ {{ visit.last_activity_at|ar_since }}</span><span>عرض التفاصيل {% include "includes/staff_icon.html" with name="chevron" %}</span></div>
           </a>
