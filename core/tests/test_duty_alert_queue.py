@@ -1,5 +1,7 @@
 """Unassigned-alert projection and post-handover reconciliation regressions."""
 
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -14,7 +16,7 @@ from core.models import (
     Category, NotificationEvent, NotificationLog, NotificationPreference,
     Order, OrderItem, Product, PushSubscription,
 )
-from core.notifications import create_notification
+from core.notifications import create_notification, visible_recipients_for
 from core.services.notification_delivery import user_is_push_target
 from operations.duty import (
     accept_duty_handover, assign_duty_coverage, request_duty_handover,
@@ -179,6 +181,19 @@ class DutyAlertFollowupTests(TestCase):
         self.order.save(update_fields=['status', 'updated_at'])
         self.assertFalse(event_has_outstanding_work(event))
         self.assertFalse(unassigned_duty_alerts_for_manager(self.day, self.owner))
+
+    def test_previous_business_day_alert_never_rebroadcasts_to_old_roles(self):
+        event = self._event()
+        event.duty_routing_business_date = self.day.business_date - timedelta(days=1)
+        event.save(update_fields=['duty_routing_business_date', 'updated_at'])
+        self.assertFalse(user_is_push_target(event, self.owner))
+        self.assertFalse(user_is_push_target(event, self.tamer))
+        self.assertFalse(
+            visible_recipients_for(self.owner).filter(notification_event=event).exists()
+        )
+        self.assertEqual(unassigned_duty_alerts_for_manager(self.day, self.owner), [])
+        with override_settings(DUTY_NOTIFICATION_ROUTING_ENABLED=False):
+            self.assertTrue(user_is_push_target(event, self.owner))
 
     def test_only_flagged_events_appear_and_flag_off_is_noop(self):
         self._event()
