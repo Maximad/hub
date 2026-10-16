@@ -6,7 +6,14 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from .insights import business_day_metrics, detect_anomalies, send_owner_digest
-from .models import BusinessDay, BusinessDayChecklistItem, BusinessDayException, HandoverNote
+from .duty import (
+    accept_duty_handover, assign_duty_coverage,
+    eligible_duty_users, request_duty_handover,
+)
+from .models import (
+    BusinessDay, BusinessDayChecklistItem, BusinessDayDutyCoverage,
+    BusinessDayException, HandoverNote,
+)
 from .opening import (
     acknowledge_handover,
     active_staff_queryset,
@@ -117,6 +124,32 @@ def staff_business_day(request):
                     raise PermissionDenied
                 set_staff_roster(day, actor=request.user, user_ids=request.POST.getlist('staff_user_ids'))
                 messages.success(request, 'تم تحديث فريق العمل لهذا اليوم.')
+                return redirect('staff_close_day')
+
+            elif action == 'duty_assign':
+                if not _can_manage(request.user):
+                    raise PermissionDenied
+                assign_duty_coverage(
+                    day, responsibility=request.POST.get('responsibility', ''),
+                    user_id=request.POST.get('duty_user_id'), actor=request.user,
+                )
+                messages.success(request, 'تم تحديث مسؤول المناوبة وتوثيق التغيير.')
+                return redirect('staff_close_day')
+
+            elif action == 'duty_handover_request':
+                request_duty_handover(
+                    day, responsibility=request.POST.get('responsibility', ''),
+                    to_user_id=request.POST.get('duty_user_id'), actor=request.user,
+                )
+                messages.info(request, 'طلب التسليم بانتظار قبول المسؤول الجديد.')
+                return redirect('staff_close_day')
+
+            elif action == 'duty_handover_accept':
+                accept_duty_handover(
+                    day, responsibility=request.POST.get('responsibility', ''),
+                    actor=request.user,
+                )
+                messages.success(request, 'تم قبول التسليم وأصبحت المسؤولية معك.')
                 return redirect('staff_close_day')
 
             elif action == 'checklist':
@@ -264,6 +297,21 @@ def staff_business_day(request):
         day.code_receipts.select_related('user').order_by('user__username')
         if day and can_manage else []
     )
+    duty_rows = []
+    if day:
+        coverage_by_role = {
+            c.responsibility: c
+            for c in day.duty_coverages.select_related(
+                'primary_assignment__user', 'proposed_assignment__user'
+            )
+        }
+        for value, label in BusinessDayDutyCoverage.Responsibility.choices:
+            duty_rows.append({
+                'value': value,
+                'label': label,
+                'coverage': coverage_by_role.get(value),
+                'candidates': eligible_duty_users(day, value),
+            })
     metrics = business_day_metrics(day) if day and can_manage else None
     anomalies = detect_anomalies(day) if day and can_manage else []
     recent_days = BusinessDay.objects.select_related('opened_by', 'closed_by').order_by('-business_date')[:14]
@@ -276,6 +324,7 @@ def staff_business_day(request):
         'can_reopen_business_day': _can_reopen(request.user),
         'staff_options': staff_options,
         'staff_assignments': assignments,
+        'duty_rows': duty_rows,
         'assigned_staff_ids': assigned_staff_ids,
         'opening_checklist_items': checklist_items,
         'handover_notes': handover_notes,
