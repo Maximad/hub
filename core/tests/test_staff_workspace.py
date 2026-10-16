@@ -328,7 +328,7 @@ class StaffWorkspaceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'التنقل التشغيلي')
         self.assertContains(response, '>العمليات</a>', html=False)
-        self.assertContains(response, '>المزيد</a>', html=False)
+        self.assertContains(response, '>الأقسام</a>', html=False)
         self.assertNotContains(response, '>الجلسات</a>', html=False)
         self.assertNotContains(response, '>الدفع</a>', html=False)
         self.assertNotContains(response, '>الإنترنت</a>', html=False)
