@@ -130,6 +130,17 @@ def set_staff_roster(day, *, actor, user_ids):
         raise ValidationError('تتضمن قائمة الفريق حساباً غير صالح أو غير نشط.')
 
     current_ids = set(day.staff_assignments.values_list('user_id', flat=True))
+    removed_ids = current_ids - valid_ids
+    if removed_ids:
+        from django.db.models import Q
+        busy = day.duty_coverages.filter(
+            Q(primary_assignment__user_id__in=removed_ids)
+            | Q(proposed_assignment__user_id__in=removed_ids)
+        ).exists()
+        if busy:
+            raise ValidationError(
+                'لا يمكن حذف موظف مسؤول عن المناوبة أو لديه تسليم معلّق. انقل المسؤولية أولاً.'
+            )
     day.staff_assignments.exclude(user_id__in=valid_ids).delete()
     for user in staff:
         BusinessDayStaffAssignment.objects.get_or_create(
