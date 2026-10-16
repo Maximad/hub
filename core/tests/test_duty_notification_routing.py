@@ -84,11 +84,13 @@ class DutyNotificationRoutingTests(TestCase):
         return event
 
     def _visible(self, event, user):
-        return any(
-            card['group_key'] == f'event:{event.pk}' or (
-                event.event_type == 'new_prep_item'
-                and card['group_key'].startswith(f'prep-order:{self.order.pk}:')
+        keys = {f'event:{event.pk}'}
+        if event.event_type == 'new_prep_item':
+            keys.add(
+                f'prep-order:{self.order.pk}:station:{event.target_station_id or "none"}'
             )
+        return any(
+            card['group_key'] in keys
             for card in group_notification_recipients_for_user(user)
         )
 
