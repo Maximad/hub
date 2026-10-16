@@ -97,6 +97,20 @@ def current_duty_users(day, responsibility):
     return [holder.user]
 
 
+def _schedule_duty_alert_reconciliation(day, responsibility):
+    """Recheck outstanding work after the duty update transaction commits."""
+    from django.conf import settings
+    if not getattr(settings, 'DUTY_NOTIFICATION_ROUTING_ENABLED', False):
+        return
+    from core.duty_alert_queue import schedule_reenqueue_after_duty_change
+    transaction.on_commit(
+        lambda day_id=day.pk, slot=responsibility: schedule_reenqueue_after_duty_change(
+            day_id, slot
+        ),
+        robust=True,
+    )
+
+
 def _audit(actor, action, day, responsibility, **details):
     ActivityLog.objects.create(
         actor=actor,
@@ -133,6 +147,7 @@ def assign_duty_coverage(day, *, responsibility, user_id, actor):
         actor, 'business_day.duty_assigned', day, responsibility,
         from_user_id=old_user_id, to_user_id=candidate.user_id,
     )
+    _schedule_duty_alert_reconciliation(day, responsibility)
     return coverage
 
 
@@ -192,4 +207,5 @@ def accept_duty_handover(day, *, responsibility, actor):
         actor, 'business_day.duty_handover_accepted', day, responsibility,
         from_user_id=from_user_id, to_user_id=actor.pk,
     )
+    _schedule_duty_alert_reconciliation(day, responsibility)
     return coverage
