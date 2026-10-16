@@ -15,7 +15,7 @@ from accounts.permissions import user_has_capability
 from .forms_reminders import ReminderCreateForm
 from .models import Reminder
 from .reminders import (
-    _manager, can_access_reminder, close_reminder,
+    _manager, _recipient, can_access_reminder, close_reminder,
     create_standalone_reminder, reminders_enabled, snooze_reminder,
 )
 from .services import current_business_date
@@ -35,9 +35,30 @@ def _displayable_reminders(user, *, show_history=False):
         queryset = queryset.filter(status=Reminder.Status.ACTIVE).order_by(
             'next_due_at', '-updated_at', 'pk',
         )
-    # Real operational ownership, not a role-only audience; use the same
-    # predicate as the mutation service. Bounded until the duty-queue UI grows.
-    return [r for r in queryset[:250] if can_access_reminder(user, r)]
+    # Resolve each distinct holder/responsibility combination only once per
+    # page. Record-level POST mutations still recheck fresh duty ownership.
+    items = list(queryset[:250])
+    if _manager(user):
+        return items
+    day = BusinessDay.objects.filter(
+        business_date=current_business_date(),
+        status__in=[
+            BusinessDay.Status.OPEN, BusinessDay.Status.CLOSING,
+            BusinessDay.Status.REOPENED,
+        ],
+    ).first()
+    if day is None:
+        return []
+    recipient_cache = {}
+    visible = []
+    for item in items:
+        key = (item.assigned_to_id, item.responsibility)
+        if key not in recipient_cache:
+            target = _recipient(item, day)
+            recipient_cache[key] = target.pk if target is not None else None
+        if recipient_cache[key] == user.pk:
+            visible.append(item)
+    return visible
 
 
 @login_required
