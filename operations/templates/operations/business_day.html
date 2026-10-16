@@ -124,7 +124,7 @@
           {% endif %}
         </div>
       </div>
-      {% if business_day.status == 'open' or business_day.status == 'reopened' %}
+      {% if business_day.status != 'closed' %}
       <div class="ops-task__actions">
         {% if can_manage_business_day and duty.candidates %}
         <form method="post" class="hub-form">
