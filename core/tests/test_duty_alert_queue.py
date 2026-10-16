@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
+from django.urls import reverse
 from django.utils import timezone
 
 from catalog.models import PrepStation
@@ -17,7 +18,7 @@ from core.models import (
     Category, NotificationEvent, NotificationLog, NotificationPreference,
     Order, OrderItem, Product, PushSubscription,
 )
-from core.notifications import create_notification, visible_recipients_for
+from core.notifications import create_notification, link_for_event, visible_recipients_for
 from core.services.notification_delivery import user_is_push_target
 from operations.duty import (
     accept_duty_handover, assign_duty_coverage, request_duty_handover,
@@ -187,6 +188,17 @@ class DutyAlertFollowupTests(TestCase):
         item.save(update_fields=['prep_status', 'updated_at'])
         self.assertFalse(event_has_outstanding_work(event))
         self.assertEqual(reenqueue_outstanding_after_duty_change(self.day.pk, 'kitchen'), 0)
+
+    def test_duty_routed_ready_item_links_to_service_orders_not_prep_board(self):
+        item = OrderItem.objects.create(
+            order=self.order, product=self.product, quantity=1,
+            product_name_ar_snapshot=self.product.name_ar,
+            unit_price_syp_snapshot=150,
+            prep_station=self.kitchen, prep_status=OrderItem.PrepStatus.READY,
+        )
+        event = self._event('prep_item_ready', order_item=item, station=self.kitchen)
+        self.assertTrue(event_has_outstanding_work(event))
+        self.assertEqual(link_for_event(event), reverse('staff_orders'))
 
     def test_resolved_or_cancelled_order_is_not_in_unassigned_queue(self):
         event = self._event()
