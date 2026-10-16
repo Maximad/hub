@@ -50,6 +50,10 @@
   <link rel="stylesheet" href="{% static 'css/staff_ux31.css' %}">
   <link rel="stylesheet" href="{% static 'css/staff_ux5.css' %}">
   {% endif %}
+  {# 2026 brand direction: presentation-only, restricted to public menu + staff Operations. #}
+  {% if request.path|slice:":6" == "/menu/" or request.path == "/staff/" %}
+  <link rel="stylesheet" href="{% static 'css/hub_visual_2026.css' %}">
+  {% endif %}
   {% include "includes/hub_theme.html" %}
   {% comment %}Legacy density choices map onto the semantic token layer.{% endcomment %}
   {% if system_settings %}<style>:root{
@@ -59,7 +63,7 @@
   }</style>{% endif %}
   <script src="{% static 'js/htmx.min.js' %}"></script>
 </head>
-<body class="hub-page hub-ui-v3 {% block body_class %}{% endblock %}{% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %} hub-staff-ui{% endif %}{% if request.path|slice:":10" == "/provider/" %} hub-provider-ui{% endif %}{% if system_settings %} density-{{ system_settings.safe_ui_density }} button-scale-{{ system_settings.safe_button_padding_scale }} input-size-{{ system_settings.safe_input_size }} shadow-{{ system_settings.safe_card_shadow_level }}{% if system_settings.sticky_header_enabled %} hub-sticky-header{% endif %}{% endif %}">
+<body class="hub-page hub-ui-v3 {% if request.path|slice:":6" == "/menu/" or request.path == "/staff/" %}hub-visual-2026 {% endif %}{% block body_class %}{% endblock %}{% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %} hub-staff-ui{% endif %}{% if request.path|slice:":10" == "/provider/" %} hub-provider-ui{% endif %}{% if system_settings %} density-{{ system_settings.safe_ui_density }} button-scale-{{ system_settings.safe_button_padding_scale }} input-size-{{ system_settings.safe_input_size }} shadow-{{ system_settings.safe_card_shadow_level }}{% if system_settings.sticky_header_enabled %} hub-sticky-header{% endif %}{% endif %}">
   {% if view_as_active %}
   <aside class="hub-view-as-banner" role="status">
     <div class="hub-container hub-view-as-banner__inner">
