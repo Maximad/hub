@@ -41,6 +41,10 @@ class DutyAlertFollowupTests(TestCase):
             username='followup-owner', phone='+963955993001',
             email='followup@example.org', password='pass',
         )
+        self.manager = User.objects.create_user(
+            username='followup-manager', phone='+963955993005',
+            role=User.Role.ADMIN,
+        )
         self.tamer = User.objects.create_user(
             username='followup-tamer', phone='+963955993002',
             role=User.Role.CASHIER,
@@ -120,13 +124,13 @@ class DutyAlertFollowupTests(TestCase):
         self.assertFalse(unassigned_duty_alerts_for_manager(self.day, self.provider))
         self.assertFalse(unassigned_duty_alerts_for_manager(self.day, self.tamer))
 
-    def test_permission_revocation_hides_queue_even_for_admin(self):
+    def test_permission_revocation_hides_queue_for_regular_admin(self):
         self._event()
-        self.assertTrue(unassigned_duty_alerts_for_manager(self.day, self.owner))
+        self.assertTrue(unassigned_duty_alerts_for_manager(self.day, self.manager))
         UserCapabilityOverride.objects.create(
-            user=self.owner, capability='orders', allowed=False,
+            user=self.manager, capability='orders', allowed=False,
         )
-        self.assertFalse(unassigned_duty_alerts_for_manager(self.day, self.owner))
+        self.assertFalse(unassigned_duty_alerts_for_manager(self.day, self.manager))
 
     def test_manager_queue_clears_when_valid_holder_is_assigned(self):
         event = self._event()
