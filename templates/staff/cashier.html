@@ -10,7 +10,7 @@
 </form>
 
 <section class="hub-section">
-  <div class="hub-page-header"><div><p class="staff-workspace__eyebrow">الحساب هو الجلسة، وليس الطلب المنفرد</p><h3>الطاولات والجلسات المفتوحة</h3></div></div>
+  <div class="hub-page-header"><div><p class="staff-workspace__eyebrow">تُجمع الطلبات المرتبطة بحساب مفتوح في فاتورة واحدة.</p><h3>الطاولات والجلسات المفتوحة</h3></div></div>
   <div class="hub-grid hub-grid-2 cashier-layout-{{ system_settings.cashier_layout|default:'single_column' }}">
     {% for row in visit_rows %}
       {% with visit=row.visit %}
@@ -35,8 +35,8 @@
 
 {% if standalone_rows %}
 <section class="hub-section">
-  <h3>طلبات دون حساب جلسة</h3>
-  <p class="hub-help-text">هذه الطلبات غير مرتبطة بحساب جلسة، حتى لو كانت لها طاولة أو مساحة محددة. يُقبض كل طلب منها على حدة.</p>
+  <h3>طلبات بحساب منفصل</h3>
+  <p class="hub-help-text">يُقبض كل طلب هنا على حدة، حتى لو كان مرتبطاً بطاولة. لا يُضاف إلى حساب مفتوح تلقائياً.</p>
   <div class="hub-grid hub-grid-2">
     {% for row in standalone_rows %}{% with order=row.order %}
       <article class="hub-card">
