@@ -270,7 +270,7 @@ def tick_reminders(*, now=None, limit=100):
     day = _current_day(now)
     if day is None:
         return result
-    due = Reminder.objects.select_for_update().filter(
+    due = Reminder.objects.select_for_update(of=('self',)).filter(
         status=Reminder.Status.ACTIVE, next_due_at__isnull=False, next_due_at__lte=now,
     ).filter(
         Q(retry_after__isnull=True) | Q(retry_after__lte=now)
