@@ -3,9 +3,11 @@
 from datetime import timedelta
 
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Q
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
@@ -42,6 +44,9 @@ def _displayable_reminders(user, *, show_history=False):
 def staff_reminders(request):
     if (
         not request.user.is_active
+        or getattr(request.user, 'role', '') == getattr(
+            get_user_model().Role, 'INTERNET_PROVIDER', 'internet_provider'
+        )
         or not user_has_capability(request.user, 'staff_home')
     ):
         raise PermissionDenied
@@ -80,9 +85,12 @@ def staff_reminders(request):
                     messages.success(request, 'تم إنشاء التذكير.')
                     return redirect('staff_reminders')
         elif action in {'complete', 'cancel', 'snooze'}:
+            reminder_id = (request.POST.get('reminder_id') or '').strip()
+            if not reminder_id.isdecimal():
+                raise Http404
             reminder = get_object_or_404(
                 Reminder.objects.select_related('assigned_to'),
-                pk=request.POST.get('reminder_id'),
+                pk=reminder_id,
             )
             if not can_access_reminder(request.user, reminder):
                 raise PermissionDenied
