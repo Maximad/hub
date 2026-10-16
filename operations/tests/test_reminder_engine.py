@@ -93,6 +93,7 @@ class ReminderEngineTests(TestCase):
         ).exists())
 
     def test_uncovered_reminder_defers_without_broadcast_or_ledger_record(self):
+        self.day.duty_coverages.filter(responsibility='operations').delete()
         reminder = self.make_reminder(responsibility='service')
         outcome = tick_reminders()
         self.assertEqual(outcome['sent'], 0)
