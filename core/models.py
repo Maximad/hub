@@ -607,6 +607,7 @@ class NotificationEvent(TimeStampedModel):
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_notification_events')
     expires_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
+    duty_routing_business_date = models.DateField(null=True, blank=True, db_index=True)
 
     class Meta:
         ordering = ['-created_at']
