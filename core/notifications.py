@@ -70,6 +70,15 @@ def _roles_for_event(event_type, station=None, target_role=''):
 
 def link_for_event(event):
     code = getattr(event.target_station, 'code', '') if event.target_station_id else ''
+    if (
+        event.event_type == 'prep_item_ready'
+        and event.duty_routing_business_date is not None
+    ):
+        return (
+            reverse('staff_delivery')
+            if event.order_id and event.order.is_delivery
+            else reverse('staff_orders')
+        )
     if event.event_type in PREP_EVENTS:
         return reverse('staff_prep_station', kwargs={'station_code': code}) if code else reverse('staff_prep')
     if event.event_type in PAYMENT_EVENTS or event.event_type in MANAGER_EVENTS:
