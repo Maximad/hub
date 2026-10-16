@@ -124,6 +124,17 @@ def create_notification(
                         station=target_station,
                     )
                 )
+            if event.duty_routing_business_date is not None:
+                # A neutral role-only recipient makes each routed event
+                # visible to the effective duty holder regardless of their
+                # legacy account role. Duty eligibility still gates visibility.
+                recipients.append(
+                    NotificationRecipient(
+                        notification_event=event,
+                        role='duty',
+                        station=target_station,
+                    )
+                )
             for user in User.objects.filter(is_active=True, is_superuser=True):
                 recipients.append(
                     NotificationRecipient(
