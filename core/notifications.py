@@ -15,7 +15,9 @@ from django.urls import reverse
 from django.utils import timezone
 
 from core.notification_audience import notification_roles_for_user
-from core.duty_notification_routing import routing_day_for_new_event, duty_inbox_scope
+from core.duty_notification_routing import (
+    routing_day_for_new_event, duty_inbox_scope, duty_routing_enabled,
+)
 from core.models import (
     NotificationEvent,
     NotificationLog,
@@ -385,6 +387,19 @@ def visible_recipients_for(user):
             user__isnull=True,
             role__in=notification_roles_for_user(user),
         )
+    if duty_routing_enabled():
+        # Closed/previous Business Day duty broadcasts belong to the audit
+        # archive, not a new shift's ordinary role-based notification inbox.
+        from operations.services import current_business_date
+        from operations.models import BusinessDay
+        day = BusinessDay.objects.filter(business_date=current_business_date()).first()
+        if day is None or day.status == BusinessDay.Status.CLOSED:
+            audience &= Q(notification_event__duty_routing_business_date__isnull=True)
+        else:
+            audience &= (
+                Q(notification_event__duty_routing_business_date__isnull=True)
+                | Q(notification_event__duty_routing_business_date=day.business_date)
+            )
     routed_event_ids, eligible_event_ids = duty_inbox_scope(user)
     if routed_event_ids:
         audience = (
