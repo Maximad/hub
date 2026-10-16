@@ -95,6 +95,9 @@ class ReminderAdmin(admin.ModelAdmin):
     autocomplete_fields = ('assigned_to', 'created_by')
     actions = None
 
+    def has_delete_permission(self, request, obj=None):
+        return False
+
 
 @admin.register(ReminderOccurrence)
 class ReminderOccurrenceAdmin(admin.ModelAdmin):
