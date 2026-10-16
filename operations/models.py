@@ -1,4 +1,6 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.utils import timezone
 from django.db import models
 from django.db.models import Q
 
@@ -300,6 +302,94 @@ class BusinessDayTask(models.Model):
 
     def __str__(self):
         return f'{self.business_day.business_date} — {self.title_ar}'
+
+
+class Reminder(models.Model):
+    """Reusable reminder schedule; its source task stays authoritative."""
+
+    class Status(models.TextChoices):
+        ACTIVE = 'active', 'نشط'
+        COMPLETED = 'completed', 'تم'
+        CANCELLED = 'cancelled', 'ملغى'
+
+    class Repeat(models.TextChoices):
+        ONCE = 'once', 'مرة واحدة'
+        INTERVAL = 'interval', 'كل فترة'
+        DAILY = 'daily', 'يومياً'
+        WEEKLY = 'weekly', 'أسبوعياً'
+
+    title_ar = models.CharField(max_length=240)
+    details = models.TextField(blank=True)
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.ACTIVE)
+    repeat = models.CharField(max_length=12, choices=Repeat.choices, default=Repeat.ONCE)
+    interval_minutes = models.PositiveIntegerField(default=0)
+    next_due_at = models.DateTimeField(null=True, blank=True)
+    retry_after = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    source_due_at = models.DateTimeField(null=True, blank=True)
+    source_task = models.OneToOneField(
+        BusinessDayTask, null=True, blank=True, on_delete=models.CASCADE,
+        related_name='reminder_schedule',
+    )
+    responsibility = models.CharField(
+        max_length=20, choices=BusinessDayDutyCoverage.Responsibility.choices, blank=True,
+    )
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='assigned_reminders',
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='created_reminders',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['next_due_at', 'pk']
+        indexes = [
+            models.Index(fields=['status', 'next_due_at'], name='reminder_due_idx'),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.repeat == self.Repeat.INTERVAL and not (1 <= self.interval_minutes <= 10080):
+            raise ValidationError({'interval_minutes': 'مدة التكرار يجب أن تكون بين دقيقة و7 أيام.'})
+        if self.repeat != self.Repeat.INTERVAL and self.interval_minutes:
+            raise ValidationError({'interval_minutes': 'الدقائق متاحة للتكرار الزمني فقط.'})
+        if self.next_due_at and timezone.is_naive(self.next_due_at):
+            raise ValidationError({'next_due_at': 'وقت التذكير يجب أن يتضمن المنطقة الزمنية.'})
+        if self.expires_at and self.next_due_at and self.expires_at <= self.next_due_at:
+            raise ValidationError({'expires_at': 'موعد الانتهاء يجب أن يكون بعد الموعد.'})
+
+    def __str__(self):
+        return self.title_ar
+
+
+class ReminderOccurrence(models.Model):
+    """Append-only proof of one scheduled notification, not human acknowledgement."""
+
+    reminder = models.ForeignKey(
+        Reminder, on_delete=models.CASCADE, related_name='occurrences',
+    )
+    scheduled_for = models.DateTimeField()
+    notification_event = models.ForeignKey(
+        'core.NotificationEvent', on_delete=models.PROTECT,
+        related_name='reminder_occurrences',
+    )
+    recipient_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL,
+        related_name='reminder_occurrences',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-scheduled_for', '-pk']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['reminder', 'scheduled_for'], name='unique_reminder_occurrence',
+            ),
+        ]
 
 
 class StaffDailyCodeReceipt(models.Model):

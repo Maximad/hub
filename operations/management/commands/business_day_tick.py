@@ -8,6 +8,7 @@ from operations.models import BusinessDay, BusinessDayTask
 from operations.opening import maybe_send_opening_reminder, send_daily_code_reminders
 from operations.services import current_business_date, open_business_day
 from operations.tasks import send_overdue_task_reminders, sync_business_day_tasks
+from operations.reminders import reminders_enabled, sync_task_reminders, tick_reminders
 
 
 class Command(BaseCommand):
@@ -59,7 +60,16 @@ class Command(BaseCommand):
             return
 
         task_sync = sync_business_day_tasks(active)
-        task_reminders = send_overdue_task_reminders(active)
+        engine_created = 0
+        engine_result = None
+        if reminders_enabled():
+            engine_created = sync_task_reminders(
+                active, repeat_minutes=int(getattr(settings, 'BUSINESS_DAY_TASK_REMINDER_MINUTES', 60)),
+            )
+            engine_result = tick_reminders()
+            task_reminders = engine_result['sent']
+        else:
+            task_reminders = send_overdue_task_reminders(active)
         reminder_minutes = int(getattr(settings, 'BUSINESS_DAY_CODE_REMINDER_MINUTES', 120))
         reminder_due = (
             not active.code_issued_at
@@ -71,4 +81,8 @@ class Command(BaseCommand):
             f'business_day={active.business_date} tasks_created={task_sync["created"]} '
             f'tasks_auto_waived={task_sync["auto_waived"]} task_reminders={task_reminders} '
             f'code_reminders={code_reminders} opening_reminder={int(opening_reminder)}'
+            + (
+                f' reminders_created={engine_created} reminders_deferred={engine_result["deferred"]}'
+                if engine_result is not None else ''
+            )
         )

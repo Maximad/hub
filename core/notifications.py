@@ -83,6 +83,8 @@ def link_for_event(event):
         return reverse('staff_prep_station', kwargs={'station_code': code}) if code else reverse('staff_prep')
     if event.event_type in PAYMENT_EVENTS or event.event_type in MANAGER_EVENTS:
         return reverse('staff_cashier_order', kwargs={'public_code': event.order.public_code}) if event.order_id else reverse('staff_cashier')
+    if event.event_type == 'operational_reminder':
+        return reverse('staff_operational_tasks')
     if event.event_type == 'guest_wifi_daily_pin':
         return reverse('staff_home')
     if event.event_type in DAILY_EVENTS:
