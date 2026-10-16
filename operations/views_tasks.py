@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from .models import BusinessDay, BusinessDayTask, OperationalTaskTemplate
+from .reminders import reminders_enabled
 from .opening import active_staff_queryset
 from .services import current_business_date
 from .tasks import (
@@ -197,6 +198,7 @@ def staff_operational_tasks(request):
 
     return render(request, 'operations/tasks.html', {
         'business_day': day,
+        'reminders_enabled': reminders_enabled(),
         'tasks': tasks,
         'task_counts': counts,
         'can_manage_tasks': can_manage,
