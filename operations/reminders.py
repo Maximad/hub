@@ -86,11 +86,35 @@ def create_standalone_reminder(
     return reminder
 
 
+def can_access_reminder(user, reminder):
+    """Authorize a reminder using effective staff access and actual duty coverage.
+
+    Non-managers see only reminders addressed to the responsibility they
+    currently hold, including an explicit target and operations fallback.
+    This uses the exact recipient resolver that produces in-app alerts.
+    """
+    if (
+        not getattr(user, 'is_authenticated', False)
+        or not getattr(user, 'is_active', False)
+        or not user_has_capability(user, 'staff_home')
+    ):
+        return False
+    if _manager(user):
+        return True
+    day = _current_day(timezone.now())
+    if day is None:
+        return False
+    recipient = _recipient(reminder, day)
+    return recipient is not None and recipient.pk == user.pk
+
+
 @transaction.atomic
 def close_reminder(reminder, *, actor, cancelled=False):
-    if not _manager(actor) and reminder.assigned_to_id != getattr(actor, 'pk', None):
+    if not can_access_reminder(actor, reminder):
         raise PermissionDenied
     reminder = Reminder.objects.select_for_update().get(pk=reminder.pk)
+    if not can_access_reminder(actor, reminder):
+        raise PermissionDenied
     if reminder.source_task_id:
         raise ValidationError('أغلق المهمة الأصلية من صفحة المهام بدلاً من إنهاء تذكيرها.')
     if reminder.status != Reminder.Status.ACTIVE:
@@ -107,12 +131,14 @@ def close_reminder(reminder, *, actor, cancelled=False):
 
 @transaction.atomic
 def snooze_reminder(reminder, *, actor, until):
-    if not _manager(actor) and reminder.assigned_to_id != getattr(actor, 'pk', None):
+    if not can_access_reminder(actor, reminder):
         raise PermissionDenied
     _valid_datetime(until, 'وقت التأجيل')
     if until <= timezone.now():
         raise ValidationError('يجب أن يكون موعد التأجيل في المستقبل.')
     reminder = Reminder.objects.select_for_update().get(pk=reminder.pk)
+    if not can_access_reminder(actor, reminder):
+        raise PermissionDenied
     if reminder.status != Reminder.Status.ACTIVE or reminder.source_task_id:
         raise ValidationError('لا يمكن تأجيل هذا التذكير.')
     if reminder.expires_at and until >= reminder.expires_at:
