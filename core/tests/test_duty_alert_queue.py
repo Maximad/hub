@@ -7,6 +7,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from catalog.models import PrepStation
+from accounts.models import UserCapabilityOverride
 from core.duty_alert_queue import (
     event_has_outstanding_work,
     reenqueue_outstanding_after_duty_change,
@@ -118,6 +119,14 @@ class DutyAlertFollowupTests(TestCase):
         )
         self.assertFalse(unassigned_duty_alerts_for_manager(self.day, self.provider))
         self.assertFalse(unassigned_duty_alerts_for_manager(self.day, self.tamer))
+
+    def test_permission_revocation_hides_queue_even_for_admin(self):
+        self._event()
+        self.assertTrue(unassigned_duty_alerts_for_manager(self.day, self.owner))
+        UserCapabilityOverride.objects.create(
+            user=self.owner, capability='orders', allowed=False,
+        )
+        self.assertFalse(unassigned_duty_alerts_for_manager(self.day, self.owner))
 
     def test_manager_queue_clears_when_valid_holder_is_assigned(self):
         event = self._event()
