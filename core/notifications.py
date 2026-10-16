@@ -15,6 +15,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from core.notification_audience import notification_roles_for_user
+from core.duty_notification_routing import routing_day_for_new_event, duty_inbox_scope
 from core.models import (
     NotificationEvent,
     NotificationLog,
@@ -109,6 +110,7 @@ def create_notification(
                 order_item=order_item,
                 target_station=target_station,
                 target_role=target_role or '',
+                duty_routing_business_date=routing_day_for_new_event(event_type),
                 created_by=created_by if getattr(created_by, 'is_authenticated', False) else None,
             )
             User = get_user_model()
@@ -371,5 +373,14 @@ def visible_recipients_for(user):
         audience |= Q(
             user__isnull=True,
             role__in=notification_roles_for_user(user),
+        )
+    routed_event_ids, eligible_event_ids = duty_inbox_scope(user)
+    if routed_event_ids:
+        audience = (
+            (audience & ~Q(notification_event_id__in=routed_event_ids))
+            | (
+                Q(notification_event_id__in=eligible_event_ids)
+                & (Q(user__isnull=True) | Q(user_id=user.pk))
+            )
         )
     return NotificationRecipient.objects.filter(audience)
