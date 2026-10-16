@@ -1,0 +1,325 @@
+/*
+ * Hub Sweida visual direction 2026 — first implementation slice.
+ *
+ * Scope: existing public menu and staff Operations ONLY.
+ * Reuses Hub UI 3.0 and staff UI v2. No changes to payment, order,
+ * session, permission, QR, product/section data, or RouterOS behavior.
+ *
+ * The colorful handout describes a brand palette. These are decorative
+ * surface colors; transaction status and primary action colors remain
+ * independent and accessible.
+ */
+body.hub-visual-2026 {
+  --hub26-paper: #f6f1e8;
+  --hub26-ink: #18313d;
+  --hub26-teal: #18b7a4;
+  --hub26-community: #25c98d;
+  --hub26-food: #f77732;
+  --hub26-events: #a153d1;
+  --hub26-learning: #ffc929;
+  --hub26-internet: #338ceb;
+  --hub26-surface: #fff;
+  --hub26-outline: #dedbd3;
+  --hub26-focus: #17588c;
+  --hub26-action: #137f70; /* Existing verified action hue. */
+  --hub26-radius: 18px;
+}
+
+/* Customer: bright and recognizably Hub, with real catalog data. */
+body.public-menu-page.hub-visual-2026 {
+  background: var(--hub26-paper);
+  color: var(--hub26-ink);
+}
+body.public-menu-page.hub-visual-2026 .hub-header--customer {
+  background: rgba(246, 241, 232, .98);
+  border-bottom-color: #dfd5c6;
+}
+body.public-menu-page.hub-visual-2026 .hub-customer-header__inner {
+  min-height: 62px;
+}
+body.public-menu-page.hub-visual-2026 .hub-customer-header__brand strong {
+  color: var(--hub26-ink);
+  font-weight: 700;
+}
+body.public-menu-page.hub-visual-2026 .menu-public {
+  color: var(--hub26-ink);
+}
+body.public-menu-page.hub-visual-2026 .menu-public__header {
+  background: var(--hub26-teal);
+  color: #073e3a;
+  border-radius: 24px;
+  padding: clamp(20px, 5vw, 36px);
+  margin-block: 10px 14px;
+  min-height: 178px;
+  box-shadow: none;
+  isolation: isolate;
+}
+body.public-menu-page.hub-visual-2026 .menu-public__header::after {
+  border-color: rgba(255,255,255,.25);
+  width: 218px;
+  height: 218px;
+  inset-inline-end: -63px;
+  inset-block-end: -118px;
+}
+body.public-menu-page.hub-visual-2026 .menu-public__header::before {
+  content:"";
+  position:absolute;
+  pointer-events:none;
+  z-index:0;
+  border:2px solid rgba(255,255,255,.19);
+  width:140px;
+  height:140px;
+  border-radius:50%;
+  inset-inline-start:-50px;
+  inset-block-start:-90px;
+}
+body.public-menu-page.hub-visual-2026 .menu-public__heading .hub-section-title {
+  color: #073e3a;
+  font-size: clamp(1.8rem, 5.5vw, 3rem);
+  max-width: 18ch;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+body.public-menu-page.hub-visual-2026 .menu-public__header .menu-public__brand,
+body.public-menu-page.hub-visual-2026 .menu-public__header .menu-public__eyebrow,
+body.public-menu-page.hub-visual-2026 .menu-public__header .menu-public__table-banner {
+  color:#064b43;
+}
+body.public-menu-page.hub-visual-2026 .menu-public__header p {
+  line-height:1.55;
+}
+body.public-menu-page.hub-visual-2026 .menu-public__logo {
+  max-width: 150px;
+  max-height: 72px;
+  object-fit: contain;
+}
+body.public-menu-page.hub-visual-2026 .hub-v3-feature-nav {
+  gap: 12px;
+  margin-block: 4px 16px;
+}
+body.public-menu-page.hub-visual-2026 .hub-v3-feature {
+  min-height: clamp(152px, 25vw, 206px);
+  padding: 17px;
+  border-radius: 21px;
+  background: var(--hub26-teal);
+  color: #073e3a;
+  box-shadow: 0 5px 15px rgba(24,49,61,.06);
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+body.public-menu-page.hub-visual-2026 .hub-v3-feature--2 {
+  background: var(--hub26-food);
+  color: #382319;
+}
+body.public-menu-page.hub-visual-2026 .hub-v3-feature__eyebrow,
+body.public-menu-page.hub-visual-2026 .hub-v3-feature__more {
+  color:inherit;
+  opacity:1;
+  font-weight:600;
+}
+body.public-menu-page.hub-visual-2026 .hub-v3-feature__title {
+  position:relative;
+  z-index:2;
+  color: inherit;
+  max-width: 68%;
+  font-size: clamp(1.15rem, 3.2vw, 1.7rem);
+  line-height:1.4;
+  text-shadow: 0 1px 0 rgba(255,255,255,.16);
+}
+body.public-menu-page.hub-visual-2026 .hub-v3-feature__image {
+  opacity: .76;
+  width: 54%;
+  height: 82%;
+  mask-image: linear-gradient(to left, #000 65%, transparent);
+  -webkit-mask-image: linear-gradient(to left, #000 65%, transparent);
+}
+body.public-menu-page.hub-visual-2026 .hub-v3-feature:hover {
+  transform:translateY(-2px);
+  box-shadow:0 9px 23px rgba(24,49,61,.11);
+}
+body.public-menu-page.hub-visual-2026 .hub-v3-menu-tools {
+  background:rgba(246,241,232,.97);
+}
+body.public-menu-page.hub-visual-2026 .customer-menu-search {
+  background: #fff;
+  border-color: #dfd7cc;
+  border-radius: 15px;
+}
+body.public-menu-page.hub-visual-2026 .menu-sections-nav {
+  background: transparent;
+}
+body.public-menu-page.hub-visual-2026 .menu-section-chip {
+  background: #fff;
+  border: 1px solid #dfd7cc;
+  border-radius: 999px;
+  color: var(--hub26-ink);
+  min-height: 44px;
+}
+body.public-menu-page.hub-visual-2026 .menu-section-chip:hover,
+body.public-menu-page.hub-visual-2026 .menu-section-chip:focus-visible {
+  background: #dbf7ef;
+  border-color: var(--hub26-action);
+  color: #0d655a;
+}
+body.public-menu-page.hub-visual-2026 .menu-section-heading {
+  margin-block: 8px 12px;
+}
+body.public-menu-page.hub-visual-2026 .menu-section-heading .hub-section-title {
+  color: var(--hub26-ink);
+  font-size: clamp(1.3rem,3vw,1.8rem);
+}
+body.public-menu-page.hub-visual-2026 .menu-product-card {
+  border: 1px solid #e4ded4;
+  border-radius: 19px;
+  background: #fff;
+  box-shadow:0 3px 13px rgba(24,49,61,.035);
+  overflow:hidden;
+  transition:border-color .15s ease, box-shadow .15s ease;
+}
+body.public-menu-page.hub-visual-2026 .menu-product-card:hover,
+body.public-menu-page.hub-visual-2026 .menu-product-card:focus-visible {
+  border-color: var(--hub26-action);
+  box-shadow: 0 8px 22px rgba(24,49,61,.09);
+}
+body.public-menu-page.hub-visual-2026 .menu-product-name {
+  color: var(--hub26-ink);
+  font-weight:700;
+  line-height:1.4;
+}
+body.public-menu-page.hub-visual-2026 .menu-product-price {
+  color:#0d655a;
+  font-weight:700;
+  font-variant-numeric: tabular-nums;
+}
+body.public-menu-page.hub-visual-2026 .menu-product-media--placeholder {
+  background:#dff5ec;
+  color:#0e6457;
+}
+body.public-menu-page.hub-visual-2026 .menu-cart-review {
+  border-radius:20px;
+}
+body.public-menu-page.hub-visual-2026 .hub-button-primary {
+  background: var(--hub26-action);
+  border-color: var(--hub26-action);
+  color:#fff;
+}
+
+/* Staff: same identity, drastically quieter. Existing top shell,
+ * capability controls, filters and right-drawer/bottom-sheet remain. */
+body.staff-workspace-page.hub-visual-2026 {
+  background:#f7f8f8;
+  color:#34495e;
+}
+body.staff-workspace-page.hub-visual-2026 .ops-v2__hero {
+  border-inline-start:4px solid var(--hub26-teal);
+  padding-inline-start:16px;
+}
+body.staff-workspace-page.hub-visual-2026 .staff-v2-eyebrow {
+  color:#0d655a;
+  font-weight:700;
+}
+body.staff-workspace-page.hub-visual-2026 .ops-v2__hero .staff-v2-title {
+  color: var(--hub26-ink);
+  font-size:clamp(1.55rem,2.5vw,2.05rem);
+}
+body.staff-workspace-page.hub-visual-2026 .hub-daily-start,
+body.staff-workspace-page.hub-visual-2026 .ops-v2__account,
+body.staff-workspace-page.hub-visual-2026 .ops-v2__orders-panel {
+  border-color:#dce4e7;
+  border-radius:18px;
+}
+body.staff-workspace-page.hub-visual-2026 .hub-daily-start__action--primary {
+  background:#e0f6ef;
+  border-color:#8ecfbe;
+  color:#0a6155;
+}
+body.staff-workspace-page.hub-visual-2026 .ops-v2__toolbar {
+  border-color:#dce4e7;
+  border-radius:14px;
+}
+body.staff-workspace-page.hub-visual-2026 .ops-v2__stat {
+  background:#fff;
+  border:1px solid #dce4e7;
+  border-radius:16px;
+  box-shadow:0 2px 10px rgba(24,49,61,.035);
+}
+body.staff-workspace-page.hub-visual-2026 .ops-v2__stat strong {
+  font-variant-numeric:tabular-nums;
+  color:var(--hub26-ink);
+}
+body.staff-workspace-page.hub-visual-2026 .ops-v2__stat-icon {
+  color:#0e7566;
+  background:#e2f7ef;
+  border-radius:11px;
+}
+body.staff-workspace-page.hub-visual-2026 .ops-v2__account,
+body.staff-workspace-page.hub-visual-2026 .ops-v2__order {
+  background:#fff;
+  box-shadow:0 2px 12px rgba(24,49,61,.035);
+}
+body.staff-workspace-page.hub-visual-2026 .ops-v2__account:hover {
+  border-color:#8fc5b8;
+  box-shadow:0 5px 17px rgba(24,49,61,.07);
+}
+body.staff-workspace-page.hub-visual-2026 .ops-v2__account-title strong,
+body.staff-workspace-page.hub-visual-2026 .ops-v2__account-money strong {
+  color:#18313d;
+}
+body.staff-workspace-page.hub-visual-2026 .staff-v2-button--primary {
+  background:#137f70;
+  border-color:#137f70;
+  color:#fff;
+}
+
+/* Keyboard, low motion, print and narrow phone behavior. */
+body.hub-visual-2026 :is(
+  .hub-v3-feature,.menu-section-chip,.menu-product-card,
+  .ops-v2__stat,.ops-v2__account a,.staff-v2-button
+):focus-visible {
+  outline:3px solid var(--hub26-focus);
+  outline-offset:3px;
+}
+@media(max-width:700px) {
+  body.public-menu-page.hub-visual-2026 .menu-public__header {
+    min-height: 152px;
+    margin-block: 6px 12px;
+    border-radius:19px;
+  }
+  body.public-menu-page.hub-visual-2026 .hub-v3-feature {
+    min-height: 146px;
+    padding:12px;
+    border-radius:17px;
+  }
+  body.public-menu-page.hub-visual-2026 .hub-v3-feature__title {
+    max-width:78%;
+    font-size:clamp(1.03rem,4vw,1.35rem);
+  }
+  body.public-menu-page.hub-visual-2026 .hub-v3-feature__image {
+    width:50%;
+    opacity:.56;
+  }
+  body.staff-workspace-page.hub-visual-2026 .ops-v2__hero {
+    padding-inline-start:11px;
+  }
+}
+@media(prefers-reduced-motion:reduce) {
+  body.hub-visual-2026 .hub-v3-feature,
+  body.hub-visual-2026 .menu-product-card {
+    transition:none;
+  }
+  body.hub-visual-2026 .hub-v3-feature:hover {transform:none;}
+}
+@media print {
+  body.hub-visual-2026 {
+    background:#fff !important;
+    color:#000 !important;
+  }
+  body.hub-visual-2026 :is(
+    .menu-public__header,.hub-v3-feature,.menu-product-card,
+    .ops-v2__stat,.ops-v2__account,.ops-v2__order
+  ) {
+    background:#fff !important;
+    color:#000 !important;
+    box-shadow:none !important;
+    border:1px solid #777 !important;
+  }
+}
