@@ -25,11 +25,24 @@ def reminders_enabled():
 
 
 def _manager(user):
-    return bool(
+    """Administration or the explicitly assigned operations-duty holder.
+
+    Legacy cashier account roles are not a blanket management grant.
+    """
+    if not (
         getattr(user, 'is_authenticated', False)
         and getattr(user, 'is_active', False)
         and user_has_capability(user, 'staff_home')
-        and (user.is_superuser or getattr(user, 'role', '') in {'admin', 'cashier'})
+    ):
+        return False
+    if user.is_superuser or getattr(user, 'role', '') == 'admin':
+        return True
+    day = _current_day(timezone.now())
+    return bool(
+        day and any(
+            holder.pk == user.pk
+            for holder in current_duty_users(day, 'operations')
+        )
     )
 
 
