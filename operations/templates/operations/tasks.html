@@ -15,7 +15,7 @@
 </section>
 
 <nav class="ops-flow-nav" aria-label="التشغيل اليومي">
-  <a href="{% url 'staff_home' %}">العمليات</a><a href="{% url 'staff_close_day' %}">اليوم</a><a href="{% url 'staff_operational_tasks' %}" aria-current="page">المهام</a>
+  <a href="{% url 'staff_home' %}">العمليات</a><a href="{% url 'staff_close_day' %}">اليوم</a><a href="{% url 'staff_operational_tasks' %}" aria-current="page">المهام</a>{% if reminders_enabled %}<a href="{% url 'staff_reminders' %}">التذكيرات</a>{% endif %}
   {% if staff_caps.kitchen_board %}<a href="{% url 'staff_kitchen' %}">التحضير</a>{% endif %}{% if staff_caps.inventory %}<a href="{% url 'staff_inventory_home' %}">المخزون</a>{% endif %}{% if staff_caps.internet_billing %}<a href="{% url 'staff_internet' %}">الإنترنت</a>{% endif %}
 </nav>
 
