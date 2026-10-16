@@ -23,6 +23,7 @@ class Migration(migrations.Migration):
                 ('repeat', models.CharField(max_length=12, choices=[('once', 'مرة واحدة'), ('interval', 'كل فترة'), ('daily', 'يومياً'), ('weekly', 'أسبوعياً')], default='once')),
                 ('interval_minutes', models.PositiveIntegerField(default=0)),
                 ('next_due_at', models.DateTimeField(blank=True, null=True)),
+                ('retry_after', models.DateTimeField(blank=True, null=True)),
                 ('expires_at', models.DateTimeField(blank=True, null=True)),
                 ('source_due_at', models.DateTimeField(blank=True, null=True)),
                 ('responsibility', models.CharField(blank=True, choices=[
