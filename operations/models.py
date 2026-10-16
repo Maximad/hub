@@ -85,6 +85,53 @@ class BusinessDayStaffAssignment(models.Model):
         return f'{self.business_day.business_date} — {self.user}'
 
 
+class BusinessDayDutyCoverage(models.Model):
+    """Current operational responsibility inside an existing Business Day roster.
+
+    This does not replace payroll shifts, scheduled staff assignments, or
+    operational task ownership. A proposed replacement is inactive until accepted.
+    """
+
+    class Responsibility(models.TextChoices):
+        SERVICE = 'service', 'الخدمة'
+        CASHIER = 'cashier', 'الكاشير'
+        BAR = 'bar', 'مشاريب'
+        KITCHEN = 'kitchen', 'المطبخ'
+        OPERATIONS = 'operations', 'التشغيل'
+
+    business_day = models.ForeignKey(
+        BusinessDay, on_delete=models.CASCADE, related_name='duty_coverages'
+    )
+    responsibility = models.CharField(max_length=20, choices=Responsibility.choices)
+    primary_assignment = models.ForeignKey(
+        BusinessDayStaffAssignment, on_delete=models.PROTECT, null=True, blank=True,
+        related_name='primary_duty_coverages',
+    )
+    proposed_assignment = models.ForeignKey(
+        BusinessDayStaffAssignment, on_delete=models.PROTECT, null=True, blank=True,
+        related_name='proposed_duty_coverages',
+    )
+    proposed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='requested_duty_handovers',
+    )
+    proposed_at = models.DateTimeField(null=True, blank=True)
+    transferred_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['responsibility']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['business_day', 'responsibility'],
+                name='unique_business_day_duty_coverage',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.business_day.business_date}: {self.get_responsibility_display()}'
+
+
 class BusinessDayChecklistItem(models.Model):
     class Stage(models.TextChoices):
         OPENING = 'opening', 'الافتتاح'

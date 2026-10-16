@@ -16,7 +16,7 @@
 
 <nav class="ops-flow-nav" aria-label="التشغيل اليومي">
   <a href="{% url 'staff_home' %}">العمليات</a><a href="#overview" aria-current="page">اليوم</a><a href="{% url 'staff_operational_tasks' %}">المهام</a>
-  {% if business_day %}<a href="#opening">الافتتاح</a><a href="#team">الفريق</a><a href="#handover">التسليم</a>{% if can_manage_business_day %}<a href="#closing">الإغلاق</a>{% endif %}{% endif %}
+  {% if business_day %}<a href="#opening">الافتتاح</a><a href="#team">الفريق</a><a href="#active-duty">المسؤولون الآن</a><a href="#handover">التسليم</a>{% if can_manage_business_day %}<a href="#closing">الإغلاق</a>{% endif %}{% endif %}
 </nav>
 
 {% if not business_day %}
@@ -99,6 +99,78 @@
   <div class="ops-task-list" style="margin-top:10px;">{% for assignment in staff_assignments %}<div class="ops-task"><div class="ops-task__main"><strong>{{ assignment.user }}</strong><div class="ops-task__meta"><span>{{ assignment.user.get_role_display }}</span><span>أضيف {{ assignment.assigned_at|ar_time }}</span></div></div><div>{% if assignment.checked_in_at %}<span class="hub-badge hub-badge-success">تم التأكيد {{ assignment.checked_in_at|ar_time }}</span>{% else %}<span class="hub-badge">لم يؤكد بعد</span>{% endif %}</div><div></div></div>{% empty %}<div class="staff-v2-empty">لم يتم تثبيت فريق اليوم.</div>{% endfor %}</div>
 </section>
 {% endif %}
+
+<section id="active-duty" class="hub-section ops-section-card">
+  <div class="ops-section-head">
+    <div>
+      <h2>المسؤولون الآن</h2>
+      <p>فريق اليوم ليس بالضرورة المسؤول الآن. لا تُنقل المسؤولية إلا بعد قبول التسليم أو تحديث المدير. هذه البيانات لا تغيّر مسارات إشعارات المتصفح بعد.</p>
+    </div>
+  </div>
+  <div class="ops-task-list">
+    {% for duty in duty_rows %}
+    {% with cover=duty.coverage %}
+    <article class="ops-task">
+      <div class="ops-task__main">
+        <strong>{{ duty.label }}</strong>
+        <div class="ops-task__meta">
+          {% if cover and cover.primary_assignment %}
+            <span>المسؤول: {{ cover.primary_assignment.user }}</span>
+          {% else %}
+            <span class="hub-badge">غير مغطّى</span>
+          {% endif %}
+          {% if cover and cover.proposed_assignment %}
+            <span>تسليم معلّق إلى {{ cover.proposed_assignment.user }}</span>
+          {% endif %}
+        </div>
+      </div>
+      {% if business_day.status != 'closed' %}
+      <div class="ops-task__actions">
+        {% if can_manage_business_day and duty.candidates %}
+        <form method="post" class="hub-form">
+          {% csrf_token %}
+          <input type="hidden" name="business_day_action" value="duty_assign">
+          <input type="hidden" name="responsibility" value="{{ duty.value }}">
+          <label class="hub-visually-hidden" for="duty-assign-{{ duty.value }}">تعيين مسؤول {{ duty.label }}</label>
+          <select name="duty_user_id" id="duty-assign-{{ duty.value }}" required>
+            <option value="">اختر المسؤول</option>
+            {% for candidate in duty.candidates %}
+            <option value="{{ candidate.pk }}">{{ candidate }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="ops-action">تعيين</button>
+        </form>
+        {% endif %}
+        {% if cover and cover.primary_assignment and cover.primary_assignment.user_id == request.user.pk and duty.candidates %}
+        <form method="post" class="hub-form">
+          {% csrf_token %}
+          <input type="hidden" name="business_day_action" value="duty_handover_request">
+          <input type="hidden" name="responsibility" value="{{ duty.value }}">
+          <label class="hub-visually-hidden" for="duty-transfer-{{ duty.value }}">تسليم {{ duty.label }}</label>
+          <select name="duty_user_id" id="duty-transfer-{{ duty.value }}" required>
+            <option value="">سلّم إلى...</option>
+            {% for candidate in duty.candidates %}
+            {% if candidate.pk != request.user.pk %}<option value="{{ candidate.pk }}">{{ candidate }}</option>{% endif %}
+            {% endfor %}
+          </select>
+          <button type="submit" class="ops-action">طلب تسليم</button>
+        </form>
+        {% endif %}
+        {% if cover and cover.proposed_assignment and cover.proposed_assignment.user_id == request.user.pk %}
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="business_day_action" value="duty_handover_accept">
+          <input type="hidden" name="responsibility" value="{{ duty.value }}">
+          <button type="submit" class="ops-action ops-action--done">قبول المسؤولية</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endif %}
+    </article>
+    {% endwith %}
+    {% endfor %}
+  </div>
+</section>
 
 <section id="handover" class="hub-section ops-section-card">
   <div class="ops-section-head"><div><h2>التسليم بين المناوبات والأيام</h2><p>ملاحظات تبقى ظاهرة حتى الاطلاع عليها أو حلها.</p></div></div>
