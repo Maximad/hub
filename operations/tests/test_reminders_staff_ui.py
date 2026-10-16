@@ -37,10 +37,14 @@ class ReminderStaffUITests(TestCase):
             username='ui-reminder-provider', phone='+963955983104',
             role=User.Role.INTERNET_PROVIDER, password='pass',
         )
+        self.cashier = User.objects.create_user(
+            username='ui-reminder-cashier', phone='+963955983105',
+            role=User.Role.CASHIER, password='pass',
+        )
         self.day = open_business_day(actor=self.owner)
         set_staff_roster(
             self.day, actor=self.owner,
-            user_ids=[self.owner.pk, self.waiter_a.pk, self.waiter_b.pk],
+            user_ids=[self.owner.pk, self.waiter_a.pk, self.waiter_b.pk, self.cashier.pk],
         )
         self.day.staff_assignments.update(checked_in_at=timezone.now())
         assign_duty_coverage(
@@ -202,6 +206,28 @@ class ReminderStaffUITests(TestCase):
             self.assertEqual(self.client.post(self.url, {
                 'reminder_action': 'create',
             }).status_code, 403)
+
+    def test_cashier_account_alone_cannot_manage_reminders_but_operations_duty_can(self):
+        due = timezone.localtime(timezone.now() + timedelta(hours=2)).strftime('%Y-%m-%dT%H:%M')
+        data = {
+            'reminder_action': 'create',
+            'title_ar': 'اختبار مسؤول العمليات',
+            'due_at': due,
+            'repeat': 'once',
+            'interval_minutes': '',
+            'responsibility': 'operations',
+        }
+        self.client.force_login(self.cashier)
+        self.assertNotContains(self.client.get(self.url), 'تذكير جديد')
+        self.assertEqual(self.client.post(self.url, data).status_code, 403)
+        self.assertFalse(Reminder.objects.filter(title_ar=data['title_ar']).exists())
+        assign_duty_coverage(
+            self.day, responsibility='operations',
+            user_id=self.cashier.pk, actor=self.owner,
+        )
+        self.assertContains(self.client.get(self.url), 'تذكير جديد')
+        self.assertRedirects(self.client.post(self.url, data), self.url)
+        self.assertTrue(Reminder.objects.filter(title_ar=data['title_ar']).exists())
 
     def test_tasks_navigation_respects_opt_in_setting(self):
         self.client.force_login(self.owner)
