@@ -191,17 +191,23 @@ def _current_day(now):
     return day
 
 
-def _eligible_direct(day, user):
+def _eligible_direct(day, user, responsibility):
+    """Check current duty, not a historical check-in alone."""
     if user is None or not user.is_active or not user_has_capability(user, 'staff_home'):
         return False
-    return day.staff_assignments.filter(
-        user=user, checked_in_at__isnull=False,
-    ).exists()
+    slots = (
+        [responsibility] if responsibility
+        else ['service', 'cashier', 'bar', 'kitchen', 'operations']
+    )
+    return any(
+        holder.pk == user.pk
+        for slot in slots for holder in current_duty_users(day, slot)
+    )
 
 
 def _recipient(reminder, day):
     candidate = reminder.assigned_to
-    if candidate is not None and _eligible_direct(day, candidate):
+    if candidate is not None and _eligible_direct(day, candidate, reminder.responsibility):
         return candidate
     slot = reminder.responsibility or 'operations'
     holders = current_duty_users(day, slot)
