@@ -10,14 +10,17 @@ import logging
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.db.models import Exists, OuterRef, Q
 from django.urls import reverse
 from django.utils import timezone
 
+from core.notification_audience import notification_roles_for_user
 from core.models import (
     NotificationEvent,
     NotificationLog,
     NotificationPreference,
     NotificationRecipient,
+    NotificationReadReceipt,
     Order,
     OrderItem,
 )
@@ -246,7 +249,7 @@ def _card_from_group(group_key, recipients):
             message = f'{message}، و{len(item_messages) - 3} عناصر أخرى'
     order_number = event.order.display_number if event.order_id else ''
     recipient_ids = sorted({r.id for r in recipients})
-    unread = any(not r.is_read for r in recipients)
+    unread = any(not (r.is_read or getattr(r, 'has_user_read_receipt', False)) for r in recipients)
     return {
         'id': group_key,
         'group_key': group_key,
@@ -265,7 +268,13 @@ def _card_from_group(group_key, recipients):
 
 
 def group_notification_recipients_for_user(user, *, unread_only=False, limit=50, fetch_limit=250):
-    qs = visible_recipients_for(user).select_related(
+    qs = visible_recipients_for(user).annotate(
+        has_user_read_receipt=Exists(
+            NotificationReadReceipt.objects.filter(
+                notification_recipient_id=OuterRef('pk'), user_id=user.pk,
+            ),
+        ),
+    ).select_related(
         'notification_event',
         'notification_event__order',
         'notification_event__order_item',
@@ -277,7 +286,7 @@ def group_notification_recipients_for_user(user, *, unread_only=False, limit=50,
         notification_event__expires_at__lte=timezone.now(),
     )
     if unread_only:
-        qs = qs.filter(is_read=False)
+        qs = qs.filter(is_read=False, has_user_read_receipt=False)
     rows = list(qs.order_by('-notification_event__created_at', '-created_at')[:fetch_limit])
     grouped = {}
     order = []
@@ -303,7 +312,18 @@ def get_unread_grouped_notification_count(user):
 
 
 def mark_grouped_notification_read(user, group_key=None, recipient_id=None):
-    qs = visible_recipients_for(user).filter(is_read=False, notification_event__is_active=True)
+    """Mark only the requesting staff member's visible notification group read."""
+    if not group_key and not recipient_id:
+        return 0
+
+    qs = visible_recipients_for(user).annotate(
+        has_user_read_receipt=Exists(
+            NotificationReadReceipt.objects.filter(
+                notification_recipient_id=OuterRef('pk'), user_id=user.pk,
+            ),
+        ),
+    ).filter(is_read=False, has_user_read_receipt=False, notification_event__is_active=True)
+
     if recipient_id:
         try:
             recipient = qs.select_related('notification_event').get(pk=recipient_id)
@@ -313,24 +333,43 @@ def mark_grouped_notification_read(user, group_key=None, recipient_id=None):
             recipient.notification_event,
             collapse_prep_by_order=user_is_notification_admin(user),
         )
-    if group_key:
-        cards = group_notification_recipients_for_user(
-            user,
-            unread_only=True,
-            limit=500,
-            fetch_limit=500,
-        )
-        recipient_ids = []
-        for card in cards:
-            if card['group_key'] == group_key:
-                recipient_ids = card['recipient_ids']
-                break
-        qs = qs.filter(pk__in=recipient_ids)
-    return qs.update(is_read=True, read_at=timezone.now(), delivered_at=timezone.now())
+
+    cards = group_notification_recipients_for_user(
+        user, unread_only=True, limit=500, fetch_limit=500,
+    )
+    recipient_ids = next(
+        (card['recipient_ids'] for card in cards if card['group_key'] == group_key), []
+    )
+    if not recipient_ids:
+        return 0
+
+    owned_ids = list(qs.filter(pk__in=recipient_ids).values_list('pk', flat=True))
+    # The role/audience record is shared historical data: never flip its
+    # is_read flag or another staff member will lose their unread alert.
+    NotificationReadReceipt.objects.bulk_create(
+        [
+            NotificationReadReceipt(notification_recipient_id=pk, user_id=user.pk)
+            for pk in owned_ids
+        ],
+        ignore_conflicts=True,
+    )
+    return len(owned_ids)
 
 
 def visible_recipients_for(user):
-    role = getattr(user, 'role', '')
-    if user.is_superuser or role == 'admin':
-        return NotificationRecipient.objects.all()
-    return NotificationRecipient.objects.filter(user=user) | NotificationRecipient.objects.filter(role=role)
+    """Explicit user records are private, even when they carry a role label.
+
+    Broadcast records (user=NULL) match legacy role aliases; admins retain
+    visibility of broadcast operational alerts, not other users' private notes.
+    """
+    if not getattr(user, 'is_authenticated', False) or not getattr(user, 'is_active', False):
+        return NotificationRecipient.objects.none()
+    audience = Q(user_id=user.pk)
+    if user.is_superuser or getattr(user, 'role', '') == 'admin':
+        audience |= Q(user__isnull=True)
+    else:
+        audience |= Q(
+            user__isnull=True,
+            role__in=notification_roles_for_user(user),
+        )
+    return NotificationRecipient.objects.filter(audience)
