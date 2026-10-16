@@ -103,7 +103,9 @@ class ReminderEngineTests(TestCase):
             self.day, responsibility='service',
             user_id=self.waiter.pk, actor=self.admin,
         )
-        self.assertEqual(tick_reminders()['sent'], 1)
+        reminder.refresh_from_db()
+        self.assertIsNotNone(reminder.retry_after)
+        self.assertEqual(tick_reminders(now=reminder.retry_after + timedelta(seconds=1))['sent'], 1)
         self.assertEqual(ReminderOccurrence.objects.get(reminder=reminder).recipient_user, self.waiter)
 
     def test_repeat_interval_skips_missed_intervals_and_deduplicates(self):
