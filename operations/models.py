@@ -322,6 +322,7 @@ class Reminder(models.Model):
     repeat = models.CharField(max_length=12, choices=Repeat.choices, default=Repeat.ONCE)
     interval_minutes = models.PositiveIntegerField(default=0)
     next_due_at = models.DateTimeField(null=True, blank=True)
+    retry_after = models.DateTimeField(null=True, blank=True)
     expires_at = models.DateTimeField(null=True, blank=True)
     source_due_at = models.DateTimeField(null=True, blank=True)
     source_task = models.OneToOneField(
