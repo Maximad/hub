@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from accounts.permissions import user_has_capability
@@ -135,6 +136,13 @@ def sync_task_reminders(day, *, repeat_minutes=60):
     tasks = day.tasks.filter(
         status=BusinessDayTask.Status.PENDING, due_at__isnull=False,
     ).select_related('assigned_to')
+    Reminder.objects.filter(
+        source_task__business_day=day,
+        status=Reminder.Status.ACTIVE,
+    ).exclude(
+        source_task__status=BusinessDayTask.Status.PENDING,
+    ).update(status=Reminder.Status.COMPLETED, next_due_at=None, retry_after=None)
+
     for task in tasks:
         due = task.due_at
         if task.last_reminded_at:
@@ -162,9 +170,14 @@ def sync_task_reminders(day, *, repeat_minutes=60):
                 'responsibility': _task_responsibility(task),
                 'interval_minutes': repeat_minutes,
             }
+            if reminder.status == Reminder.Status.COMPLETED:
+                values['status'] = Reminder.Status.ACTIVE
+                values['next_due_at'] = due
+                values['retry_after'] = None
             if reminder.source_due_at != task.due_at:
                 values['source_due_at'] = task.due_at
                 values['next_due_at'] = due
+                values['retry_after'] = None
             for key, value in values.items():
                 if getattr(reminder, key) != value:
                     setattr(reminder, key, value)
@@ -259,6 +272,8 @@ def tick_reminders(*, now=None, limit=100):
         return result
     due = Reminder.objects.select_for_update().filter(
         status=Reminder.Status.ACTIVE, next_due_at__isnull=False, next_due_at__lte=now,
+    ).filter(
+        Q(retry_after__isnull=True) | Q(retry_after__lte=now)
     ).select_related('source_task', 'source_task__business_day', 'assigned_to').order_by('next_due_at', 'pk')[:limit]
     for reminder in due:
         task = reminder.source_task
@@ -267,16 +282,25 @@ def tick_reminders(*, now=None, limit=100):
             or task.business_day_id != day.pk
             or task.business_day.status not in ACTIVE_DUTY_STATUSES
         ):
+            reminder.status = Reminder.Status.COMPLETED
+            reminder.next_due_at = None
+            reminder.retry_after = None
+            reminder.save(update_fields=['status', 'next_due_at', 'retry_after', 'updated_at'])
             result['source_resolved'] += 1
             continue
         if reminder.expires_at and reminder.expires_at <= now:
             reminder.status = Reminder.Status.CANCELLED
             reminder.next_due_at = None
-            reminder.save(update_fields=['status', 'next_due_at', 'updated_at'])
+            reminder.retry_after = None
+            reminder.save(update_fields=['status', 'next_due_at', 'retry_after', 'updated_at'])
             result['expired'] += 1
             continue
         recipient = _recipient(reminder, day)
         if recipient is None:
+            # The due time stays unchanged; retry suppression is independent
+            # of daily/weekly calendar recurrence and avoids queue starvation.
+            reminder.retry_after = now + timedelta(minutes=5)
+            reminder.save(update_fields=['retry_after', 'updated_at'])
             result['deferred'] += 1
             continue
         scheduled_for = reminder.next_due_at
@@ -286,7 +310,8 @@ def tick_reminders(*, now=None, limit=100):
             reminder=reminder, scheduled_for=scheduled_for,
         ).exists():
             reminder.next_due_at = _next_due(reminder, scheduled_for, now)
-            reminder.save(update_fields=['next_due_at', 'updated_at'])
+            reminder.retry_after = None
+            reminder.save(update_fields=['next_due_at', 'retry_after', 'updated_at'])
             continue
         event = NotificationEvent.objects.create(
             event_type=NotificationEvent.EventType.OPERATIONAL_REMINDER,
@@ -309,7 +334,8 @@ def tick_reminders(*, now=None, limit=100):
             notification_event=event, recipient_user=recipient,
         )
         reminder.next_due_at = _next_due(reminder, scheduled_for, now)
-        reminder.save(update_fields=['next_due_at', 'updated_at'])
+        reminder.retry_after = None
+        reminder.save(update_fields=['next_due_at', 'retry_after', 'updated_at'])
         if task is not None:
             task.last_reminded_at = now
             task.reminder_count += 1
