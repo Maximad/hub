@@ -77,7 +77,7 @@ def eligible_duty_users(day, responsibility):
 
 def current_duty_users(day, responsibility):
     """Fail closed when coverage is unset, pending, invalid or day is inactive."""
-    if day is None or day.status not in {BusinessDay.Status.OPEN, BusinessDay.Status.REOPENED}:
+    if day is None or day.status not in ACTIVE_DUTY_STATUSES:
         return []
     coverage = (
         day.duty_coverages.filter(responsibility=responsibility)
