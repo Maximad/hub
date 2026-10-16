@@ -55,6 +55,7 @@ from core.views.visits import (current_visit, current_visit_checkout_qr,
 from core.views.staff_visits import staff_visits, staff_visit_detail
 from core.views.wifi import wifi_entry, wifi_staff_login
 from operations.views_tasks import staff_operational_tasks
+from operations.views_reminders import staff_reminders
 
 
 urlpatterns = [
@@ -208,6 +209,7 @@ urlpatterns = [
     path('staff/reports/products.csv', staff_product_margin_csv, name='staff_product_margin_csv'),
     path('staff/close-day/', staff_close_day, name='staff_close_day'),
     path('staff/operations/tasks/', staff_operational_tasks, name='staff_operational_tasks'),
+    path('staff/operations/reminders/', staff_reminders, name='staff_reminders'),
     path('staff/close-day/<int:close_id>/print/', staff_close_day_print, name='staff_close_day_print'),
     path('staff/members/', staff_members, name='staff_members'),
     path('staff/members/new/', staff_member_new, name='staff_member_new'),

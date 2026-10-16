@@ -1,0 +1,145 @@
+{% extends "base.html" %}{% load hub_time %}
+{% block title %}التذكيرات{% endblock %}
+{% block body_class %}staff-operational-tasks{% endblock %}
+{% block content %}
+<section class="hub-section ops-flow-header">
+  <div class="ops-flow-header__copy">
+    <p class="hub-badge hub-badge-info">تشغيل اليوم</p>
+    <h1>التذكيرات</h1>
+    <p>مواعيد وتذكيرات للفريق، منفصلة عن المهام. قراءة التنبيه لا تعني إنجاز العمل.</p>
+  </div>
+  <div class="hub-toolbar">
+    <a class="hub-button" href="{% url 'staff_operational_tasks' %}">مهام اليوم</a>
+    <a class="hub-button" href="{% url 'staff_close_day' %}">اليوم التشغيلي</a>
+  </div>
+</section>
+<nav class="ops-flow-nav" aria-label="التشغيل اليومي">
+  <a href="{% url 'staff_home' %}">العمليات</a>
+  <a href="{% url 'staff_close_day' %}">اليوم</a>
+  <a href="{% url 'staff_operational_tasks' %}">المهام</a>
+  <a href="{% url 'staff_reminders' %}" aria-current="page">التذكيرات</a>
+</nav>
+
+{% if not reminders_enabled %}
+<section class="hub-section ops-section-card">
+  <h2>التذكيرات غير مفعّلة بعد</h2>
+  <p>ستظهر التذكيرات هنا بعد تفعيل النظام واختباره على أجهزة الفريق. مهام اليوم الحالية مستمرة كما كانت.</p>
+</section>
+{% else %}
+{% if not business_day %}
+<section class="hub-section ops-section-card">
+  <h2>لا يوجد يوم تشغيلي مفتوح حالياً</h2>
+  <p>يمكن للإدارة تسجيل تذكيرات مسبقاً، لكنها لن تُرسل حتى يبدأ يوم تشغيلي وتُحدّد المسؤوليات المناوبة.</p>
+</section>
+{% endif %}
+
+{% if can_manage_reminders %}
+<section class="hub-section ops-section-card ops-create">
+  <details {% if create_form.errors %}open{% endif %}>
+    <summary class="hub-button hub-button-primary">+ تذكير جديد</summary>
+    <div class="ops-create__panel">
+      <p class="hub-text-muted">التذكير لا ينشئ مهمة أو يغيّر حالة طلب. سيظهر للمسؤول المناوب في إشعارات هَبّ الداخلية فقط.</p>
+      <form method="post" class="hub-form hub-grid hub-grid-2">
+        {% csrf_token %}
+        <input type="hidden" name="reminder_action" value="create">
+        {% if create_form.non_field_errors %}
+        <div style="grid-column:1/-1;" role="alert">{{ create_form.non_field_errors }}</div>
+        {% endif %}
+        {% for field in create_form %}
+          <div {% if field.name == 'title_ar' or field.name == 'details' %}style="grid-column:1/-1;"{% endif %}>
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}<div role="alert" class="hub-text-danger">{{ field.errors }}</div>{% endif %}
+          </div>
+        {% endfor %}
+        <div style="grid-column:1/-1;">
+          <button class="hub-button hub-button-primary" type="submit">حفظ التذكير</button>
+        </div>
+      </form>
+    </div>
+  </details>
+</section>
+{% endif %}
+
+<section class="hub-section ops-section-card">
+  <div class="ops-section-head">
+    <div>
+      <h2>{% if show_history %}التذكيرات المنتهية{% else %}التذكيرات النشطة{% endif %}</h2>
+      <p>{% if show_history %}آخر 30 يوماً من التذكيرات المكتملة والملغاة.{% else %}تذكيراتك الحالية والتذكيرات المرتبطة بمسؤوليتك المناوبة.{% endif %}</p>
+    </div>
+    <div class="hub-toolbar">
+      {% if show_history %}
+      <a class="hub-button" href="{% url 'staff_reminders' %}">النشطة</a>
+      {% else %}
+      <a class="hub-button" href="{% url 'staff_reminders' %}?view=history">السجل</a>
+      {% endif %}
+    </div>
+  </div>
+  <div class="ops-task-list">
+    {% for reminder in reminders %}
+    <article class="ops-task{% if reminder.status == 'active' and reminder.next_due_at and reminder.next_due_at <= now %} is-overdue{% endif %}{% if reminder.status == 'completed' %} is-done{% endif %}">
+      <div class="ops-task__main">
+        <div class="ops-task__title">
+          <strong>{{ reminder.title_ar }}</strong>
+          {% if reminder.source_task_id %}<span class="hub-badge">مرتبط بمهمة</span>{% endif %}
+          {% if reminder.status == 'completed' %}<span class="hub-badge hub-badge-success">تمّ</span>{% endif %}
+          {% if reminder.status == 'cancelled' %}<span class="hub-badge">ملغى</span>{% endif %}
+        </div>
+        <div class="ops-task__meta">
+          <span>{{ reminder.get_repeat_display }}</span>
+          {% if reminder.next_due_at %}
+            <span>الموعد: {{ reminder.next_due_at|ar_datetime }}</span>
+          {% elif reminder.status == 'active' %}
+            <span>أُرسل التنبيه، وبانتظار إكمال العمل</span>
+          {% endif %}
+          {% if reminder.retry_after %}<span>بانتظار تغطية مناوبة، ستتم المحاولة لاحقاً</span>{% endif %}
+          {% if reminder.responsibility %}<span>{{ reminder.get_responsibility_display }}</span>{% endif %}
+          {% if reminder.assigned_to %}<span>الموظف المحدد: {{ reminder.assigned_to }}</span>{% endif %}
+          {% if reminder.expires_at %}<span>ينتهي: {{ reminder.expires_at|ar_datetime }}</span>{% endif %}
+        </div>
+        {% if reminder.details %}<small>{{ reminder.details }}</small>{% endif %}
+      </div>
+      <div class="ops-task__actions">
+        {% if reminder.source_task_id %}
+          <a class="ops-action" href="{% url 'staff_operational_tasks' %}">فتح المهمة</a>
+        {% elif reminder.status == 'active' %}
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="reminder_action" value="complete">
+            <input type="hidden" name="reminder_id" value="{{ reminder.pk }}">
+            <button type="submit" class="ops-action ops-action--done">تمّ</button>
+          </form>
+          <details class="ops-inline-details">
+            <summary class="ops-action ops-action--muted">تأجيل</summary>
+            <form method="post" class="ops-inline-details__panel">
+              {% csrf_token %}
+              <input type="hidden" name="reminder_action" value="snooze">
+              <input type="hidden" name="reminder_id" value="{{ reminder.pk }}">
+              <label for="reminder-snooze-{{ reminder.pk }}">المدة</label>
+              <select name="snooze_minutes" id="reminder-snooze-{{ reminder.pk }}" required>
+                <option value="15">15 دقيقة</option>
+                <option value="30">30 دقيقة</option>
+                <option value="60">ساعة</option>
+                <option value="240">4 ساعات</option>
+              </select>
+              <button type="submit" class="ops-action">تأجيل</button>
+            </form>
+          </details>
+          {% if can_manage_reminders %}
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="reminder_action" value="cancel">
+            <input type="hidden" name="reminder_id" value="{{ reminder.pk }}">
+            <button type="submit" class="ops-action ops-action--muted">إلغاء</button>
+          </form>
+          {% endif %}
+        {% endif %}
+      </div>
+    </article>
+    {% empty %}
+      <div class="staff-v2-empty">لا توجد تذكيرات في هذا القسم.</div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}
