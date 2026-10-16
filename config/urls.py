@@ -24,7 +24,7 @@ from core.views_pwa import staff_web_app_manifest, service_worker, staff_push_co
 from accounts.views_staff import (
     staff_users_list, staff_user_new, staff_user_detail, staff_user_edit,
     staff_user_password, staff_user_toggle_active, staff_user_view_as,
-    staff_view_as_exit,
+    staff_view_as_exit, staff_profile, staff_password_change, staff_logout,
 )
 from members import views as member_device_views
 from core.views.internet_provider import (
@@ -102,6 +102,9 @@ urlpatterns = [
     path('order/<uuid:public_code>/qr.svg', menu.order_qr, name='order_qr'),
     path('table/<uuid:qr_token>/qr.svg', menu.table_qr, name='table_qr'),
     path('staff/', menu.staff_home, name='staff_home'),
+    path('staff/account/', staff_profile, name='staff_profile'),
+    path('staff/account/password/', staff_password_change, name='staff_password_change'),
+    path('staff/logout/', staff_logout, name='staff_logout'),
     path('staff/pos/', menu.staff_pos, name='staff_pos'),
     path('staff/visits/', staff_visits, name='staff_visits'),
     path('staff/visits/<uuid:public_code>/', staff_visit_detail, name='staff_visit_detail'),

@@ -124,18 +124,12 @@
   </section>
 
   <section id="staff-more" class="staff-v2-panel hub-ux5-directory" aria-labelledby="staff-more-title">
-    <div class="staff-v2-panel-head"><div><h3 id="staff-more-title">الإدارة والمساحات المتخصصة</h3><p>إعدادات وتقارير وأعمال لا تحتاجها مع كل طلب.</p></div></div>
-    <nav class="staff-workspace__secondary-links hub-ux5-directory__links" aria-label="الإدارة والمساحات المتخصصة">
+    <div class="staff-v2-panel-head"><div><h3 id="staff-more-title">أقسام العمل الأخرى</h3><p>أعمال تشغيلية لا تحتاجها مع كل طلب. تجد الإعدادات وإدارة حسابك في القائمة بجانب اسمك.</p></div></div>
+    <nav class="staff-workspace__secondary-links hub-ux5-directory__links" aria-label="أقسام العمل الأخرى">
       {% if staff_caps.inventory %}<a href="{% url 'staff_inventory_home' %}">المخزون والمشتريات</a>{% endif %}
       {% if staff_caps.finance %}<a href="{% url 'staff_finance_home' %}">المالية والحسابات</a>{% endif %}
-      {% if staff_caps.reports %}<a href="{% url 'staff_reports_home' %}">تقارير الإدارة</a>{% endif %}
       {% if staff_caps.internet_billing %}<a href="{% url 'staff_members' %}">الأعضاء</a>{% endif %}
-      {% if staff_caps.orders %}<a href="{% url 'staff_menu_tools' %}">إدارة القائمة</a>{% endif %}
-      {% if staff_caps.settings %}<a href="{% url 'staff_vendors' %}">الموردون والشركاء</a><a href="{% url 'staff_food_lab' %}">سُفرة والمشاركات</a>{% endif %}
-      {% if staff_caps.settings %}<a href="{% url 'staff_users_list' %}">المستخدمون والصلاحيات</a><a href="{% url 'staff_qr_links' %}">رموز QR</a>{% endif %}
-      {% if staff_caps.imports %}<a href="{% url 'staff_import_home' %}">الاستيراد</a>{% endif %}
-      {% if staff_caps.modifiers %}<a href="{% url 'staff_modifiers' %}">خيارات المنتجات</a>{% endif %}
-      {% if staff_caps.internet_billing and staff_caps.settings %}<a href="{% url 'staff_internet_settings' %}">إعدادات الإنترنت</a>{% endif %}
+      {% if staff_caps.settings %}<a href="{% url 'staff_food_lab' %}">سُفرة والمشاركات</a>{% endif %}
     </nav>
   </section>
 

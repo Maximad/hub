@@ -1,5 +1,6 @@
 from django.contrib import messages
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, logout as auth_logout, update_session_auth_hash
+from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
@@ -75,6 +76,39 @@ def _would_remove_last_active_admin(user, new_active=None, new_profile=None, new
     )
     was_active_admin = user.is_active and (user.is_superuser or current_role == User.Role.ADMIN)
     return was_active_admin and _last_active_admin_count() <= 1
+
+
+
+@require_staff_capability('staff_home')
+def staff_profile(request):
+    """Read-only self-service staff account information, separate from admin user edits."""
+    return render(request, 'staff/account/profile.html')
+
+
+@require_staff_capability('staff_home')
+def staff_password_change(request):
+    """Allow staff to change only their own password after confirming the old one."""
+    form = PasswordChangeForm(user=request.user, data=request.POST or None)
+    form.fields['old_password'].label = 'كلمة المرور الحالية'
+    form.fields['new_password1'].label = 'كلمة المرور الجديدة'
+    form.fields['new_password2'].label = 'تأكيد كلمة المرور الجديدة'
+    for field in form.fields.values():
+        field.widget.attrs['class'] = 'hub-input'
+    if request.method == 'POST' and form.is_valid():
+        user = form.save()
+        update_session_auth_hash(request, user)
+        _audit_user_change(user, 'accounts.self_password_changed', user)
+        messages.success(request, 'تم تغيير كلمة المرور بنجاح.')
+        return redirect('staff_profile')
+    return render(request, 'staff/account/password.html', {'form': form})
+
+
+@require_POST
+@require_staff_capability('staff_home')
+def staff_logout(request):
+    """Sign out through a CSRF-protected POST, never a GET link."""
+    auth_logout(request)
+    return redirect('wifi_staff_login')
 
 
 @require_staff_capability('users', ADMIN_ONLY_MESSAGE)
