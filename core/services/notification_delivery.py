@@ -19,6 +19,7 @@ from django.utils import timezone
 
 from accounts.permissions import user_has_capability
 from core.notification_audience import ROLE_TO_ACCOUNT_ROLES
+from core.duty_notification_routing import duty_target_ids_for_event
 from core.models import (
     NotificationEvent,
     NotificationLog,
@@ -106,6 +107,9 @@ def user_is_push_target(event: NotificationEvent, user) -> bool:
     route = push_route_for_event(event)
     if route is None or not user_has_capability(user, route.required_capability):
         return False
+    duty_ids = duty_target_ids_for_event(event)
+    if duty_ids is not None:
+        return user.pk in duty_ids
     if route.include_explicit_recipients and event.recipients.filter(user_id=user.pk).exists():
         return True
     return any(_role_matches_user(role, user) for role in route.roles)
@@ -116,6 +120,9 @@ def _target_users(event: NotificationEvent):
     User = get_user_model()
     if route is None:
         return User.objects.none()
+    duty_ids = duty_target_ids_for_event(event)
+    if duty_ids is not None:
+        return User.objects.filter(is_active=True, pk__in=duty_ids)
 
     query = Q(pk__in=[])
     if route.include_explicit_recipients:

@@ -69,6 +69,8 @@ if not SECRET_KEY:
 ALLOWED_HOSTS = [host.strip() for host in os.getenv('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost').split(',') if host.strip()]
 RESERVATION_DEFAULT_DURATION_MINUTES = non_negative_int_env('RESERVATION_DEFAULT_DURATION_MINUTES', 120)
 BUSINESS_DAY_CUTOFF_HOUR = non_negative_int_env('BUSINESS_DAY_CUTOFF_HOUR', 4)
+# Opt-in: only new events during an open Business Day use Active Duty routing.
+DUTY_NOTIFICATION_ROUTING_ENABLED = bool_env('DUTY_NOTIFICATION_ROUTING_ENABLED', False)
 if BUSINESS_DAY_CUTOFF_HOUR > 23:
     raise ImproperlyConfigured('BUSINESS_DAY_CUTOFF_HOUR must be between 0 and 23')
 CSRF_TRUSTED_ORIGINS = [
