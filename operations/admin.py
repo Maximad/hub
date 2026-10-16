@@ -8,6 +8,8 @@ from .models import (
     BusinessDayTask,
     HandoverNote,
     OperationalTaskTemplate,
+    Reminder,
+    ReminderOccurrence,
     StaffDailyCodeReceipt,
 )
 
@@ -79,3 +81,31 @@ class StaffDailyCodeReceiptAdmin(admin.ModelAdmin):
     )
     list_filter = ('business_day', 'code_version')
     search_fields = ('user__username', 'user__phone')
+
+
+@admin.register(Reminder)
+class ReminderAdmin(admin.ModelAdmin):
+    list_display = (
+        'title_ar', 'status', 'repeat', 'next_due_at', 'responsibility',
+        'assigned_to', 'source_task',
+    )
+    list_filter = ('status', 'repeat', 'responsibility')
+    search_fields = ('title_ar', 'details')
+    readonly_fields = ('source_task', 'source_due_at', 'created_at', 'updated_at')
+    autocomplete_fields = ('assigned_to', 'created_by')
+    actions = None
+
+
+@admin.register(ReminderOccurrence)
+class ReminderOccurrenceAdmin(admin.ModelAdmin):
+    list_display = ('reminder', 'scheduled_for', 'recipient_user', 'notification_event', 'created_at')
+    list_filter = ('scheduled_for',)
+    readonly_fields = (
+        'reminder', 'scheduled_for', 'recipient_user', 'notification_event', 'created_at',
+    )
+    def has_add_permission(self, request):
+        return False
+    def has_change_permission(self, request, obj=None):
+        return False
+    def has_delete_permission(self, request, obj=None):
+        return False
