@@ -1,12 +1,12 @@
 {% extends "base.html" %}{% load hub_icons %}
 {% load static menu_form product_media %}
-{% block title %}نقطة البيع / POS{% endblock %}
+{% block title %}طلب جديد{% endblock %}
 {% block content %}
 <div class="staff-pos pos-layout-{{ system_settings.pos_layout_preset|default:'fast_touch' }} pos-cart-{{ system_settings.pos_cart_position|default:'side' }} {{ system_settings.pos_mobile_layout_class|default:'layout-grid-2' }} {{ system_settings.pos_tablet_layout_class|default:'layout-tablet-3' }} {{ system_settings.pos_desktop_layout_class|default:'layout-grid-4' }}" dir="rtl">
   <header class="hub-card staff-pos__header">
     <div>
-      {% if system_settings.pos_logo_url %}<img class="staff-pos__logo" src="{{ system_settings.pos_logo_url }}" alt="POS">{% endif %}<p class="menu-public__brand">Staff POS / نقطة البيع</p>
-      <h2 class="hub-section-title hub-page-header__title">{{ page_setting.title|default:"إدخال طلب سريع باللمس" }}</h2>
+      {% if system_settings.pos_logo_url %}<img class="staff-pos__logo" src="{{ system_settings.pos_logo_url }}" alt="POS">{% endif %}<p class="menu-public__brand">تسجيل الطلبات</p>
+      <h2 class="hub-section-title hub-page-header__title">{{ page_setting.title|default:"طلب جديد" }}</h2>
       {% if page_setting.subtitle %}<p>{{ page_setting.subtitle }}</p>{% else %}<p>اختر الطاولة أو طلب عام داخل المكان، اضغط المنتجات بسرعة، ثم أرسل الطلب إلى لوحة الطلبات والكاشير.</p>{% endif %}
     </div>
     <div class="hub-toolbar">
@@ -26,7 +26,7 @@
           <label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="inside_space_general" {% if form_values.fulfillment_mode != 'delivery' and form_values.fulfillment_mode != 'takeaway' and form_values.fulfillment_mode != 'table' %}checked{% endif %}> داخل المكان</label>
           <label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="table" {% if form_values.fulfillment_mode == 'table' %}checked{% endif %}> طاولة</label>
           {% if settings.effective_delivery_enabled %}<label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="delivery" {% if form_values.fulfillment_mode == 'delivery' %}checked{% endif %}> توصيل</label>{% endif %}
-          {% if settings.effective_takeaway_enabled %}<label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="takeaway" {% if form_values.fulfillment_mode == 'takeaway' %}checked{% endif %}> تيك أواي</label>{% endif %}
+          {% if settings.effective_takeaway_enabled %}<label class="menu-option-chip"><input type="radio" name="fulfillment_mode" value="takeaway" {% if form_values.fulfillment_mode == 'takeaway' %}checked{% endif %}> سفري</label>{% endif %}
         </div>
       </div>
       <div>
@@ -38,7 +38,7 @@
           {% endfor %}
         </select>
       </div>
-      <div><label for="visit_id"><strong>الحساب المفتوح (اختياري)</strong></label><select class="hub-input" name="visit_id" id="visit_id"><option value="">بدون جلسة</option>{% for visit in open_visits %}<option value="{{ visit.pk }}" {% if selected_visit_id == visit.pk|stringformat:'s' %}selected{% endif %}>جلسة {{ visit.display_number }} — {{ visit.table|default:'بدون طاولة' }}</option>{% endfor %}</select></div>
+      <div><label for="visit_id"><strong>الحساب المفتوح (اختياري)</strong></label><select class="hub-input" name="visit_id" id="visit_id" aria-describedby="pos-account-help"><option value="">حساب منفصل لهذا الطلب</option>{% for visit in open_visits %}<option value="{{ visit.pk }}" {% if selected_visit_id == visit.pk|stringformat:'s' %}selected{% endif %}>جلسة {{ visit.display_number }} — {{ visit.table|default:'بدون طاولة' }}</option>{% endfor %}</select><p class="hub-help-text" id="pos-account-help">لإضافة الطلب إلى فاتورة مفتوحة، اختر الحساب هنا. اختيار الطاولة وحده لا يضيف الطلب إلى الحساب.</p></div>
       <div>
         <label for="customer_name"><strong>اسم اختياري</strong></label>
         <input class="hub-input" type="text" name="customer_name" id="customer_name" value="{{ form_values.customer_name|default:'' }}" autocomplete="off">
@@ -127,7 +127,7 @@
 
                   {% if p.valid_option_assignments %}
                     <details class="menu-options-details staff-pos__details" data-options-panel{% if not system_settings.collapse_modifiers_by_default %} open{% endif %}>
-                      <summary class="hub-button hub-button-secondary">خيارات / Modifiers</summary>
+                      <summary class="hub-button hub-button-secondary">الإضافات والتعديلات</summary>
                       <div class="menu-options-wrap">
                         {% for assignment in p.valid_option_assignments %}
                           {% with group=assignment.group %}
@@ -151,7 +151,7 @@
                   {% endif %}
 
                   <details class="menu-note-details staff-pos__details">
-                    <summary class="hub-button hub-button-secondary">ملاحظة عنصر</summary>
+                    <summary class="hub-button hub-button-secondary">ملاحظة للمنتج</summary>
                     <label for="note_{{ p.id }}">ملاحظة على {{ p.name_ar }}</label>
                     {% form_value form_values 'note_' p.id '' as note_value %}
                     <input class="hub-input" type="text" name="note_{{ p.id }}" id="note_{{ p.id }}" value="{{ note_value }}" placeholder="بدون سكر، حار، سفري...">
