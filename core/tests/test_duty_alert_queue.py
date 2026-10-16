@@ -107,10 +107,13 @@ class DutyAlertFollowupTests(TestCase):
             )
 
     def test_no_coverage_creates_manager_queue_without_new_task_rows(self):
+        before_tasks = set(self.day.tasks.values_list('pk', flat=True))
         event = self._event()
         queue = unassigned_duty_alerts_for_manager(self.day, self.owner)
         self.assertEqual([item['event_id'] for item in queue], [event.pk])
-        self.assertEqual(self.day.tasks.count(), 1 if self.day.tasks.filter(fingerprint='wifi:board-pin').exists() else 0)
+        self.assertEqual(
+            set(self.day.tasks.values_list('pk', flat=True)), before_tasks,
+        )
         self.assertFalse(unassigned_duty_alerts_for_manager(self.day, self.provider))
         self.assertFalse(unassigned_duty_alerts_for_manager(self.day, self.tamer))
 
@@ -196,10 +199,8 @@ class DutyAlertFollowupTests(TestCase):
     def test_business_day_page_displays_queue_for_admin_not_regular_staff(self):
         self._event()
         self.client.force_login(self.owner)
-        response = self.client.get('/staff/business-day/')
-        if response.status_code == 404:
-            from django.urls import reverse
-            response = self.client.get(reverse('staff_close_day'))
+        from django.urls import reverse
+        response = self.client.get(reverse('staff_close_day'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'تنبيهات تحتاج تغطية')
         self.assertContains(response, 'تنبيه يحتاج متابعة')
