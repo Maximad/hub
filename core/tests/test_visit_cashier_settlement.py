@@ -182,9 +182,9 @@ class VisitCashierSettlementTests(TestCase):
             [row['visit'].pk for row in response.context['visit_rows']],
             [visit.pk],
         )
-        self.assertContains(response, 'طلبات دون حساب جلسة')
+        self.assertContains(response, 'طلبات بحساب منفصل')
         self.assertContains(
-            response, 'حتى لو كانت لها طاولة أو مساحة محددة',
+            response, 'حتى لو كان مرتبطاً بطاولة. لا يُضاف إلى حساب مفتوح تلقائياً.',
         )
         self.assertContains(response, standalone.display_number)
         self.assertContains(response, attached.display_number, count=0)
