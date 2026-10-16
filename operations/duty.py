@@ -13,6 +13,11 @@ from core.models import ActivityLog
 from .models import BusinessDay, BusinessDayDutyCoverage, BusinessDayStaffAssignment
 
 
+ACTIVE_DUTY_STATUSES = {
+    BusinessDay.Status.OPEN, BusinessDay.Status.CLOSING, BusinessDay.Status.REOPENED,
+}
+
+
 RESPONSIBILITY_CAPABILITY = {
     BusinessDayDutyCoverage.Responsibility.SERVICE: 'orders',
     BusinessDayDutyCoverage.Responsibility.CASHIER: 'cashier',
@@ -26,21 +31,26 @@ def _manager(user):
     return bool(
         getattr(user, 'is_authenticated', False)
         and getattr(user, 'is_active', False)
+        and user_has_capability(user, 'staff_home')
         and (user.is_superuser or getattr(user, 'role', '') in {'admin', 'cashier'})
     )
 
 
 def _require_open_day(day):
-    if day.status not in {BusinessDay.Status.OPEN, BusinessDay.Status.REOPENED}:
+    if day.status not in ACTIVE_DUTY_STATUSES:
         raise ValidationError('تغيير مسؤوليات المناوبة متاح خلال يوم تشغيل مفتوح فقط.')
 
 
 def _eligible_assignment(day, responsibility, user_id):
     if responsibility not in RESPONSIBILITY_CAPABILITY:
         raise ValidationError('المسؤولية التشغيلية غير معروفة.')
+    try:
+        normalized_user_id = int(user_id)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValidationError('الموظف المحدد غير صالح.') from exc
     assignment = (
         BusinessDayStaffAssignment.objects.select_related('user')
-        .filter(business_day=day, user_id=user_id)
+        .filter(business_day=day, user_id=normalized_user_id)
         .first()
     )
     if (
@@ -56,7 +66,7 @@ def _eligible_assignment(day, responsibility, user_id):
 def eligible_duty_users(day, responsibility):
     """Candidates for explicit coverage, not an auto-assign/broadcast fallback."""
     capability = RESPONSIBILITY_CAPABILITY.get(responsibility)
-    if not capability or day.status not in {BusinessDay.Status.OPEN, BusinessDay.Status.REOPENED}:
+    if not capability or day.status not in ACTIVE_DUTY_STATUSES:
         return []
     assignments = (
         day.staff_assignments.filter(checked_in_at__isnull=False, user__is_active=True)
