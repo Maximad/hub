@@ -159,6 +159,18 @@ class DutyNotificationRoutingTests(TestCase):
         self.assertTrue(self._visible(bar_event, self.bar))
         self.assertFalse(self._visible(bar_event, self.kitchen))
 
+    def test_ready_for_pickup_has_in_app_record_for_on_duty_waiter(self):
+        # Legacy ready-item recipients are admin/kitchen; new duty audience
+        # must not depend on those legacy role labels.
+        assign_duty_coverage(
+            self.day, responsibility='service', user_id=self.waiter.pk, actor=self.owner,
+        )
+        event = self._event('prep_item_ready', self.kitchen_station)
+        self.assertEqual(self._pushed_to(event), {self.waiter.pk})
+        self.assertTrue(self._visible(event, self.waiter))
+        self.assertFalse(self._visible(event, self.kitchen))
+        self.assertFalse(self._visible(event, self.owner))
+
     def test_capability_override_revokes_duty_alert_and_escalates(self):
         assign_duty_coverage(
             self.day, responsibility='service', user_id=self.tamer.pk, actor=self.owner,

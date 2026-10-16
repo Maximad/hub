@@ -108,17 +108,16 @@ def duty_target_ids_for_event(event):
         or event.duty_routing_business_date is None
     ):
         return None
-    # Previously routed days retain their historical audience in the inbox.
-    # Pending deliveries from previous days still follow the worker's normal
-    # freshness rules; introducing reminder/escalation expiry is a later phase.
+    # A previously duty-routed event must NOT become a broad legacy push
+    # after the duty day ends. Worker revalidation skips stale deliveries.
     if event.duty_routing_business_date != current_business_date():
-        return None
+        return frozenset()
     day = BusinessDay.objects.filter(
         business_date=event.duty_routing_business_date,
         status__in=(BusinessDay.Status.OPEN, BusinessDay.Status.CLOSING, BusinessDay.Status.REOPENED),
     ).first()
     if day is None:
-        return None
+        return frozenset()
     return _duty_target_ids(day, event)
 
 

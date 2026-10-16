@@ -15,7 +15,9 @@ from django.urls import reverse
 from django.utils import timezone
 
 from core.notification_audience import notification_roles_for_user
-from core.duty_notification_routing import routing_day_for_new_event, duty_inbox_scope
+from core.duty_notification_routing import (
+    routing_day_for_new_event, duty_inbox_scope, duty_routing_enabled,
+)
 from core.models import (
     NotificationEvent,
     NotificationLog,
@@ -68,6 +70,15 @@ def _roles_for_event(event_type, station=None, target_role=''):
 
 def link_for_event(event):
     code = getattr(event.target_station, 'code', '') if event.target_station_id else ''
+    if (
+        event.event_type == 'prep_item_ready'
+        and event.duty_routing_business_date is not None
+    ):
+        return (
+            reverse('staff_delivery')
+            if event.order_id and event.order.is_delivery
+            else reverse('staff_orders')
+        )
     if event.event_type in PREP_EVENTS:
         return reverse('staff_prep_station', kwargs={'station_code': code}) if code else reverse('staff_prep')
     if event.event_type in PAYMENT_EVENTS or event.event_type in MANAGER_EVENTS:
@@ -121,6 +132,17 @@ def create_notification(
                     NotificationRecipient(
                         notification_event=event,
                         role=role,
+                        station=target_station,
+                    )
+                )
+            if event.duty_routing_business_date is not None:
+                # A neutral role-only recipient makes each routed event
+                # visible to the effective duty holder regardless of their
+                # legacy account role. Duty eligibility still gates visibility.
+                recipients.append(
+                    NotificationRecipient(
+                        notification_event=event,
+                        role='duty',
                         station=target_station,
                     )
                 )
@@ -374,6 +396,19 @@ def visible_recipients_for(user):
             user__isnull=True,
             role__in=notification_roles_for_user(user),
         )
+    if duty_routing_enabled():
+        # Closed/previous Business Day duty broadcasts belong to the audit
+        # archive, not a new shift's ordinary role-based notification inbox.
+        from operations.services import current_business_date
+        from operations.models import BusinessDay
+        day = BusinessDay.objects.filter(business_date=current_business_date()).first()
+        if day is None or day.status == BusinessDay.Status.CLOSED:
+            audience &= Q(notification_event__duty_routing_business_date__isnull=True)
+        else:
+            audience &= (
+                Q(notification_event__duty_routing_business_date__isnull=True)
+                | Q(notification_event__duty_routing_business_date=day.business_date)
+            )
     routed_event_ids, eligible_event_ids = duty_inbox_scope(user)
     if routed_event_ids:
         audience = (

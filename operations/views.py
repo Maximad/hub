@@ -5,6 +5,10 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
+from core.duty_alert_queue import unassigned_duty_alerts_for_manager
+from accounts.permissions import user_has_capability
+from core.duty_notification_routing import duty_routing_enabled
+
 from .insights import business_day_metrics, detect_anomalies, send_owner_digest
 from .duty import (
     accept_duty_handover, assign_duty_coverage,
@@ -312,6 +316,16 @@ def staff_business_day(request):
                 'coverage': coverage_by_role.get(value),
                 'candidates': eligible_duty_users(day, value),
             })
+    duty_alerts_enabled = duty_routing_enabled()
+    can_review_unassigned_alerts = (
+        duty_alerts_enabled
+        and (request.user.is_superuser or getattr(request.user, 'role', '') == 'admin')
+        and user_has_capability(request.user, 'staff_home')
+    )
+    unassigned_duty_alerts = (
+        unassigned_duty_alerts_for_manager(day, request.user, limit=30)
+        if day and duty_alerts_enabled else []
+    )
     metrics = business_day_metrics(day) if day and can_manage else None
     anomalies = detect_anomalies(day) if day and can_manage else []
     recent_days = BusinessDay.objects.select_related('opened_by', 'closed_by').order_by('-business_date')[:14]
@@ -325,6 +339,9 @@ def staff_business_day(request):
         'staff_options': staff_options,
         'staff_assignments': assignments,
         'duty_rows': duty_rows,
+        'duty_alerts_enabled': duty_alerts_enabled,
+        'can_review_unassigned_alerts': can_review_unassigned_alerts,
+        'unassigned_duty_alerts': unassigned_duty_alerts,
         'assigned_staff_ids': assigned_staff_ids,
         'opening_checklist_items': checklist_items,
         'handover_notes': handover_notes,

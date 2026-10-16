@@ -172,6 +172,37 @@
   </div>
 </section>
 
+{% if can_review_unassigned_alerts %}
+<section id="unassigned-alerts" class="hub-section ops-section-card">
+  <div class="ops-section-head">
+    <div>
+      <h2>تنبيهات تحتاج تغطية</h2>
+      <p>طلبات وإشعارات تشغيلية لم تُسند لمسؤول مناوبة مؤهّل. لا يعني فتح القائمة قبول العمل أو إغلاقه.</p>
+    </div>
+    <span class="hub-badge {% if unassigned_duty_alerts %}hub-badge-warning{% endif %}">{{ unassigned_duty_alerts|length }} بانتظار مسؤول</span>
+  </div>
+  <div class="ops-task-list">
+    {% for alert in unassigned_duty_alerts %}
+    <article class="ops-task">
+      <div class="ops-task__main">
+        <strong>{{ alert.title }}</strong>
+        <div class="ops-task__meta">
+          <span>{{ alert.responsibility }}</span>
+          <span>{{ alert.created_at|date:'Y-m-d H:i' }}</span>
+        </div>
+      </div>
+      <div class="ops-task__actions">
+        <a class="ops-action" href="{{ alert.link }}">فتح العمل</a>
+        <a class="ops-action" href="#active-duty">تعيين مسؤول</a>
+      </div>
+    </article>
+    {% empty %}
+    <div class="staff-v2-empty">لا توجد أعمال غير مغطّاة بحاجة إلى متابعة الآن.</div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 <section id="handover" class="hub-section ops-section-card">
   <div class="ops-section-head"><div><h2>التسليم بين المناوبات والأيام</h2><p>ملاحظات تبقى ظاهرة حتى الاطلاع عليها أو حلها.</p></div></div>
   {% if business_day.status != 'closed' %}
