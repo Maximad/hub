@@ -76,3 +76,43 @@ class Phase5StaffNavigationTests(TestCase):
     def test_anonymous_user_cannot_access_consolidated_staff_home(self):
         response = self.client.get(reverse("staff_home"))
         self.assertEqual(response.status_code, 302)
+
+    def test_help_shortcut_opens_real_role_aware_guidance(self):
+        self.client.force_login(self.waiter)
+        response = self.client.get(reverse("staff_home"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'href="/staff/#staff-help" aria-label="المساعدة"')
+        self.assertContains(response, 'id="staff-help"')
+        self.assertContains(response, "اختيار الطاولة وحده لا يجمع الفواتير.")
+        self.assertContains(response, "إذا انقطع الاتصال")
+        self.assertNotContains(response, "<strong>قبض الحساب</strong>")
+        self.assertNotContains(response, "<strong>جرد المخزون</strong>")
+
+    def test_pos_explains_shared_versus_separate_bills(self):
+        self.client.force_login(self.waiter)
+        response = self.client.get(reverse("staff_pos"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'aria-describedby="pos-account-help"')
+        self.assertContains(response, "حساب منفصل لهذا الطلب")
+        self.assertContains(response, "اختيار الطاولة وحده لا يضيف الطلب إلى الحساب.")
+        self.assertContains(response, "تسجيل الطلبات")
+
+    def test_cashier_explains_shared_bill_without_technical_session_model(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("staff_cashier"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "تُجمع الطلبات المرتبطة بحساب مفتوح في فاتورة واحدة.")
+
+    def test_staff_labels_remove_unnecessary_technical_terms(self):
+        from pathlib import Path
+        from django.conf import settings
+
+        root = Path(settings.BASE_DIR)
+        pos = (root / "templates/staff/pos.html").read_text(encoding="utf-8")
+        cashier = (root / "templates/staff/cashier.html").read_text(encoding="utf-8")
+        stock = (root / "templates/staff/inventory_stock_count.html").read_text(encoding="utf-8")
+        self.assertIn("الإضافات والتعديلات", pos)
+        self.assertIn("> سفري</label>", pos)
+        self.assertIn("طلبات بحساب منفصل", cashier)
+        self.assertIn("لا يسجّل شراءً أو دفعاً أو قيمة مالية للمخزون", stock)
+        self.assertNotIn("قيد تقييم افتتاحي مالي", stock)

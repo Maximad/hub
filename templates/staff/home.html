@@ -138,6 +138,17 @@
       {% if staff_caps.internet_billing and staff_caps.settings %}<a href="{% url 'staff_internet_settings' %}">إعدادات الإنترنت</a>{% endif %}
     </nav>
   </section>
+
+  <section id="staff-help" class="staff-v2-panel hub-ux5-directory" aria-labelledby="staff-help-title">
+    <div class="staff-v2-panel-head"><div><h3 id="staff-help-title">مساعدة سريعة</h3><p>إرشادات قصيرة للمهام اليومية، بحسب صلاحياتك.</p></div></div>
+    <div class="hub-grid hub-grid-2">
+      {% if staff_caps.pos %}<div><strong>طلب جديد</strong><p>إذا كان الطلب ضمن فاتورة مفتوحة، اختر حساب الزبون عند تسجيله. اختيار الطاولة وحده لا يجمع الفواتير.</p></div>{% endif %}
+      {% if staff_caps.kitchen_board %}<div><strong>التحضير</strong><p>افتح لوحة التحضير، واتبع الإجراء المناسب بعد تجهيز الطلب.</p></div>{% endif %}
+      {% if staff_caps.cashier %}<div><strong>قبض الحساب</strong><p>راجع المبلغ المتبقي، وسجّل الدفعة بعد استلام المال فعلياً.</p></div>{% endif %}
+      {% if staff_caps.inventory_stock_count %}<div><strong>جرد المخزون</strong><p>أدخل الكمية التي وجدتها، ثم راجع الفرق قبل التأكيد.</p></div>{% endif %}
+      <div><strong>إذا انقطع الاتصال</strong><p>تحقّق من تسجيل الإجراء قبل إرساله مرة ثانية، حتى لا يتكرر الطلب أو الدفع.</p></div>
+    </div>
+  </section>
 </section>
 
 {% if staff_caps.orders and staff_caps.visit_manage %}

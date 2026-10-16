@@ -42,7 +42,7 @@
     <p>الفرق: <strong>{{ preview.difference }} {{ preview.unit }}</strong></p>
     {% if preview.difference %}
       <p>سبب التصحيح: {{ preview.reason }}</p>
-      <p class="hub-help-text">سيُسجل الفرق كحركة تصحيح مخزون باسمك. هذا لا ينشئ فاتورة شراء، ولا دفعة مورد، ولا قيد تقييم افتتاحي مالي.</p>
+      <p class="hub-help-text">سيُسجَّل فرق الكمية في المخزون باسمك. هذا لا يسجّل شراءً أو دفعاً أو قيمة مالية للمخزون.</p>
     {% else %}
       <p class="hub-help-text">الكمية مطابقة، لذلك لن تُنشأ حركة مخزون إضافية.</p>
     {% endif %}
