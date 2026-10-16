@@ -7,11 +7,12 @@ It remains hidden from the task navigation until the existing engine flag
 `REMINDERS_ENGINE_ENABLED` is enabled.
 
 ## Staff actions and authorization
-- Managers who pass the existing operational manager check can create an
-  independent reminder with title, optional details, first due time, expiry,
+- Administrators or the person currently assigned **operations Active Duty**
+  can create an independent reminder with title, optional details, expiry,
   once/interval/daily/weekly recurrence, duty responsibility and optional
   designated staff member. The backend validates the date and repeat pattern.
-- Non-managers cannot create reminders. They see only schedules that the
+- A generic cashier account role does not, by itself, grant reminder
+  management. Non-managers see only schedules that the
   current Active Duty resolver would actually route to them, including
   accepted handovers and the operations-lead fallback.
 - For a standalone active reminder, the authorized holder can mark it
