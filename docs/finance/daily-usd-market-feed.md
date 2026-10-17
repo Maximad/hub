@@ -9,7 +9,7 @@ the market feed currently has no verified city field.
 
 ## Flow
 
-1. The GitHub workflow (daily around **20:10 Damascus time**) fetches market USD
+1. The GitHub workflow (daily around **09:10 Damascus time**) fetches market USD
    buy/sell rates, rejects old-lira-scale numbers, stale timestamps, ambiguous
    denominations, invalid spreads or manual source overrides, then commits
    `rates/latest.json` and `rates/history/YYYY-MM-DD.json` to
@@ -42,8 +42,11 @@ sudo systemctl enable --now hub-rate-stage.timer
 sudo systemctl list-timers hub-rate-stage.timer
 ```
 
-It schedules **staging** at approximately **21:15 Damascus time** and never
-approves or changes the adopted rate. Requires `deploy` access to Docker
+It schedules **staging** at approximately **10:15 Damascus time**, allowing
+about one hour after collection for GitHub Actions scheduling delays. If the
+collector has not yet published a new file, staging remains idempotent and
+never approves or changes the adopted rate. The public provider may not yet
+have updated its morning quote; always check the source timestamp before approval. Requires `deploy` access to Docker
 and the production compose path; confirm these before enabling.
 
 To test explicitly (from `/opt/hub`):
