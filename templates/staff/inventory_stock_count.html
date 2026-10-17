@@ -74,7 +74,7 @@
         <option value="{{ code }}"{% if values.count_unit == code or not values.count_unit and code == item.unit %} selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select>
-      <span class="hub-stock-count__unit" id="stock-count-unit-hint">وحدة المخزون: <strong>{{ item.get_unit_display }}</strong></span>
+      <span class="hub-stock-count__unit" id="stock-count-unit-hint">وحدة القياس: <strong>{{ item.get_unit_display }}</strong></span>
     </div>
     <p class="hub-help-text" data-count-preview aria-live="polite">أدخل الكمية لرؤية الفرق قبل المراجعة.</p>
     <details class="hub-ux5-module__more" data-count-reason-section{% if error and values.count %} open{% endif %}>
