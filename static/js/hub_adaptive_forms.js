@@ -47,6 +47,8 @@
       if (!input || !preview) return;
       const recorded = Number(input.dataset.recorded);
       const unit = (input.dataset.countUnit || '').trim();
+      const base = input.dataset.baseUnit || '';
+      const selection = form.querySelector('[data-count-unit-select]');
       const update = () => {
         const entered = input.value.trim();
         const numeric = Number(entered);
@@ -54,13 +56,23 @@
           preview.textContent = 'أدخل كمية صحيحة لرؤية الفرق.';
           return;
         }
-        const difference = numeric - recorded;
-        const label = difference === 0 ? 'الكمية مطابقة للمسجل' :
+        const chosen = selection?.value || base;
+        const factor = chosen === base ? 1 :
+          ((base === 'g' && chosen === 'kg') || (base === 'ml' && chosen === 'liter')) ? 1000 :
+          ((base === 'kg' && chosen === 'g') || (base === 'liter' && chosen === 'ml')) ? 0.001 : NaN;
+        const inBase = numeric * factor;
+        if (!Number.isFinite(inBase) || Math.abs(inBase * 1000 - Math.round(inBase * 1000)) > 1e-6) {
+          preview.textContent = 'لا يمكن حفظ الكمية بهذه الدقة في وحدة المخزون، راجع الكسور.';
+          return;
+        }
+        const difference = inBase - recorded;
+        const label = Math.abs(difference) < 1e-9 ? 'الكمية مطابقة للمسجل' :
           'الفرق عن المسجل: ' + difference.toLocaleString('ar-SY', {maximumFractionDigits: 3}) + (unit ? ' ' + unit : '');
         preview.textContent = label + ' — سيجري التحقق مجدداً قبل تأكيد الجرد.';
-        if (reason && difference !== 0) reason.open = true;
+        if (reason && Math.abs(difference) > 1e-9) reason.open = true;
       };
       input.addEventListener('input', update);
+      selection?.addEventListener('change', update);
       update();
     });
   };
