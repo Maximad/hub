@@ -81,7 +81,7 @@
         <button class="hub-button hub-button-primary" type="submit">حفظ الدفعة</button>
       </form>
       <script>(function(){const form=document.getElementById('visit-payment-form');if(!form)return;const amount=form.querySelector('[data-currency-amount]');const currency=form.querySelector('[data-currency-select]');const approval=document.getElementById('visit-manager-approval');const remaining=Number(form.dataset.remaining||'0');if(amount&&!amount.value)amount.value=form.dataset.defaultAmount||'';function toggle(){if(!amount||!approval)return;const entered=Number(amount.value||'0');const isSyp=!currency||currency.value==='SYP_NEW';approval.hidden=isSyp?!(entered>0&&entered<remaining):false;}amount?.addEventListener('input',toggle);currency?.addEventListener('change',toggle);toggle();})();</script>
-      {% else %}<div class="hub-message hub-message-success">الرصيد الحالي مسدد بالكامل. يمكنك إبقاء الجلسة مفتوحة لطلبات إضافية أو إغلاقها.</div>{% endif %}
+      {% else %}<div class="hub-message hub-message-success">رصيد الجلسة صفر. {% if paid == 0 %}لم تُحصّل دفعات نقدية على هذا الحساب.{% else %}لا يوجد مبلغ متبقٍ للتحصيل.{% endif %} يمكنك إغلاق الجلسة أو إضافة طلب آخر.</div>{% endif %}
     </article>
 
     <article class="hub-card">

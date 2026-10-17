@@ -36,7 +36,7 @@
         <button class="hub-button" type="submit">حفظ الدفعة فقط</button>
       </form>
     </section>
-  {% elif remaining == 0 and visit.status == 'open' and not active_internet_sessions %}<div class="hub-message hub-message-success">الحساب الحالي مسدد بالكامل ويمكن إغلاقه مباشرة.</div>{% endif %}
+  {% elif remaining == 0 and visit.status == 'open' and not active_internet_sessions %}<div class="hub-message hub-message-success">رصيد الحساب صفر، ويمكن إغلاقه دون تسجيل دفعة جديدة.</div>{% endif %}
 
   {% if visit.status == 'open' %}
   <section class="hub-card">

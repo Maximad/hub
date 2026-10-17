@@ -336,7 +336,8 @@ def staff_cashier_visit_settle(request, public_code):
                     'ended_internet_sessions': [session.pk for session in sessions],
                 },
             )
-        messages.success(request, 'تم تسديد كامل حساب الجلسة وإغلاقها.')
+        messages.success(request, 'أُغلقت الجلسة دون تحصيل دفعة جديدة.' if remaining == 0
+                         else 'تم تسديد الرصيد المتبقي وإغلاق الجلسة.')
     except (ValidationError, PermissionDenied) as error:
         messages.error(request, ' '.join(getattr(error, 'messages', [str(error)])))
 
