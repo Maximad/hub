@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}حسابي{% endblock %}
+{% block content %}
+<section class="hub-card hub-section staff-account-page" dir="rtl">
+  <header class="hub-page-header">
+    <div><h1 class="hub-page-header__title">حسابي</h1><p class="hub-help-text">بيانات حساب العمل الحالي. لتعديل الصلاحيات أو بيانات الفريق، تواصل مع المسؤول.</p></div>
+  </header>
+  <dl class="staff-account-page__facts">
+    <div><dt>الاسم</dt><dd>{{ request.user.get_full_name|default:request.user.username }}</dd></div>
+    <div><dt>اسم المستخدم</dt><dd>{{ request.user.username }}</dd></div>
+    <div><dt>المسمى الوظيفي</dt><dd>{{ request.user.job_title|default:request.user.access_label }}</dd></div>
+    <div><dt>نمط الوصول</dt><dd>{% if request.user.access_profile %}{{ request.user.access_profile.name_ar }}{% else %}{{ request.user.get_role_display }}{% endif %}</dd></div>
+    <div><dt>رقم الهاتف</dt><dd>{{ request.user.phone|default:"غير مضاف" }}</dd></div>
+    <div><dt>البريد الإلكتروني</dt><dd>{{ request.user.email|default:"غير مضاف" }}</dd></div>
+  </dl>
+  <div class="hub-toolbar" style="margin-top:16px">
+    {% if not view_as_active and request.user.has_usable_password %}<a class="hub-button hub-button-primary" href="{% url 'staff_password_change' %}">تغيير كلمة المرور</a>{% endif %}
+    <a class="hub-button" href="{% url 'staff_home' %}">العودة إلى العمليات</a>
+  </div>
+</section>
+{% endblock %}

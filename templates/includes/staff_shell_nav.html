@@ -15,7 +15,7 @@
         {% if staff_caps.internet_billing %}<a{% if request.path|slice:":16" == '/staff/internet/' %} class="staff-shell-nav__primary" aria-current="page"{% endif %} href="{% url 'staff_internet' %}">الإنترنت</a>{% endif %}
         {% if staff_caps.finance %}<a{% if request.path|slice:":15" == '/staff/finance/' %} class="staff-shell-nav__primary" aria-current="page"{% endif %} href="{% url 'staff_finance_home' %}">المالية</a>{% endif %}
         <a href="{% url 'staff_home' %}#staff-today">اليوم</a>
-        <a href="{% url 'staff_home' %}#staff-more">المزيد</a>
+        <a href="{% url 'staff_home' %}#staff-more">الأقسام</a>
       </div>
     </nav>
 
@@ -32,10 +32,45 @@
         <p id="staff-notification-status" class="hub-visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>
       </div>
       <a class="staff-app-header__tool staff-app-header__help" href="{% url 'staff_home' %}#staff-help" aria-label="المساعدة">{% include "includes/staff_icon.html" with name="help" %}</a>
-      <div class="staff-app-header__user" title="{{ request.user.job_title|default:request.user.access_label }}">
-        <span class="staff-app-header__avatar">{{ request.user.username|slice:":1"|upper }}</span>
-        <span class="staff-app-header__user-copy"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><span>{% if request.user.job_title %}{{ request.user.job_title }}{% else %}{{ request.user.access_label }}{% endif %}</span></span>
-      </div>
+      <details class="staff-app-header__user staff-account-menu" data-staff-account-menu>
+        <summary class="staff-account-menu__trigger" aria-label="حسابي والإعدادات">
+          <span class="staff-app-header__avatar" aria-hidden="true">{{ request.user.username|slice:":1"|upper }}</span>
+          <span class="staff-app-header__user-copy"><strong>{{ request.user.get_full_name|default:request.user.username }}</strong><span>{% if request.user.job_title %}{{ request.user.job_title }}{% else %}{{ request.user.access_label }}{% endif %}</span></span>
+          <span class="staff-account-menu__chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="staff-account-menu__panel">
+          <div class="staff-account-menu__heading">
+            <strong>{{ request.user.get_full_name|default:request.user.username }}</strong>
+            <small>{{ request.user.username }} · {% if request.user.job_title %}{{ request.user.job_title }}{% else %}{{ request.user.access_label }}{% endif %}</small>
+          </div>
+          <nav aria-label="إعدادات حسابي" class="staff-account-menu__links">
+            <span class="staff-account-menu__label">حسابي</span>
+            <a href="{% url 'staff_profile' %}">بيانات حسابي</a>
+            {% if not view_as_active and request.user.has_usable_password %}<a href="{% url 'staff_password_change' %}">تغيير كلمة المرور</a>{% endif %}
+          </nav>
+          {% if staff_caps.settings or staff_caps.users or staff_caps.orders or staff_caps.modifiers or staff_caps.imports or staff_caps.reports %}
+          <nav aria-label="الإدارة والإعدادات" class="staff-account-menu__links staff-account-menu__links--separate">
+            <span class="staff-account-menu__label">الإدارة والإعدادات</span>
+            {% if staff_caps.users %}<a href="{% url 'staff_users_list' %}">المستخدمون والصلاحيات</a>{% endif %}
+            {% if staff_caps.orders %}<a href="{% url 'staff_menu_tools' %}">إدارة القائمة</a>{% endif %}
+            {% if staff_caps.modifiers %}<a href="{% url 'staff_modifiers' %}">خيارات المنتجات</a>{% endif %}
+            {% if staff_caps.settings %}<a href="{% url 'staff_qr_links' %}">رموز QR للطاولات</a><a href="{% url 'staff_vendors' %}">الموردون والشركاء</a>{% endif %}
+            {% if staff_caps.settings and staff_caps.internet_billing %}<a href="{% url 'staff_internet_settings' %}">إعدادات الإنترنت</a>{% endif %}
+            {% if staff_caps.reports %}<a href="{% url 'staff_reports_home' %}">تقارير الإدارة</a>{% endif %}
+            {% if staff_caps.imports %}<a href="{% url 'staff_import_home' %}">استيراد البيانات</a>{% endif %}
+            {% if request.user.is_staff %}<a href="{% url 'admin:index' %}">إدارة النظام المتقدمة</a>{% endif %}
+          </nav>
+          {% endif %}
+          {% if view_as_active %}
+          <p class="staff-account-menu__preview-note">المعاينة للقراءة فقط. أنهِ المعاينة لتعديل حسابك أو تسجيل الخروج.</p>
+          {% else %}
+          <form method="post" action="{% url 'staff_logout' %}" class="staff-account-menu__logout">
+            {% csrf_token %}
+            <button type="submit">تسجيل الخروج</button>
+          </form>
+          {% endif %}
+        </div>
+      </details>
     </div>
   </div>
 </header>
