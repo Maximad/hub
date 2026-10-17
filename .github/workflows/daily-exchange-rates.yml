@@ -1,0 +1,44 @@
+name: Collect unapproved USD market rate
+
+on:
+  schedule:
+    # 20:10 Damascus time (Syria UTC+3); GitHub schedules can be delayed.
+    - cron: "10 17 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: exchange-rate-data-feed
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate public feed and generate unapproved JSON
+        run: python scripts/collect_lirascope_rates.py --output /tmp/hub-rate.json
+      - name: Publish only to isolated data branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git fetch origin data/exchange-rates
+          git checkout -B data/exchange-rates origin/data/exchange-rates
+          mkdir -p rates/history
+          cp /tmp/hub-rate.json rates/latest.json
+          RATE_DAY=$(python -c 'import json; print(json.load(open("/tmp/hub-rate.json"))["business_date_damascus"])')
+          cp /tmp/hub-rate.json "rates/history/${RATE_DAY}.json"
+          git add rates/latest.json rates/history
+          if git diff --cached --quiet; then
+            echo "No changed rate file; no commit."
+            exit 0
+          fi
+          git -c user.name="hub-rate-bot" -c user.email="hub-rate-bot@users.noreply.github.com" commit -m "data: unapproved USD market rate ${RATE_DAY}"
+          git push origin HEAD:data/exchange-rates
