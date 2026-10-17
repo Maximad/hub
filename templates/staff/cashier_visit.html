@@ -91,7 +91,7 @@
         {% csrf_token %}<input type="hidden" name="action" value="settle_close">
         <label>طريقة الدفع<select class="hub-input" name="method">{% for value,label in methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
         <label>ملاحظات<textarea class="hub-input" name="notes" rows="2"></textarea></label>
-        <button class="hub-button hub-button-primary" type="submit">تسديد كامل وإغلاق الجلسة</button>
+        <button class="hub-button hub-button-primary" type="submit">{% if remaining == 0 and not active_internet_sessions %}إغلاق الجلسة دون تحصيل{% else %}تسديد المتبقي وإغلاق الجلسة{% endif %}</button>
       </form>
       <p class="hub-help-text">إذا كان الرصيد صفراً، سيغلق النظام الجلسة مباشرة. لا يتم شطب أي رصيد تلقائياً.</p>
     </article>

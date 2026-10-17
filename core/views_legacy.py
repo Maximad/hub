@@ -192,7 +192,7 @@ def _build_day_report(report_date):
     start_utc, end_utc = _day_range_utc(report_date)
     orders = (
         Order.objects.select_related('table', 'table__room')
-        .prefetch_related('items', 'payments', 'discounts', 'consumptions')
+        .prefetch_related('items', 'payments', 'discounts', 'consumptions__discount')
         .filter(created_at__gte=start_utc, created_at__lt=end_utc)
         .order_by('-created_at')
     )

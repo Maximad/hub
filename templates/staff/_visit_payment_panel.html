@@ -48,7 +48,7 @@
       <input type="hidden" name="idempotency_key" value="{{ settlement_request_key }}">
       {% if remaining > 0 or active_internet_sessions %}<label>طريقة تسديد الرصيد النهائي<select class="hub-input" name="method" required>{% for value,label in methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>{% endif %}
       <details class="hub-ux5-module__more"><summary>ملاحظات الإغلاق (اختياري)</summary><label>ملاحظات<textarea class="hub-input" name="notes" rows="2"></textarea></label></details>
-      <button class="hub-button hub-button-primary" type="submit">تسديد المتبقي وإغلاق الحساب</button>
+      <button class="hub-button hub-button-primary" type="submit">{% if remaining == 0 and not active_internet_sessions %}إغلاق الجلسة دون تحصيل{% else %}تسديد المتبقي وإغلاق الحساب{% endif %}</button>
     </form>
   </section>
   {% else %}<div class="hub-message hub-message-success">تم إغلاق هذا الحساب.</div>{% endif %}
