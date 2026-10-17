@@ -30,7 +30,7 @@ from accounts.permissions import (
     require_staff_capability, user_has_capability,
 )
 from core.stock_recipes import deduct_order_item_stock
-from core.models import ActivityLog, CancellationReason, CashMovement, Category, DailyClose, Expense, HubVisit, InternetEntitlement, InternetPackage, InternetSession, Member, Order, OrderDiscount, OrderItem, Payment, PostingCommand, Product, Room, SystemSetting, TableArea
+from core.models import ActivityLog, CancellationReason, CashMovement, Category, DailyClose, Expense, HubVisit, InternetEntitlement, InternetPackage, InternetSession, Member, Order, OrderConsumption, OrderDiscount, OrderItem, Payment, PostingCommand, Product, Room, SystemSetting, TableArea
 from core.services.visits import issue_visit_credential, resolve_visit_credential, set_visit_cookie
 from core.services.posting.context import PostingContext
 from core.services.posting.order_payments import collect as collect_order_payment
@@ -201,7 +201,7 @@ def _build_day_report(report_date):
         'cash_total': 0, 'manual_transfer_total': 0, 'free_total': 0, 'discount_total': 0, 'discounts_syp': 0,
         'cancelled_count': 0, 'cancelled_value': 0, 'served_or_paid_count': 0, 'unpaid_orders_count': 0, 'partial_orders_count': 0, 'partial_payments_syp': 0, 'non_cash_sales_syp': 0,
         'delivery_order_count': 0, 'delivery_gross_sales': 0, 'delivery_fees_total': 0, 'unpaid_delivery_orders': 0, 'cancelled_delivery_orders': 0, 'takeaway_order_count': 0,
-        'estimated_cost_syp': 0, 'estimated_gross_margin_syp': 0, 'margin_known_sales_syp': 0, 'products_missing_cost_count': 0, 'comp_value_syp': 0,
+        'estimated_cost_syp': 0, 'estimated_gross_margin_syp': 0, 'margin_known_sales_syp': 0, 'products_missing_cost_count': 0, 'comp_value_syp': 0, 'owner_personal_value_syp': 0,
         'internet_workspace_sessions_count': 0, 'internet_workspace_raw_minutes': 0, 'internet_workspace_billable_minutes': 0, 'internet_workspace_revenue_syp': 0,
         'internet_workspace_prepaid_minutes_used': 0, 'internet_workspace_metered_revenue_syp': 0, 'internet_workspace_cancelled_sessions': 0, 'internet_workspace_unpaid_orders': 0,
     }
@@ -233,7 +233,14 @@ def _build_day_report(report_date):
         sums['orders_count'] += 1
         sums['gross_sales'] += order.subtotal_syp + order.service_fee_syp + max(order.delivery_fee_syp or 0, 0)
         sums['discounts_syp'] += order.discount_syp
-        sums['comp_value_syp'] += sum(d.amount_syp for d in order.discounts.all() if d.is_active and d.discount_type == OrderDiscount.DiscountType.COMP)
+        owner_entries = order.consumptions.filter(category=OrderConsumption.Category.OWNER_PERSONAL)
+        owner_discount_ids = set(owner_entries.values_list('discount_id', flat=True))
+        sums['owner_personal_value_syp'] += sum(entry.retail_value_syp for entry in owner_entries)
+        sums['comp_value_syp'] += sum(
+            d.amount_syp for d in order.discounts.all()
+            if d.is_active and d.discount_type == OrderDiscount.DiscountType.COMP
+            and d.pk not in owner_discount_ids
+        )
         for item in order.items.all():
             im = item_margin(item, allow_current_product_cost=True)
             if im['estimated_cost_syp'] is None:
@@ -709,6 +716,8 @@ def _order_edit_block_reason(order):
     total, paid, remaining, _payment_label = _order_financials(order)
     if order.status == Order.Status.CANCELLED:
         return 'لا يمكن تعديل طلب ملغى.', total, paid, remaining
+    if order.consumptions.exists():
+        return 'سُجّل استهلاك أو ضيافة على هذا الطلب. لا يمكن تغيير بنوده؛ أضف طلباً منفصلاً عند الحاجة.', total, paid, remaining
     if total > 0 and remaining == 0:
         return 'لا يمكن تعديل طلب مدفوع بالكامل.', total, paid, remaining
     return '', total, paid, remaining
@@ -1357,7 +1366,7 @@ def staff_cashier_order(request, public_code):
     order = get_object_or_404(Order.objects.select_related('table', 'table__room').prefetch_related('items', 'payments', 'discounts'), public_code=public_code)
     total, paid, remaining, payment_label = _order_financials(order)
     methods = Payment.Method.choices
-    return render(request, 'staff/cashier_order.html', {'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods, 'discount_types': OrderDiscount.DiscountType.choices, 'can_manage_discounts': _can_approve_partial_payment(request.user), 'payment_amount_default': remaining, 'collection_request_key': f'order-pay:{order.pk}:{uuid.uuid4().hex}', 'qr_url': reverse('order_qr', kwargs={'public_code': order.public_code}), 'currency_component': CurrencyEntryFormService(request, operation='payment').context})
+    return render(request, 'staff/cashier_order.html', {'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods, 'discount_types': [(code, label) for code, label in OrderDiscount.DiscountType.choices if code != OrderDiscount.DiscountType.COMP], 'can_manage_discounts': _can_approve_partial_payment(request.user), 'consumption_request_key': str(uuid.uuid4()), 'payment_amount_default': remaining, 'collection_request_key': f'order-pay:{order.pk}:{uuid.uuid4().hex}', 'qr_url': reverse('order_qr', kwargs={'public_code': order.public_code}), 'currency_component': CurrencyEntryFormService(request, operation='payment').context})
 
 
 @require_staff_capability('cashier')
@@ -1447,6 +1456,9 @@ def staff_cashier_discount(request, public_code):
         messages.error(request, 'سبب الخصم مطلوب.')
         return redirect('staff_cashier_order', public_code=order.public_code)
     discount_type = request.POST.get('discount_type', OrderDiscount.DiscountType.FIXED)
+    if discount_type == OrderDiscount.DiscountType.COMP:
+        messages.error(request, 'اختر المنتج والكمية من نموذج الضيافة أو الاستخدام الشخصي بدلاً من الخصم العام.')
+        return redirect('staff_cashier_order', public_code=order.public_code)
     if discount_type not in set(OrderDiscount.DiscountType.values):
         discount_type = OrderDiscount.DiscountType.FIXED
     amount = _parse_nonnegative_int(request.POST.get('amount_syp'), default=0, maximum=10_000_000)

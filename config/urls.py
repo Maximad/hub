@@ -20,6 +20,7 @@ from core.views.staff_finance import *
 from core.views import staff_inventory
 from core.views.staff_exchange_rates import staff_exchange_rate_settings
 from core.views.stock_count import staff_inventory_stock_count
+from core.views.staff_consumption import staff_order_consumption, staff_consumption_report
 from core.views_notifications import staff_notifications, staff_notifications_poll, staff_notifications_mark_read, staff_notifications_preferences
 from core.views_pwa import staff_web_app_manifest, service_worker, staff_push_config, staff_push_subscription
 from accounts.views_staff import (
@@ -162,6 +163,8 @@ urlpatterns = [
     path('staff/cashier/<uuid:public_code>/', menu.staff_cashier_order, name='staff_cashier_order'),
     path('staff/cashier/<uuid:public_code>/pay/', menu.staff_cashier_pay, name='staff_cashier_pay'),
     path('staff/cashier/<uuid:public_code>/discount/', menu.staff_cashier_discount, name='staff_cashier_discount'),
+    path('staff/cashier/<uuid:public_code>/consumption/', staff_order_consumption, name='staff_order_consumption'),
+    path('staff/reports/consumption/', staff_consumption_report, name='staff_consumption_report'),
     path('staff/finance/', staff_finance_home, name='staff_finance_home'),
     path('staff/finance/payments/<int:payment_id>/reverse/', staff_customer_payment_reverse, name='staff_customer_payment_reverse'),
     path('staff/finance/daily-closes/', staff_daily_closes, name='staff_daily_closes'),
