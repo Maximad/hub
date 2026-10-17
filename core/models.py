@@ -355,6 +355,8 @@ class Order(TimeStampedModel, PublicCodeModel):
         with transaction.atomic():
             order = cls.objects.select_for_update().get(pk=order_id)
             old_status = getattr(order, field)
+            if field == 'status' and new_status == cls.Status.CANCELLED and order.consumptions.exists():
+                raise ValidationError('الطلب مرتبط باستهلاك أو ضيافة مسجلين. يلزم إجراء عكس موثق قبل إلغاء الطلب.')
             if new_status not in maps.get(old_status, ()):
                 raise ValidationError({field: f'Transition from {old_status} to {new_status} is not permitted.'})
             reason = (reason or '').strip()
