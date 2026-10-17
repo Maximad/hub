@@ -60,7 +60,7 @@ def record_consumption(*, actor, order_id, order_item_id, category, quantity,
     # Serialize classification, order pricing and payment-state review under one
     # order lock. Duplicated form submissions must return the original result.
     with transaction.atomic():
-        order = Order.objects.select_for_update().select_related('visit').get(pk=order_id)
+        order = Order.objects.select_for_update().get(pk=order_id)
         previous = OrderConsumption.objects.filter(request_key=request_key).first()
         if previous:
             if (previous.order_id == order.pk and previous.order_item_id == order_item_id
