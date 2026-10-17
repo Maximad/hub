@@ -2,7 +2,7 @@
 Description=Hub Sweida: daily market rate staging (no approval)
 
 [Timer]
-OnCalendar=*-*-* 21:15:00 Asia/Damascus
+OnCalendar=*-*-* 10:15:00 Asia/Damascus
 Persistent=true
 RandomizedDelaySec=120
 Unit=hub-rate-stage.service

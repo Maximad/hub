@@ -6,8 +6,9 @@ on:
       - "scripts/collect_lirascope_rates.py"
       - ".github/workflows/daily-exchange-rates.yml"
   schedule:
-    # 20:10 Damascus time (Syria UTC+3); GitHub schedules can be delayed.
-    - cron: "10 17 * * *"
+    # Approximately 09:10 Damascus time (Syria UTC+3); GitHub schedules can be delayed.
+    # Run slightly off the hour to reduce GitHub Actions scheduling congestion.
+    - cron: "10 6 * * *"
   workflow_dispatch:
 
 permissions:
