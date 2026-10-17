@@ -33,13 +33,14 @@
 <section class="hub-card hub-section" dir="rtl">
   <h3 class="hub-section-title">{{ item.name_ar }}</h3>
   <p>المسجّل في النظام: <strong>{{ item.current_quantity }} {{ item.get_unit_display }}</strong></p>
-  <p class="hub-help-text">وحدة القياس المعتمدة لهذه المادة: <strong>{{ item.get_unit_display }}</strong>. أدخل الكمية بهذه الوحدة نفسها.</p>
+  <p class="hub-help-text">وحدة المخزون المعتمدة: <strong>{{ item.get_unit_display }}</strong>. يمكنك استخدام وحدة مكافئة وسيظهر التحويل قبل التأكيد.</p>
 
   {% if preview %}
   <div class="hub-card" aria-label="مراجعة فرق الجرد">
     <h4>راجع قبل التأكيد</h4>
     <p>الكمية السابقة: <strong>{{ preview.before }} {{ preview.unit }}</strong></p>
-    <p>الكمية التي وجدتها: <strong>{{ preview.after }} {{ preview.unit }}</strong></p>
+    <p>الكمية التي أدخلتها: <strong>{{ preview.entered_quantity }} {{ preview.entered_unit_label }}</strong></p>
+    <p>الكمية التي وجدتها بعد التحويل: <strong>{{ preview.after }} {{ preview.unit }}</strong></p>
     <p>الفرق: <strong>{{ preview.difference }} {{ preview.unit }}</strong></p>
     {% if preview.difference %}
       <p>سبب التصحيح: {{ preview.reason }}</p>
@@ -67,7 +68,12 @@
              min="0" step="0.001" inputmode="decimal" placeholder="مثال: 2.500"
              value="{{ values.count|default_if_none:'' }}" required
              aria-describedby="stock-count-unit-hint" data-count-value
-             data-recorded="{{ item.current_quantity|unlocalize }}" data-count-unit="{{ item.get_unit_display }}">
+             data-recorded="{{ item.current_quantity|unlocalize }}" data-count-unit="{{ item.get_unit_display }}" data-base-unit="{{ item.unit }}">
+      <select class="hub-input" name="count_unit" data-count-unit-select aria-label="وحدة الكمية الموجودة فعلياً">
+        {% for code, label in count_units %}
+        <option value="{{ code }}"{% if values.count_unit == code or not values.count_unit and code == item.unit %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
       <span class="hub-stock-count__unit" id="stock-count-unit-hint">وحدة القياس: <strong>{{ item.get_unit_display }}</strong></span>
     </div>
     <p class="hub-help-text" data-count-preview aria-live="polite">أدخل الكمية لرؤية الفرق قبل المراجعة.</p>

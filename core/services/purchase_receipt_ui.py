@@ -7,7 +7,8 @@ from decimal import Decimal
 
 from django.db.models import Sum
 
-from core.models import Purchase, PurchaseReceiptLine
+from core.models import Purchase, PurchaseReceiptLine, InventoryItem
+from core.services.inventory_unit_entry import allowed_entry_units
 
 
 def purchase_receipt_ui(purchase):
@@ -33,6 +34,8 @@ def purchase_receipt_ui(purchase):
             "ordered": item.quantity,
             "received": received,
             "remaining": remaining,
+            "entry_units": [(code, label) for code, label in InventoryItem.Unit.choices
+                            if code in allowed_entry_units(item.unit)],
         })
     can_receive = (
         purchase.status != Purchase.Status.CANCELLED

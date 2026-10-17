@@ -33,9 +33,31 @@
           const qty = line.querySelector('[data-purchase-quantity]');
           const cost = line.querySelector('[data-purchase-cost]');
           const unit = line.querySelector('[data-purchase-unit-hint]');
+          const unitChoice = line.querySelector('[data-purchase-quantity-unit]');
+          const converted = line.querySelector('[data-purchase-converted-quantity]');
+          const costLabel = line.querySelector('[data-purchase-cost-label]');
           const output = line.querySelector('[data-purchase-line-total]');
           const option = item?.selectedOptions?.[0];
           const selected = Boolean(item?.value);
+          const base = option?.dataset.baseUnit || '';
+          const chosen = unitChoice?.value || base;
+          const factor = (base === chosen) ? 1 :
+            ((base === 'g' && chosen === 'kg') || (base === 'ml' && chosen === 'liter')) ? 1000 :
+            ((base === 'kg' && chosen === 'g') || (base === 'liter' && chosen === 'ml')) ? 0.001 : NaN;
+          if (unitChoice) {
+            Array.from(unitChoice.options).forEach(opt => {
+              if (!opt.value) return;
+              const valid = opt.value === base ||
+                ((base === 'g' || base === 'kg') && (opt.value === 'g' || opt.value === 'kg')) ||
+                ((base === 'ml' || base === 'liter') && (opt.value === 'ml' || opt.value === 'liter'));
+              opt.disabled = !valid;
+              opt.hidden = !valid;
+            });
+            if (unitChoice.selectedOptions?.[0]?.disabled) unitChoice.value = '';
+          }
+          if (costLabel) costLabel.textContent = 'كلفة ' +
+            (unitChoice?.value ? unitChoice.selectedOptions[0].textContent : (option?.dataset.unit || 'الوحدة')) +
+            ' بالليرة';
           if (unit) {
             unit.textContent = selected ?
               'الوحدة: ' + (option?.dataset.unit || '—') +
@@ -44,8 +66,10 @@
           }
           const q = Number(qty?.value);
           const p = Number(cost?.value);
+          if (converted) converted.textContent = selected && qty?.value?.trim() && Number.isFinite(q * factor) ?
+            'تعادل ' + number.format(q * factor) + ' ' + (option?.dataset.unit || '') + ' في المخزون.' : '';
           const valid = selected && qty.value.trim() && cost.value.trim() &&
-            Number.isFinite(q) && Number.isFinite(p) && q > 0 && p >= 0;
+            Number.isFinite(q) && Number.isFinite(p) && Number.isFinite(factor) && q > 0 && p >= 0;
           if (valid) {
             total += q * p;
             validLines += 1;
@@ -54,6 +78,18 @@
         });
         if (overall) overall.textContent = validLines ? number.format(total) : 'يُحسب عند الحفظ';
       };
+      lines.forEach(line => {
+        const item = line.querySelector('[data-purchase-item]');
+        const unit = line.querySelector('[data-purchase-quantity-unit]');
+        const cost = line.querySelector('[data-purchase-cost]');
+        item?.addEventListener('change', () => {
+          if (unit) unit.value = '';
+          if (cost) cost.value = '';
+        });
+        unit?.addEventListener('change', () => {
+          if (cost) cost.value = ''; // New unit requires a price for that unit.
+        });
+      });
       form.addEventListener('input', update);
       form.addEventListener('change', update);
       update();

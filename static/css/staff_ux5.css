@@ -156,3 +156,16 @@
     white-space: normal;
   }
 }
+
+/* Physical inventory quantity conversions: readable on RTL phones. */
+.hub-staff-ui [data-receipt-unit-row] {padding:.75rem 0;border-block-end:1px solid var(--hub-border,#ddd)}
+.hub-staff-ui [data-receipt-unit-row] label,
+.hub-staff-ui [data-purchase-line] label {min-width:0}
+.hub-staff-ui [data-purchase-converted-quantity],
+.hub-staff-ui [data-receipt-equivalent] {color:var(--hub-primary,#0f5f57);font-size:.85rem}
+.hub-staff-ui .hub-stock-count__quantity {grid-template-columns:minmax(0,1fr) auto auto}
+.hub-staff-ui .hub-stock-count__quantity select {min-width:70px;max-width:120px}
+@media(max-width:520px){
+  .hub-staff-ui .hub-stock-count__quantity {grid-template-columns:minmax(0,1fr) minmax(80px,auto)}
+  .hub-staff-ui .hub-stock-count__unit {grid-column:1/-1}
+}

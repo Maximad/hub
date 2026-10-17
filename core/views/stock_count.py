@@ -18,6 +18,7 @@ from django.views.decorators.http import require_http_methods
 
 from accounts.permissions import require_staff_capability
 from core.models import ActivityLog, AuditEvent, InventoryItem, PostingCommand, StockMovement
+from core.services.inventory_unit_entry import allowed_entry_units, to_base_quantity
 
 
 SIGNING_SALT = 'hub.staff.inventory.stock_count.v1'
@@ -65,6 +66,8 @@ def _page(request, *, item=None, preview=None, error='', values=None):
     return render(request, 'staff/inventory_stock_count.html', {
         'items': items,
         'item': item,
+        'count_units': [(code, label) for code, label in InventoryItem.Unit.choices
+                        if item and code in allowed_entry_units(item.unit)],
         'preview': preview,
         'error': error,
         'values': values or {},
@@ -84,9 +87,10 @@ def staff_inventory_stock_count(request):
             InventoryItem, pk=request.POST.get('item'), is_active=True,
         )
         raw = request.POST.get('count')
+        entered_unit = request.POST.get('count_unit') or item.unit
         reason = request.POST.get('reason', '').strip()[:1000]
         try:
-            counted = _quantity(raw)
+            counted = to_base_quantity(raw, item.unit, entered_unit, allow_zero=True)
             difference = counted - item.current_quantity
             if difference and not reason:
                 raise ValidationError('أدخل سبب الاختلاف قبل تأكيد تعديل المخزون.')
@@ -96,12 +100,15 @@ def staff_inventory_stock_count(request):
                 'after': counted,
                 'difference': difference,
                 'unit': item.get_unit_display(),
+                'entered_quantity': raw,
+                'entered_unit': entered_unit,
+                'entered_unit_label': dict(InventoryItem.Unit.choices).get(entered_unit),
                 'reason': reason,
                 'token': token,
-            }, values={'count': raw, 'reason': reason})
+            }, values={'count': raw, 'count_unit': entered_unit, 'reason': reason})
         except ValidationError as error:
             return _page(request, item=item, error=' '.join(error.messages),
-                         values={'count': raw, 'reason': reason})
+                         values={'count': raw, 'count_unit': entered_unit, 'reason': reason})
 
     if action != 'confirm':
         return _page(request, error='عملية غير معروفة.')
