@@ -56,6 +56,7 @@
             {% if staff_caps.modifiers %}<a href="{% url 'staff_modifiers' %}">خيارات المنتجات</a>{% endif %}
             {% if staff_caps.settings %}<a href="{% url 'staff_qr_links' %}">رموز QR للطاولات</a><a href="{% url 'staff_vendors' %}">الموردون والشركاء</a>{% endif %}
             {% if staff_caps.settings and staff_caps.internet_billing %}<a href="{% url 'staff_internet_settings' %}">إعدادات الإنترنت</a>{% endif %}
+            {% if request.user.is_superuser and not view_as_active %}<a href="{% url 'staff_exchange_rate_settings' %}">أسعار الصرف · الدولار</a>{% endif %}
             {% if staff_caps.reports %}<a href="{% url 'staff_reports_home' %}">تقارير الإدارة</a>{% endif %}
             {% if staff_caps.imports %}<a href="{% url 'staff_import_home' %}">استيراد البيانات</a>{% endif %}
             {% if request.user.is_staff %}<a href="{% url 'admin:index' %}">إدارة النظام المتقدمة</a>{% endif %}

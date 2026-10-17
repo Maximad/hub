@@ -18,6 +18,7 @@ from core.views.staff_import import (
 from core.views.kitchen import staff_kitchen, staff_kitchen_partial, staff_kitchen_order, staff_kitchen_item_status, staff_prep, staff_prep_station, staff_prep_profiles
 from core.views.staff_finance import *
 from core.views import staff_inventory
+from core.views.staff_exchange_rates import staff_exchange_rate_settings
 from core.views.stock_count import staff_inventory_stock_count
 from core.views_notifications import staff_notifications, staff_notifications_poll, staff_notifications_mark_read, staff_notifications_preferences
 from core.views_pwa import staff_web_app_manifest, service_worker, staff_push_config, staff_push_subscription
@@ -103,6 +104,7 @@ urlpatterns = [
     path('table/<uuid:qr_token>/qr.svg', menu.table_qr, name='table_qr'),
     path('staff/', menu.staff_home, name='staff_home'),
     path('staff/account/', staff_profile, name='staff_profile'),
+    path('staff/settings/exchange-rates/', staff_exchange_rate_settings, name='staff_exchange_rate_settings'),
     path('staff/account/password/', staff_password_change, name='staff_password_change'),
     path('staff/logout/', staff_logout, name='staff_logout'),
     path('staff/pos/', menu.staff_pos, name='staff_pos'),
