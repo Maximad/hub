@@ -1,5 +1,5 @@
 {% extends "staff/inventory_base.html" %}
-{% load hub_numbers %}
+{% load hub_numbers l10n %}
 {% block inventory_content %}
 <section class="hub-card hub-section" dir="rtl" data-hub-adaptive-form>
   <header class="hub-page-header">
@@ -67,7 +67,7 @@
              min="0" step="0.001" inputmode="decimal" placeholder="مثال: 2.500"
              value="{{ values.count|default_if_none:'' }}" required
              aria-describedby="stock-count-unit-hint" data-count-value
-             data-recorded="{{ item.current_quantity }}" data-count-unit="{{ item.get_unit_display }}">
+             data-recorded="{{ item.current_quantity|unlocalize }}" data-count-unit="{{ item.get_unit_display }}">
       <span class="hub-stock-count__unit" id="stock-count-unit-hint">وحدة القياس: <strong>{{ item.get_unit_display }}</strong></span>
     </div>
     <p class="hub-help-text" data-count-preview aria-live="polite">أدخل الكمية لرؤية الفرق قبل المراجعة.</p>
