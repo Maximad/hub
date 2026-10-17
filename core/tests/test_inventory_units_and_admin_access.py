@@ -37,6 +37,7 @@ class InventoryCountUnitTests(TestCase):
                 self.assertContains(response, 'id="stock-count-unit-hint"')
                 self.assertContains(response, f'وحدة القياس: <strong>{displayed}</strong>', html=False)
                 self.assertContains(response, f'data-count-unit="{displayed}"')
+                self.assertContains(response, f'data-recorded="{item.current_quantity}"')
                 self.assertContains(response, 'aria-describedby="stock-count-unit-hint"')
                 self.assertEqual(response.context['item'].current_quantity, item.current_quantity)
                 self.assertEqual(response.context['item'].get_unit_display(), displayed)
