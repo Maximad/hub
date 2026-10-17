@@ -114,6 +114,8 @@ def _approval_for_partial(request, amount, remaining, *, visit, anchor_order=Non
 
 def _visit_detail_context(request, visit):
     orders = list(active_visit_orders(visit))
+    for order in orders:
+        order.consumption_request_key = str(uuid.uuid4())
     financial = visit_financials(visit, orders=orders)
     active_sessions = list(
         visit.internet_sessions.select_related('package', 'entitlement')
