@@ -1,0 +1,33 @@
+name: Prevent merging exchange-rate data into application code
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  close-data-branch-pr:
+    # Do not check out or execute any code from the PR. The data branch is an
+    # append-only export, never a source for changes to the application.
+    if: >-
+      ${{ github.event.pull_request.base.ref == 'main' &&
+          github.event.pull_request.head.ref == 'data/exchange-rates' &&
+          github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Close accidental pull request from exchange-rate archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GH_REPO}/issues/${PR_NUMBER}/comments" \
+            -f body="This PR was closed automatically because data/exchange-rates is a machine-maintained rate archive, not a code branch. Do not merge it into main. Hub Suite reads its JSON directly."
+          gh api -X PATCH "repos/${GH_REPO}/pulls/${PR_NUMBER}" -f state=closed
+          echo "Closed archive-to-main PR #${PR_NUMBER}."
