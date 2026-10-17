@@ -17,6 +17,7 @@ from core.models import CashMovement, Expense, ExpenseCategory, InventoryItem, P
 from core.services.posting.context import PostingContext
 from core.services.posting import purchases as purchase_posting
 from core.services.purchase_receipt_ui import purchase_receipt_ui
+from core.services.inventory_unit_entry import allowed_entry_units, to_base_quantity, to_base_unit_cost, receipt_quantities_from_post
 
 
 def _dec(value, default='0'):
@@ -112,10 +113,12 @@ def _purchase_draft_form_context(request, errors=None):
     ids = request.POST.getlist('inventory_item') if request.method == 'POST' else []
     quantities = request.POST.getlist('quantity') if request.method == 'POST' else []
     costs = request.POST.getlist('unit_cost_syp') if request.method == 'POST' else []
+    units = request.POST.getlist('quantity_unit') if request.method == 'POST' else []
     lines = [
         {
             'item_id': ids[i] if i < len(ids) else '',
             'quantity': quantities[i] if i < len(quantities) else '',
+            'quantity_unit': units[i] if i < len(units) else '',
             'unit_cost_syp': costs[i] if i < len(costs) else '',
         }
         for i in range(max(5, len(ids), len(quantities), len(costs)))
@@ -123,6 +126,7 @@ def _purchase_draft_form_context(request, errors=None):
     return {
         'vendors': Vendor.objects.all(),
         'items': InventoryItem.objects.filter(is_active=True),
+        'units': InventoryItem.Unit.choices,
         'today': timezone.localdate(),
         'form_values': values,
         'purchase_lines': lines,
@@ -138,7 +142,8 @@ def _clean_inventory_purchase_lines(request):
     ids = request.POST.getlist('inventory_item')
     quantities = request.POST.getlist('quantity')
     costs = request.POST.getlist('unit_cost_syp')
-    if not (len(ids) == len(quantities) == len(costs)) or len(ids) > 5:
+    units = request.POST.getlist('quantity_unit')
+    if not (len(ids) == len(quantities) == len(costs)) or len(ids) > 5 or (units and len(units) != len(ids)):
         raise ValidationError('تأكد من اكتمال حقول جميع المواد.')
     result = []
     for index, (id_raw, qty_raw, cost_raw) in enumerate(zip(ids, quantities, costs), 1):
@@ -149,13 +154,12 @@ def _clean_inventory_purchase_lines(request):
         item = InventoryItem.objects.filter(pk=id_raw, is_active=True).first() if str(id_raw).isdigit() else None
         if not item:
             raise ValidationError(f'اختر مادة مخزون صالحة في السطر {index}.')
+        entered_unit = (units[index - 1] if units else '') or item.unit
         try:
-            quantity = Decimal(str(qty_raw))
-            unit_cost = Decimal(str(cost_raw))
-        except (InvalidOperation, ValueError):
-            raise ValidationError(f'أدخل كمية وكلفة صحيحتين في السطر {index}.')
-        if not quantity.is_finite() or not unit_cost.is_finite() or quantity <= 0 or unit_cost < 0:
-            raise ValidationError(f'الكمية يجب أن تكون موجبة والكلفة غير سالبة في السطر {index}.')
+            quantity = to_base_quantity(qty_raw, item.unit, entered_unit)
+            unit_cost = to_base_unit_cost(cost_raw, item.unit, entered_unit)
+        except ValidationError as exc:
+            raise ValidationError(f'السطر {index}: {" ".join(exc.messages)}') from exc
         result.append((item, quantity, unit_cost))
     if not result:
         raise ValidationError('اختر مادة واحدة على الأقل وأدخل الكمية وكلفة الوحدة.')
@@ -226,8 +230,8 @@ def staff_inventory_purchase_receive(request,purchase_id):
         if not _can_manage(request.user): messages.error(request,'استلام الشراء يحتاج صلاحية الكاشير أو المدير.'); return redirect('staff_inventory_purchase_detail',purchase_id=p.pk)
         if p.status==Purchase.Status.CANCELLED: messages.error(request,'لا يمكن استلام شراء ملغى.'); return redirect('staff_inventory_purchase_detail',purchase_id=p.pk)
         try:
-            quantities={int(key[9:]): _dec(value) for key,value in request.POST.items() if key.startswith('quantity_')}
-            purchase_posting.receive(p, _posting_context(request, p.business_date), quantities or None)
+            quantities = receipt_quantities_from_post(request, p)
+            purchase_posting.receive(p, _posting_context(request, p.business_date), quantities)
             messages.success(request,'تم استلام الشراء وتحديث المخزون.')
         except Exception as e: messages.error(request,f'تعذر إكمال الربط المالي أو المخزني: {e}')
     return redirect('staff_inventory_purchase_detail',purchase_id=p.pk)
