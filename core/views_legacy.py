@@ -709,6 +709,8 @@ def _order_edit_block_reason(order):
     total, paid, remaining, _payment_label = _order_financials(order)
     if order.status == Order.Status.CANCELLED:
         return 'لا يمكن تعديل طلب ملغى.', total, paid, remaining
+    if order.consumptions.exists():
+        return 'سُجّل استهلاك أو ضيافة على هذا الطلب. لا يمكن تغيير بنوده؛ أضف طلباً منفصلاً عند الحاجة.', total, paid, remaining
     if total > 0 and remaining == 0:
         return 'لا يمكن تعديل طلب مدفوع بالكامل.', total, paid, remaining
     return '', total, paid, remaining
@@ -1357,7 +1359,7 @@ def staff_cashier_order(request, public_code):
     order = get_object_or_404(Order.objects.select_related('table', 'table__room').prefetch_related('items', 'payments', 'discounts'), public_code=public_code)
     total, paid, remaining, payment_label = _order_financials(order)
     methods = Payment.Method.choices
-    return render(request, 'staff/cashier_order.html', {'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods, 'discount_types': OrderDiscount.DiscountType.choices, 'can_manage_discounts': _can_approve_partial_payment(request.user), 'payment_amount_default': remaining, 'collection_request_key': f'order-pay:{order.pk}:{uuid.uuid4().hex}', 'qr_url': reverse('order_qr', kwargs={'public_code': order.public_code}), 'currency_component': CurrencyEntryFormService(request, operation='payment').context})
+    return render(request, 'staff/cashier_order.html', {'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods, 'discount_types': [(code, label) for code, label in OrderDiscount.DiscountType.choices if code != OrderDiscount.DiscountType.COMP], 'can_manage_discounts': _can_approve_partial_payment(request.user), 'consumption_request_key': str(uuid.uuid4()), 'payment_amount_default': remaining, 'collection_request_key': f'order-pay:{order.pk}:{uuid.uuid4().hex}', 'qr_url': reverse('order_qr', kwargs={'public_code': order.public_code}), 'currency_component': CurrencyEntryFormService(request, operation='payment').context})
 
 
 @require_staff_capability('cashier')
@@ -1447,6 +1449,9 @@ def staff_cashier_discount(request, public_code):
         messages.error(request, 'سبب الخصم مطلوب.')
         return redirect('staff_cashier_order', public_code=order.public_code)
     discount_type = request.POST.get('discount_type', OrderDiscount.DiscountType.FIXED)
+    if discount_type == OrderDiscount.DiscountType.COMP:
+        messages.error(request, 'اختر المنتج والكمية من نموذج الضيافة أو الاستخدام الشخصي بدلاً من الخصم العام.')
+        return redirect('staff_cashier_order', public_code=order.public_code)
     if discount_type not in set(OrderDiscount.DiscountType.values):
         discount_type = OrderDiscount.DiscountType.FIXED
     amount = _parse_nonnegative_int(request.POST.get('amount_syp'), default=0, maximum=10_000_000)

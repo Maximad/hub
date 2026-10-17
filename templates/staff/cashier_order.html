@@ -61,6 +61,19 @@
 {% else %}
 <div class="hub-message hub-message-success">تم تسديد الطلب بالكامل. لا حاجة لتسجيل دفعة إضافية.</div>
 {% endif %}
+<h3>الضيافة والاستهلاك الشخصي</h3>
+{% if can_manage_discounts %}
+  {% include "staff/_order_consumption_controls.html" %}
+{% else %}<p class="hub-help-text">تسجيل الضيافة يحتاج موافقة مدير مخوّل، والاستخدام الشخصي مخصص للمالك.</p>{% endif %}
+{% if order.consumptions.all %}
+  <ul>{% for entry in order.consumptions.all %}
+    <li>{{ entry.get_category_display }} · {{ entry.order_item.product_name_ar_snapshot }} × {{ entry.quantity }}
+      · {{ entry.retail_value_syp }} ل.س
+      {% if request.user.is_superuser and entry.estimated_cost_syp != None %}
+      · الكلفة التقديرية {{ entry.estimated_cost_syp }} ل.س{% endif %}
+    </li>
+  {% endfor %}</ul>
+{% endif %}
 <h3>الخصومات</h3>
 {% if can_manage_discounts %}<form method="post" action="{% url 'staff_cashier_discount' order.public_code %}" class="hub-form hub-form-section">{% csrf_token %}
 <label>نوع الخصم<select class="hub-input" name="discount_type">{% for value, label in discount_types %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>

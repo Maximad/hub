@@ -1,0 +1,68 @@
+<div class="hub-card hub-section" dir="rtl">
+  <h4 class="hub-section-title">الضيافة والاستهلاك الداخلي</h4>
+  <p class="hub-help-text">اختر المنتج والكمية. لا تسجل دفعة نقدية. الكلفة المعروضة تقديرية فقط.</p>
+  {% if order.status == 'cancelled' or order.paid_syp > 0 %}
+    <p class="hub-help-text">لا يمكن تصنيف المنتجات بعد الدفع أو إلغاء الطلب.</p>
+  {% else %}
+    <details class="hub-ux5-module__more">
+      <summary class="hub-button">ضيافة هَب</summary>
+      <form method="post" action="{% url 'staff_order_consumption' order.public_code %}" class="hub-form hub-form-section">
+        {% csrf_token %}
+        <input type="hidden" name="category" value="hub_hospitality">
+        <input type="hidden" name="request_key" value="{{ consumption_request_key|default_if_none:'' }}">
+        <label>المنتج
+          <select class="hub-input" name="order_item_id" required>
+            {% for item in order.items.all %}
+              {% if not item.product.not_discountable and item.prep_status != 'cancelled' %}
+                <option value="{{ item.pk }}">{{ item.product_name_ar_snapshot }} · من {{ item.quantity }} · السطر {{ item.line_total_syp_snapshot|default:item.unit_price_syp_snapshot }} ل.س</option>
+              {% endif %}
+            {% endfor %}
+          </select>
+        </label>
+        <label>عدد الوحدات المجانية
+          <input class="hub-input" type="number" name="quantity" min="1" max="999" step="1" value="1" required>
+        </label>
+        <label>سبب الضيافة
+          <input class="hub-input" name="reason" placeholder="مثلاً: استقبال فنان زائر" maxlength="255" required>
+        </label>
+        <label>ملاحظة المستفيد (اختياري)
+          <input class="hub-input" name="beneficiary_note" maxlength="120" placeholder="لا حاجة لتسجيل بيانات شخصية">
+        </label>
+        <button class="hub-button hub-button-primary" type="submit">اعتماد الضيافة</button>
+      </form>
+    </details>
+    {% if request.user.is_superuser %}
+      <details class="hub-ux5-module__more">
+        <summary class="hub-button">استخدام شخصي للمالك</summary>
+        <form method="post" action="{% url 'staff_order_consumption' order.public_code %}" class="hub-form hub-form-section">
+          {% csrf_token %}
+          <input type="hidden" name="category" value="owner_personal">
+          <input type="hidden" name="request_key" value="{{ consumption_request_key|default_if_none:'' }}">
+          <label>المنتج
+            <select class="hub-input" name="order_item_id" required>
+              {% for item in order.items.all %}
+                {% if not item.product.not_discountable and item.prep_status != 'cancelled' %}
+                  <option value="{{ item.pk }}">{{ item.product_name_ar_snapshot }} · من {{ item.quantity }}</option>
+                {% endif %}
+              {% endfor %}
+            </select>
+          </label>
+          <label>الكمية
+            <input class="hub-input" type="number" name="quantity" min="1" max="999" step="1" value="1" required>
+          </label>
+          <label>نوع التسوية المقترحة
+            <select class="hub-input" name="owner_treatment" required>
+              <option value="draw_proposed">سحب شخصي (بانتظار تسوية مالية)</option>
+              <option value="reimburse_proposed">تعويض لاحق (بانتظار تسوية مالية)</option>
+            </select>
+          </label>
+          <label>السبب
+            <input class="hub-input" name="reason" maxlength="255" placeholder="مثلاً: ضيافة عائلية خاصة" required>
+          </label>
+          <button class="hub-button hub-button-primary" type="submit">تسجيل الاستخدام الشخصي</button>
+        </form>
+      </details>
+    {% endif %}
+  {% endif %}
+  <p class="hub-help-text">لإضافة بنود أخرى بعد تسجيل الضيافة، افتح طلباً جديداً. هذا التصنيف لا ينشئ قيد محاسبة أو تسوية دين المالك.</p>
+</div>

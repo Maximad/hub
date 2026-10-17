@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}الضيافة والاستهلاك الشخصي{% endblock %}
+{% block content %}
+<section class="hub-card hub-section" dir="rtl" style="max-width:1050px;margin-inline:auto">
+  <h1 class="hub-page-header__title">الضيافة والاستهلاك الشخصي</h1>
+  <p class="hub-help-text">كشف تشغيلي وليس ذمماً أو سحوبات محاسبية. القيمة بسعر البيع للعلم، والكلفة تقديرية إذا توفرت عند تسجيل الطلب.</p>
+  <form method="get" class="hub-form-section" style="max-width:360px">
+    <label>الشهر <input class="hub-input" type="month" name="month" value="{{ month }}"></label>
+    <button type="submit" class="hub-button">عرض الشهر</button>
+  </form>
+  <div class="hub-grid hub-grid-2">
+    {% for code, row in totals.items %}
+      <article class="hub-card">
+        <h2>{{ row.label }}</h2>
+        <p>عمليات: <strong>{{ row.count }}</strong> · بسعر البيع: <strong>{{ row.retail }} ل.س</strong></p>
+        <p>الكلفة التقديرية المتاحة: <strong>{{ row.cost }} ل.س</strong></p>
+        {% if row.missing_cost %}<p class="hub-help-text">{{ row.missing_cost }} عمليات بدون كلفة معروفة. ليست الكلفة الإجمالية نهائية.</p>{% endif %}
+      </article>
+    {% endfor %}
+  </div>
+  <h2>تفاصيل الاستهلاك</h2>
+  <div class="hub-table-wrap">
+    <table class="hub-table">
+      <thead><tr><th>التاريخ</th><th>النوع</th><th>الطلب والمنتج</th><th>الكمية</th><th>القيمة</th><th>الكلفة التقديرية</th><th>المعتمد</th><th>التسوية المقترحة</th></tr></thead>
+      <tbody>{% for row in records %}
+        <tr>
+          <td>{{ row.business_date }}</td>
+          <td>{{ row.get_category_display }}</td>
+          <td><a href="{% url 'staff_cashier_order' row.order.public_code %}">{{ row.order.display_number }}</a> · {{ row.order_item.product_name_ar_snapshot }}{% if row.reason %}<small> · {{ row.reason }}</small>{% endif %}</td>
+          <td>{{ row.quantity }}</td>
+          <td>{{ row.retail_value_syp }} ل.س</td>
+          <td>{% if row.estimated_cost_syp != None %}{{ row.estimated_cost_syp }} ل.س{% else %}غير معروفة{% endif %}</td>
+          <td>{{ row.approved_by|default:"—" }}</td>
+          <td>{{ row.get_owner_treatment_display|default:"—" }}</td>
+        </tr>
+      {% empty %}<tr><td colspan="8">لا توجد عمليات مصنفة لهذا الشهر.</td></tr>{% endfor %}</tbody>
+    </table>
+  </div>
+  {% if report_limited %}<p class="hub-alert hub-alert--warning">يعرض الكشف آخر 500 عملية فقط. المجاميع هنا جزئية.</p>{% endif %}
+</section>
+{% endblock %}
