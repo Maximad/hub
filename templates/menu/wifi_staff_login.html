@@ -32,6 +32,7 @@
 
     <form method="post" action="{% url 'wifi_staff_login' %}" class="hub-card hub-form">
       {% csrf_token %}
+      {% if next_path %}<input type="hidden" name="next" value="{{ next_path }}">{% endif %}
       <label for="{{ form.username.id_for_label }}">اسم المستخدم</label>
       {{ form.username }}
       {% if form.username.errors %}<small class="hub-text-danger">{{ form.username.errors|join:' ' }}</small>{% endif %}

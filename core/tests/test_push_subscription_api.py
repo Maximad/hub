@@ -52,7 +52,7 @@ class PushSubscriptionApiTests(TestCase):
             content_type='application/json',
         )
         self.assertEqual(response.status_code, 302)
-        self.assertIn('/admin/login/', response.url)
+        self.assertIn('/wifi/staff-login/', response.url)
 
     def test_registration_requires_csrf(self):
         client = Client(enforce_csrf_checks=True)
