@@ -897,6 +897,60 @@ class OrderDiscount(TimeStampedModel):
     def __str__(self):
         return f'{self.order.display_number} — {self.amount_syp} ل.س'
 
+class OrderConsumption(TimeStampedModel):
+    """Categorized non-cash consumption of an existing POS item.
+
+    The accompanying order discount reduces the amount due; the consumption
+    category is *not* itself an accounting journal or settlement.
+    """
+
+    class Category(models.TextChoices):
+        HUB_HOSPITALITY = 'hub_hospitality', 'ضيافة هَب'
+        OWNER_PERSONAL = 'owner_personal', 'استخدام شخصي للمالك'
+
+    class OwnerTreatment(models.TextChoices):
+        DRAW_PROPOSED = 'draw_proposed', 'سحب شخصي (بانتظار سياسة التسوية)'
+        REIMBURSE_PROPOSED = 'reimburse_proposed', 'تعويض لاحق (بانتظار سياسة التسوية)'
+
+    order = models.ForeignKey(Order, on_delete=models.PROTECT, related_name='consumptions')
+    order_item = models.ForeignKey(OrderItem, on_delete=models.PROTECT, related_name='consumptions')
+    discount = models.OneToOneField(OrderDiscount, on_delete=models.PROTECT, related_name='consumption_record')
+    category = models.CharField(max_length=24, choices=Category.choices)
+    owner_treatment = models.CharField(max_length=24, choices=OwnerTreatment.choices, blank=True)
+    quantity = models.PositiveIntegerField()
+    retail_value_syp = models.PositiveIntegerField()
+    estimated_cost_syp = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    reason = models.CharField(max_length=255)
+    beneficiary_note = models.CharField(max_length=120, blank=True)
+    business_date = models.DateField()
+    request_key = models.CharField(max_length=100, unique=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                   null=True, related_name='recorded_order_consumptions')
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                    null=True, related_name='approved_order_consumptions')
+
+    class Meta:
+        ordering = ['-business_date', '-created_at']
+        constraints = [
+            models.CheckConstraint(condition=Q(quantity__gt=0), name='order_consumption_qty_positive'),
+            models.CheckConstraint(condition=Q(retail_value_syp__gt=0), name='order_consumption_retail_positive'),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.order_item_id and self.order_id and self.order_item.order_id != self.order_id:
+            raise ValidationError('البند لا ينتمي إلى الطلب المحدد.')
+        if self.discount_id and self.order_id and self.discount.order_id != self.order_id:
+            raise ValidationError('خصم الضيافة لا ينتمي إلى الطلب المحدد.')
+        if self.category == self.Category.OWNER_PERSONAL and not self.owner_treatment:
+            raise ValidationError('حدد نية التسوية للاستخدام الشخصي.')
+        if self.category != self.Category.OWNER_PERSONAL and self.owner_treatment:
+            raise ValidationError('التسوية الشخصية متاحة للاستهلاك الشخصي فقط.')
+
+    def __str__(self):
+        return f'{self.get_category_display()} — {self.order_item.product_name_ar_snapshot} × {self.quantity}'
+
+
 class ExpenseCategory(TimeStampedModel):
     class CategoryType(models.TextChoices):
         INGREDIENTS='ingredients','مواد أولية'; DRINKS_SUPPLIES='drinks_supplies','مشروبات ومستلزمات'; PACKAGING='packaging','تغليف'; CLEANING='cleaning','تنظيف'; UTILITIES='utilities','كهرباء/مياه/خدمات'; RENT='rent','إيجار'; MAINTENANCE='maintenance','صيانة'; WAGES='wages','أجور'; TRANSPORT='transport','نقل'; EVENT_COST='event_cost','فعالية'; EQUIPMENT='equipment','معدات'; MARKETING='marketing','تسويق'; OTHER='other','أخرى'
