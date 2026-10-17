@@ -1,0 +1,11 @@
+[Unit]
+Description=Hub Sweida: stage external unapproved USD market rate
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=deploy
+WorkingDirectory=/opt/hub
+ExecStart=/usr/bin/docker compose -f docker-compose.prod.yml --env-file .env exec -T web python manage.py stage_exchange_rate_feed
+TimeoutStartSec=75

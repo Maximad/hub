@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}أسعار الصرف{% endblock %}
+{% block content %}
+<section class="hub-card hub-section" dir="rtl" style="max-width:950px;margin-inline:auto;">
+  <header class="hub-page-header">
+    <div>
+      <h1 class="hub-page-header__title">أسعار صرف الدولار</h1>
+      <p class="hub-help-text">مرجع سوق خارجي، وليس سعراً معتمداً تلقائياً. لا يُستخدم أي سعر جديد حتى توافق عليه صراحةً.</p>
+    </div>
+  </header>
+  <p class="hub-help-text">المصدر: LiraScope · سعر السوق (المدينة غير محددة في البيانات). القيم بالليرة السورية الجديدة لكل دولار أمريكي. التحديث المجدول قد يتأخر أو يتوقف عند تعطل المصدر.</p>
+  {% if latest %}
+    <div class="hub-card">
+      <strong>آخر سعر معتمد في النظام</strong>
+      <p>{{ latest.rate_to_base }} ل.س / USD — بتاريخ {{ latest.effective_date }} · {{ latest.source }}</p>
+    </div>
+  {% else %}
+    <p class="hub-message hub-message-warning">لا يوجد سعر صرف معتمد.</p>
+  {% endif %}
+  <section class="hub-card hub-section">
+    <h2 class="hub-section-title">فرق سعر السويداء</h2>
+    <p class="hub-help-text">أدخل فرقاً موجباً أو سالباً بالليرة الجديدة لكل دولار. يطبَّق عند اعتماد سعر جديد فقط، ولا يغيّر العمليات السابقة.</p>
+    <form method="post" class="hub-form-section" style="max-width:450px">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="adjustment">
+      <label for="rate-offset">الفرق عن السعر المرجعي (ل.س / USD)</label>
+      <input class="hub-input" id="rate-offset" type="number" step="0.01" min="-50" max="50"
+             name="sweida_offset_syp" value="{{ offset }}" required>
+      <button class="hub-button hub-button-primary" type="submit">حفظ فرق السويداء</button>
+    </form>
+  </section>
+  <section class="hub-card hub-section">
+    <h2 class="hub-section-title">الأسعار المستوردة للمراجعة</h2>
+    <p class="hub-help-text">الأسعار تشمل الشراء والمبيع. حالياً ينتج الاعتماد سعراً مرجعياً وسطياً بعد فرق السويداء، للتوافق مع نظام التحويل إلى الليرة. البيع والشراء الفعلي وفروقات الصرف الشهرية لا تُسجّل آلياً.</p>
+    <div class="hub-table-wrap">
+      <table class="hub-table">
+        <thead><tr><th>وقت المصدر</th><th>شراء</th><th>مبيع</th><th>الحالة</th><th>الإجراء</th></tr></thead>
+        <tbody>
+          {% for rate in candidates %}
+            <tr>
+              <td>{{ rate.source_timestamp|date:"Y-m-d H:i" }}</td>
+              <td>{{ rate.reference_buy_syp }}</td>
+              <td>{{ rate.reference_sell_syp }}</td>
+              <td>{{ rate.get_status_display }}</td>
+              <td>
+                {% if rate.status == 'pending' %}
+                  <form method="post" style="display:inline-block;">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="approve">
+                    <input type="hidden" name="candidate_id" value="{{ rate.pk }}">
+                    <button class="hub-button hub-button-primary" type="submit">اعتماد السعر</button>
+                  </form>
+                  <form method="post" style="display:inline-block;">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="reject">
+                    <input type="hidden" name="candidate_id" value="{{ rate.pk }}">
+                    <input class="hub-input" name="reason" maxlength="500" placeholder="سبب الرفض" required>
+                    <button class="hub-button" type="submit">رفض</button>
+                  </form>
+                {% elif rate.approved_exchange_rate %}
+                  {{ rate.approved_exchange_rate.rate_to_base }} ل.س · فرق {{ rate.applied_offset_syp }}
+                {% else %}
+                  {{ rate.review_note|default:"—" }}
+                {% endif %}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5">لم تصل أسعار مستوردة بعد. شغّل عملية الجمع والاستيراد أولاً.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <p class="hub-help-text">المراجعة الشهرية لفروق أسعار الصرف تحتاج سياسة محاسبية مستقلة. لا تُنشأ قيود أو أرباح أو خسائر تلقائياً من هذا الإعداد.</p>
+</section>
+{% endblock %}

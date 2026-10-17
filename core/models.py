@@ -1580,6 +1580,49 @@ class AuditEvent(models.Model):
         raise ValidationError('Audit events are immutable and cannot be deleted.')
 
 
+class LocalExchangeRatePolicy(TimeStampedModel):
+    """One editable Sweida adjustment, separate from public market observations."""
+
+    sweida_offset_syp = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+
+    def clean(self):
+        super().clean()
+        if self.pk != 1 or not (-Decimal('50') <= self.sweida_offset_syp <= Decimal('50')):
+            raise ValidationError('فرق سعر السويداء يجب أن يكون بين -50 و+50 ليرة جديدة.')
+
+    def __str__(self):
+        return f'فرق السويداء: {self.sweida_offset_syp} ل.س لكل دولار'
+
+
+class ImportedMarketRate(TimeStampedModel):
+    """Data-only market rate pending manual, superuser-authorized approval."""
+
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'بانتظار المراجعة'
+        APPROVED = 'approved', 'معتمد'
+        REJECTED = 'rejected', 'مرفوض'
+
+    source_fingerprint = models.CharField(max_length=64, unique=True)
+    raw_sha256 = models.CharField(max_length=64)
+    source_timestamp = models.DateTimeField()
+    reference_buy_syp = models.DecimalField(max_digits=12, decimal_places=2)
+    reference_sell_syp = models.DecimalField(max_digits=12, decimal_places=2)
+    business_date = models.DateField()
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
+    reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    applied_offset_syp = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    approved_exchange_rate = models.OneToOneField('ExchangeRate', on_delete=models.PROTECT, null=True, blank=True)
+    review_note = models.CharField(max_length=500, blank=True)
+
+    class Meta:
+        ordering = ['-source_timestamp', '-created_at']
+
+    def __str__(self):
+        return f'{self.business_date}: {self.reference_buy_syp} / {self.reference_sell_syp} — {self.get_status_display()}'
+
+
 class ExchangeRate(TimeStampedModel):
     """Append-only published rate, expressed as new SYP for one foreign unit."""
     base_currency = models.CharField(max_length=8, default='SYP_NEW', editable=False)
