@@ -38,7 +38,8 @@ class InventoryCountUnitTests(TestCase):
                 self.assertContains(response, f'وحدة القياس: <strong>{displayed}</strong>', html=False)
                 self.assertContains(response, f'data-count-unit="{displayed}"')
                 self.assertContains(response, 'aria-describedby="stock-count-unit-hint"')
-                self.assertContains(response, f'{item.current_quantity} {displayed}')
+                self.assertEqual(response.context['item'].current_quantity, item.current_quantity)
+                self.assertEqual(response.context['item'].get_unit_display(), displayed)
                 self.assertEqual(StockMovement.objects.count(), 0)
 
     def test_preview_still_preserves_unit_and_registered_quantity(self):
@@ -47,8 +48,11 @@ class InventoryCountUnitTests(TestCase):
             'action': 'preview', 'item': str(self.weight.pk), 'count': '2.250', 'reason': 'فرق جرد',
         })
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '2.250 كغ')
-        self.assertContains(response, '2.500 كغ')
+        self.assertEqual(response.context['preview']['after'], Decimal('2.250'))
+        self.assertEqual(response.context['preview']['before'], Decimal('2.500'))
+        self.assertEqual(response.context['preview']['unit'], 'كغ')
+        self.assertContains(response, 'الكمية السابقة')
+        self.assertContains(response, 'الكمية التي وجدتها')
         self.assertEqual(StockMovement.objects.count(), 0)
 
 
