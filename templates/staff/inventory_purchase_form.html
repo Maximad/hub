@@ -30,18 +30,26 @@
         <label>المادة
           <select class="hub-input" name="inventory_item" data-hub-searchable-select="true" data-purchase-item>
             <option value="">اختر مادة</option>
-            {% for item in items %}<option value="{{ item.pk }}" data-unit="{{ item.get_unit_display }}" data-estimated-cost="{{ item.estimated_unit_cost_syp|default_if_none:'' }}"{% if line.item_id == item.pk|stringformat:"s" %} selected{% endif %}>{{ item }} · {{ item.get_unit_display }}</option>{% endfor %}
+            {% for item in items %}<option value="{{ item.pk }}" data-unit="{{ item.get_unit_display }}" data-base-unit="{{ item.unit }}" data-estimated-cost="{{ item.estimated_unit_cost_syp|default_if_none:'' }}"{% if line.item_id == item.pk|stringformat:"s" %} selected{% endif %}>{{ item }} · {{ item.get_unit_display }}</option>{% endfor %}
           </select>
         </label>
         <p class="hub-help-text" data-purchase-unit-hint>تظهر وحدة المادة عند اختيارها.</p>
         <div class="hub-grid hub-grid-2">
           <label>الكمية
-            <input class="hub-input" type="number" name="quantity" min="0.001" step="0.001" inputmode="decimal" placeholder="الكمية" value="{{ line.quantity }}" data-purchase-quantity>
+            <input class="hub-input" type="number" name="quantity" min="0.001" step="any" inputmode="decimal" placeholder="الكمية" value="{{ line.quantity }}" data-purchase-quantity>
           </label>
-          <label>كلفة الوحدة
-            <input class="hub-input" type="number" name="unit_cost_syp" min="0" step="0.01" inputmode="decimal" placeholder="الكلفة الفعلية" value="{{ line.unit_cost_syp }}" data-purchase-cost>
+          <label>وحدة الشراء
+            <select class="hub-input" name="quantity_unit" data-purchase-quantity-unit>
+              <option value="">وحدة المادة نفسها</option>
+              {% for code, label in units %}<option value="{{ code }}"{% if line.quantity_unit == code %} selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
           </label>
         </div>
+        <p class="hub-help-text" data-purchase-converted-quantity aria-live="polite"></p>
+        <label><span data-purchase-cost-label>كلفة الوحدة المختارة بالليرة</span>
+          <input class="hub-input" type="number" name="unit_cost_syp" min="0" step="0.01" inputmode="decimal" placeholder="الكلفة عن كل وحدة اخترتها" value="{{ line.unit_cost_syp }}" data-purchase-cost>
+        </label>
+        <p class="hub-help-text">الكلفة المدخلة هي كلفة وحدة الشراء المختارة، وسيحوّلها النظام إلى وحدة المخزون.</p>
         <p class="hub-help-text">إجمالي المادة: <output data-purchase-line-total>—</output></p>
       </div>
       {% if forloop.counter == 5 %}</details>{% endif %}
