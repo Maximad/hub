@@ -29,8 +29,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          git fetch origin data/exchange-rates
-          git checkout -B data/exchange-rates origin/data/exchange-rates
+          git fetch origin refs/heads/data/exchange-rates:refs/remotes/origin/data/exchange-rates
+          git checkout -B data/exchange-rates refs/remotes/origin/data/exchange-rates
           mkdir -p rates/history
           cp /tmp/hub-rate.json rates/latest.json
           RATE_DAY=$(python -c 'import json; print(json.load(open("/tmp/hub-rate.json"))["business_date_damascus"])')
