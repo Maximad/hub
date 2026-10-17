@@ -337,7 +337,7 @@ def staff_cashier_visit_settle(request, public_code):
                 },
             )
         messages.success(request, 'أُغلقت الجلسة دون تحصيل دفعة جديدة.' if remaining == 0
-                         else 'تم تسديد الرصيد المتبقي وإغلاق الجلسة.')
+                         else 'تم تسديد كامل حساب الجلسة وإغلاقها.')
     except (ValidationError, PermissionDenied) as error:
         messages.error(request, ' '.join(getattr(error, 'messages', [str(error)])))
 
