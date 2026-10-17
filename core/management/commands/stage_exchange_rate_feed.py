@@ -28,8 +28,8 @@ class Command(BaseCommand):
                     'Cache-Control': 'no-cache',
                 })
                 with urlopen(request, timeout=15) as response:
-                    if 'application/json' not in response.headers.get('Content-Type', '').lower():
-                        raise CommandError('Public rate feed did not return JSON.')
+                    if not any(x in response.headers.get('Content-Type', '').lower() for x in ('application/json', 'text/plain')):
+                        raise CommandError('Public rate feed did not return a JSON/text data document.')
                     raw = response.read(MAX_SIZE + 1)
             if len(raw) > MAX_SIZE:
                 raise CommandError('Rate feed is unexpectedly large.')
