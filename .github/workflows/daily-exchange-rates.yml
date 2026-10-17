@@ -1,20 +1,38 @@
 name: Collect unapproved USD market rate
 
 on:
+  pull_request:
+    paths:
+      - "scripts/collect_lirascope_rates.py"
+      - ".github/workflows/daily-exchange-rates.yml"
   schedule:
     # 20:10 Damascus time (Syria UTC+3); GitHub schedules can be delayed.
     - cron: "10 17 * * *"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: exchange-rate-data-feed
   cancel-in-progress: false
 
 jobs:
+  feed-probe:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify keyless source returns a valid, fresh USD quote
+        run: python scripts/collect_lirascope_rates.py --output /tmp/hub-probe.json
   collect:
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
