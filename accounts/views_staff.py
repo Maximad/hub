@@ -92,6 +92,11 @@ def staff_password_change(request):
     form.fields['old_password'].label = 'كلمة المرور الحالية'
     form.fields['new_password1'].label = 'كلمة المرور الجديدة'
     form.fields['new_password2'].label = 'تأكيد كلمة المرور الجديدة'
+    # Django's default help strings are English and can stretch the RTL form
+    # beyond a narrow phone viewport. Keep validators unchanged, localize hints.
+    form.fields['old_password'].help_text = ''
+    form.fields['new_password1'].help_text = 'اختر كلمة مرور طويلة وفريدة يصعب تخمينها، ولا تستخدم معلوماتك الشخصية.'
+    form.fields['new_password2'].help_text = 'أعد كتابة كلمة المرور الجديدة للتأكيد.'
     for field in form.fields.values():
         field.widget.attrs['class'] = 'hub-input'
     if request.method == 'POST' and form.is_valid():

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}إعدادات التنبيهات{% endblock %}
+{% block content %}
+<section class="hub-card hub-section staff-account-page" dir="rtl">
+  <header class="hub-page-header">
+    <div>
+      <h1 class="hub-page-header__title">إعدادات التنبيهات</h1>
+      <p class="hub-help-text">يمكنك تغيير صوت التنبيهات وإشعارات المتصفح لهذا الحساب والجهاز.</p>
+    </div>
+  </header>
+  {% if view_as_active %}
+    <p class="hub-help-text">تُعرض إعدادات التنبيهات للقراءة فقط في وضع المعاينة.</p>
+  {% endif %}
+  <div class="staff-notification-setting">
+    <div>
+      <h2>صوت التنبيهات</h2>
+      <p>التحكم بصوت التنبيه على هذا المتصفح. لا يغيّر إعدادات باقي الأجهزة.</p>
+    </div>
+    <button id="staff-notification-settings-sound" class="hub-button hub-button-secondary"
+            type="button" disabled aria-pressed="false">تشغيل صوت التنبيهات</button>
+  </div>
+  <div class="staff-notification-setting">
+    <div>
+      <h2>تنبيهات المتصفح</h2>
+      <p>يتطلب التفعيل السماح بالإشعارات في المتصفح. وقد تتطلب تنبيهات الخلفية اتصالاً بالإنترنت ودعم الجهاز.</p>
+    </div>
+    <button id="staff-notification-settings-browser" class="hub-button hub-button-secondary"
+            type="button" disabled aria-pressed="false">تفعيل تنبيهات المتصفح</button>
+  </div>
+  <p class="hub-help-text">إذا سبق أن رفضت إذن الإشعارات، يمكنك تغييره من إعدادات الموقع في المتصفح.</p>
+  <noscript><p class="hub-help-text">تحتاج هذه الخيارات إلى تفعيل JavaScript في المتصفح.</p></noscript>
+  <div class="hub-toolbar" style="margin-top:16px">
+    <a class="hub-button" href="{% url 'staff_profile' %}">حسابي</a>
+    <a class="hub-button" href="{% url 'staff_notifications' %}">عرض جميع التنبيهات</a>
+  </div>
+</section>
+{% endblock %}

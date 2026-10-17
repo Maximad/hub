@@ -10,6 +10,8 @@
   const toggle = document.getElementById('staff-notification-toggle');
   const soundBtn = document.getElementById('staff-sound-toggle');
   const browserBtn = document.getElementById('staff-browser-toggle');
+  const soundSettingsBtn = document.getElementById('staff-notification-settings-sound');
+  const browserSettingsBtn = document.getElementById('staff-notification-settings-browser');
   const notificationApi = window.Notification;
   const browserNavigator = window.navigator || {};
 
@@ -59,6 +61,11 @@
 
   function setSoundLabel() {
     soundBtn.textContent = sound ? 'كتم الصوت' : 'تشغيل الصوت';
+    soundBtn.setAttribute('aria-pressed', sound ? 'true' : 'false');
+    if (soundSettingsBtn) {
+      soundSettingsBtn.textContent = sound ? 'إيقاف صوت التنبيهات' : 'تشغيل صوت التنبيهات';
+      soundSettingsBtn.setAttribute('aria-pressed', sound ? 'true' : 'false');
+    }
   }
 
   function setBrowserLabel(message) {
@@ -67,6 +74,10 @@
     else if (browser) browserBtn.textContent = 'تنبيهات المتصفح مفعّلة';
     else browserBtn.textContent = 'تفعيل تنبيهات المتصفح';
     browserBtn.setAttribute('aria-pressed', browser ? 'true' : 'false');
+    if (browserSettingsBtn) {
+      browserSettingsBtn.textContent = browserBtn.textContent;
+      browserSettingsBtn.setAttribute('aria-pressed', browser ? 'true' : 'false');
+    }
   }
 
   function ensureAudioContext() {
@@ -207,6 +218,17 @@
     if (box.hidden) openNotifications();
     else closeNotifications(false);
   });
+
+  // The full settings page delegates to the existing controls; do not
+  // duplicate browser permission, push subscription, or preference logic.
+  if (soundSettingsBtn) {
+    soundSettingsBtn.disabled = false;
+    soundSettingsBtn.addEventListener('click', function () { soundBtn.click(); });
+  }
+  if (browserSettingsBtn) {
+    browserSettingsBtn.disabled = false;
+    browserSettingsBtn.addEventListener('click', function () { browserBtn.click(); });
+  }
 
   document.addEventListener('keydown', function (event) {
     if (event.key === 'Escape' && !box.hidden) {

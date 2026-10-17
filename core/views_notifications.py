@@ -2,7 +2,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, Http404
 from django.shortcuts import render
 from django.utils import timezone
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_http_methods
 
 from accounts.permissions import user_has_capability
 from core.models import NotificationPreference
@@ -55,9 +55,18 @@ def staff_notifications_mark_read(request):
 
 
 @login_required
-@require_POST
+@require_http_methods(['GET', 'POST'])
 def staff_notifications_preferences(request):
     if _deny(request.user): raise Http404()
+    if request.method == 'GET':
+        # Rendering the settings page must not create a preference row, especially
+        # during superuser read-only View As previews.
+        pref = NotificationPreference.objects.filter(user=request.user).first()
+        response = render(request, 'staff/notification_settings.html', {
+            'notification_preference': pref,
+        })
+        response['Cache-Control'] = 'private, no-store, max-age=0'
+        return response
     pref, _ = NotificationPreference.objects.get_or_create(user=request.user)
     for field in ['enable_sound','enable_browser_notifications']:
         if field in request.POST:

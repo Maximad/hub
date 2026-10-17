@@ -82,3 +82,71 @@
   .hub-staff-ui .staff-account-menu .staff-app-header__avatar { display:grid; width:32px;height:32px; }
   .hub-staff-ui .staff-account-page__facts { grid-template-columns:1fr; }
 }
+
+/* Keep header notifications inside the viewport on mobile, regardless of the
+   bell's RTL position or the (narrow) width of its toolbar container. */
+@media (max-width: 900px) {
+  .hub-staff-ui .staff-app-header__notifications .staff-notification-dropdown {
+    position: fixed;
+    inset-block-start: calc(60px + env(safe-area-inset-top, 0px));
+    inset-block-end: auto;
+    inset-inline-start: max(12px, env(safe-area-inset-left, 0px));
+    inset-inline-end: max(12px, env(safe-area-inset-right, 0px));
+    width: auto;
+    max-width: none;
+    max-height: min(65dvh, 420px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    box-sizing: border-box;
+    overflow-wrap: anywhere;
+    z-index: 110;
+  }
+}
+/* Account and notification settings forms must never create horizontal scroll. */
+.hub-staff-ui .staff-account-page {
+  width: 100%;
+  max-width: min(100%, 680px);
+  min-width: 0;
+  margin-inline: auto;
+  overflow-wrap: anywhere;
+}
+.hub-staff-ui .staff-account-page .hub-form-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  max-width: min(100%, 460px);
+  min-width: 0;
+  margin-inline: 0;
+}
+.hub-staff-ui .staff-account-page .hub-form-section > *,
+.hub-staff-ui .staff-account-page .hub-form-section .hub-input {
+  min-width: 0;
+  max-width: 100%;
+}
+.hub-staff-ui .staff-account-page .hub-form-section :is(p, ul, li) {
+  overflow-wrap: anywhere;
+  word-break: normal;
+  white-space: normal;
+}
+.hub-staff-ui .staff-account-page .hub-form-section .hub-help-text {
+  font-size: .79rem;
+  line-height: 1.55;
+}
+.hub-staff-ui .staff-notification-setting {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-block-end: 1px solid var(--staff-v2-line, #ddd2c0);
+}
+.hub-staff-ui .staff-notification-setting > div { min-width: 0; }
+.hub-staff-ui .staff-notification-setting h2 { margin: 0 0 4px; font-size: 1rem; }
+.hub-staff-ui .staff-notification-setting p { margin: 0; font-size: .8rem; color: var(--staff-v2-muted,#626a67); }
+.hub-staff-ui .staff-notification-setting button { min-width: 152px; }
+@media (max-width: 520px) {
+  .hub-staff-ui .staff-notification-setting {
+    grid-template-columns: minmax(0,1fr);
+  }
+  .hub-staff-ui .staff-notification-setting button { width: 100%; }
+}

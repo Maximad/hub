@@ -1,6 +1,8 @@
 {% load static %}
-{# Shared contextual workspace, deliberately gated by the existing staff capabilities.
-   The regular page links and server-side permission checks remain authoritative. #}
+{% comment %}
+Shared contextual workspace, deliberately gated by the existing staff capabilities.
+The regular page links and server-side permission checks remain authoritative.
+{% endcomment %}
 {% if staff_caps.visit_manage or staff_caps.order_edit or staff_caps.cashier %}
 <dialog id="staff-context-drawer" class="staff-context-drawer" aria-labelledby="staff-context-drawer-title">
   <section class="staff-context-drawer__surface" dir="rtl">
