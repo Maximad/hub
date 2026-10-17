@@ -46,7 +46,7 @@
           <nav aria-label="إعدادات حسابي" class="staff-account-menu__links">
             <span class="staff-account-menu__label">حسابي</span>
             <a href="{% url 'staff_profile' %}">بيانات حسابي</a>
-            {% if not view_as_active and request.user.has_usable_password %}<a href="{% url 'staff_password_change' %}">تغيير كلمة المرور</a>{% endif %}
+            <a href="{% url 'staff_notifications_preferences' %}">إعدادات التنبيهات</a>
           </nav>
           {% if staff_caps.settings or staff_caps.users or staff_caps.orders or staff_caps.modifiers or staff_caps.imports or staff_caps.reports %}
           <nav aria-label="الإدارة والإعدادات" class="staff-account-menu__links staff-account-menu__links--separate">

@@ -29,7 +29,8 @@ class StaffAccountMenuTests(TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertContains(response, 'data-staff-account-menu')
                 self.assertContains(response, reverse("staff_profile"))
-                self.assertContains(response, reverse("staff_password_change"))
+                self.assertContains(response, reverse("staff_notifications_preferences"))
+                self.assertNotContains(response, reverse("staff_password_change"))
                 self.assertContains(response, 'method="post" action="%s"' % reverse("staff_logout"))
                 self.assertContains(response, 'staff_account_menu.css')
                 self.assertContains(response, 'staff_account_menu.js')
@@ -54,6 +55,7 @@ class StaffAccountMenuTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "menu-waiter")
         self.assertNotContains(response, "menu-admin")
+        self.assertContains(response, reverse("staff_password_change"))
         restricted = self.client.get(reverse("staff_user_detail", kwargs={"user_id": self.admin.pk}))
         self.assertNotEqual(restricted.status_code, 200)
 
