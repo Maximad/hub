@@ -46,6 +46,7 @@
       const reason = form.querySelector('[data-count-reason-section]');
       if (!input || !preview) return;
       const recorded = Number(input.dataset.recorded);
+      const unit = (input.dataset.countUnit || '').trim();
       const update = () => {
         const entered = input.value.trim();
         const numeric = Number(entered);
@@ -55,7 +56,7 @@
         }
         const difference = numeric - recorded;
         const label = difference === 0 ? 'الكمية مطابقة للمسجل' :
-          'الفرق عن المسجل: ' + difference.toLocaleString('ar-SY', {maximumFractionDigits: 3});
+          'الفرق عن المسجل: ' + difference.toLocaleString('ar-SY', {maximumFractionDigits: 3}) + (unit ? ' ' + unit : '');
         preview.textContent = label + ' — سيجري التحقق مجدداً قبل تأكيد الجرد.';
         if (reason && difference !== 0) reason.open = true;
       };

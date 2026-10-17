@@ -1,5 +1,5 @@
 {% extends "staff/inventory_base.html" %}
-{% load hub_numbers %}
+{% load hub_numbers l10n %}
 {% block inventory_content %}
 <section class="hub-card hub-section" dir="rtl" data-hub-adaptive-form>
   <header class="hub-page-header">
@@ -33,6 +33,7 @@
 <section class="hub-card hub-section" dir="rtl">
   <h3 class="hub-section-title">{{ item.name_ar }}</h3>
   <p>المسجّل في النظام: <strong>{{ item.current_quantity }} {{ item.get_unit_display }}</strong></p>
+  <p class="hub-help-text">وحدة القياس المعتمدة لهذه المادة: <strong>{{ item.get_unit_display }}</strong>. أدخل الكمية بهذه الوحدة نفسها.</p>
 
   {% if preview %}
   <div class="hub-card" aria-label="مراجعة فرق الجرد">
@@ -60,11 +61,15 @@
     <input type="hidden" name="action" value="preview">
     <input type="hidden" name="item" value="{{ item.pk }}">
     <input type="hidden" name="q" value="{{ q }}">
-    <label for="stock-count-quantity">الكمية الموجودة فعلياً ({{ item.get_unit_display }})</label>
-    <input class="hub-input" id="stock-count-quantity" type="number" name="count"
-           min="0" step="0.001" inputmode="decimal" placeholder="مثال: 2.500"
-           value="{{ values.count|default_if_none:'' }}" required
-           data-count-value data-recorded="{{ item.current_quantity }}">
+    <label for="stock-count-quantity">الكمية الموجودة فعلياً</label>
+    <div class="hub-stock-count__quantity">
+      <input class="hub-input" id="stock-count-quantity" type="number" name="count"
+             min="0" step="0.001" inputmode="decimal" placeholder="مثال: 2.500"
+             value="{{ values.count|default_if_none:'' }}" required
+             aria-describedby="stock-count-unit-hint" data-count-value
+             data-recorded="{{ item.current_quantity|unlocalize }}" data-count-unit="{{ item.get_unit_display }}">
+      <span class="hub-stock-count__unit" id="stock-count-unit-hint">وحدة القياس: <strong>{{ item.get_unit_display }}</strong></span>
+    </div>
     <p class="hub-help-text" data-count-preview aria-live="polite">أدخل الكمية لرؤية الفرق قبل المراجعة.</p>
     <details class="hub-ux5-module__more" data-count-reason-section{% if error and values.count %} open{% endif %}>
       <summary>سبب الاختلاف وملاحظات الجرد</summary>

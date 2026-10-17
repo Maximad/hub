@@ -120,3 +120,39 @@
   .hub-staff-ui .hub-daily-start__action {padding:.65rem;min-height:100px;gap:.4rem}
   .hub-staff-ui .hub-daily-start__arrow {display:none}
 }
+
+/* Physical counts show the model's stored unit immediately beside the number. */
+.hub-staff-ui .hub-stock-count__quantity {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: .6rem;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+}
+.hub-staff-ui .hub-stock-count__quantity .hub-input {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+.hub-staff-ui .hub-stock-count__unit {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  white-space: nowrap;
+  padding: .4rem .75rem;
+  border: 1px solid var(--hub-border, #ddd2c0);
+  border-radius: 10px;
+  background: var(--hub-surface-alt, #f7f7f4);
+  font-size: .85rem;
+}
+@media(max-width: 520px) {
+  .hub-staff-ui .hub-stock-count__quantity {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hub-staff-ui .hub-stock-count__unit {
+    width: fit-content;
+    max-width: 100%;
+    white-space: normal;
+  }
+}

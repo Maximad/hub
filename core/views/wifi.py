@@ -9,6 +9,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils import timezone
 
 from catalog.models import MediaAsset
@@ -63,8 +64,16 @@ def wifi_staff_login(request):
     Hub staff roles are separate from Django admin access, so this flow must not
     depend on the admin login page.
     """
+    requested_next = (request.POST.get('next') or request.GET.get('next') or '').strip()
+    # Only return to a local staff route, never an external site or an admin path.
+    next_path = (
+        requested_next if requested_next.startswith('/staff/')
+        and url_has_allowed_host_and_scheme(
+            requested_next, allowed_hosts={request.get_host()}, require_https=request.is_secure(),
+        ) else ''
+    )
     if request.user.is_authenticated:
-        return redirect(_wifi_internet_path())
+        return redirect(next_path or _wifi_internet_path())
 
     form = AuthenticationForm(request=request, data=request.POST or None)
     form.fields['username'].widget.attrs.update({
@@ -86,11 +95,13 @@ def wifi_staff_login(request):
                 action='wifi.staff_authenticated',
                 details={'source': 'captive_portal'},
             )
+            if next_path:
+                return redirect(next_path)
             if usable_internal_grant_for_user(user) is not None and self_service_enabled(get_system_settings()):
                 return _start_staff_wifi(request)
             return redirect(_wifi_internet_path())
 
-    response = render(request, 'menu/wifi_staff_login.html', {'form': form})
+    response = render(request, 'menu/wifi_staff_login.html', {'form': form, 'next_path': next_path})
     response['Cache-Control'] = 'no-store, private, max-age=0'
     response['Pragma'] = 'no-cache'
     response['X-Robots-Tag'] = 'noindex, nofollow, noarchive'

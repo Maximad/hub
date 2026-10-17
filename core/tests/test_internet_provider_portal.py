@@ -64,7 +64,7 @@ class InternetProviderPortalTests(TestCase):
     def test_provider_role_has_no_staff_workspace_access(self):
         response = self.client.get(reverse('staff_home'))
         self.assertEqual(response.status_code, 302)
-        self.assertIn('/admin/login/', response.url)
+        self.assertEqual(response.url, reverse('internet_provider_dashboard'))
 
     def test_role_and_active_partner_association_are_both_required(self):
         no_partner = get_user_model().objects.create_user(

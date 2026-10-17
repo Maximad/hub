@@ -100,7 +100,7 @@ SECURE_REFERRER_POLICY = os.getenv(
 X_FRAME_OPTIONS = os.getenv('DJANGO_X_FRAME_OPTIONS', 'DENY').strip().upper()
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
+    'config.apps.SuperuserOnlyAdminConfig',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -205,7 +205,7 @@ STORAGES = {
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'accounts.User'
 
-LOGIN_URL = '/admin/login/'
+LOGIN_URL = '/wifi/staff-login/'
 LOGIN_REDIRECT_URL = '/staff/'
 LOGOUT_REDIRECT_URL = '/admin/login/'
 

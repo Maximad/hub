@@ -361,6 +361,10 @@ def require_staff_capability(capability, message=ACCESS_DENIED_MESSAGE):
             messages.error(request, message)
             if user_has_capability(request.user, 'staff_home'):
                 return redirect('staff_home')
-            return redirect('admin:login')
+            # Unauthorized provider users belong at their own portal; do not
+            # send staff or providers to the superuser-only Django admin login.
+            if user_has_capability(request.user, 'provider_dashboard'):
+                return redirect('internet_provider_dashboard')
+            return redirect('wifi_entry')
         return wrapper
     return decorator

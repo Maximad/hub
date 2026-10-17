@@ -58,7 +58,7 @@
             {% if staff_caps.settings and staff_caps.internet_billing %}<a href="{% url 'staff_internet_settings' %}">إعدادات الإنترنت</a>{% endif %}
             {% if staff_caps.reports %}<a href="{% url 'staff_reports_home' %}">تقارير الإدارة</a>{% endif %}
             {% if staff_caps.imports %}<a href="{% url 'staff_import_home' %}">استيراد البيانات</a>{% endif %}
-            {% if request.user.is_staff %}<a href="{% url 'admin:index' %}">إدارة النظام المتقدمة</a>{% endif %}
+            {% if request.user.is_active and request.user.is_superuser and not view_as_active %}<a href="{% url 'admin:index' %}">إدارة النظام المتقدمة</a>{% endif %}
           </nav>
           {% endif %}
           {% if view_as_active %}

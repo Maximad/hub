@@ -105,7 +105,7 @@ class ProxySecurityTests(SimpleTestCase):
     def test_staff_redirect_works_behind_https_proxy(self):
         response = self.https_client.get('/staff/')
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, '/admin/login/?next=/staff/')
+        self.assertEqual(response.url, '/wifi/staff-login/?next=/staff/')
 
     def test_plain_http_redirects_to_https(self):
         response = Client(HTTP_HOST='hubsweida.jwtalenthouse.com').get('/menu/')
