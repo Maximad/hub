@@ -1,0 +1,68 @@
+{% extends "staff/inventory_base.html" %}
+{% block inventory_content %}
+<section class="hub-card hub-section" dir="rtl">
+  <h2 class="hub-section-title">طلبات الضيافة والاستهلاك الداخلي</h2>
+  <p class="hub-message hub-message-warning">هذه سجلات أولية للمراجعة فقط. لا تخصم أي كمية من المخزون، ولا تنشئ قيوداً مالية. تسجيل الخصم الفعلي مؤجل إلى اعتماد سياسة D10.</p>
+  {% if messages %}{% for message in messages %}<p class="hub-message hub-message-{{ message.tags|default:'info' }}">{{ message }}</p>{% endfor %}{% endif %}
+  <form method="post" class="hub-form hub-form-section" style="max-width:640px">
+    {% csrf_token %}<input type="hidden" name="request_key" value="{{ request_key }}">
+    <label>مادة المخزون<select class="hub-input" name="inventory_item_id" id="consumption-item" required>
+      <option value="">اختر المادة</option>
+      {% for item in items %}<option value="{{ item.pk }}" data-unit="{{ item.unit }}" data-label="{{ item.get_unit_display }}">{{ item.name_ar }} ({{ item.current_quantity }} {{ item.get_unit_display }})</option>{% endfor %}
+    </select></label>
+    <div class="hub-grid hub-grid-2">
+      <label>الكمية<input class="hub-input" type="number" min="0.001" step="any" inputmode="decimal" name="quantity" required></label>
+      <label>وحدة الإدخال<select class="hub-input" name="unit" id="consumption-unit" required>
+        {% for code,label in units %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+      </select></label>
+    </div>
+    <p class="hub-help-text" id="consumption-preview" aria-live="polite">سيُحفظ الطلب بوحدة المخزون الأساسية. القطع والعبوات لا تتحول تلقائياً.</p>
+    <label>التصنيف<select class="hub-input" name="category" required>
+      <option value="hub_hospitality">ضيافة هَب</option>
+      {% if request.user.is_superuser %}<option value="owner_personal">استخدام شخصي للمالك</option>{% endif %}
+      <option value="staff">استهلاك الموظفين</option><option value="event">فعالية أو ترويج</option>
+    </select></label>
+    <label>الغرض أو السبب<input class="hub-input" name="purpose" required maxlength="255" placeholder="مثلاً: مشروبات لفريق ورشة"></label>
+    <label>ملاحظة المستفيد (اختياري)<input class="hub-input" name="beneficiary_note" maxlength="120"></label>
+    <button class="hub-button hub-button-primary" type="submit">حفظ الطلب دون خصم مخزون</button>
+  </form>
+</section>
+<section class="hub-card hub-section" dir="rtl">
+  <h2 class="hub-section-title">سجل الطلبات الأولية</h2>
+  <div class="hub-table-wrap"><table class="hub-table">
+    <thead><tr><th>التاريخ</th><th>المادة</th><th>الكمية</th><th>التصنيف</th><th>الحالة</th><th>المسجل</th><th>المراجعة</th></tr></thead>
+    <tbody>{% for entry in rows %}<tr>
+      <td>{{ entry.business_date }}</td><td>{{ entry.inventory_item.name_ar }}</td>
+      <td>{{ entry.entered_quantity }} {{ entry.get_entered_unit_display }} ({{ entry.base_quantity }} {{ entry.get_base_unit_display }})</td>
+      <td>{{ entry.get_category_display }}</td><td>{{ entry.get_status_display }}</td>
+      <td>{{ entry.created_by }}</td>
+      <td>{% if is_manager and entry.status == 'submitted' %}<form method="post" action="{% url 'staff_internal_consumption_review' entry.pk %}">
+        {% csrf_token %}<input class="hub-input" name="note" placeholder="سبب المراجعة" required maxlength="255">
+        <button class="hub-button" type="submit" name="action" value="review">مراجعة فقط</button>
+        <button class="hub-button" type="submit" name="action" value="cancel">إلغاء الطلب</button>
+      </form>{% else %}{{ entry.review_note|default:"—" }}{% endif %}</td>
+    </tr>{% empty %}<tr><td colspan="7">لا توجد طلبات مسجلة.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+<script>
+(function(){
+  const item=document.getElementById('consumption-item'),unit=document.getElementById('consumption-unit');
+  const text=document.getElementById('consumption-preview');
+  const factors={g:{g:1,kg:1000},kg:{kg:1,g:0.001},ml:{ml:1,liter:1000},liter:{liter:1,ml:0.001}};
+  function update(reset){
+    const base=item.selectedOptions[0]?.dataset.unit||'';
+    const allowed=factors[base]||{[base]:1};
+    Array.from(unit.options).forEach(o=>{o.disabled=!(o.value in allowed);o.hidden=o.disabled;});
+    if(reset||!(unit.value in allowed))unit.value=base;
+    const qty=Number(document.querySelector('input[name="quantity"]').value);
+    const f=allowed[unit.value];
+    text.textContent=base&&Number.isFinite(qty)&&qty>0&&Number.isFinite(f)
+      ? 'تعادل '+String(Number((qty*f).toFixed(3)))+' '+item.selectedOptions[0].dataset.label+' بوحدة المخزون، دون خصم فعلي.'
+      : 'يُحفظ الطلب بوحدة المادة الأساسية دون خصم فعلي.';
+  }
+  item.addEventListener('change',()=>update(true));unit.addEventListener('change',()=>update(false));
+  document.querySelector('input[name="quantity"]').addEventListener('input',()=>update(false));
+  update(true);
+})();
+</script>
+{% endblock %}
