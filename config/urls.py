@@ -20,6 +20,7 @@ from core.views.staff_finance import *
 from core.views import staff_inventory
 from core.views.staff_exchange_rates import staff_exchange_rate_settings
 from core.views.stock_count import staff_inventory_stock_count
+from core.views.staff_inventory_consumption import staff_inventory_consumption_requests
 from core.views.staff_consumption import staff_order_consumption, staff_consumption_report
 from core.views_notifications import staff_notifications, staff_notifications_poll, staff_notifications_mark_read, staff_notifications_preferences
 from core.views_pwa import staff_web_app_manifest, service_worker, staff_push_config, staff_push_subscription
@@ -190,6 +191,7 @@ urlpatterns = [
     path('staff/inventory/', staff_inventory.staff_inventory_home, name='staff_inventory_home'),
     path('staff/inventory/items/', staff_inventory.staff_inventory_items, name='staff_inventory_items'),
     path('staff/inventory/stock-count/', staff_inventory_stock_count, name='staff_inventory_stock_count'),
+    path('staff/inventory/consumption-requests/', staff_inventory_consumption_requests, name='staff_inventory_consumption_requests'),
     path('staff/inventory/items/new/', staff_inventory.staff_inventory_item_new, name='staff_inventory_item_new'),
     path('staff/inventory/items.csv', staff_inventory.staff_inventory_items_csv, name='staff_inventory_items_csv'),
     path('staff/inventory/purchases/', staff_inventory.staff_inventory_purchases, name='staff_inventory_purchases'),

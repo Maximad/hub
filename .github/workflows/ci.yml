@@ -101,3 +101,20 @@ jobs:
 
       - name: Run full Django test suite on PostgreSQL
         run: python manage.py test --noinput
+
+      - name: Verify consumption mobile layout
+        env:
+          MOBILE_PREVIEW_DIR: ${{ runner.temp }}/hub-consumption-preview
+          PYTHONPATH: .
+        run: |
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
+          python scripts/check-consumption-mobile.py
+
+      - name: Upload consumption mobile preview
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: consumption-mobile-preview
+          path: ${{ runner.temp }}/hub-consumption-preview
+          if-no-files-found: ignore
