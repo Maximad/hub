@@ -47,7 +47,7 @@
       <button class="hub-button hub-button-primary" type="submit">حفظ الدفعة</button>
     </form>
   {% else %}
-    <div class="hub-message hub-message-success">تم تسديد هذا الطلب بالكامل.</div>
+    <div class="hub-message hub-message-success">{% if paid == 0 %}الرصيد صفر دون دفعة نقدية مسجّلة.{% else %}تم تحصيل رصيد هذا الطلب.{% endif %}</div>
   {% endif %}
 
   <section class="staff-payment-panel__history">

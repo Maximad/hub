@@ -47,7 +47,7 @@
 <div class="performance-grid">
   <div class="performance-card"><small>إجمالي المبيعات</small><strong>{{ totals.gross_sales_syp }} ل.س</strong></div>
   <div class="performance-card"><small>صافي المبيعات بعد الخصومات</small><strong>{{ totals.net_sales_syp }} ل.س</strong></div>
-  <div class="performance-card"><small>الوحدات المباعة</small><strong>{{ totals.units_sold }}</strong></div>
+  <div class="performance-card"><small>وحدات الطلبات (تشمل المجاني)</small><strong>{{ totals.units_sold }}</strong><div class="performance-muted">منها ضيافة هَب {{ totals.hub_hospitality_units }} · استخدام شخصي {{ totals.owner_personal_units }}</div></div>
   <div class="performance-card"><small>الخصومات</small><strong>{{ totals.discounts_syp }} ل.س</strong></div>
   <div class="performance-card"><small>الكلفة التقديرية المعروفة</small><strong>{{ totals.estimated_cost_syp }} ل.س</strong></div>
   <div class="performance-card"><small>الهامش التقديري على المبيعات ذات الكلفة</small><strong>{{ totals.estimated_margin_syp }} ل.س</strong>{% if totals.estimated_margin_percent != None %}<div class="performance-muted">{{ totals.estimated_margin_percent }}%</div>{% endif %}</div>
@@ -63,12 +63,12 @@
 <div class="hub-table-wrap">
 <table class="hub-table performance-table" style="width:100%;border-collapse:collapse;">
   <tr>
-    <th>الشهر</th><th>الوحدات</th><th>إجمالي المبيعات</th><th>التغير</th><th>صافي المبيعات</th><th>الكلفة التقديرية</th><th>الهامش</th><th>نسبة الهامش</th><th>المصروفات</th><th>المشتريات</th><th>البيانات</th>
+    <th>الشهر</th><th>وحدات الطلبات (تشمل المجاني)</th><th>إجمالي المبيعات</th><th>التغير</th><th>صافي المبيعات</th><th>الكلفة التقديرية</th><th>الهامش</th><th>نسبة الهامش</th><th>المصروفات</th><th>المشتريات</th><th>البيانات</th>
   </tr>
   {% for row in monthly_rows %}
   <tr>
     <td>{{ row.month }}</td>
-    <td>{{ row.units_sold }}</td>
+    <td>{{ row.units_sold }}<small class="performance-muted"> · ضيافة {{ row.hub_hospitality_units }}، شخصي {{ row.owner_personal_units }}</small></td>
     <td>{{ row.gross_sales_syp }}</td>
     <td>{% if row.revenue_change_percent == None %}—{% else %}{{ row.revenue_change_percent }}%{% endif %}</td>
     <td>{{ row.net_sales_syp }}</td>

@@ -5,6 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from core.models import ActivityLog, HubVisit, Order, Payment
+from core.services.consumption_labels import zero_balance_consumption_label
 from core.services.posting.engine import dispatch
 from core.services.posting.order_payments import collect as collect_order_payment
 
@@ -34,7 +35,7 @@ def visit_financials(visit, *, orders=None):
     paid = sum(order.paid_syp for order in rows)
     remaining = max(total - paid, 0)
     if total == 0:
-        label = 'ضيافة'
+        label = zero_balance_consumption_label(rows)
     elif remaining == 0:
         label = 'مدفوع'
     elif paid > 0:

@@ -46,6 +46,8 @@ def _pct_change(current, previous):
 def _new_metrics():
     return {
         'units_sold': 0,
+        'hub_hospitality_units': 0,
+        'owner_personal_units': 0,
         'orders_count': 0,
         'product_sales_syp': 0,
         'gross_sales_syp': 0,
@@ -122,6 +124,8 @@ def staff_performance_report(request):
         )
         day_values = {
             'units_sold': units,
+            'hub_hospitality_units': int(sums.get('hub_hospitality_units') or 0),
+            'owner_personal_units': int(sums.get('owner_personal_units') or 0),
             'orders_count': int(sums.get('orders_count') or 0),
             'product_sales_syp': int(sums.get('subtotal_total') or 0),
             'gross_sales_syp': int(sums.get('gross_sales') or 0),

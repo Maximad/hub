@@ -59,7 +59,7 @@
 })();
 </script>
 {% else %}
-<div class="hub-message hub-message-success">تم تسديد الطلب بالكامل. لا حاجة لتسجيل دفعة إضافية.</div>
+<div class="hub-message hub-message-success">{% if paid == 0 %}الرصيد صفر. لا توجد دفعة نقدية مسجّلة لهذا الطلب.{% else %}تم تحصيل رصيد الطلب. لا حاجة لتسجيل دفعة إضافية.{% endif %}</div>
 {% endif %}
 <h3>الضيافة والاستهلاك الشخصي</h3>
 {% if can_manage_discounts %}

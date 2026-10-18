@@ -19,13 +19,13 @@
   <li>الهامش التقديري: {{ sums.estimated_gross_margin_syp }} ل.س</li>
   <li>نسبة الهامش: {% if sums.estimated_gross_margin_percent == None %}غير محدد{% else %}{{ sums.estimated_gross_margin_percent }}%{% endif %}</li>
   <li>منتجات بدون كلفة: {{ sums.products_missing_cost_count }}</li>
-  <li>قيمة ضيافة هَب: {{ sums.comp_value_syp }} ل.س</li>
-  <li>الاستهلاك الشخصي للمالك (بسعر البيع): {{ sums.owner_personal_value_syp }} ل.س</li>
+  <li>قيمة ضيافة هَب (بسعر البيع): {{ sums.comp_value_syp }} ل.س · الأصناف المصنفة كضيافة: {{ sums.hub_hospitality_units }} وحدة</li>
+  <li>الاستهلاك الشخصي للمالك (بسعر البيع): {{ sums.owner_personal_value_syp }} ل.س · الأصناف المصنفة كشخصية: {{ sums.owner_personal_units }} وحدة</li>
   <li>إجمالي المدفوع: {{ sums.paid_total }} ل.س</li>
   <li>إجمالي المتبقي: {{ sums.remaining_total }} ل.س</li>
   <li>النقدي: {{ sums.cash_total }} ل.س</li>
   <li>التحويل اليدوي: {{ sums.manual_transfer_total }} ل.س</li>
-  <li>الضيافة: {{ sums.free_total }} ل.س</li>
+  <li>دفعات بطريقة «ضيافة» القديمة: {{ sums.free_total }} ل.س (منفصلة عن خصومات الأصناف)</li>
   <li>خصم الأعضاء: {{ sums.discount_total }} ل.س</li>
   <li>الطلبات الملغاة: {{ sums.cancelled_count }} / {{ sums.cancelled_value }} ل.س</li>
   <li>النقد المتوقع: {{ sums.expected_cash_syp }} ل.س</li>

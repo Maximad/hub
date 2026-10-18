@@ -217,3 +217,76 @@ class PosConsumptionTests(TestCase):
         self.coffee_line.save(update_fields=['line_total_syp_snapshot'])
         self.post(key='invalid-key')
         self.assertFalse(OrderConsumption.objects.exists())
+
+    def test_fully_complimentary_visit_closes_without_cash_and_is_reported_separately(self):
+        """Two category combinations must not be falsely labelled 'paid'."""
+        from core.views_legacy import DAMASCUS_TZ, _build_day_report, _order_financials
+        from django.utils import timezone
+
+        # The two coffee servings are personal; the sandwich is Hub hospitality.
+        self.assertEqual(self.post(category='owner_personal', qty=2).status_code, 302)
+        self.assertEqual(self.post(line=self.sandwich_line, category='hub_hospitality').status_code, 302)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.total_syp, 0)
+        self.assertEqual(self.order.paid_syp, 0)
+        self.assertEqual(self.order.remaining_syp, 0)
+        self.assertEqual(_order_financials(self.order)[3], 'ضيافة هَب واستخدام شخصي')
+        cashier = self.client.get(reverse('staff_cashier_order', args=[self.order.public_code]))
+        self.assertContains(cashier, 'الرصيد صفر. لا توجد دفعة نقدية')
+        self.assertNotContains(cashier, 'تم تسديد الطلب بالكامل')
+
+        visit = HubVisit.objects.create(created_by=self.owner)
+        self.order.visit = visit
+        self.order.save(update_fields=['visit'])
+        visit_page = self.client.get(reverse('staff_cashier_order', args=[visit.public_code]))
+        self.assertEqual(visit_page.status_code, 200)
+        self.assertContains(visit_page, 'ضيافة هَب واستخدام شخصي')
+        self.assertContains(visit_page, 'إغلاق الجلسة دون تحصيل')
+        close = self.client.post(
+            reverse('staff_cashier_pay', args=[visit.public_code]),
+            {'action': 'settle_close', 'method': ''},
+            follow=True,
+        )
+        self.assertContains(close, 'أُغلقت الجلسة دون تحصيل دفعة جديدة')
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, HubVisit.Status.CLOSED)
+        self.assertFalse(Payment.objects.exists())
+        self.assertFalse(CashMovement.objects.exists())
+        self.assertFalse(PostingBatch.objects.exists())
+        self.assertEqual(OrderConsumption.objects.count(), 2)
+
+        # The existing daily calculation remains a source of truth; it must
+        # not count personal use as Hub hospitality or cash revenue.
+        day = timezone.now().astimezone(DAMASCUS_TZ).date()
+        _rows, sums = _build_day_report(day)
+        self.assertEqual(sums['owner_personal_units'], 2)
+        self.assertEqual(sums['hub_hospitality_units'], 1)
+        self.assertEqual(sums['owner_personal_value_syp'], 180)
+        self.assertEqual(sums['comp_value_syp'], 150)
+        self.assertEqual(sums['net_sales'], 0)
+        self.assertEqual(sums['paid_total'], 0)
+        self.assertEqual(sums['cash_total'], 0)
+        daily = self.client.get(reverse('staff_reports_day'), {'date': str(day)})
+        self.assertEqual(daily.status_code, 200)
+        self.assertContains(daily, 'الاستهلاك الشخصي للمالك')
+        self.assertContains(daily, 'قيمة ضيافة هَب')
+
+    def test_owner_only_zero_balance_not_mislabelled_as_paid(self):
+        from core.views_legacy import _order_financials
+
+        self.post(category='owner_personal', qty=2)
+        self.post(category='owner_personal', line=self.sandwich_line)
+        self.assertEqual(self.order.total_syp, 0)
+        self.assertEqual(_order_financials(self.order)[3], 'استخدام شخصي للمالك')
+        self.assertFalse(Payment.objects.exists())
+
+    def test_unclassified_zero_price_does_not_claim_recorded_hub_hospitality(self):
+        from core.views_legacy import _order_financials
+
+        OrderDiscount.objects.create(
+            order=self.order, discount_type=OrderDiscount.DiscountType.FIXED,
+            amount_syp=330, reason='existing generic reduction',
+        )
+        self.assertEqual(self.order.total_syp, 0)
+        self.assertEqual(_order_financials(self.order)[3], 'ضيافة')
+        self.assertFalse(OrderConsumption.objects.exists())

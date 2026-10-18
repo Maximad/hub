@@ -30,6 +30,7 @@ from accounts.permissions import (
     require_staff_capability, user_has_capability,
 )
 from core.stock_recipes import deduct_order_item_stock
+from core.services.consumption_labels import zero_balance_consumption_label
 from core.models import ActivityLog, CancellationReason, CashMovement, Category, DailyClose, Expense, HubVisit, InternetEntitlement, InternetPackage, InternetSession, Member, Order, OrderConsumption, OrderDiscount, OrderItem, Payment, PostingCommand, Product, Room, SystemSetting, TableArea
 from core.services.visits import issue_visit_credential, resolve_visit_credential, set_visit_cookie
 from core.services.posting.context import PostingContext
@@ -191,7 +192,7 @@ def _build_day_report(report_date):
     start_utc, end_utc = _day_range_utc(report_date)
     orders = (
         Order.objects.select_related('table', 'table__room')
-        .prefetch_related('items', 'payments')
+        .prefetch_related('items', 'payments', 'discounts', 'consumptions__discount')
         .filter(created_at__gte=start_utc, created_at__lt=end_utc)
         .order_by('-created_at')
     )
@@ -202,6 +203,7 @@ def _build_day_report(report_date):
         'cancelled_count': 0, 'cancelled_value': 0, 'served_or_paid_count': 0, 'unpaid_orders_count': 0, 'partial_orders_count': 0, 'partial_payments_syp': 0, 'non_cash_sales_syp': 0,
         'delivery_order_count': 0, 'delivery_gross_sales': 0, 'delivery_fees_total': 0, 'unpaid_delivery_orders': 0, 'cancelled_delivery_orders': 0, 'takeaway_order_count': 0,
         'estimated_cost_syp': 0, 'estimated_gross_margin_syp': 0, 'margin_known_sales_syp': 0, 'products_missing_cost_count': 0, 'comp_value_syp': 0, 'owner_personal_value_syp': 0,
+        'hub_hospitality_units': 0, 'owner_personal_units': 0,
         'internet_workspace_sessions_count': 0, 'internet_workspace_raw_minutes': 0, 'internet_workspace_billable_minutes': 0, 'internet_workspace_revenue_syp': 0,
         'internet_workspace_prepaid_minutes_used': 0, 'internet_workspace_metered_revenue_syp': 0, 'internet_workspace_cancelled_sessions': 0, 'internet_workspace_unpaid_orders': 0,
     }
@@ -233,8 +235,19 @@ def _build_day_report(report_date):
         sums['orders_count'] += 1
         sums['gross_sales'] += order.subtotal_syp + order.service_fee_syp + max(order.delivery_fee_syp or 0, 0)
         sums['discounts_syp'] += order.discount_syp
-        owner_entries = order.consumptions.filter(category=OrderConsumption.Category.OWNER_PERSONAL)
-        owner_discount_ids = set(owner_entries.values_list('discount_id', flat=True))
+        active_consumptions = [
+            entry for entry in order.consumptions.all() if entry.discount.is_active
+        ]
+        owner_entries = [
+            entry for entry in active_consumptions
+            if entry.category == OrderConsumption.Category.OWNER_PERSONAL
+        ]
+        sums['owner_personal_units'] += sum(entry.quantity for entry in owner_entries)
+        sums['hub_hospitality_units'] += sum(
+            entry.quantity for entry in active_consumptions
+            if entry.category == OrderConsumption.Category.HUB_HOSPITALITY
+        )
+        owner_discount_ids = {entry.discount_id for entry in owner_entries}
         sums['owner_personal_value_syp'] += sum(entry.retail_value_syp for entry in owner_entries)
         sums['comp_value_syp'] += sum(
             d.amount_syp for d in order.discounts.all()
@@ -702,7 +715,7 @@ def _order_financials(order):
     if order.status == Order.Status.CANCELLED:
         payment_label = 'ملغى'
     elif total == 0:
-        payment_label = 'ضيافة'
+        payment_label = zero_balance_consumption_label([order])
     elif remaining == 0:
         payment_label = 'مدفوع'
     elif paid > 0:
