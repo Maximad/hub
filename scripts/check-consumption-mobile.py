@@ -50,7 +50,9 @@ with sync_playwright() as p:
     assert page.locator('html').get_attribute('dir') == 'rtl'
     for width in (320, 390):
         page.set_viewport_size({'width': width, 'height': 844})
+        page.evaluate('document.activeElement.blur(); window.scrollTo(0, 0)')
+        page.wait_for_timeout(500)  # Let responsive layout and sticky navigation settle.
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), 'Page overflows phone viewport'
-        page.screenshot(path=str(output / f'consumption-{width}.png'), full_page=True)
+        page.screenshot(path=str(output / f'consumption-{width}.png'), full_page=True, animations='disabled')
     browser.close()
 print(f'RTL mobile layout and conversion passed; screenshots in {output}')
