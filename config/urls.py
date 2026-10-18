@@ -20,6 +20,7 @@ from core.views.staff_finance import *
 from core.views import staff_inventory
 from core.views.staff_exchange_rates import staff_exchange_rate_settings
 from core.views.stock_count import staff_inventory_stock_count
+from core.views.staff_internal_consumption import staff_internal_consumption_requests, staff_internal_consumption_review
 from core.views.staff_consumption import staff_order_consumption, staff_consumption_report
 from core.views_notifications import staff_notifications, staff_notifications_poll, staff_notifications_mark_read, staff_notifications_preferences
 from core.views_pwa import staff_web_app_manifest, service_worker, staff_push_config, staff_push_subscription
@@ -198,6 +199,8 @@ urlpatterns = [
     path('staff/inventory/purchases/<int:purchase_id>/', staff_inventory.staff_inventory_purchase_detail, name='staff_inventory_purchase_detail'),
     path('staff/inventory/purchases/<int:purchase_id>/receive/', staff_inventory.staff_inventory_purchase_receive, name='staff_inventory_purchase_receive'),
     path('staff/inventory/movements/', staff_inventory.staff_inventory_movements, name='staff_inventory_movements'),
+    path('staff/inventory/consumption-requests/', staff_internal_consumption_requests, name='staff_internal_consumption_requests'),
+    path('staff/inventory/consumption-requests/<int:request_id>/review/', staff_internal_consumption_review, name='staff_internal_consumption_review'),
     path('staff/inventory/movements/new/', staff_inventory.staff_inventory_movement_new, name='staff_inventory_movement_new'),
     path('staff/inventory/movements.csv', staff_inventory.staff_inventory_movements_csv, name='staff_inventory_movements_csv'),
     path('staff/inventory/low-stock/', staff_inventory.staff_inventory_low_stock, name='staff_inventory_low_stock'),
