@@ -1235,7 +1235,7 @@ class InternalConsumptionRequest(TimeStampedModel):
     business_date = models.DateField()
     category = models.CharField(max_length=24, choices=Category.choices)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.SUBMITTED)
-    entered_quantity = models.DecimalField(max_digits=12, decimal_places=3)
+    entered_quantity = models.DecimalField(max_digits=12, decimal_places=6)
     entered_unit = models.CharField(max_length=20, choices=InventoryItem.Unit.choices)
     base_quantity = models.DecimalField(max_digits=12, decimal_places=3)
     base_unit = models.CharField(max_length=20, choices=InventoryItem.Unit.choices)
