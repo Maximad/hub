@@ -1636,6 +1636,74 @@ class AuditEvent(models.Model):
         raise ValidationError('Audit events are immutable and cannot be deleted.')
 
 
+class InventoryConsumptionRequest(TimeStampedModel):
+    """Unposted physical-use request. NEVER a stock movement, order or ledger row.
+
+    D10 is still unconfirmed: these records may be cancelled but must not be
+    approved/posted until a separate reviewed policy and posting service exist.
+    """
+
+    class Category(models.TextChoices):
+        HUB_HOSPITALITY = 'hub_hospitality', 'ضيافة هَب'
+        OWNER_PERSONAL = 'owner_personal', 'استخدام شخصي للمالك'
+        STAFF = 'staff', 'استهلاك الموظفين'
+        EVENT = 'event', 'ضيافة فعالية أو ترويج'
+
+    class State(models.TextChoices):
+        PENDING = 'pending_policy', 'بانتظار السياسة والتسوية'
+        REVIEWED = 'reviewed', 'تمت المراجعة دون خصم المخزون'
+        CANCELLED = 'cancelled', 'ملغى دون أثر على المخزون'
+
+    inventory_item = models.ForeignKey('InventoryItem', on_delete=models.PROTECT, related_name='consumption_requests')
+    category = models.CharField(max_length=24, choices=Category.choices)
+    state = models.CharField(max_length=20, choices=State.choices, default=State.PENDING)
+    business_date = models.DateField()
+    entered_quantity = models.DecimalField(max_digits=15, decimal_places=6)
+    entered_unit = models.CharField(max_length=20, choices=InventoryItem.Unit.choices)
+    base_quantity = models.DecimalField(max_digits=12, decimal_places=3)
+    base_unit = models.CharField(max_length=20, choices=InventoryItem.Unit.choices)
+    stock_quantity_at_request = models.DecimalField(max_digits=12, decimal_places=3)
+    unit_cost_estimate_syp = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    total_cost_estimate_syp = models.DecimalField(max_digits=16, decimal_places=2, null=True, blank=True)
+    reason = models.CharField(max_length=255)
+    beneficiary_note = models.CharField(max_length=120, blank=True)
+    event_label = models.CharField(max_length=120, blank=True)
+    owner_treatment = models.CharField(max_length=24, choices=OrderConsumption.OwnerTreatment.choices, blank=True)
+    request_key = models.UUIDField(unique=True)
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name='inventory_consumption_requests')
+    reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='reviewed_inventory_consumption_requests')
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_note = models.CharField(max_length=255, blank=True)
+    cancelled_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='cancelled_inventory_consumption_requests')
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancellation_reason = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ['-business_date', '-created_at']
+        constraints = [
+            models.CheckConstraint(condition=Q(base_quantity__gt=0), name='internal_use_request_quantity_positive'),
+            models.CheckConstraint(condition=Q(entered_quantity__gt=0), name='internal_use_request_entered_positive'),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.category == self.Category.OWNER_PERSONAL and not self.owner_treatment:
+            raise ValidationError('حدد نوع التسوية المقترحة لاستخدام المالك.')
+        if self.category != self.Category.OWNER_PERSONAL and self.owner_treatment:
+            raise ValidationError('نوع التسوية الشخصية متاح للمالك فقط.')
+        if self.category == self.Category.EVENT and not self.event_label:
+            raise ValidationError('أدخل اسم الفعالية لهذا الطلب.')
+        if self.category != self.Category.EVENT and self.event_label:
+            raise ValidationError('اسم الفعالية مسموح لطلبات الفعاليات فقط.')
+        if self.state == self.State.REVIEWED and (not self.reviewed_at or not self.review_note):
+            raise ValidationError('المراجعة تتطلب وقتاً وملاحظة.')
+        if self.state == self.State.CANCELLED and (not self.cancelled_at or not self.cancellation_reason):
+            raise ValidationError('إلغاء الطلب يتطلب وقت الإلغاء وسببه.')
+
+    def __str__(self):
+        return f'{self.get_category_display()} · {self.inventory_item} · {self.base_quantity} {self.base_unit}'
+
+
 class LocalExchangeRatePolicy(TimeStampedModel):
     """One editable Sweida adjustment, separate from public market observations."""
 
