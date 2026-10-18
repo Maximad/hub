@@ -107,8 +107,14 @@ def request_inventory_consumption(*, actor, item_id, quantity, unit, category,
             },
         )
         if not created:
-            if record.requested_by_id != actor.pk or record.inventory_item_id != item.pk:
-                raise ValidationError('رمز الطلب مستخدم في سجل آخر.')
+            if (record.requested_by_id != actor.pk or
+                record.inventory_item_id != item.pk or
+                record.category != category or record.entered_quantity != entered or
+                record.entered_unit != unit or record.reason != reason or
+                record.beneficiary_note != beneficiary_note or
+                record.event_label != event_label or
+                record.owner_treatment != owner_treatment):
+                raise ValidationError('رمز الطلب مستخدم في سجل ببيانات مختلفة.')
             return record, False
         record.full_clean()
         AuditEvent.objects.create(
