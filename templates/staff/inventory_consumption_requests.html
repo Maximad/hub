@@ -1,0 +1,121 @@
+{% extends "staff/inventory_base.html" %}
+{% block title %}طلبات الاستهلاك الداخلي{% endblock %}
+{% block inventory_content %}
+<section class="hub-card hub-section" dir="rtl" aria-labelledby="consumption-title">
+  <h2 id="consumption-title" class="hub-section-title">طلبات الاستهلاك الداخلي</h2>
+  <div class="hub-message hub-message-warning" role="status">
+    <strong>المعاملات هنا مسودات بانتظار سياسة D10.</strong>
+    لن يؤدي تقديم طلب إلى خصم المخزون أو إنشاء قيد محاسبي أو تسوية مع المالك.
+    الرصيد المعروض تقديري لحظة الطلب، وليس كمية محجوزة.
+  </div>
+  <p class="hub-help-text">إذا تم أخذ المادة فعلياً، فسجّل الطلب للمراجعة التشغيلية ولا تعتبر أن رصيد المخزون قد تحدّث. يجب استكمال قرار الاعتماد والتسوية قبل تفعيل الحركات الفعلية.</p>
+  <form method="get" class="hub-form-section" style="max-width:550px">
+    <label>ابحث عن المادة
+      <input class="hub-input" type="search" name="q" value="{{ q }}" placeholder="اسم المادة أو الكود" maxlength="70">
+    </label>
+    <button type="submit" class="hub-button">بحث</button>
+  </form>
+  <div class="hub-table-wrap">
+    <table class="hub-table">
+      <thead><tr><th>المادة</th><th>الوحدة الأساسية</th><th>الرصيد الحالي</th><th></th></tr></thead>
+      <tbody>
+        {% for stock in items %}
+        <tr>
+          <td>{{ stock.name_ar }}</td>
+          <td>{{ stock.get_unit_display }}</td>
+          <td>{{ stock.current_quantity }}</td>
+          <td><a href="{% url 'staff_inventory_consumption_requests' %}?item={{ stock.pk }}">اختيار</a></td>
+        </tr>
+        {% empty %}<tr><td colspan="4">لا توجد مواد مطابقة.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% if item %}
+<section class="hub-card hub-section" dir="rtl">
+  <h3>طلب مسودة: {{ item.name_ar }}</h3>
+  <p class="hub-help-text">وحدة المخزون: {{ item.get_unit_display }} · الرصيد المسجل {{ item.current_quantity }} {{ item.get_unit_display }}</p>
+  <form method="post" class="hub-form hub-form-section" style="max-width:550px">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="create">
+    <input type="hidden" name="request_key" value="{{ request_key }}">
+    <input type="hidden" name="inventory_item" value="{{ item.pk }}">
+    <div class="hub-grid hub-grid-2">
+      <label>الكمية
+        <input class="hub-input" name="quantity" type="number" step="any" min="0.000001" required inputmode="decimal" placeholder="مثل 1.5">
+      </label>
+      <label>الوحدة
+        <select class="hub-input" name="unit" required>
+          {% for unit_code, unit_label in units %}
+          <option value="{{ unit_code }}"{% if unit_code == item.unit %} selected{% endif %}>{{ unit_label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    <label>نوع الاستخدام
+      <select class="hub-input" name="category" required>
+        <option value="">اختر نوع الاستخدام</option>
+        {% for category_code, category_label in categories %}
+        <option value="{{ category_code }}">{{ category_label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% if request.user.is_superuser %}
+    <label>التسوية المقترحة إن كان استخداماً شخصياً للمالك
+      <select class="hub-input" name="owner_treatment">
+        <option value="">لا ينطبق</option>
+        {% for value, label in owner_treatments %}
+        <option value="{{ value }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endif %}
+    <label>اسم الفعالية (فقط إذا كان الاستخدام للفعالية)
+      <input class="hub-input" name="event_label" maxlength="120" placeholder="اختياري لغير الفعاليات: اتركه فارغاً">
+    </label>
+    <label>السبب
+      <input class="hub-input" name="reason" maxlength="255" required placeholder="مثلاً: مشروبات لضيافة ضيوف المكان">
+    </label>
+    <label>ملاحظة المستفيد (اختياري)
+      <input class="hub-input" name="beneficiary_note" maxlength="120" placeholder="لا يلزم تسجيل بيانات شخصية">
+    </label>
+    <button class="hub-button hub-button-primary" type="submit">حفظ طلب للمراجعة دون خصم المخزون</button>
+  </form>
+</section>
+{% endif %}
+<section class="hub-card hub-section" dir="rtl">
+  <h3>السجل التشغيلي (غير مرحّل إلى المخزون)</h3>
+  <p class="hub-help-text">آخر 80 طلباً متاحاً لك. قد تتغير الكلفة التقديرية، ولا تُحسب مبالغ هذه الطلبات كمصروفات أو سحب مالك.</p>
+  <div class="hub-table-wrap">
+    <table class="hub-table">
+      <thead><tr><th>التاريخ</th><th>المادة</th><th>النوع</th><th>الكمية بعد التحويل</th><th>التكلفة التقديرية</th><th>الحالة</th><th>الإجراء</th></tr></thead>
+      <tbody>
+      {% for record in rows %}
+        <tr>
+          <td>{{ record.business_date }}</td>
+          <td>{{ record.inventory_item.name_ar }}{% if record.reason %}<div class="hub-help-text">{{ record.reason }}</div>{% endif %}</td>
+          <td>{{ record.get_category_display }}</td>
+          <td>{{ record.entered_quantity }} {{ record.get_entered_unit_display }} → {{ record.base_quantity }} {{ record.get_base_unit_display }}</td>
+          <td>{% if record.total_cost_estimate_syp != None %}{{ record.total_cost_estimate_syp }} ل.س{% else %}غير معروفة{% endif %}</td>
+          <td>{{ record.get_state_display }}</td>
+          <td>
+            {% if record.state == "pending_policy" %}
+              {% if request.user.is_superuser or record.requested_by_id == request.user.pk %}
+              <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="cancel">
+                <input type="hidden" name="request_id" value="{{ record.pk }}">
+                <input class="hub-input" name="cancellation_reason" required maxlength="255" placeholder="سبب الإلغاء">
+                <button class="hub-button" type="submit">إلغاء المسودة</button>
+              </form>
+              {% endif %}
+            {% endif %}
+          </td>
+        </tr>
+      {% empty %}<tr><td colspan="7">لا توجد طلبات مسجّلة.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
