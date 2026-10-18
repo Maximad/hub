@@ -1217,6 +1217,56 @@ class PurchaseReturnLine(TimeStampedModel):
     purchase_item = models.ForeignKey(PurchaseItem, on_delete=models.PROTECT, related_name='return_lines')
     returned_quantity = models.DecimalField(max_digits=12, decimal_places=3, validators=[MinValueValidator(Decimal('0.001'))])
 
+class InternalConsumptionRequest(TimeStampedModel):
+    """Evidence-only request. D10 posting remains blocked."""
+
+    class Category(models.TextChoices):
+        HUB_HOSPITALITY = 'hub_hospitality', 'ضيافة هَب'
+        OWNER_PERSONAL = 'owner_personal', 'استخدام شخصي للمالك'
+        STAFF = 'staff', 'استهلاك الموظفين'
+        EVENT = 'event', 'ضيافة فعالية أو ترويج'
+
+    class Status(models.TextChoices):
+        SUBMITTED = 'submitted', 'مسجّل بانتظار المراجعة'
+        REVIEWED = 'reviewed', 'تمت المراجعة (دون خصم)'
+        CANCELLED = 'cancelled', 'ملغى (دون خصم)'
+
+    inventory_item = models.ForeignKey('InventoryItem', on_delete=models.PROTECT, related_name='consumption_requests')
+    business_date = models.DateField()
+    category = models.CharField(max_length=24, choices=Category.choices)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.SUBMITTED)
+    entered_quantity = models.DecimalField(max_digits=12, decimal_places=3)
+    entered_unit = models.CharField(max_length=20, choices=InventoryItem.Unit.choices)
+    base_quantity = models.DecimalField(max_digits=12, decimal_places=3)
+    base_unit = models.CharField(max_length=20, choices=InventoryItem.Unit.choices)
+    estimated_unit_cost_syp_snapshot = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    purpose = models.CharField(max_length=255)
+    beneficiary_note = models.CharField(max_length=120, blank=True)
+    request_key = models.UUIDField(unique=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='inventory_consumption_requests')
+    reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_consumption_requests')
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_note = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        constraints = [
+            models.CheckConstraint(condition=Q(entered_quantity__gt=0), name='cons_req_entered_qty_gt_0'),
+            models.CheckConstraint(condition=Q(base_quantity__gt=0), name='cons_req_base_qty_gt_0'),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.inventory_item_id:
+            from core.services.inventory_unit_entry import to_base_quantity
+            converted = to_base_quantity(self.entered_quantity, self.inventory_item.unit, self.entered_unit)
+            if converted != self.base_quantity or self.base_unit != self.inventory_item.unit:
+                raise ValidationError('الكمية أو الوحدة المحفوظة غير متوافقة مع مادة المخزون.')
+
+    def __str__(self):
+        return f'{self.get_category_display()} · {self.inventory_item} · {self.base_quantity} {self.base_unit}'
+
+
 class StockMovement(TimeStampedModel):
     class MovementType(models.TextChoices):
         PURCHASE_RECEIVED='purchase_received','استلام شراء'; MANUAL_ADJUSTMENT='manual_adjustment','تعديل يدوي'; WASTE='waste','هدر'; INTERNAL_USE='internal_use','استخدام داخلي'; RETURN_TO_VENDOR='return_to_vendor','إرجاع للمورد'; CORRECTION='correction','تصحيح'; OPENING_BALANCE='opening_balance','رصيد افتتاحي'; SALE_DEDUCTION='sale_deduction','خصم بيع'; PRODUCTION_CONSUMPTION='production_consumption','استهلاك تحضير'; PRODUCTION_OUTPUT='production_output','إنتاج تحضير'; SALE_RETURN='sale_return','إرجاع خصم بيع'; OTHER='other','أخرى'
