@@ -21,7 +21,7 @@ class Migration(migrations.Migration):
                 ('business_date', models.DateField()),
                 ('category', models.CharField(choices=[('hub_hospitality','ضيافة هَب'), ('owner_personal','استخدام شخصي للمالك'), ('staff','استهلاك الموظفين'), ('event','ضيافة فعالية أو ترويج')], max_length=24)),
                 ('status', models.CharField(choices=[('submitted','مسجّل بانتظار المراجعة'), ('reviewed','تمت المراجعة (دون خصم)'), ('cancelled','ملغى (دون خصم)')], default='submitted', max_length=16)),
-                ('entered_quantity', models.DecimalField(decimal_places=3, max_digits=12)),
+                ('entered_quantity', models.DecimalField(decimal_places=6, max_digits=12)),
                 ('entered_unit', models.CharField(choices=[('kg','كغ'), ('g','غ'), ('liter','لتر'), ('ml','مل'), ('piece','قطعة'), ('pack','عبوة'), ('bottle','زجاجة'), ('box','صندوق'), ('portion','حصة'), ('other','أخرى')], max_length=20)),
                 ('base_quantity', models.DecimalField(decimal_places=3, max_digits=12)),
                 ('base_unit', models.CharField(choices=[('kg','كغ'), ('g','غ'), ('liter','لتر'), ('ml','مل'), ('piece','قطعة'), ('pack','عبوة'), ('bottle','زجاجة'), ('box','صندوق'), ('portion','حصة'), ('other','أخرى')], max_length=20)),
