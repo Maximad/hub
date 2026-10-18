@@ -31,6 +31,8 @@ def staff_internal_consumption_requests(request):
             unit = request.POST.get('unit') or item.unit
             entered = request.POST.get('quantity', '').strip()
             base = to_base_quantity(entered, item.unit, unit)
+            if item.unit in {'piece', 'pack', 'bottle', 'box'} and base != base.to_integral_value():
+                raise ValidationError('القطع والعبوات والزجاجات والصناديق تُسجّل بأعداد صحيحة فقط.')
             purpose = request.POST.get('purpose', '').strip()
             beneficiary_note = request.POST.get('beneficiary_note', '').strip()
             if not purpose or len(purpose) > 255 or len(beneficiary_note) > 120:
