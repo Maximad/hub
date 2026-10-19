@@ -55,6 +55,9 @@ with sync_playwright() as p:
         page.evaluate('document.activeElement.blur(); window.scrollTo(0, 0)')
         page.wait_for_timeout(500)  # Let responsive layout and sticky navigation settle.
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), 'Page overflows phone viewport'
+        confirmation = page.locator('.consumption-issue-form label').bounding_box()
+        button = page.locator('.consumption-issue-form button').bounding_box()
+        assert button['y'] >= confirmation['y'] + confirmation['height'], 'Confirmation text overlaps issue button'
         page.screenshot(path=str(output / f'consumption-{width}.png'), full_page=True, animations='disabled')
     browser.close()
 print(f'RTL mobile layout and conversion passed; screenshots in {output}')

@@ -95,17 +95,17 @@
               <p class="hub-help-text">الصرف: {{ record.issue_movement.business_date }} · {{ record.issue_movement.approved_by }}</p>
             {% endif %}
             {% if record.can_issue %}
-              <form method="post">
+              <form method="post" class="consumption-issue-form" style="display:grid;gap:.75rem;min-width:0">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="issue">
                 <input type="hidden" name="request_id" value="{{ record.pk }}">
-                <label><input type="checkbox" name="direct_issue_confirmed" value="yes" required> أؤكد صرف هذه الكمية فعلياً، وهي غير مسجلة في طلب بيع أو خصم وصفة.</label>
+                <label style="display:block"><input type="checkbox" name="direct_issue_confirmed" value="yes" required> أؤكد صرف هذه الكمية فعلياً، وهي غير مسجلة في طلب بيع أو خصم وصفة.</label>
                 <button class="hub-button hub-button-primary" type="submit">تأكيد الصرف وخصم المخزون</button>
               </form>
             {% endif %}
             {% if record.can_return %}
               <details><summary>إرجاع أو تصحيح</summary>
-                <form method="post">
+                <form method="post" style="display:grid;gap:.75rem;min-width:0">
                   {% csrf_token %}
                   <input type="hidden" name="action" value="return">
                   <input type="hidden" name="request_id" value="{{ record.pk }}">
@@ -114,7 +114,7 @@
                     <option value="entry_error">تصحيح خصم خاطئ لكامل الكمية</option>
                   </select></label>
                   <label>السبب<input class="hub-input" name="reason" required maxlength="255"></label>
-                  <label><input type="checkbox" name="restoration_confirmed" value="yes" required> أؤكد أن كامل الكمية عادت فعلياً أو لم تُصرف أصلاً. لا أعيد مواد مستهلكة.</label>
+                  <label style="display:block"><input type="checkbox" name="restoration_confirmed" value="yes" required> أؤكد أن كامل الكمية عادت فعلياً أو لم تُصرف أصلاً. لا أعيد مواد مستهلكة.</label>
                   <button class="hub-button" type="submit">إعادة الكمية للمخزون</button>
                 </form>
               </details>
