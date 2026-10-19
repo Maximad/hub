@@ -2,7 +2,7 @@
 
 ## Authority and confirmation state
 
-On **2026-08-11**, owner/finance lead **Maxim Abou Diab** approved D01-D04 and D12-D14. On **2026-08-22**, D07, D08, D09, and D11 were approved for Hub Sweida. D05, D06, and D10 remain **UNCONFIRMED / POSTING BLOCKED**; no policy is implied for them.
+On **2026-08-11**, owner/finance lead **Maxim Abou Diab** approved D01-D04 and D12-D14. On **2026-08-22**, D07, D08, D09, and D11 were approved for Hub Sweida. D05, D06, and D10 financial posting remain **UNCONFIRMED / POSTING BLOCKED**. A limited direct-consumption stock-only exception was approved on 2026-10-19, documented at the end of this file.
 
 The sole operating unit is **Hub Sweida / هَب السويداء**. Approved launch
 accounts use the existing blank/global `business_unit`; rooms are not accounting
@@ -116,3 +116,41 @@ After confirmation, each implementation change must cite decision IDs in its
 migration/rule/test, activate only the approved codes and scopes, and add both a
 successful fixture and rejection fixtures for wrong unit, role, date, state, and
 account. Partial confirmation must not weaken the remaining blocks.
+
+## D10 limited stock-only exception approved 2026-10-19
+
+Maxim Abou Diab explicitly approved the proposed direct-consumption operational
+policy in this session on 2026-10-19. This supersedes the blanket stock prohibition
+only for the service `inventory_consumption_requests.issue_consumption` and its
+linked full reversal. **D10 financial posting remains UNCONFIRMED / BLOCKED**,
+as do D05/D06. Waste, general adjustments, production and the legacy manual
+movement endpoint receive no new authority.
+
+- Existing category/request permissions remain. Inventory-capable admin or owner
+  confirms actual direct issue. A staff-category request cannot be confirmed by
+  its own requester, including a manager; owner personal use can be self-confirmed.
+- Owner-personal records and actions remain owner-only. Issue requires explicit
+  confirmation of physical handover and that it is not a POS/recipe deduction.
+- Lock request and inventory item; deduct exactly once, refuse insufficient stock
+  and changed units. Existing drafts remain unissued until individually confirmed.
+- Use the actual confirmation/return date in the Damascus calendar, never backdate
+  to the draft date. No financial periods are posted or reopened.
+- Preserve the recorded request-time estimate for operational reporting. Missing
+  cost remains unknown. Stock movements carry no recognized financial value.
+- No expense, receivable, owner withdrawal journal, payment, cash or ledger entry.
+  Historical owner-treatment intentions remain informational only; new personal
+  requests need no accounting treatment selection.
+- Authorized admin/owner can restore the full quantity only after explicit physical
+  return or erroneous-deduction confirmation and a mandatory reason. The same
+  privacy/self-consumption authority checks apply. Original movements and review
+  history are preserved; reversal is linked and replay-safe. Partial returns are
+  not supported in this milestone and must not be entered as full returns.
+- Monthly direct-consumption reports group by item, unit and category and include
+  issued/returned quantities and estimated costs on their respective movement
+  dates. Pending/cancelled requests and POS usage are excluded. Generic stock
+  history omits private consumption reasons and categories.
+
+No actual POS order can be attached through this service. Human confirmation is
+required to distinguish an unrecorded physical withdrawal from an unrelated POS
+entry; the system cannot infer that two independently entered physical events
+are the same. Existing POS recipe deduction is unchanged.

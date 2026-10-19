@@ -1637,11 +1637,7 @@ class AuditEvent(models.Model):
 
 
 class InventoryConsumptionRequest(TimeStampedModel):
-    """Unposted physical-use request. NEVER a stock movement, order or ledger row.
-
-    D10 is still unconfirmed: these records may be cancelled but must not be
-    approved/posted until a separate reviewed policy and posting service exist.
-    """
+    """Direct consumption with linked stock-only issue/return; never a ledger entry."""
 
     class Category(models.TextChoices):
         HUB_HOSPITALITY = 'hub_hospitality', 'ضيافة هَب'
@@ -1650,8 +1646,10 @@ class InventoryConsumptionRequest(TimeStampedModel):
         EVENT = 'event', 'ضيافة فعالية أو ترويج'
 
     class State(models.TextChoices):
-        PENDING = 'pending_policy', 'بانتظار السياسة والتسوية'
-        REVIEWED = 'reviewed', 'تمت المراجعة دون خصم المخزون'
+        PENDING = 'pending_policy', 'بانتظار التأكيد'
+        REVIEWED = 'reviewed', 'بانتظار تأكيد الصرف (مراجع سابقاً)'
+        ISSUED = 'issued', 'تم الخصم'
+        REVERSED = 'reversed', 'تمت إعادة الكمية'
         CANCELLED = 'cancelled', 'ملغى دون أثر على المخزون'
 
     inventory_item = models.ForeignKey('InventoryItem', on_delete=models.PROTECT, related_name='consumption_requests')
@@ -1678,17 +1676,20 @@ class InventoryConsumptionRequest(TimeStampedModel):
     cancelled_at = models.DateTimeField(null=True, blank=True)
     cancellation_reason = models.CharField(max_length=255, blank=True)
 
+    issue_movement = models.OneToOneField('StockMovement', null=True, blank=True, on_delete=models.PROTECT, related_name='internal_consumption_issue')
+    reversal_movement = models.OneToOneField('StockMovement', null=True, blank=True, on_delete=models.PROTECT, related_name='internal_consumption_reversal')
+    reversal_kind = models.CharField(max_length=20, blank=True, choices=[('physical_return', 'إرجاع فعلي'), ('entry_error', 'تصحيح خصم خاطئ')])
+
     class Meta:
         ordering = ['-business_date', '-created_at']
         constraints = [
+            models.CheckConstraint(condition=(Q(state__in=['pending_policy', 'reviewed', 'cancelled'], issue_movement__isnull=True, reversal_movement__isnull=True, reversal_kind='') | Q(state='issued', issue_movement__isnull=False, reversal_movement__isnull=True, reversal_kind='') | Q(state='reversed', issue_movement__isnull=False, reversal_movement__isnull=False, reversal_kind__in=['physical_return', 'entry_error'])), name='consumption_stock_state_consistent'),
             models.CheckConstraint(condition=Q(base_quantity__gt=0), name='internal_use_request_quantity_positive'),
             models.CheckConstraint(condition=Q(entered_quantity__gt=0), name='internal_use_request_entered_positive'),
         ]
 
     def clean(self):
         super().clean()
-        if self.category == self.Category.OWNER_PERSONAL and not self.owner_treatment:
-            raise ValidationError('حدد نوع التسوية المقترحة لاستخدام المالك.')
         if self.category != self.Category.OWNER_PERSONAL and self.owner_treatment:
             raise ValidationError('نوع التسوية الشخصية متاح للمالك فقط.')
         if self.category == self.Category.EVENT and not self.event_label:

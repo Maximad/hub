@@ -22,12 +22,14 @@ row = InventoryConsumptionRequest(pk=1, inventory_item=item, requested_by=owner,
     business_date=date.today(), category='staff', entered_quantity=Decimal('1.5'),
     entered_unit='kg', base_quantity=Decimal('1500'), base_unit='g',
     reason='وجبة فريق الورشة', state='pending_policy')
+row.can_issue = True
 request = SimpleNamespace(user=owner, path='/staff/inventory/consumption-requests/',
     resolver_match=SimpleNamespace(url_name='staff_inventory_consumption_requests'))
 html = get_template('staff/inventory_consumption_requests.html').render(dict(
     request=request, items=[item], item=item, rows=[row], units=[('g', 'غ'), ('kg', 'كغ')],
     categories=InventoryConsumptionRequest.Category.choices,
     owner_treatments=OrderConsumption.OwnerTreatment.choices, can_review=True,
+    month=date.today().strftime('%Y-%m'), consumption_totals=[],
     request_key=uuid.uuid4(), csrf_token='synthetic-preview-token'))
 output = Path(os.environ.get('MOBILE_PREVIEW_DIR', '/tmp/hub-consumption-preview'))
 output.mkdir(parents=True, exist_ok=True)
@@ -53,6 +55,9 @@ with sync_playwright() as p:
         page.evaluate('document.activeElement.blur(); window.scrollTo(0, 0)')
         page.wait_for_timeout(500)  # Let responsive layout and sticky navigation settle.
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), 'Page overflows phone viewport'
+        confirmation = page.locator('.consumption-issue-form label').bounding_box()
+        button = page.locator('.consumption-issue-form button').bounding_box()
+        assert button['y'] >= confirmation['y'] + confirmation['height'], 'Confirmation text overlaps issue button'
         page.screenshot(path=str(output / f'consumption-{width}.png'), full_page=True, animations='disabled')
     browser.close()
 print(f'RTL mobile layout and conversion passed; screenshots in {output}')
