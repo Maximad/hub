@@ -70,12 +70,16 @@ def _page(request):
         entry['net'] = entry['issued'] - entry['returned']
     rows = list(rows.order_by('-created_at')[:80])
     for record in rows:
-        record.can_issue = (can_review_consumption_requests(request.user)
-            and record.state in (record.State.PENDING, record.State.REVIEWED)
-            and not (record.category == record.Category.STAFF and record.requested_by_id == request.user.pk))
-        record.can_return = (can_review_consumption_requests(request.user)
-            and record.state == record.State.ISSUED
-            and not (record.category == record.Category.STAFF and record.requested_by_id == request.user.pk))
+        can_authorize = (
+            can_review_consumption_requests(request.user)
+            and (record.requested_by_id != request.user.pk or (
+                request.user.is_superuser and record.category == record.Category.OWNER_PERSONAL
+            ))
+        )
+        record.can_issue = (can_authorize
+            and record.state in (record.State.PENDING, record.State.REVIEWED))
+        record.can_return = (can_authorize
+            and record.state == record.State.ISSUED)
     return render(request, 'staff/inventory_consumption_requests.html', {
         'month': month, 'consumption_totals': list(totals.values()),
         'q': q, 'items': items, 'item': item, 'units': units,
