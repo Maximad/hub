@@ -121,3 +121,10 @@ cashier-vs-direct reconciliation, missing-cost checks, staff policy limits,
 6. Confirm reporting, cutoffs, and exclusion of duplicated POS recipe use.
 
 **No policies are considered approved merely because this document exists.**
+
+## Update 2026-10-19
+
+The stock-only subset was explicitly approved by the owner. See the authoritative
+`D10 limited stock-only exception approved 2026-10-19` section in
+`domain-decisions.md`. The atomic stock-plus-ledger proposal above remains
+unapproved; implementation must not activate its accounting mappings.

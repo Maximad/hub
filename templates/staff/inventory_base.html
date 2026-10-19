@@ -12,7 +12,7 @@
     <a href="{% url 'staff_inventory_home' %}"{% if request.resolver_match.url_name == 'staff_inventory_home' %} aria-current="page"{% endif %}>الملخص</a>
     <a href="{% url 'staff_inventory_items' %}"{% if request.resolver_match.url_name == 'staff_inventory_items' %} aria-current="page"{% endif %}>المواد</a>
     {% if staff_caps.inventory_stock_count %}<a href="{% url 'staff_inventory_stock_count' %}"{% if request.resolver_match.url_name == 'staff_inventory_stock_count' %} aria-current="page"{% endif %}>جرد المخزون</a>{% endif %}
-    <a href="{% url 'staff_inventory_consumption_requests' %}"{% if request.resolver_match.url_name == 'staff_inventory_consumption_requests' %} aria-current="page"{% endif %}>طلبات الاستهلاك (غير مخصومة)</a>
+    <a href="{% url 'staff_inventory_consumption_requests' %}"{% if request.resolver_match.url_name == 'staff_inventory_consumption_requests' %} aria-current="page"{% endif %}>الاستهلاك الداخلي</a>
     <a href="{% url 'staff_inventory_low_stock' %}"{% if request.resolver_match.url_name == 'staff_inventory_low_stock' %} aria-current="page"{% endif %}>النواقص</a>
     <a href="{% url 'staff_inventory_purchases' %}"{% if request.resolver_match.url_name == 'staff_inventory_purchases' %} aria-current="page"{% endif %}>المشتريات</a>
   </nav>

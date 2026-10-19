@@ -185,7 +185,7 @@ class UnpostedDirectConsumptionTests(TestCase):
         self.assert_no_operational_posting()
 
     def test_explicit_declaration_required_for_owner_reimbursement_and_event(self):
-        self.submit(category='owner_personal', owner_treatment='')
+        self.submit(category='owner_personal', owner_treatment='invalid')
         self.submit(category='event', event_label='')
         self.assertEqual(InventoryConsumptionRequest.objects.count(), 0)
         self.assert_no_operational_posting()

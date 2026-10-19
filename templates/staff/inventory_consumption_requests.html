@@ -1,14 +1,13 @@
 {% extends "staff/inventory_base.html" %}
-{% block title %}طلبات الاستهلاك الداخلي{% endblock %}
+{% block title %}تسجيل استهلاك داخلي{% endblock %}
 {% block inventory_content %}
 <section class="hub-card hub-section" dir="rtl" aria-labelledby="consumption-title">
-  <h2 id="consumption-title" class="hub-section-title">طلبات الاستهلاك الداخلي</h2>
+  <h2 id="consumption-title" class="hub-section-title">تسجيل استهلاك داخلي</h2>
   <div class="hub-message hub-message-warning" role="status">
-    <strong>المعاملات هنا مسودات بانتظار سياسة D10.</strong>
-    لن يؤدي تقديم طلب إلى خصم المخزون أو إنشاء قيد محاسبي أو تسوية مع المالك.
-    الرصيد المعروض تقديري لحظة الطلب، وليس كمية محجوزة.
+    <strong>يُخصم المخزون عند تأكيد الصرف الفعلي.</strong>
+    حفظ الطلب وحده لا يغيّر الرصيد. لا تُنشأ دفعة نقدية أو قيود مالية.
   </div>
-  <p class="hub-help-text">إذا تم أخذ المادة فعلياً، فسجّل الطلب للمراجعة التشغيلية ولا تعتبر أن رصيد المخزون قد تحدّث. يجب استكمال قرار الاعتماد والتسوية قبل تفعيل الحركات الفعلية.</p>
+  <p class="hub-help-text">للمواد المسحوبة مباشرة من المخزون. القهوة والوجبات المسجلة ضمن طلبات نقطة البيع تُعالج هناك، ولا تسجلها مرة ثانية هنا.</p>
   <form method="get" class="hub-form-section" style="max-width:550px">
     <label>ابحث عن المادة
       <input class="hub-input" type="search" name="q" value="{{ q }}" placeholder="اسم المادة أو الكود" maxlength="70">
@@ -34,7 +33,7 @@
 </section>
 {% if item %}
 <section class="hub-card hub-section" dir="rtl">
-  <h3>طلب مسودة: {{ item.name_ar }}</h3>
+  <h3>طلب صرف: {{ item.name_ar }}</h3>
   <p class="hub-help-text">وحدة المخزون: {{ item.get_unit_display }} · الرصيد المسجل {{ item.current_quantity }} {{ item.get_unit_display }}</p>
   <form method="post" class="hub-form hub-form-section" style="max-width:550px">
     {% csrf_token %}
@@ -62,16 +61,6 @@
         {% endfor %}
       </select>
     </label>
-    {% if request.user.is_superuser %}
-    <label>التسوية المقترحة إن كان استخداماً شخصياً للمالك
-      <select class="hub-input" name="owner_treatment">
-        <option value="">لا ينطبق</option>
-        {% for value, label in owner_treatments %}
-        <option value="{{ value }}">{{ label }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    {% endif %}
     <label>اسم الفعالية (فقط إذا كان الاستخدام للفعالية)
       <input class="hub-input" name="event_label" maxlength="120" placeholder="اختياري لغير الفعاليات: اتركه فارغاً">
     </label>
@@ -81,13 +70,13 @@
     <label>ملاحظة المستفيد (اختياري)
       <input class="hub-input" name="beneficiary_note" maxlength="120" placeholder="لا يلزم تسجيل بيانات شخصية">
     </label>
-    <button class="hub-button hub-button-primary" type="submit">حفظ طلب للمراجعة دون خصم المخزون</button>
+    <button class="hub-button hub-button-primary" type="submit">إرسال طلب للتأكيد</button>
   </form>
 </section>
 {% endif %}
 <section class="hub-card hub-section" dir="rtl">
-  <h3>السجل التشغيلي (غير مرحّل إلى المخزون)</h3>
-  <p class="hub-help-text">آخر 80 طلباً متاحاً لك. قد تتغير الكلفة التقديرية، ولا تُحسب مبالغ هذه الطلبات كمصروفات أو سحب مالك.</p>
+  <h3>سجل الاستهلاك</h3>
+  <p class="hub-help-text">آخر 80 طلباً متاحاً لك. الكلفة تقديرية محفوظة عند إنشاء الطلب، وليست مصروفاً محاسبياً أو ديناً على المالك.</p>
   <div class="hub-table-wrap">
     <table class="hub-table">
       <thead><tr><th>التاريخ</th><th>المادة</th><th>النوع</th><th>الكمية بعد التحويل</th><th>التكلفة التقديرية</th><th>الحالة</th><th>الإجراء</th></tr></thead>
@@ -102,23 +91,43 @@
           <td>{{ record.get_state_display }}</td>
           <td>
             {% if record.reviewed_at %}<p class="hub-help-text">{{ record.review_note }} · {{ record.reviewed_by }} · {{ record.reviewed_at }}</p>{% endif %}
-            {% if record.state == "pending_policy" and can_review %}
+            {% if record.issue_movement_id %}
+              <p class="hub-help-text">الصرف: {{ record.issue_movement.business_date }} · {{ record.issue_movement.approved_by }}</p>
+            {% endif %}
+            {% if record.can_issue %}
               <form method="post">
                 {% csrf_token %}
-                <input type="hidden" name="action" value="review">
+                <input type="hidden" name="action" value="issue">
                 <input type="hidden" name="request_id" value="{{ record.pk }}">
-                <label>ملاحظة المراجعة<input class="hub-input" name="review_note" required maxlength="255"></label>
-                <button class="hub-button" type="submit">مراجعة فقط دون خصم</button>
+                <label><input type="checkbox" name="direct_issue_confirmed" value="yes" required> أؤكد صرف هذه الكمية فعلياً، وهي غير مسجلة في طلب بيع أو خصم وصفة.</label>
+                <button class="hub-button hub-button-primary" type="submit">تأكيد الصرف وخصم المخزون</button>
               </form>
             {% endif %}
-            {% if record.state != "cancelled" %}
+            {% if record.can_return %}
+              <details><summary>إرجاع أو تصحيح</summary>
+                <form method="post">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="return">
+                  <input type="hidden" name="request_id" value="{{ record.pk }}">
+                  <label>نوع التصحيح<select class="hub-input" name="kind" required>
+                    <option value="physical_return">إرجاع فعلي لكامل الكمية</option>
+                    <option value="entry_error">تصحيح خصم خاطئ لكامل الكمية</option>
+                  </select></label>
+                  <label>السبب<input class="hub-input" name="reason" required maxlength="255"></label>
+                  <label><input type="checkbox" name="restoration_confirmed" value="yes" required> أؤكد أن كامل الكمية عادت فعلياً أو لم تُصرف أصلاً. لا أعيد مواد مستهلكة.</label>
+                  <button class="hub-button" type="submit">إعادة الكمية للمخزون</button>
+                </form>
+              </details>
+            {% endif %}
+            {% if record.reversal_movement_id %}<p class="hub-help-text">{{ record.get_reversal_kind_display }}: {{ record.reversal_movement.business_date }}</p>{% endif %}
+            {% if record.state == "pending_policy" or record.state == "reviewed" %}
               {% if request.user.is_superuser or record.requested_by_id == request.user.pk %}
               <form method="post">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="cancel">
                 <input type="hidden" name="request_id" value="{{ record.pk }}">
                 <input class="hub-input" name="cancellation_reason" required maxlength="255" placeholder="سبب الإلغاء">
-                <button class="hub-button" type="submit">إلغاء المسودة</button>
+                <button class="hub-button" type="submit">إلغاء الطلب</button>
               </form>
               {% endif %}
             {% endif %}
@@ -128,6 +137,19 @@
       </tbody>
     </table>
   </div>
+</section>
+<section class="hub-card hub-section" dir="rtl">
+  <h3>تقرير الاستهلاك المباشر الشهري</h3>
+  <form method="get"><label>الشهر<input class="hub-input" type="month" name="month" value="{{ month }}" required></label><button class="hub-button" type="submit">عرض التقرير</button></form>
+  <p class="hub-help-text">حسب تاريخ الصرف والإرجاع، دون الطلبات المعلقة ودون استهلاك نقطة البيع. المبالغ تقديرات فقط. الإرجاع في شهر لاحق يظهر في شهر الإرجاع.</p>
+  <div class="hub-table-wrap"><table class="hub-table">
+    <thead><tr><th>المادة</th><th>الغرض</th><th>المصروف</th><th>المعاد</th><th>الصافي</th><th>صافي الكلفة التقديرية</th></tr></thead>
+    <tbody>{% for total in consumption_totals %}<tr>
+      <td>{{ total.name }}</td><td>{{ total.category }}</td>
+      <td>{{ total.issued }} {{ total.unit }}</td><td>{{ total.returned }} {{ total.unit }}</td><td>{{ total.net }} {{ total.unit }}</td>
+      <td>{% if total.unknown %}غير مكتملة: {{ total.unknown }} حركة بكلفة مجهولة{% else %}{{ total.cost }} ل.س{% endif %}</td>
+    </tr>{% empty %}<tr><td colspan="6">لا توجد حركات صرف أو إرجاع في هذا الشهر.</td></tr>{% endfor %}</tbody>
+  </table></div>
 </section>
 <script>
 (function () {

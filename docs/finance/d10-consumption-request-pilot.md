@@ -86,3 +86,11 @@ Validation includes role and privacy boundaries, the review/cancel lifecycle,
 whole bottles, event references, concurrent duplicate creation and review, and
 unchanged stock/ledger balances. Full PostgreSQL CI and narrow-screen Arabic
 review remain release gates. Do not merge or deploy automatically.
+
+## Operational upgrade approved 2026-10-19
+
+The draft-only pilot is superseded by the limited stock-only policy in
+`domain-decisions.md`. The same URL now supports actual issue confirmation,
+linked full return/correction and monthly direct-consumption reporting. Existing
+requests are not auto-issued. Review-only history remains readable; new actions
+use explicit issue confirmation. No financial posting is authorized.

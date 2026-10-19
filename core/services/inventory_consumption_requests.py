@@ -1,7 +1,6 @@
-"""Prepare and cancel unposted physical internal-use requests.
+"""Direct consumption. D10 stock-only exception approved 2026-10-19.
 
-D10 remains BLOCKED. Never call StockMovement.apply_to_stock, cash posting,
-journal posting, recipe deduction or the old disabled manual movement handler.
+Financial posting, recipe deduction and the legacy movement endpoint remain blocked.
 """
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import uuid
@@ -13,7 +12,7 @@ from django.utils import timezone
 from accounts.permissions import can_approve_partial_payment, user_has_capability, is_owner_or_admin
 from core.models import (
     ActivityLog, AuditEvent, InventoryConsumptionRequest, InventoryItem,
-    OrderConsumption,
+    OrderConsumption, StockMovement,
 )
 from core.services.inventory_unit_entry import to_base_quantity
 
@@ -51,7 +50,7 @@ def request_inventory_consumption(*, actor, item_id, quantity, unit, category,
     if len(beneficiary_note) > 120 or len(event_label) > 120:
         raise ValidationError('الملاحظة أو اسم الفعالية أطول من الحد المسموح.')
     if category == InventoryConsumptionRequest.Category.OWNER_PERSONAL:
-        if owner_treatment not in OrderConsumption.OwnerTreatment.values:
+        if owner_treatment and owner_treatment not in OrderConsumption.OwnerTreatment.values:
             raise ValidationError('حدد نية تسوية الاستخدام الشخصي للمالك.')
     elif owner_treatment:
         raise ValidationError('لا تُستخدم خيارات حساب المالك لهذا النوع.')
@@ -126,11 +125,11 @@ def request_inventory_consumption(*, actor, item_id, quantity, unit, category,
                 'base_quantity': str(canonical_qty), 'base_unit': item.unit,
                 'estimated_cost_syp': str(cost_total) if cost_total is not None else None,
                 'state': record.state, 'stock_effect': False, 'accounting_effect': False,
-                'policy': 'D10 BLOCKED',
+                'policy': 'D10 financial posting blocked; request unissued',
             }, request_key=f'inventory-use-request:{key}', channel='staff-inventory',
         )
         ActivityLog.objects.create(actor=actor, action='inventory_consumption_request_created',
-                                   details={'request_id': record.pk, 'policy': 'D10 BLOCKED'})
+                                   details={'request_id': record.pk, 'policy': 'D10 financial posting blocked; request unissued'})
         return record, True
 
 
@@ -205,5 +204,96 @@ def review_consumption_request(*, actor, request_id, note):
             request_key=f'inventory-use-review:{record.pk}', channel='staff-inventory',
         )
         ActivityLog.objects.create(actor=actor, action='inventory_consumption_request_reviewed',
-                                   details={'request_id': record.pk, 'policy': 'D10 BLOCKED'})
+                                   details={'request_id': record.pk, 'policy': 'D10 financial posting blocked; request unissued'})
+        return record, True
+
+
+def _require_stock_authority(actor, record):
+    if not can_review_consumption_requests(actor):
+        raise PermissionDenied('تأكيد الصرف والإرجاع متاح للإدارة فقط.')
+    if record.category == record.Category.OWNER_PERSONAL and not actor.is_superuser:
+        raise PermissionDenied('هذا الطلب خاص بالمالك.')
+    if record.category == record.Category.STAFF and record.requested_by_id == actor.pk:
+        raise PermissionDenied('يجب أن يؤكد شخص آخر استهلاكك كموظف.')
+
+
+def issue_consumption(*, actor, request_id, direct_issue_confirmed=False):
+    """Confirm actual non-POS issue once. Request lock precedes item lock."""
+    with transaction.atomic():
+        record = InventoryConsumptionRequest.objects.select_for_update().get(pk=request_id)
+        _require_stock_authority(actor, record)
+        if direct_issue_confirmed is not True:
+            raise ValidationError('أكد الصرف الفعلي وأنه غير مسجل ضمن طلب بيع أو وصفة.')
+        # Replaying an old issue after return must never deduct again.
+        if record.issue_movement_id:
+            return record, False
+        if record.state not in (record.State.PENDING, record.State.REVIEWED):
+            raise ValidationError('لا يمكن صرف طلب ملغى.')
+        item = InventoryItem.objects.select_for_update().get(pk=record.inventory_item_id)
+        if not item.is_active or item.unit != record.base_unit:
+            raise ValidationError('المادة غير فعالة أو تغيرت وحدتها. ألغ الطلب وأنشئ طلباً صحيحاً.')
+        if record.base_quantity > item.current_quantity:
+            raise ValidationError('الرصيد الحالي غير كاف. لم تُخصم أي كمية.')
+        previous_state = record.state
+        movement = StockMovement(
+            inventory_item=item, business_date=timezone.localdate(),
+            movement_type=StockMovement.MovementType.INTERNAL_USE,
+            direction=StockMovement.Direction.OUT, quantity=record.base_quantity,
+            unit=record.base_unit, reason='صرف استهلاك داخلي',
+            created_by=record.requested_by, approved_by=actor,
+            # Estimates live on the private request, not as recognized stock value.
+            unit_cost_syp=None, total_value_syp=None,
+        )
+        movement.full_clean()
+        movement.save()
+        movement.apply_to_stock()
+        record.issue_movement = movement
+        record.state = record.State.ISSUED
+        record.save(update_fields=['issue_movement', 'state', 'updated_at'])
+        AuditEvent.objects.create(source=record, actor=actor,
+            action='inventory_consumption_issued',
+            before_snapshot={'state': previous_state},
+            after_snapshot={'state': record.state, 'movement_id': movement.pk,
+                            'quantity': str(record.base_quantity), 'unit': record.base_unit,
+                            'direct_non_pos_confirmed': True, 'accounting_effect': False},
+            request_key=f'inventory-use-issue:{record.pk}', channel='staff-inventory')
+        return record, True
+
+
+def reverse_consumption(*, actor, request_id, reason, kind, restoration_confirmed=False):
+    """Full return/correction only. Never delete or edit the original movement."""
+    if kind not in ('physical_return', 'entry_error'):
+        raise ValidationError('اختر إرجاعاً فعلياً أو تصحيح خصم خاطئ.')
+    reason = (reason or '').strip()
+    if not reason or len(reason) > 255 or restoration_confirmed is not True:
+        raise ValidationError('سبب واضح وتأكيد استحقاق إعادة كامل الكمية مطلوبان.')
+    with transaction.atomic():
+        record = InventoryConsumptionRequest.objects.select_for_update().get(pk=request_id)
+        _require_stock_authority(actor, record)
+        if record.reversal_movement_id:
+            return record, False
+        if record.state != record.State.ISSUED or not record.issue_movement_id:
+            raise ValidationError('الإرجاع متاح لعملية صرف مؤكدة فقط.')
+        item = InventoryItem.objects.select_for_update().get(pk=record.inventory_item_id)
+        if item.unit != record.base_unit:
+            raise ValidationError('تغيرت وحدة المادة. يلزم مراجعة المخزون قبل الإرجاع.')
+        movement = StockMovement(inventory_item=item, business_date=timezone.localdate(),
+            movement_type=StockMovement.MovementType.CORRECTION,
+            direction=StockMovement.Direction.IN, quantity=record.base_quantity,
+            unit=record.base_unit, reason='إعادة كمية استهلاك داخلي موثقة',
+            created_by=actor, approved_by=actor)
+        movement.full_clean()
+        movement.save()
+        movement.apply_to_stock()
+        record.reversal_movement = movement
+        record.reversal_kind = kind
+        record.state = record.State.REVERSED
+        record.save(update_fields=['reversal_movement', 'reversal_kind', 'state', 'updated_at'])
+        AuditEvent.objects.create(source=record, actor=actor,
+            action='inventory_consumption_reversed',
+            before_snapshot={'state': record.State.ISSUED, 'movement_id': record.issue_movement_id},
+            after_snapshot={'state': record.state, 'movement_id': movement.pk,
+                            'reason': reason, 'kind': kind, 'restoration_confirmed': True,
+                            'accounting_effect': False},
+            request_key=f'inventory-use-reverse:{record.pk}', channel='staff-inventory')
         return record, True
