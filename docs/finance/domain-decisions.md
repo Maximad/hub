@@ -127,8 +127,9 @@ as do D05/D06. Waste, general adjustments, production and the legacy manual
 movement endpoint receive no new authority.
 
 - Existing category/request permissions remain. Inventory-capable admin or owner
-  confirms actual direct issue. A staff-category request cannot be confirmed by
-  its own requester, including a manager; owner personal use can be self-confirmed.
+  confirms actual direct issue. A request in any category cannot be confirmed
+  or reversed by its own requester, including a manager; the superuser owner
+  may confirm and reverse only their own private owner-personal use.
 - Owner-personal records and actions remain owner-only. Issue requires explicit
   confirmation of physical handover and that it is not a POS/recipe deduction.
 - Lock request and inventory item; deduct exactly once, refuse insufficient stock

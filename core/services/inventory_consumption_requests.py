@@ -213,8 +213,12 @@ def _require_stock_authority(actor, record):
         raise PermissionDenied('تأكيد الصرف والإرجاع متاح للإدارة فقط.')
     if record.category == record.Category.OWNER_PERSONAL and not actor.is_superuser:
         raise PermissionDenied('هذا الطلب خاص بالمالك.')
-    if record.category == record.Category.STAFF and record.requested_by_id == actor.pk:
-        raise PermissionDenied('يجب أن يؤكد شخص آخر استهلاكك كموظف.')
+    # Separation of duties applies to every category, not just staff meals.
+    # The owner may authorize their own private personal use only.
+    if record.requested_by_id == actor.pk and not (
+        actor.is_superuser and record.category == record.Category.OWNER_PERSONAL
+    ):
+        raise PermissionDenied('يجب أن يؤكد شخص آخر الطلب الذي أنشأته.')
 
 
 def issue_consumption(*, actor, request_id, direct_issue_confirmed=False):

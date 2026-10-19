@@ -83,6 +83,37 @@ class ConsumptionStockTests(StockFixtures, TestCase):
                 self.issue(own, actor=actor)
         self.assertFalse(StockMovement.objects.exists())
 
+    def test_manager_cannot_approve_or_return_own_hospitality_or_event_requests(self):
+        for category, extras in (
+            ('hub_hospitality', {}),
+            ('event', {'event_label': 'ورشة'}),
+        ):
+            with self.subTest(category=category):
+                record = self.draft(actor=self.manager, category=category, **extras)
+                with self.assertRaises(PermissionDenied):
+                    self.issue(record, actor=self.manager)
+                self.client.force_login(self.manager)
+                page = self.client.get(self.url)
+                visible = next(r for r in page.context['rows'] if r.pk == record.pk)
+                self.assertFalse(visible.can_issue)
+                self.issue(record, actor=self.owner)
+                page = self.client.get(self.url)
+                visible = next(r for r in page.context['rows'] if r.pk == record.pk)
+                self.assertFalse(visible.can_return)
+                with self.assertRaises(PermissionDenied):
+                    self.restore(record, actor=self.manager)
+                self.restore(record, actor=self.owner)
+        self.assert_finance_untouched()
+
+    def test_superuser_cannot_approve_own_hub_hospitality(self):
+        record = self.draft(actor=self.owner, category='hub_hospitality')
+        with self.assertRaises(PermissionDenied):
+            self.issue(record, actor=self.owner)
+        self.client.force_login(self.owner)
+        row = next(r for r in self.client.get(self.url).context['rows'] if r.pk == record.pk)
+        self.assertFalse(row.can_issue)
+        self.assert_finance_untouched()
+
     def test_owner_personal_is_private_and_self_confirmable_without_treatment(self):
         record = self.draft(actor=self.owner, category='owner_personal')
         with self.assertRaises(PermissionDenied):
