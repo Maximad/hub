@@ -146,6 +146,7 @@ class OperationalTaskTests(TestCase):
         sync_business_day_tasks(day, actor=self.admin)
         task = day.tasks.get(fingerprint='inventory:low-stock-review')
         self.assertEqual(task.kind, BusinessDayTask.Kind.INVENTORY)
+        self.assertIsNone(task.due_at)  # no manager-wide overdue reminder flood
         self.assertIn(item.pk, task.metadata['item_ids'])
 
         item.current_quantity = Decimal('5.000')
