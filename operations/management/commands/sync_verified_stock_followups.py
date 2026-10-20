@@ -6,6 +6,7 @@ and ActivityLog. Never creates inventory movements or financial transactions.
 from __future__ import annotations
 
 from django.core.management.base import BaseCommand, CommandError
+from django.contrib.auth import get_user_model
 from django.db import transaction
 
 from core.models import ActivityLog, InventoryItem
@@ -49,7 +50,7 @@ def _assignee(day):
     return None
 
 
-def _synchronize(day, ids, *, apply):
+def _synchronize(day, ids, *, apply, actor):
     from django.utils import timezone
 
     items = list(InventoryItem.objects.filter(pk__in=ids, is_active=True).order_by("pk"))
@@ -74,6 +75,7 @@ def _synchronize(day, ids, *, apply):
                         "status", "completion_note", "completed_at", "updated_at",
                     ])
                     ActivityLog.objects.create(
+                        actor=actor,
                         action="stock_followup.resolved",
                         details={"business_day_id": day.pk, "item_id": item.pk, "task_id": task.pk},
                     )
@@ -101,6 +103,7 @@ def _synchronize(day, ids, *, apply):
                     metadata={"origin": "verified-stock-pilot", "reason": "needs_count"},
                 )
                 ActivityLog.objects.create(
+                    actor=actor,
                     action="stock_followup.created",
                     details={
                         "business_day_id": day.pk, "item_id": item.pk, "task_id": task.pk,
@@ -129,14 +132,24 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--ids", required=True, help="1-10 actual inventory IDs separated by commas")
         parser.add_argument("--apply", action="store_true", help="Commit bounded tasks; defaults to no writes")
+        parser.add_argument("--actor", help="Existing active staff operator for audited apply")
 
     def handle(self, *args, **options):
         ids = _parse_ids(options["ids"])
+        actor = None
+        if options["apply"]:
+            if not options.get("actor"):
+                raise CommandError("--apply requires --actor")
+            actor = get_user_model().objects.filter(
+                username=options["actor"], is_active=True, is_staff=True,
+            ).first()
+            if actor is None or not (actor.is_superuser or getattr(actor, "role", "") in {"admin", "cashier"}):
+                raise CommandError("Actor must be an active authorized manager")
         with transaction.atomic():
             day = _active_day()
             if day is None:
                 raise CommandError("No open Business Day; first open and roster the operating day")
-            results = _synchronize(day, ids, apply=options["apply"])
+            results = _synchronize(day, ids, apply=options["apply"], actor=actor)
             if not options["apply"]:
                 transaction.set_rollback(True)
         self.stdout.write("APPLIED" if options["apply"] else "PREVIEW ONLY")
