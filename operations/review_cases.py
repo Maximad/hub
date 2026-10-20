@@ -13,7 +13,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from accounts.permissions import user_has_capability
-from core.models import ActivityLog, InternetSession, InventoryItem, Order, OrderItem, Product, StockMovement
+from core.models import ActivityLog, InternetSession, InventoryItem, Order, OrderItem, Product, Purchase, PurchaseReceipt, StockMovement, OperationsImportReceipt
 from internet.models import InternetSessionNetworkOperation
 from internet.session_network_backends import PROVISION_ERROR
 from core.services.operational_completeness import counted_inventory_ids, recipe_completeness
@@ -28,24 +28,27 @@ ISSUE_TITLES = {
     OperationalReviewCase.IssueCode.RECIPE_REVIEW: "مراجعة وصفة",
     OperationalReviewCase.IssueCode.PRICE_REVIEW: "اعتماد سعر",
     OperationalReviewCase.IssueCode.NETWORK_REVIEW: "متابعة اتصال الإنترنت",
+    OperationalReviewCase.IssueCode.RECEIPT_REVIEW: "مراجعة مستند استلام شراء",
 }
 SOURCE_CAPABILITIES = {
     OperationalReviewCase.IssueCode.NEEDS_COUNT: "inventory_stock_count",
     OperationalReviewCase.IssueCode.RECIPE_REVIEW: "inventory",
     OperationalReviewCase.IssueCode.PRICE_REVIEW: "inventory",
     OperationalReviewCase.IssueCode.NETWORK_REVIEW: "internet_billing",
+    OperationalReviewCase.IssueCode.RECEIPT_REVIEW: "inventory",
 }
 
 
-def _candidate_ids(*, product_ids, inventory_ids, internet_ids=None, include_recent, limit):
+def _candidate_ids(*, product_ids, inventory_ids, internet_ids=None, purchase_ids=None, include_recent, limit):
     if not 1 <= limit <= 30:
         raise ValidationError("حد المراجعات يجب أن يكون بين 1 و30.")
     given_products = {int(pk) for pk in (product_ids or [])}
     given_inventory = {int(pk) for pk in (inventory_ids or [])}
     given_internet = {int(pk) for pk in (internet_ids or [])}
-    if any(pk < 1 for pk in given_products | given_inventory | given_internet):
+    given_purchases = {int(pk) for pk in (purchase_ids or [])}
+    if any(pk < 1 for pk in given_products | given_inventory | given_internet | given_purchases):
         raise ValidationError("معرّفات المواد والمنتجات يجب أن تكون موجبة.")
-    if len(given_products) + len(given_inventory) + len(given_internet) > limit:
+    if len(given_products) + len(given_inventory) + len(given_internet) + len(given_purchases) > limit:
         raise ValidationError("اختر مجموعة أصغر، بما لا يتجاوز حد المراجعات.")
     if include_recent:
         since = timezone.now() - timedelta(days=14)
@@ -66,11 +69,11 @@ def _candidate_ids(*, product_ids, inventory_ids, internet_ids=None, include_rec
             )
             .values_list("inventory_item_id", flat=True).distinct().order_by("inventory_item_id")
         )
-        slots = limit - len(given_products) - len(given_inventory) - len(given_internet)
+        slots = limit - len(given_products) - len(given_inventory) - len(given_internet) - len(given_purchases)
         for pk in operational_orders[:slots]:
             if pk not in given_products:
                 given_products.add(pk)
-        slots = limit - len(given_products) - len(given_inventory) - len(given_internet)
+        slots = limit - len(given_products) - len(given_inventory) - len(given_internet) - len(given_purchases)
         if slots:
             for pk in receipts[:slots]:
                 if pk not in given_inventory:
@@ -79,7 +82,7 @@ def _candidate_ids(*, product_ids, inventory_ids, internet_ids=None, include_rec
         # Only durable recent *actual* failed provision operations. No imports,
         # stale legacy sessions or raw error strings enter the follow-up.
         since = timezone.now() - timedelta(days=14)
-        slots = limit - len(given_products) - len(given_inventory) - len(given_internet)
+        slots = limit - len(given_products) - len(given_inventory) - len(given_internet) - len(given_purchases)
         if slots:
             failures = (
                 InternetSessionNetworkOperation.objects.filter(
@@ -94,7 +97,17 @@ def _candidate_ids(*, product_ids, inventory_ids, internet_ids=None, include_rec
             )
             for pk in failures[:slots]:
                 given_internet.add(pk)
-    return given_products, given_inventory, given_internet
+    # Purchase candidates are deliberately explicit only: a recent creation
+    # date alone cannot distinguish a real receipt from reconstructed notebooks.
+    return given_products, given_inventory, given_internet, given_purchases
+
+
+def _review_source_label(kind, source):
+    if kind == OperationalReviewCase.SourceType.INTERNET_SESSION:
+        return f"جلسة إنترنت #{source.pk}"
+    if kind == OperationalReviewCase.SourceType.PURCHASE:
+        return f"شراء مستلم #{source.pk}"
+    return source.name_ar
 
 
 def case_spec(kind, source):
@@ -111,6 +124,28 @@ def case_spec(kind, source):
         if source.requires_preparation and recipe_completeness(source)["state"] != "operational_ready":
             issues.add(OperationalReviewCase.IssueCode.RECIPE_REVIEW)
         return issues
+    if kind == OperationalReviewCase.SourceType.PURCHASE:
+        # Only an actual unreversed receipt is eligible. A notebook-imported
+        # purchase must not enter the current-operations review queue.
+        if OperationsImportReceipt.objects.filter(purchase=source).exists():
+            return set()
+        if not PurchaseReceipt.objects.filter(
+            purchase=source, reversed_at__isnull=True, lines__isnull=False,
+        ).exists():
+            return set()
+        missing_supplier = not (source.vendor_id or (source.supplier_name or '').strip())
+        # Check the posted receiving movement, not a mutable PurchaseItem price:
+        # editing an old item cannot silently certify an already posted receipt.
+        zero_receipt_cost = StockMovement.objects.filter(
+            related_purchase=source,
+            movement_type=StockMovement.MovementType.PURCHASE_RECEIVED,
+            purchase_receipt_line__receipt__reversed_at__isnull=True,
+            is_cancelled=False,
+            unit_cost_syp__lte=0,
+        ).exists()
+        return {OperationalReviewCase.IssueCode.RECEIPT_REVIEW} if (
+            missing_supplier or zero_receipt_cost
+        ) else set()
     if kind == OperationalReviewCase.SourceType.INTERNET_SESSION:
         # Network provisioning failure is supported by the durable outbox,
         # not by a guessed session age, billing status, or text in operator
@@ -184,7 +219,7 @@ def _project(day, case):
 
 
 def sync_operational_review_cases(
-    day, *, actor=None, product_ids=None, inventory_ids=None, internet_ids=None,
+    day, *, actor=None, product_ids=None, inventory_ids=None, internet_ids=None, purchase_ids=None,
     include_recent=True, limit=20, dry_run=True,
 ):
     """Review at most 30 NEW sources plus existing open cases, atomically.
@@ -194,8 +229,9 @@ def sync_operational_review_cases(
     """
     if day.status not in LIVE_STATUSES:
         raise ValidationError("حالات المتابعة تتطلب يوم تشغيل مفتوح.")
-    ids_product, ids_inventory, ids_internet = _candidate_ids(
+    ids_product, ids_inventory, ids_internet, ids_purchase = _candidate_ids(
         product_ids=product_ids, inventory_ids=inventory_ids, internet_ids=internet_ids,
+        purchase_ids=purchase_ids,
         include_recent=include_recent, limit=limit,
     )
     objects = {}
@@ -205,7 +241,9 @@ def sync_operational_review_cases(
         objects[(OperationalReviewCase.SourceType.INVENTORY, obj.pk)] = obj
     for obj in InternetSession.objects.filter(pk__in=ids_internet):
         objects[(OperationalReviewCase.SourceType.INTERNET_SESSION, obj.pk)] = obj
-    if (len(ids_product) + len(ids_inventory) + len(ids_internet)) != len(objects):
+    for obj in Purchase.objects.filter(pk__in=ids_purchase):
+        objects[(OperationalReviewCase.SourceType.PURCHASE, obj.pk)] = obj
+    if (len(ids_product) + len(ids_inventory) + len(ids_internet) + len(ids_purchase)) != len(objects):
         raise ValidationError("هناك منتج أو مادة غير موجودة، لم ننشئ أي مراجعة.")
 
     # Re-evaluate only cases already tracked, rather than scanning all stock.
@@ -222,12 +260,17 @@ def sync_operational_review_cases(
         extra_internet = InternetSession.objects.filter(
             pk__in=[pk for kind, pk in missing if kind == OperationalReviewCase.SourceType.INTERNET_SESSION]
         )
+        extra_purchases = Purchase.objects.filter(
+            pk__in=[pk for kind, pk in missing if kind == OperationalReviewCase.SourceType.PURCHASE]
+        )
         for obj in extra_products:
             objects[(OperationalReviewCase.SourceType.PRODUCT, obj.pk)] = obj
         for obj in extra_inventory:
             objects[(OperationalReviewCase.SourceType.INVENTORY, obj.pk)] = obj
         for obj in extra_internet:
             objects[(OperationalReviewCase.SourceType.INTERNET_SESSION, obj.pk)] = obj
+        for obj in extra_purchases:
+            objects[(OperationalReviewCase.SourceType.PURCHASE, obj.pk)] = obj
 
     counts = {"created": 0, "resolved": 0, "reopened": 0, "unchanged": 0, "task_created": 0}
     changes = []
@@ -248,7 +291,7 @@ def sync_operational_review_cases(
             if case is None:
                 case = OperationalReviewCase.objects.create(
                     source_type=kind, source_id=pk, issue_code=issue,
-                    source_label=(f"جلسة إنترنت #{pk}" if kind == OperationalReviewCase.SourceType.INTERNET_SESSION else source.name_ar),
+                    source_label=_review_source_label(kind, source),
                     evidence={"source": "recent_actual_operation_or_selected_record"},
                 )
                 existing[(kind, pk, issue)] = case
@@ -257,7 +300,7 @@ def sync_operational_review_cases(
             elif case.status != desired:
                 case.status = desired
                 case.resolved_at = timezone.now() if desired == OperationalReviewCase.Status.RESOLVED else None
-                case.source_label = (f"جلسة إنترنت #{pk}" if kind == OperationalReviewCase.SourceType.INTERNET_SESSION else source.name_ar)
+                case.source_label = _review_source_label(kind, source)
                 case.save(update_fields=["status", "resolved_at", "source_label", "reviewed_at"])
                 action = "resolved" if desired == OperationalReviewCase.Status.RESOLVED else "reopened"
                 counts[action] += 1
