@@ -19,6 +19,7 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('--product-id', type=int, action='append', default=[])
         parser.add_argument('--inventory-id', type=int, action='append', default=[])
+        parser.add_argument('--internet-session-id', type=int, action='append', default=[])
         parser.add_argument('--limit', type=int, default=20)
         parser.add_argument('--no-recent', action='store_true')
         parser.add_argument('--apply', action='store_true')
@@ -44,6 +45,7 @@ class Command(BaseCommand):
             result = run_review_sync(
                 day, actor=actor, product_ids=options['product_id'],
                 inventory_ids=options['inventory_id'],
+                internet_ids=options['internet_session_id'],
                 include_recent=not options['no_recent'], limit=options['limit'],
                 dry_run=not options['apply'],
             )
