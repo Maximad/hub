@@ -13,7 +13,9 @@ from django.db import transaction
 from django.utils import timezone
 
 from accounts.permissions import user_has_capability
-from core.models import ActivityLog, InventoryItem, Order, OrderItem, Product, StockMovement
+from core.models import ActivityLog, InternetSession, InventoryItem, Order, OrderItem, Product, StockMovement
+from internet.models import InternetSessionNetworkOperation
+from internet.session_network_backends import PROVISION_ERROR
 from core.services.operational_completeness import counted_inventory_ids, recipe_completeness
 from .duty import current_duty_users
 from .models import BusinessDay, BusinessDayTask, OperationalReviewCase
@@ -25,22 +27,25 @@ ISSUE_TITLES = {
     OperationalReviewCase.IssueCode.NEEDS_COUNT: "جرد فعلي",
     OperationalReviewCase.IssueCode.RECIPE_REVIEW: "مراجعة وصفة",
     OperationalReviewCase.IssueCode.PRICE_REVIEW: "اعتماد سعر",
+    OperationalReviewCase.IssueCode.NETWORK_REVIEW: "متابعة اتصال الإنترنت",
 }
 SOURCE_CAPABILITIES = {
     OperationalReviewCase.IssueCode.NEEDS_COUNT: "inventory_stock_count",
     OperationalReviewCase.IssueCode.RECIPE_REVIEW: "inventory",
     OperationalReviewCase.IssueCode.PRICE_REVIEW: "inventory",
+    OperationalReviewCase.IssueCode.NETWORK_REVIEW: "internet_billing",
 }
 
 
-def _candidate_ids(*, product_ids, inventory_ids, include_recent, limit):
+def _candidate_ids(*, product_ids, inventory_ids, internet_ids=None, include_recent, limit):
     if not 1 <= limit <= 30:
         raise ValidationError("حد المراجعات يجب أن يكون بين 1 و30.")
     given_products = {int(pk) for pk in (product_ids or [])}
     given_inventory = {int(pk) for pk in (inventory_ids or [])}
-    if any(pk < 1 for pk in given_products | given_inventory):
+    given_internet = {int(pk) for pk in (internet_ids or [])}
+    if any(pk < 1 for pk in given_products | given_inventory | given_internet):
         raise ValidationError("معرّفات المواد والمنتجات يجب أن تكون موجبة.")
-    if len(given_products) + len(given_inventory) > limit:
+    if len(given_products) + len(given_inventory) + len(given_internet) > limit:
         raise ValidationError("اختر مجموعة أصغر، بما لا يتجاوز حد المراجعات.")
     if include_recent:
         since = timezone.now() - timedelta(days=14)
@@ -61,7 +66,7 @@ def _candidate_ids(*, product_ids, inventory_ids, include_recent, limit):
             )
             .values_list("inventory_item_id", flat=True).distinct().order_by("inventory_item_id")
         )
-        slots = limit - len(given_products) - len(given_inventory)
+        slots = limit - len(given_products) - len(given_inventory) - len(given_internet)
         for pk in operational_orders[:slots]:
             if pk not in given_products:
                 given_products.add(pk)
@@ -70,7 +75,26 @@ def _candidate_ids(*, product_ids, inventory_ids, include_recent, limit):
             for pk in receipts[:slots]:
                 if pk not in given_inventory:
                     given_inventory.add(pk)
-    return given_products, given_inventory
+    if include_recent:
+        # Only durable recent *actual* failed provision operations. No imports,
+        # stale legacy sessions or raw error strings enter the follow-up.
+        since = timezone.now() - timedelta(days=14)
+        slots = limit - len(given_products) - len(given_inventory) - len(given_internet)
+        if slots:
+            failures = (
+                InternetSessionNetworkOperation.objects.filter(
+                    operation=InternetSessionNetworkOperation.Operation.PROVISION,
+                    status=InternetSessionNetworkOperation.Status.FAILED,
+                    attempt_count__gte=3,
+                    session__status=InternetSession.Status.ACTIVE,
+                    session__network_status=PROVISION_ERROR,
+                    created_at__gte=since,
+                )
+                .values_list("session_id", flat=True).distinct().order_by("session_id")
+            )
+            for pk in failures[:slots]:
+                given_internet.add(pk)
+    return given_products, given_inventory, given_internet
 
 
 def case_spec(kind, source):
@@ -87,6 +111,23 @@ def case_spec(kind, source):
         if source.requires_preparation and recipe_completeness(source)["state"] != "operational_ready":
             issues.add(OperationalReviewCase.IssueCode.RECIPE_REVIEW)
         return issues
+    if kind == OperationalReviewCase.SourceType.INTERNET_SESSION:
+        # Network provisioning failure is supported by the durable outbox,
+        # not by a guessed session age, billing status, or text in operator
+        # notes. Three actual failed attempts avoid transient retry noise.
+        if (
+            source.status == InternetSession.Status.ACTIVE
+            and source.network_provider != InternetSession.NetworkProvider.MANUAL
+            and source.network_status == PROVISION_ERROR
+            and InternetSessionNetworkOperation.objects.filter(
+                session=source,
+                operation=InternetSessionNetworkOperation.Operation.PROVISION,
+                status=InternetSessionNetworkOperation.Status.FAILED,
+                attempt_count__gte=3,
+            ).exists()
+        ):
+            return {OperationalReviewCase.IssueCode.NETWORK_REVIEW}
+        return set()
     return set()
 
 
@@ -143,7 +184,7 @@ def _project(day, case):
 
 
 def sync_operational_review_cases(
-    day, *, actor=None, product_ids=None, inventory_ids=None,
+    day, *, actor=None, product_ids=None, inventory_ids=None, internet_ids=None,
     include_recent=True, limit=20, dry_run=True,
 ):
     """Review at most 30 NEW sources plus existing open cases, atomically.
@@ -153,8 +194,8 @@ def sync_operational_review_cases(
     """
     if day.status not in LIVE_STATUSES:
         raise ValidationError("حالات المتابعة تتطلب يوم تشغيل مفتوح.")
-    ids_product, ids_inventory = _candidate_ids(
-        product_ids=product_ids, inventory_ids=inventory_ids,
+    ids_product, ids_inventory, ids_internet = _candidate_ids(
+        product_ids=product_ids, inventory_ids=inventory_ids, internet_ids=internet_ids,
         include_recent=include_recent, limit=limit,
     )
     objects = {}
@@ -162,7 +203,9 @@ def sync_operational_review_cases(
         objects[(OperationalReviewCase.SourceType.PRODUCT, obj.pk)] = obj
     for obj in InventoryItem.objects.filter(pk__in=ids_inventory):
         objects[(OperationalReviewCase.SourceType.INVENTORY, obj.pk)] = obj
-    if (len(ids_product) + len(ids_inventory)) != len(objects):
+    for obj in InternetSession.objects.filter(pk__in=ids_internet):
+        objects[(OperationalReviewCase.SourceType.INTERNET_SESSION, obj.pk)] = obj
+    if (len(ids_product) + len(ids_inventory) + len(ids_internet)) != len(objects):
         raise ValidationError("هناك منتج أو مادة غير موجودة، لم ننشئ أي مراجعة.")
 
     # Re-evaluate only cases already tracked, rather than scanning all stock.
@@ -176,10 +219,15 @@ def sync_operational_review_cases(
         extra_inventory = InventoryItem.objects.filter(
             pk__in=[pk for kind, pk in missing if kind == OperationalReviewCase.SourceType.INVENTORY]
         )
+        extra_internet = InternetSession.objects.filter(
+            pk__in=[pk for kind, pk in missing if kind == OperationalReviewCase.SourceType.INTERNET_SESSION]
+        )
         for obj in extra_products:
             objects[(OperationalReviewCase.SourceType.PRODUCT, obj.pk)] = obj
         for obj in extra_inventory:
             objects[(OperationalReviewCase.SourceType.INVENTORY, obj.pk)] = obj
+        for obj in extra_internet:
+            objects[(OperationalReviewCase.SourceType.INTERNET_SESSION, obj.pk)] = obj
 
     counts = {"created": 0, "resolved": 0, "reopened": 0, "unchanged": 0, "task_created": 0}
     changes = []
@@ -200,7 +248,7 @@ def sync_operational_review_cases(
             if case is None:
                 case = OperationalReviewCase.objects.create(
                     source_type=kind, source_id=pk, issue_code=issue,
-                    source_label=source.name_ar,
+                    source_label=(f"جلسة إنترنت #{pk}" if kind == OperationalReviewCase.SourceType.INTERNET_SESSION else source.name_ar),
                     evidence={"source": "recent_actual_operation_or_selected_record"},
                 )
                 existing[(kind, pk, issue)] = case
@@ -209,7 +257,7 @@ def sync_operational_review_cases(
             elif case.status != desired:
                 case.status = desired
                 case.resolved_at = timezone.now() if desired == OperationalReviewCase.Status.RESOLVED else None
-                case.source_label = source.name_ar
+                case.source_label = (f"جلسة إنترنت #{pk}" if kind == OperationalReviewCase.SourceType.INTERNET_SESSION else source.name_ar)
                 case.save(update_fields=["status", "resolved_at", "source_label", "reviewed_at"])
                 action = "resolved" if desired == OperationalReviewCase.Status.RESOLVED else "reopened"
                 counts[action] += 1
