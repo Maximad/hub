@@ -11,6 +11,7 @@ from core.models import (
 )
 from core.services.operational_completeness import (
     counted_inventory_ids, inventory_completeness, product_completeness, recipe_completeness,
+    verified_low_stock_items,
 )
 
 
@@ -34,6 +35,51 @@ class OperationalCompletenessTests(TestCase):
             is_available=True, visible_on_qr=True, orderable_on_qr=True,
             requires_preparation=True, product_type=Product.ProductType.DRINK,
         )
+
+    def test_verified_only_low_stock_is_consistent_on_dashboard_and_review_page(self):
+        self.material.low_stock_threshold = Decimal("1.000")
+        self.material.save(update_fields=["low_stock_threshold", "updated_at"])
+        self.client.force_login(self.admin)
+
+        # A historical recorded zero has not been physically checked.
+        self.assertEqual(verified_low_stock_items(), [])
+        dashboard = self.client.get(reverse("staff_inventory_home"))
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertEqual(list(dashboard.context["low_items"]), [])
+        low_page = self.client.get(reverse("staff_inventory_low_stock"))
+        self.assertEqual(low_page.status_code, 200)
+        self.assertNotContains(low_page, self.material.name_ar)
+
+        # Confirm the real zero count: it should be reviewable without a
+        # stock movement, supplier purchase, payment or financial posting.
+        count_url = reverse("staff_inventory_stock_count")
+        preview = self.client.post(count_url, {
+            "action": "preview", "item": str(self.material.pk), "count": "0",
+            "reason": "",
+        })
+        token = preview.context["preview"]["token"]
+        response = self.client.post(count_url, {
+            "action": "confirm", "confirmation_token": token,
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(StockMovement.objects.count(), 0)
+        self.assertEqual(Payment.objects.count(), 0)
+
+        self.assertEqual([x.pk for x in verified_low_stock_items()], [self.material.pk])
+        dashboard = self.client.get(reverse("staff_inventory_home"))
+        self.assertEqual([x.pk for x in dashboard.context["low_items"]], [self.material.pk])
+        low_page = self.client.get(reverse("staff_inventory_low_stock"))
+        self.assertContains(low_page, self.material.name_ar)
+        self.assertContains(low_page, "هذا تنبيه للمراجعة")
+
+        # Even with a count, a higher actual stock or a removed threshold
+        # must clear the recommendation. Never auto-create purchases.
+        self.material.current_quantity = Decimal("2.000")
+        self.material.save(update_fields=["current_quantity", "updated_at"])
+        self.assertEqual(verified_low_stock_items(), [])
+        self.material.low_stock_threshold = None
+        self.material.save(update_fields=["low_stock_threshold", "updated_at"])
+        self.assertEqual(verified_low_stock_items(), [])
 
     def test_legacy_zero_and_cost_estimate_never_count_as_verified(self):
         self.assertEqual(counted_inventory_ids([self.material.pk]), set())

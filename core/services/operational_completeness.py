@@ -6,7 +6,9 @@ a historic zero or estimated unit cost does not establish inventory correctness.
 """
 from __future__ import annotations
 
-from core.models import ActivityLog, Product
+from django.db.models import F
+
+from core.models import ActivityLog, InventoryItem, Product
 
 
 COUNT_AUDIT_ACTION = "inventory_stock_count_confirmed"
@@ -32,6 +34,26 @@ def counted_inventory_ids(item_ids):
         for item_id in [row.get("item_id")]
         if isinstance(item_id, int) and item_id in ids
     }
+
+
+
+def verified_low_stock_items():
+    """Only flag a threshold breach after a real, recorded physical count.
+
+    A legacy zero is not a stockout. The configured threshold is treated as a
+    trigger for *human review*, not as an approved reorder quantity. This is
+    shared by the inventory UI and the business-day task generator so they
+    cannot disagree.
+    """
+    candidates = list(
+        InventoryItem.objects.filter(
+            is_active=True,
+            low_stock_threshold__isnull=False,
+            current_quantity__lte=F("low_stock_threshold"),
+        ).order_by("name_ar", "pk")
+    )
+    counted_ids = counted_inventory_ids(item.pk for item in candidates)
+    return [item for item in candidates if item.pk in counted_ids]
 
 
 def inventory_completeness(item, *, counted):

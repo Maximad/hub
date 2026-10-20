@@ -251,13 +251,11 @@ def sync_business_day_tasks(day, *, actor=None):
         )
         created_count += int(created)
 
-    low_items = list(
-        InventoryItem.objects.filter(
-            is_active=True,
-            low_stock_threshold__isnull=False,
-            current_quantity__lte=F('low_stock_threshold'),
-        ).order_by('name_ar', 'pk')
-    )
+    # Never interpret historic/uncounted zero balances as stockouts.
+    # Stock-review task and staff inventory pages share the same evidence gate.
+    from core.services.operational_completeness import verified_low_stock_items
+
+    low_items = verified_low_stock_items()
     inventory_fingerprint = 'inventory:low-stock-review'
     if low_items:
         active_fingerprints.add(inventory_fingerprint)
@@ -270,7 +268,10 @@ def sync_business_day_tasks(day, *, actor=None):
                 'title_ar': f'مراجعة المواد المنخفضة في المخزون ({len(low_items)})',
                 'details': '؛ '.join(labels[:20]),
                 'priority': OperationalTaskTemplate.Priority.HIGH,
-                'due_at': _local_due(day, datetime.strptime('12:00', '%H:%M').time()),
+                # A verified shortage is a human review, not a timed demand
+                # for a purchase. Keep the task visible without overdue push
+                # broadcasts to all managers or cashiers.
+                'due_at': None,
                 'is_required': False,
                 'responsibility_role': '',
                 'source_type': 'InventoryItem',
