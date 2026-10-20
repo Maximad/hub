@@ -73,7 +73,7 @@ def review_presentation(case, user):
         OperationalReviewCase.IssueCode.NEEDS_COUNT: ("inventory_stock_count", "staff_inventory_stock_count"),
         OperationalReviewCase.IssueCode.RECIPE_REVIEW: ("inventory", "staff_recipe_edit"),
         OperationalReviewCase.IssueCode.PRICE_REVIEW: ("staff_home", "staff_menu_tools"),
-        OperationalReviewCase.IssueCode.NETWORK_REVIEW: ("internet_billing", "staff_internet_session"),
+        OperationalReviewCase.IssueCode.NETWORK_REVIEW: ("members/internet", "staff_internet_session"),
         OperationalReviewCase.IssueCode.RECEIPT_REVIEW: ("inventory", "staff_inventory_purchase_detail"),
     }
     capability, route = routes.get(case.issue_code, (None, None))

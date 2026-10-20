@@ -222,6 +222,49 @@ class ReviewCompletionTests(ReviewFixture, TestCase):
         client.force_login(self.manager)
         self.assertEqual(client.post(self.url, {'task_action': 'review_preview', 'task_id': self.task.pk}).status_code, 403)
 
+    def test_internet_link_obeys_legacy_session_destination_capability(self):
+        case = OperationalReviewCase(source_type='internet_session', source_id=123,
+            issue_code='network_review', source_label='جلسة إنترنت #123')
+        UserCapabilityOverride.objects.create(user=self.holder, capability='internet_billing', allowed=True)
+        actor = get_user_model().objects.get(pk=self.holder.pk)
+        self.assertEqual(review_presentation(case, actor)['url'], '')
+        UserCapabilityOverride.objects.create(user=self.holder, capability='members/internet', allowed=True)
+        self.assertEqual(review_presentation(case, actor)['url'], reverse('staff_internet_session', args=[123]))
+
+    def test_confirmation_preserves_closed_day_projection_and_get_is_read_only(self):
+        previous = BusinessDay.objects.create(business_date=self.day.business_date - timedelta(days=1), status='closed')
+        old_task = BusinessDayTask.objects.create(business_day=previous,
+            title_ar='متابعة قديمة', fingerprint=f'review:{self.case.pk}',
+            source_type='OperationalReviewCase', source_id=str(self.case.pk))
+        self.count()
+        before = ActivityLog.objects.count()
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+        self.assertEqual(ActivityLog.objects.count(), before)
+        confirm_case_recheck(self.day, actor=self.holder, token=self.token())
+        old_task.refresh_from_db()
+        self.assertEqual(old_task.status, 'pending')
+
+    def test_resolved_case_reopens_from_new_evidence_without_duplicate_tasks(self):
+        category = Category.objects.create(name_ar='قائمة مراجعة')
+        product = Product.objects.create(category=category, name_ar='سعر للمراجعة', price_syp=0)
+        run_review_sync(self.day, actor=self.manager, product_ids=[product.pk], include_recent=False, dry_run=False)
+        case = OperationalReviewCase.objects.get(source_type='product', source_id=product.pk, issue_code='price_review')
+        product.price_syp = 250
+        product.save(update_fields=['price_syp'])
+        token = preview_case_recheck(self.day, case, actor=self.manager)['token']
+        confirm_case_recheck(self.day, actor=self.manager, token=token)
+        case.refresh_from_db()
+        product.price_syp = 0
+        product.save(update_fields=['price_syp'])
+        preview = preview_case_recheck(self.day, case, actor=self.manager)
+        self.assertTrue(preview['changed'])
+        self.assertEqual(preview['desired'], 'open')
+        confirm_case_recheck(self.day, actor=self.manager, token=preview['token'])
+        task = BusinessDayTask.objects.get(source_type='OperationalReviewCase', source_id=str(case.pk))
+        self.assertEqual(task.status, 'pending')
+        case.refresh_from_db()
+        self.assertIsNone(case.resolved_at)
+
 
 @override_settings(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False)
 class ConcurrentReviewConfirmationTests(ReviewFixture, TransactionTestCase):
