@@ -50,6 +50,8 @@ class HubReviewedMenuDecisionsTests(TestCase):
             Product.objects.create(
                 pk=pk, category=cat, name_ar=name, price_syp=price,
                 is_available=(pk != 322),
+                visible_on_qr=(pk != 322),
+                orderable_on_qr=(pk != 322),
                 visible_on_pos=(pk != 322),
                 orderable_on_pos=(pk != 322),
             )
@@ -122,6 +124,8 @@ class HubReviewedMenuDecisionsTests(TestCase):
         self.assertTrue(report["applied"])
         self.assertFalse(report["read_only"])
         self.assertTrue(Product.objects.get(pk=322).is_available)
+        self.assertTrue(Product.objects.get(pk=322).visible_on_qr)
+        self.assertTrue(Product.objects.get(pk=322).orderable_on_qr)
         self.assertTrue(Product.objects.get(pk=322).visible_on_pos)
         self.assertTrue(Product.objects.get(pk=322).orderable_on_pos)
         self.assertEqual(Product.objects.get(pk=322).price_syp, 100)
@@ -194,6 +198,27 @@ class HubReviewedMenuDecisionsTests(TestCase):
         )
         self.assertEqual(report["counts"].get("created", 0), 0)
         self.assertEqual(report["counts"].get("updated", 0), 0)
+
+    def test_repairs_partially_applied_3in1_without_repeat_recipe_changes(self):
+        self.run_decisions("--apply", "--actor", "menu-operator")
+        recipe_count = ProductRecipeItem.objects.count()
+        # Simulate the deployed older implementation: availability is true,
+        # but both canonical menu flags and legacy POS flags are false.
+        Product.objects.filter(pk=322).update(
+            is_available=True,
+            visible_on_qr=False, orderable_on_qr=False,
+            visible_on_pos=False, orderable_on_pos=False,
+        )
+        report = self.run_decisions("--apply", "--actor", "menu-operator")
+        self.assertEqual(report["counts"].get("created", 0), 0)
+        self.assertEqual(report["counts"].get("updated", 0), 1)
+        product = Product.objects.get(pk=322)
+        self.assertTrue(product.visible_on_qr)
+        self.assertTrue(product.orderable_on_qr)
+        self.assertTrue(product.visible_on_pos)
+        self.assertTrue(product.orderable_on_pos)
+        self.assertEqual(ProductRecipeItem.objects.count(), recipe_count)
+        self.assertEqual(self.run_decisions()["counts"].get("updated", 0), 0)
 
     def test_apply_requires_identified_active_staff_actor(self):
         with self.assertRaises(CommandError):
