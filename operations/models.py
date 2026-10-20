@@ -481,12 +481,14 @@ class OperationalReviewCase(models.Model):
         INVENTORY = 'inventory', 'مادة مخزون'
         PRODUCT = 'product', 'منتج'
         INTERNET_SESSION = 'internet_session', 'جلسة إنترنت'
+        PURCHASE = 'purchase', 'عملية شراء'
 
     class IssueCode(models.TextChoices):
         NEEDS_COUNT = 'needs_count', 'يلزم جرد فعلي'
         RECIPE_REVIEW = 'recipe_review', 'مراجعة الوصفة'
         PRICE_REVIEW = 'price_review', 'مراجعة سعر البيع'
         NETWORK_REVIEW = 'network_review', 'مراجعة فشل تفعيل الإنترنت'
+        RECEIPT_REVIEW = 'receipt_review', 'مراجعة مستند الاستلام وتكلفته'
 
     class Status(models.TextChoices):
         OPEN = 'open', 'بانتظار الاستكمال'
