@@ -286,3 +286,27 @@ class ConcurrentReviewConfirmationTests(ReviewFixture, TransactionTestCase):
         self.assertEqual(sorted(results), [False, True])
         self.assertEqual(ActivityLog.objects.filter(action='operational.review_rechecked').count(), 1)
         self.assertEqual(BusinessDayTask.objects.filter(source_type='OperationalReviewCase').count(), 2)
+
+    def test_individual_confirmation_and_global_sync_share_lock_order(self):
+        self.count()
+        token = self.token()
+        before = ActivityLog.objects.filter(action__in=['operational.review_sync', 'operational.review_rechecked']).count()
+
+        def update(global_sync):
+            close_old_connections()
+            try:
+                day = BusinessDay.objects.get(pk=self.day.pk)
+                if global_sync:
+                    return run_review_sync(day, actor=self.manager, include_recent=False, dry_run=False)
+                return confirm_case_recheck(day, actor=self.holder, token=token)
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            list(pool.map(update, [True, False]))
+        self.case.refresh_from_db()
+        self.task.refresh_from_db()
+        self.assertEqual(self.case.status, 'resolved')
+        self.assertEqual(self.task.status, 'waived')
+        self.assertEqual(BusinessDayTask.objects.filter(source_type='OperationalReviewCase').count(), 2)
+        self.assertEqual(ActivityLog.objects.filter(action__in=['operational.review_sync', 'operational.review_rechecked']).count(), before + 1)

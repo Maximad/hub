@@ -490,6 +490,10 @@ def sync_operational_review_cases(
 def run_review_sync(day, **kwargs):
     dry_run = kwargs.get("dry_run", True)
     with transaction.atomic():
+        # Match individual confirmation's day -> case lock order. Inserting a
+        # task projection can otherwise wait for a day FK lock while another
+        # transaction holds that day and waits for the same review case.
+        day = BusinessDay.objects.select_for_update().get(pk=day.pk)
         result = sync_operational_review_cases(day, **kwargs)
         if dry_run:
             transaction.set_rollback(True)
