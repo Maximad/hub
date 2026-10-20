@@ -7,8 +7,8 @@
     <a class="hub-ux5-kpi" href="{% url 'staff_inventory_items' %}" aria-label="عرض مواد المخزون النشطة">
       <span>المواد النشطة</span><strong>{{ active_count }}</strong>
     </a>
-    <a class="hub-ux5-kpi" href="{% url 'staff_inventory_low_stock' %}" aria-label="عرض المواد منخفضة المخزون">
-      <span>مواد تحتاج شراء</span><strong>{{ low_items|length }}</strong>
+    <a class="hub-ux5-kpi" href="{% url 'staff_inventory_low_stock' %}" aria-label="عرض مواد ذات جرد موثّق تحتاج مراجعة حد التنبيه">
+      <span>مخزون يحتاج مراجعة</span><strong>{{ low_items|length }}</strong>
     </a>
     <a class="hub-ux5-kpi" href="{% url 'staff_waste_report' %}" aria-label="عرض تقرير الهدر">
       <span>الهدر المسجل</span><strong>{{ waste_value|format_syp }}</strong>
