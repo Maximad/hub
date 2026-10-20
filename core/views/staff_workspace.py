@@ -32,7 +32,7 @@ ACTIVE_ORDER_STATUSES = (
 # Navigation only: use existing routes and effective capabilities. Each route also
 # enforces its own authorization, which remains the security boundary.
 DAILY_ACTIONS = {
-    "order": ("+ طلب جديد", "تسجيل طلب للزبون", "staff_pos", "pos"),
+    "order": ("بيع / طلب جديد", "طلب جديد للزبون من نقطة البيع", "staff_pos", "pos"),
     "cashier": ("قبض ودفع", "تحصيل المدفوعات ومراجعة المتبقي", "staff_cashier", "cashier"),
     "prep": ("فتح لوحة التحضير", "طلبات المطبخ والبار", "staff_kitchen", "kitchen_board"),
     "count": ("جرد المخزون", "أدخل الكمية الموجودة فعلياً", "staff_inventory_stock_count", "inventory_stock_count"),
@@ -55,7 +55,11 @@ def _daily_workspace_actions(user, capabilities):
     if capabilities.get("kitchen_board") and not capabilities.get("pos"):
         order = ("prep", "tasks", "inventory", "count", "cashier", "internet")
     elif is_cashier(user):
-        order = ("cashier", "order", "count", "purchase", "expense", "prep", "tasks", "internet", "visits")
+        # Four core daily operations first. Collection remains a prominent
+        # separate action, not hidden from a cashier's actual workflow.
+        order = ("order", "purchase", "count", "internet", "cashier", "tasks", "expense", "prep", "visits")
+    elif is_owner_or_admin(user):
+        order = ("order", "purchase", "count", "internet", "cashier", "tasks", "expense", "prep", "visits")
     else:
         order = ("order", "cashier", "count", "purchase", "prep", "tasks",
                  "expense", "inventory", "internet", "visits", "reservations")
