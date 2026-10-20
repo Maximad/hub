@@ -210,6 +210,14 @@ class HubReviewedMenuDecisionsTests(TestCase):
         self.assertFalse(InventoryItem.objects.filter(code="DRK-SAHLEB-WIN-SACHET").exists())
         self.assertFalse(Product.objects.get(pk=322).is_available)
 
+
+    def test_known_inventory_unit_mismatch_aborts_before_writes(self):
+        InventoryItem.objects.filter(pk=171).update(unit=InventoryItem.Unit.ML)
+        with self.assertRaises(CommandError):
+            self.run_decisions("--apply", "--actor", "menu-operator")
+        self.assertFalse(InventoryItem.objects.filter(code="DRK-SAHLEB-WIN-SACHET").exists())
+        self.assertFalse(Product.objects.get(pk=322).is_available)
+
     def test_preexisting_active_recipe_aborts_entire_transaction(self):
         ProductRecipeItem.objects.filter(product_id=108, inventory_item_id=171).update(
             is_active=True
