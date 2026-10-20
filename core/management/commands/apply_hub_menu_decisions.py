@@ -178,16 +178,32 @@ class CatalogPlan:
     def set_available(self, product):
         if product.price_syp <= 0:
             raise CommandError("3x1 has no positive price; cannot make it available")
-        changes = []
-        for field in ("is_available", "visible_on_pos", "orderable_on_pos"):
-            if not getattr(product, field):
-                setattr(product, field, True)
-                changes.append(field)
+        # Ordinary products use the QR/menu flags as the canonical source for
+        # both channels; the Product pre_save signal mirrors them into POS.
+        # The mirror must be included in update_fields, otherwise the signal
+        # changes only the in-memory object, not the persisted legacy columns.
+        desired = (
+            "is_available",
+            "visible_on_qr",
+            "orderable_on_qr",
+            "visible_on_pos",
+            "orderable_on_pos",
+        )
+        changes = [field for field in desired if not getattr(product, field)]
         if changes:
-            product.save(update_fields=[*changes, "updated_at"])
-            self.add("availability", "updated", str(product.pk), "3x1 POS sale enabled: " + ", ".join(changes))
+            product.is_available = True
+            product.visible_on_qr = True
+            product.orderable_on_qr = True
+            product.save(update_fields=[*desired, "updated_at"])
+            product.refresh_from_db(fields=desired)
+            if not all(getattr(product, field) for field in desired):
+                raise CommandError("3x1 visibility synchronization failed; transaction rolled back")
+            self.add(
+                "availability", "updated", str(product.pk),
+                "3x1 available in Menu + POS: " + ", ".join(changes),
+            )
         else:
-            self.add("availability", "unchanged", str(product.pk), "Already available in POS")
+            self.add("availability", "unchanged", str(product.pk), "Already available in Menu + POS")
 
 
 def build_plan(plan):
