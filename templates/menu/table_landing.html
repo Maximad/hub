@@ -14,7 +14,7 @@
 
   {% if visit_access_error %}<div class="hub-alert hub-alert-danger" role="alert">{{ visit_access_error }}</div>{% endif %}
 
-  <p class="table-entry__internet-note">امسح رمز الطاولة مرة واحدة. اختر حسابك لتفتح المنيو والإنترنت والطلبات والدفع في واجهة واحدة، من دون مسح الرمز مجدداً على هذا الجهاز.</p>
+  <p class="table-entry__internet-note">امسح رمز الطاولة مرة واحدة، ثم اختر حسابك للانتقال إلى المنيو والطلب مباشرةً.</p>
 
   <div class="table-entry__choices">
     {% if open_visit_count %}
@@ -23,7 +23,7 @@
         <span class="table-entry__choice-icon" aria-hidden="true">●</span>
         <span class="table-entry__choice-copy">
           <strong>مع المجموعة الموجودة على الطاولة</strong>
-          <small>الانضمام إلى حساب موجود: استخدم الرمز الذي أعطاك إياه أحد أصدقائك لتكون الطلبات على نفس الحساب</small>
+          <small>للطلب والدفع مع المجموعة، أدخل رمز الجلسة من أحد أصدقائك.</small>
         </span>
       </div>
       <form method="post" action="{% url 'menu_table' table.qr_token %}">
@@ -40,7 +40,7 @@
         <span class="table-entry__choice-icon" aria-hidden="true">＋</span>
         <span class="table-entry__choice-copy">
           <strong>ابدأ حسابي على هذه الطاولة</strong>
-          <small>فتح حساب منفصل: ستطلب وتدفع بشكل مستقل عن بقية الجالسين</small>
+          <small>اطلب وادفع بشكل مستقل عن بقية الجالسين.</small>
         </span>
       </div>
       <form method="post" action="{% url 'menu_table' table.qr_token %}">
@@ -55,7 +55,7 @@
         <span class="table-entry__choice-icon" aria-hidden="true">＋</span>
         <span class="table-entry__choice-copy">
           <strong>ادخل إلى هَبّ من هذه الطاولة</strong>
-          <small>المنيو · الإنترنت · الطلبات · الحساب، بدون تسجيل أو إعادة مسح</small>
+          <small>تصفّح المنيو واطلب مباشرةً. الإنترنت والحساب متاحان بعد الدخول.</small>
         </span>
       </div>
       <form method="post" action="{% url 'menu_table' table.qr_token %}">
