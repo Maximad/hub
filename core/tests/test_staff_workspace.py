@@ -182,7 +182,7 @@ class StaffWorkspaceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'staff/home.html')
         self.assertContains(response, '>العمليات</h2>', html=False)
-        self.assertContains(response, 'الطلبات، الحساب، الدفع والإنترنت من مساحة واحدة.')
+        self.assertContains(response, 'البيع والشراء والجرد والإنترنت من مساحة واحدة، بحسب صلاحيات المناوب.')
         self.assertContains(response, 'الحسابات التي تحتاج متابعة مالية')
         self.assertNotContains(response, 'data-search="' + self.visit.display_number)
         self.assertContains(response, self.order.display_number)
@@ -194,8 +194,8 @@ class StaffWorkspaceTests(TestCase):
 
     def test_quick_start_is_role_aware_and_bounded(self):
         expectations = {
-            'admin': ['order', 'cashier', 'count', 'purchase'],
-            'cashier': ['cashier', 'order', 'count', 'purchase'],
+            'admin': ['order', 'purchase', 'count', 'internet'],
+            'cashier': ['order', 'purchase', 'count', 'internet'],
             'waiter': ['order', 'tasks', 'visits', 'reservations'],
             'kitchen': ['prep', 'tasks', 'inventory'],
             'bartender': ['prep', 'tasks', 'inventory'],
@@ -227,6 +227,9 @@ class StaffWorkspaceTests(TestCase):
         other = [action['key'] for action in response.context['workspace_more_actions']]
         self.assertIn('count', keys)
         self.assertIn('purchase', keys)
+        self.assertIn('internet', keys)
+        self.assertIn('cashier', other)
+        self.assertContains(response, 'القبض ومتابعة الحسابات المفتوحة')
         self.assertIn('expense', other)
         self.assertNotIn('settings', keys + other)
         self.assertContains(response, 'مهام أخرى حسب صلاحياتك')
