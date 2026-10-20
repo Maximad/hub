@@ -53,15 +53,32 @@ def _candidate_ids(*, product_ids, inventory_ids, internet_ids=None, purchase_id
         raise ValidationError("اختر مجموعة أصغر، بما لا يتجاوز حد المراجعات.")
     if include_recent:
         since = timezone.now() - timedelta(days=14)
-        operational_orders = (
-            OrderItem.objects.filter(
-                created_at__gte=since,
-            )
+        # A recently *entered* line is not proof of a recent real sale:
+        # old notebooks are still being keyed in today, sometimes without
+        # an import_key marker. Only the existing transactional staff POS
+        # creation receipt is strong enough for automatic discovery.
+        # The short candidate window also bounds work on large imports.
+        recent_lines = list(
+            OrderItem.objects.filter(created_at__gte=since)
             .exclude(order__status=Order.Status.CANCELLED)
             .exclude(prep_status=OrderItem.PrepStatus.CANCELLED)
             .exclude(item_note__contains="import_key=")
-            .values_list("product_id", flat=True).distinct().order_by("product_id")
+            .order_by("-created_at", "-pk")
+            .values_list("order__public_code", "product_id")[:400]
         )
+        order_codes = {str(code) for code, _ in recent_lines}
+        certified_order_codes = set(
+            ActivityLog.objects.filter(
+                action="staff_pos_order_created",
+                actor__isnull=False,
+                created_at__gte=since,
+                details__order_public_code__in=order_codes,
+            ).values_list("details__order_public_code", flat=True)
+        ) if order_codes else set()
+        operational_orders = [
+            product_id for code, product_id in recent_lines
+            if str(code) in certified_order_codes
+        ]
         receipts = (
             StockMovement.objects.filter(
                 created_at__gte=since,
@@ -71,7 +88,9 @@ def _candidate_ids(*, product_ids, inventory_ids, internet_ids=None, purchase_id
             .values_list("inventory_item_id", flat=True).distinct().order_by("inventory_item_id")
         )
         slots = limit - len(given_products) - len(given_inventory) - len(given_internet) - len(given_purchases)
-        for pk in operational_orders[:slots]:
+        for pk in operational_orders:
+            if len(given_products) + len(given_inventory) + len(given_internet) + len(given_purchases) >= limit:
+                break
             if pk not in given_products:
                 given_products.add(pk)
         slots = limit - len(given_products) - len(given_inventory) - len(given_internet) - len(given_purchases)
