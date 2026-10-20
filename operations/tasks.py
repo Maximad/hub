@@ -251,13 +251,11 @@ def sync_business_day_tasks(day, *, actor=None):
         )
         created_count += int(created)
 
-    low_items = list(
-        InventoryItem.objects.filter(
-            is_active=True,
-            low_stock_threshold__isnull=False,
-            current_quantity__lte=F('low_stock_threshold'),
-        ).order_by('name_ar', 'pk')
-    )
+    # Never interpret historic/uncounted zero balances as stockouts.
+    # Stock-review task and staff inventory pages share the same evidence gate.
+    from core.services.operational_completeness import verified_low_stock_items
+
+    low_items = verified_low_stock_items()
     inventory_fingerprint = 'inventory:low-stock-review'
     if low_items:
         active_fingerprints.add(inventory_fingerprint)
