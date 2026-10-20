@@ -32,13 +32,15 @@ def expected_product(pk, name):
     return product
 
 
-def expected_inventory(pk, code):
+def expected_inventory(pk, code, unit):
     try:
         item = InventoryItem.objects.select_for_update().get(pk=pk)
     except InventoryItem.DoesNotExist as exc:
         raise CommandError(f"Required ingredient #{pk} missing: {code}") from exc
     if item.code != code:
         raise CommandError(f"Ingredient #{pk} code mismatch: {item.code!r} != {code!r}")
+    if item.unit != unit:
+        raise CommandError(f"Ingredient #{pk} unit mismatch: {item.unit!r} != {unit!r}")
     return item
 
 
@@ -200,17 +202,17 @@ def build_plan(plan):
     doodoo = expected_product(339, "شوت دودو")
     hookah = expected_product(362, "اركيلة")
 
-    tea_bag = expected_inventory(175, "DRK-TEA-AHMAD-BAG")
-    beans_ar = expected_inventory(173, "DRK-COF-ARABIC")
-    beans_espresso = expected_inventory(171, "DRK-COF-ESPRESSO")
-    milk = expected_inventory(45, "ING-DAIRY-MILK")
-    arak_ingredient = expected_inventory(200, "DRK-ALC-ARAK-RAYAN")
-    vodka = expected_inventory(201, "DRK-ALC-VODKA-SMIRNOFF")
-    rum = expected_inventory(206, "DRK-ALC-RUM-WHITE")
-    green_olives = expected_inventory(210, "ING-PICKLE-GREENOLIVE")
-    instant_coffee = expected_inventory(172, "DRK-COF-INSTANT")
-    tabasco = expected_inventory(125, "ING-SAUCE-TABASCO")
-    lemon_raw = expected_inventory(5, "ING-FRT-LEMON")
+    tea_bag = expected_inventory(175, "DRK-TEA-AHMAD-BAG", InventoryItem.Unit.PORTION)
+    beans_ar = expected_inventory(173, "DRK-COF-ARABIC", InventoryItem.Unit.KG)
+    beans_espresso = expected_inventory(171, "DRK-COF-ESPRESSO", InventoryItem.Unit.KG)
+    milk = expected_inventory(45, "ING-DAIRY-MILK", InventoryItem.Unit.LITER)
+    arak_ingredient = expected_inventory(200, "DRK-ALC-ARAK-RAYAN", InventoryItem.Unit.LITER)
+    vodka = expected_inventory(201, "DRK-ALC-VODKA-SMIRNOFF", InventoryItem.Unit.LITER)
+    rum = expected_inventory(206, "DRK-ALC-RUM-WHITE", InventoryItem.Unit.LITER)
+    green_olives = expected_inventory(210, "ING-PICKLE-GREENOLIVE", InventoryItem.Unit.KG)
+    instant_coffee = expected_inventory(172, "DRK-COF-INSTANT", InventoryItem.Unit.KG)
+    tabasco = expected_inventory(125, "ING-SAUCE-TABASCO", InventoryItem.Unit.ML)
+    lemon_raw = expected_inventory(5, "ING-FRT-LEMON", InventoryItem.Unit.KG)
 
     sahleb_sachet = plan.ingredient(
         code="DRK-SAHLEB-WIN-SACHET", name="ظرف سحلب وين",
@@ -300,9 +302,13 @@ def build_plan(plan):
     )
     whiskey_products = list(Product.objects.select_for_update().filter(name_ar="كوكتيل ويسكي")[:2])
     whiskey_items = list(InventoryItem.objects.select_for_update().filter(name_ar="ويسكي")[:2])
-    if len(whiskey_products) == 1 and len(whiskey_items) == 1:
+    if len(whiskey_products) == 1 and len(whiskey_items) == 1 and whiskey_items[0].unit in {
+        InventoryItem.Unit.LITER, InventoryItem.Unit.ML,
+    }:
+        # Stock may be stored in either liters or milliliters; no silent 1000x error.
+        whiskey_qty = "0.075" if whiskey_items[0].unit == InventoryItem.Unit.LITER else "75.000"
         plan.recipe(
-            whiskey_products[0], whiskey_items[0], "0.075",
+            whiskey_products[0], whiskey_items[0], whiskey_qty,
             note="75 مل ويسكي للكوكتيل، المازج يحتاج اعتماداً",
         )
     else:
