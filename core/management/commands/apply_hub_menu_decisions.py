@@ -176,12 +176,16 @@ class CatalogPlan:
     def set_available(self, product):
         if product.price_syp <= 0:
             raise CommandError("3x1 has no positive price; cannot make it available")
-        if not product.is_available:
-            product.is_available = True
-            product.save(update_fields=["is_available", "updated_at"])
-            self.add("availability", "updated", str(product.pk), "3x1 is_available=True")
+        changes = []
+        for field in ("is_available", "visible_on_pos", "orderable_on_pos"):
+            if not getattr(product, field):
+                setattr(product, field, True)
+                changes.append(field)
+        if changes:
+            product.save(update_fields=[*changes, "updated_at"])
+            self.add("availability", "updated", str(product.pk), "3x1 POS sale enabled: " + ", ".join(changes))
         else:
-            self.add("availability", "unchanged", str(product.pk), "Already available")
+            self.add("availability", "unchanged", str(product.pk), "Already available in POS")
 
 
 def build_plan(plan):
