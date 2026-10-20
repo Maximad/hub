@@ -204,7 +204,23 @@
 {% endif %}
 
 <section id="handover" class="hub-section ops-section-card">
-  <div class="ops-section-head"><div><h2>التسليم بين المناوبات والأيام</h2><p>ملاحظات تبقى ظاهرة حتى الاطلاع عليها أو حلها.</p></div></div>
+  <div class="ops-section-head"><div><h2>التسليم بين المناوبات والأيام</h2><p>الملاحظات والنواقص التشغيلية المستمرة. عرضها لا ينقل المسؤولية ولا يعتبر إنجازاً.</p></div></div>
+  <div class="hub-card" style="margin-block:10px;padding:12px;" aria-label="ملخص النواقص عند التسليم">
+    <div class="ops-section-head">
+      <div><strong>متابعات مفتوحة عند التسليم</strong><p>من سجلات المراجعة الحالية، وليست من دفاتر المبيعات التاريخية. لا تُنقل للمستلم إلا بعد قبول مسؤولية المناوبة.</p></div>
+      <a class="hub-button" href="{% url 'staff_operational_tasks' %}">فتح المهام</a>
+    </div>
+    <div class="ops-task-list">
+      {% for issue in handover_review_brief.items %}
+      <div class="ops-task">
+        <div class="ops-task__main"><strong>{{ issue.title }}: {{ issue.label }}</strong><div class="ops-task__meta"><span>بانتظار دليل إكمال من العملية الأصلية</span></div></div>
+      </div>
+      {% empty %}
+      <p class="hub-help-text">لا توجد متابعات مفتوحة مرئية لك حالياً. تحقق أيضاً من ملاحظات التسليم أدناه.</p>
+      {% endfor %}
+      {% if handover_review_brief.truncated %}<p class="hub-help-text">توجد متابعات إضافية. افتح صفحة المهام للمراجعة.</p>{% endif %}
+    </div>
+  </div>
   {% if business_day.status != 'closed' %}
   <details class="ops-create"><summary class="hub-button">+ ملاحظة تسليم</summary><div class="ops-create__panel"><form method="post" class="hub-form hub-grid hub-grid-2">{% csrf_token %}<input type="hidden" name="business_day_action" value="handover_add"><label style="grid-column:1/-1;">الملاحظة<textarea name="handover_message" required placeholder="مثال: ماكينة الإسبريسو تحتاج فحصاً صباحاً."></textarea></label><label>الأهمية<select name="handover_priority"><option value="normal">عادية</option><option value="high">مهمة</option></select></label><label>مسؤول محدد (اختياري)<select name="assigned_to"><option value="">فريق اليوم</option>{% for staff_user in staff_options %}<option value="{{ staff_user.pk }}">{{ staff_user }}</option>{% endfor %}</select></label><button class="hub-button hub-button-primary" type="submit">إضافة</button></form></div></details>
   {% endif %}
