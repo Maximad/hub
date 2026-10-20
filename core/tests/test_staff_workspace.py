@@ -186,7 +186,7 @@ class StaffWorkspaceTests(TestCase):
         self.assertContains(response, 'الحسابات التي تحتاج متابعة مالية')
         self.assertNotContains(response, 'data-search="' + self.visit.display_number)
         self.assertContains(response, self.order.display_number)
-        self.assertContains(response, '+ طلب جديد')
+        self.assertContains(response, 'بيع / طلب جديد')
         self.assertContains(response, '+ فتح حساب / جلسة جديدة')
         self.assertNotContains(response, 'data-context-title="الدفع وإغلاق الحساب"')
         self.assertNotContains(response, 'data-context-title="إنترنت الحساب"')
