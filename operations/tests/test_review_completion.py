@@ -215,7 +215,7 @@ class ReviewCompletionTests(ReviewFixture, TestCase):
         self.assertEqual(self.client.get(reverse('staff_menu_tools') + '?product=invalid').context['products_count'], 0)
 
     def test_source_links_obey_capability_denial_and_recheck_is_csrf_protected(self):
-        UserCapabilityOverride.objects.create(user=self.holder, capability='inventory_stock_count', allowed=False)
+        UserCapabilityOverride.objects.filter(user=self.holder, capability='inventory_stock_count').update(allowed=False)
         actor = get_user_model().objects.get(pk=self.holder.pk)
         self.assertEqual(review_presentation(self.case, actor)['url'], '')
         client = Client(enforce_csrf_checks=True)
