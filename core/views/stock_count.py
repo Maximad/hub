@@ -151,7 +151,39 @@ def staff_inventory_stock_count(request):
             if difference and not reason:
                 raise ValidationError('تعديل المخزون يتطلب سبباً واضحاً.')
             if not difference:
-                messages.success(request, 'الكمية مطابقة للمخزون المسجل، ولا حاجة لحركة تصحيح.')
+                # An unchanged physical count is still new operational evidence.
+                # Previously this returned without any durable record, meaning
+                # a verified zero looked identical to a legacy unknown zero.
+                # No stock movement or monetary value is posted.
+                PostingCommand.objects.create(
+                    key=key,
+                    command=SCOPE,
+                    source_type='core.InventoryItem',
+                    source_id=str(item.pk),
+                    result_type='core.InventoryItem',
+                    result_id=str(item.pk),
+                    actor=request.user,
+                    channel='staff-stock-count',
+                    request_metadata={'previous': str(before), 'counted': str(counted)},
+                )
+                AuditEvent.objects.create(
+                    actor=request.user,
+                    approver=request.user,
+                    action='inventory_physical_count_verified',
+                    source_content_type=ContentType.objects.get_for_model(InventoryItem),
+                    source_object_id=str(item.pk),
+                    before_snapshot={'item_id': item.pk, 'quantity': str(before), 'unit': item.unit},
+                    after_snapshot={'item_id': item.pk, 'quantity': str(counted), 'delta': '0', 'reason': reason},
+                    request_key=key,
+                    channel='staff-stock-count',
+                )
+                ActivityLog.objects.create(
+                    actor=request.user,
+                    action='inventory_stock_count_confirmed',
+                    details={'item_id': item.pk, 'movement_id': None, 'before': str(before),
+                             'counted': str(counted), 'difference': '0', 'verified_no_change': True},
+                )
+                messages.success(request, 'تم توثيق الجرد الفعلي دون إنشاء حركة مخزون، فالكمية مطابقة.')
                 return redirect('staff_inventory_stock_count')
 
             movement = StockMovement(
