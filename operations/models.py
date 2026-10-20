@@ -480,11 +480,13 @@ class OperationalReviewCase(models.Model):
     class SourceType(models.TextChoices):
         INVENTORY = 'inventory', 'مادة مخزون'
         PRODUCT = 'product', 'منتج'
+        INTERNET_SESSION = 'internet_session', 'جلسة إنترنت'
 
     class IssueCode(models.TextChoices):
         NEEDS_COUNT = 'needs_count', 'يلزم جرد فعلي'
         RECIPE_REVIEW = 'recipe_review', 'مراجعة الوصفة'
         PRICE_REVIEW = 'price_review', 'مراجعة سعر البيع'
+        NETWORK_REVIEW = 'network_review', 'مراجعة فشل تفعيل الإنترنت'
 
     class Status(models.TextChoices):
         OPEN = 'open', 'بانتظار الاستكمال'
