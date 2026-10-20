@@ -35,6 +35,26 @@
   <div class="ops-kpi"><span>منجزة</span><strong>{{ task_counts.done }}</strong></div>
 </section>
 
+{% if recheck_preview %}
+<section class="hub-card hub-section" aria-label="معاينة التحقق من المتابعة" role="status">
+  <h2>نتيجة التحقق: {{ recheck_preview.case.source_label }}</h2>
+  {% if recheck_preview.desired == 'resolved' %}
+  <p>سبب المتابعة لم يعد قائماً في السجل الأصلي.</p>
+  {% else %}
+  <p>المتابعة ما زالت تحتاج استكمالاً.</p>
+  <p>{{ recheck_preview.completion }}</p>
+  {% endif %}
+  <p class="hub-help-text">لم تُحفظ أي تغييرات. التأكيد يحدّث حالة المتابعة فقط.</p>
+  <div class="hub-toolbar">
+    {% if recheck_preview.changed %}
+    <form method="post">{% csrf_token %}<input type="hidden" name="task_action" value="review_confirm"><input type="hidden" name="confirmation_token" value="{{ recheck_preview.token }}"><button class="hub-button hub-button-primary" type="submit">{% if recheck_preview.desired == 'resolved' %}تأكيد اكتمال المتابعة{% else %}إعادة فتح المتابعة{% endif %}</button></form>
+    {% endif %}
+    {% if recheck_preview.url %}<a class="hub-button" href="{{ recheck_preview.url }}">فتح السجل الأصلي</a>{% endif %}
+    <a class="hub-button" href="{% url 'staff_operational_tasks' %}">العودة للمهام</a>
+  </div>
+</section>
+{% endif %}
+
 {% if can_manage_tasks and business_day.status != 'closed' %}
 <section class="hub-section ops-section-card ops-create">
   <details>
@@ -56,7 +76,7 @@
 {% endif %}
 
 <section class="hub-section ops-section-card">
-  <div class="ops-section-head"><div><h2>المهام</h2><p>اضغط «تم» مباشرة. إذا تعذّر التنفيذ، سجّل السبب فقط.</p></div></div>
+  <div class="ops-section-head"><div><h2>المهام</h2><p>للمراجعات: استكمل السجل الأصلي ثم تحقّق من الاكتمال. لباقي المهام: اضغط «تم» أو سجّل سبب التعذّر.</p></div></div>
   <div class="ops-task-list">
     {% for task in tasks %}
     <article class="ops-task{% if task.status == 'pending' and task.due_at and task.due_at < now %} is-overdue{% endif %}{% if task.status == 'done' %} is-done{% endif %}">
@@ -71,6 +91,11 @@
           {% if task.source_type == 'OperationalReviewCase' %}<span>مراجعة مرتبطة بالسجل الأصلي، لا تُغلق يدوياً</span>{% if task.review_url %}<a href="{{ task.review_url }}">فتح السجل</a>{% endif %}{% endif %}
         </div>
         {% if task.details %}<small>{{ task.details }}</small>{% endif %}
+        {% if task.source_type == 'OperationalReviewCase' %}
+        <small><strong>سبب المتابعة:</strong> {{ task.review_reason }}</small>
+        <small><strong>تكتمل عندما:</strong> {{ task.review_completion }}</small>
+        {% if not task.review_url %}<small>فتح السجل يحتاج صلاحية إضافية. اطلب من المسؤول المختص استكماله.</small>{% endif %}
+        {% endif %}
         {% if task.completion_note %}<small>ملاحظة: {{ task.completion_note }}</small>{% endif %}
         {% if task.completed_by %}<small>بواسطة {{ task.completed_by }} · {{ task.completed_at|ar_datetime }}</small>{% endif %}
       </div>
@@ -86,6 +111,7 @@
       <div class="ops-task__actions">
         {% if task.source_type == 'OperationalReviewCase' %}
           {% if task.review_url %}<a class="hub-button" href="{{ task.review_url }}">استكمال السجل</a>{% endif %}
+          {% if task.can_recheck %}<form method="post">{% csrf_token %}<input type="hidden" name="task_action" value="review_preview"><input type="hidden" name="task_id" value="{{ task.pk }}"><button class="hub-button" type="submit">التحقق من الاكتمال</button></form>{% endif %}
         {% elif business_day.status != 'closed' and can_manage_tasks or business_day.status != 'closed' and task.assigned_to_id == request.user.pk or business_day.status != 'closed' and task.responsibility_role == request.user.role %}
           {% if task.status == 'pending' %}
           <form method="post">{% csrf_token %}<input type="hidden" name="task_action" value="status"><input type="hidden" name="task_id" value="{{ task.pk }}"><input type="hidden" name="status" value="done"><button class="ops-action ops-action--done" type="submit">✓ تم</button></form>

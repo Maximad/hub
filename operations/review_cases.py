@@ -8,9 +8,11 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from django.core.exceptions import ValidationError
+from django.core import signing
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Q
+from django.urls import reverse
 from django.utils import timezone
 
 from accounts.permissions import user_has_capability
@@ -38,6 +40,149 @@ SOURCE_CAPABILITIES = {
     OperationalReviewCase.IssueCode.NETWORK_REVIEW: "internet_billing",
     OperationalReviewCase.IssueCode.RECEIPT_REVIEW: "inventory",
 }
+
+RECHECK_SALT = "hub.operational-review-recheck.v1"
+REVIEW_GUIDANCE = {
+    OperationalReviewCase.IssueCode.NEEDS_COUNT: (
+        "المادة تحتاج إلى جرد فعلي موثق.",
+        "أكّد الكمية الموجودة فعلياً من صفحة الجرد، حتى لو طابقت الرصيد المسجّل.",
+    ),
+    OperationalReviewCase.IssueCode.RECIPE_REVIEW: (
+        "وصفة المنتج تحتاج إلى استكمال أو مراجعة مقاديرها ووحداتها.",
+        "احفظ مكوّناً نشطاً واحداً على الأقل بمقادير موجبة ووحدات تطابق مواد المخزون.",
+    ),
+    OperationalReviewCase.IssueCode.PRICE_REVIEW: (
+        "سعر بيع المنتج غير محدد أو يساوي صفراً.",
+        "احفظ سعر بيع أكبر من صفر من أدوات القائمة. هذا لا يعتبر تدقيقاً نهائياً للسعر أو التكلفة.",
+    ),
+    OperationalReviewCase.IssueCode.NETWORK_REVIEW: (
+        "سُجّل فشل متكرر في تفعيل اتصال هذه الجلسة.",
+        "راجع الجلسة الأصلية. تزول المتابعة بعد زوال فشل التفعيل أو إنهاء الجلسة من مسارها المعتاد.",
+    ),
+    OperationalReviewCase.IssueCode.RECEIPT_REVIEW: (
+        "استلام الشراء يحتاج مراجعة المورد أو التكلفة أو حركة الاستلام.",
+        "راجع المورد وحركات الاستلام الأصلية. تصحيح استلام مثبت يحتاج المسؤول المالي، ولا يكفي تعديل كلفة بند قديم.",
+    ),
+}
+
+
+def review_presentation(case, user):
+    """Links follow the destination's permission, independently of visibility."""
+    reason, completion = REVIEW_GUIDANCE.get(case.issue_code, ("تحتاج مراجعة.", "راجع السجل الأصلي."))
+    routes = {
+        OperationalReviewCase.IssueCode.NEEDS_COUNT: ("inventory_stock_count", "staff_inventory_stock_count"),
+        OperationalReviewCase.IssueCode.RECIPE_REVIEW: ("inventory", "staff_recipe_edit"),
+        OperationalReviewCase.IssueCode.PRICE_REVIEW: ("staff_home", "staff_menu_tools"),
+        OperationalReviewCase.IssueCode.NETWORK_REVIEW: ("internet_billing", "staff_internet_session"),
+        OperationalReviewCase.IssueCode.RECEIPT_REVIEW: ("inventory", "staff_inventory_purchase_detail"),
+    }
+    capability, route = routes.get(case.issue_code, (None, None))
+    url = ""
+    if route and user_has_capability(user, capability):
+        if case.issue_code == OperationalReviewCase.IssueCode.NEEDS_COUNT:
+            url = reverse(route) + f"?item={case.source_id}"
+        elif case.issue_code == OperationalReviewCase.IssueCode.PRICE_REVIEW:
+            url = reverse(route) + f"?product={case.source_id}"
+        else:
+            url = reverse(route, args=[case.source_id])
+    return {"reason": reason, "completion": completion, "url": url}
+
+
+def can_recheck_case(day, case, actor):
+    if not (
+        getattr(actor, "is_authenticated", False) and actor.is_active
+        and getattr(actor, "role", "") != "internet_provider"
+        and user_has_capability(actor, "staff_home")
+        and user_has_capability(actor, SOURCE_CAPABILITIES.get(case.issue_code))
+    ):
+        return False
+    if actor.is_superuser or getattr(actor, "role", "") in {"admin", "cashier"}:
+        return True
+    holder = case_duty_holder(day, case)
+    return holder is not None and holder.pk == actor.pk
+
+
+def _recheck_source(case, *, lock=False):
+    models = {
+        OperationalReviewCase.SourceType.INVENTORY: InventoryItem,
+        OperationalReviewCase.SourceType.PRODUCT: Product,
+        OperationalReviewCase.SourceType.PURCHASE: Purchase,
+        OperationalReviewCase.SourceType.INTERNET_SESSION: InternetSession,
+    }
+    model = models.get(case.source_type)
+    expected_types = {
+        OperationalReviewCase.IssueCode.NEEDS_COUNT: OperationalReviewCase.SourceType.INVENTORY,
+        OperationalReviewCase.IssueCode.RECIPE_REVIEW: OperationalReviewCase.SourceType.PRODUCT,
+        OperationalReviewCase.IssueCode.PRICE_REVIEW: OperationalReviewCase.SourceType.PRODUCT,
+        OperationalReviewCase.IssueCode.NETWORK_REVIEW: OperationalReviewCase.SourceType.INTERNET_SESSION,
+        OperationalReviewCase.IssueCode.RECEIPT_REVIEW: OperationalReviewCase.SourceType.PURCHASE,
+    }
+    if model is None or expected_types.get(case.issue_code) != case.source_type:
+        raise ValidationError("نوع السجل الأصلي غير معروف. اطلب مراجعة الإدارة.")
+    rows = model.objects.all()
+    if lock:
+        rows = rows.select_for_update()
+    source = rows.filter(pk=case.source_id).first()
+    if source is None:
+        raise ValidationError("السجل الأصلي غير موجود. اطلب مراجعة الإدارة، ولم تُغلق المتابعة.")
+    return source
+
+
+def _recheck_status(day, case, actor, *, lock=False):
+    if day.status not in LIVE_STATUSES:
+        raise ValidationError("التحقق من المتابعة يتطلب يوم تشغيل مفتوحاً.")
+    if not can_recheck_case(day, case, actor):
+        raise PermissionDenied
+    source = _recheck_source(case, lock=lock)
+    return (
+        OperationalReviewCase.Status.OPEN if case.issue_code in case_spec(case.source_type, source)
+        else OperationalReviewCase.Status.RESOLVED
+    )
+
+
+def preview_case_recheck(day, case, *, actor):
+    """Read current evidence for one existing case. Never discover new cases."""
+    desired = _recheck_status(day, case, actor)
+    return {
+        "case": case,
+        "desired": desired,
+        "changed": case.status != desired,
+        **review_presentation(case, actor),
+        "token": signing.dumps({
+            "actor": actor.pk, "day": day.pk, "case": case.pk, "desired": desired,
+        }, salt=RECHECK_SALT),
+    }
+
+
+@transaction.atomic
+def confirm_case_recheck(day, *, actor, token):
+    try:
+        payload = signing.loads(token, salt=RECHECK_SALT, max_age=600)
+    except (signing.BadSignature, TypeError) as exc:
+        raise ValidationError("انتهت صلاحية المعاينة أو لم تعد صالحة. أعد التحقق من المتابعة.") from exc
+    if not isinstance(payload, dict) or payload.get("actor") != actor.pk or payload.get("day") != day.pk:
+        raise PermissionDenied
+    # Use the same day lock as duty handover and closing, then serialize case
+    # confirmation. A duplicate submission therefore has no additional effect.
+    day = BusinessDay.objects.select_for_update().get(pk=day.pk)
+    case = OperationalReviewCase.objects.select_for_update().filter(pk=payload.get("case")).first()
+    if case is None:
+        raise ValidationError("المتابعة لم تعد موجودة. حدّث الصفحة.")
+    desired = _recheck_status(day, case, actor, lock=True)
+    if desired != payload.get("desired"):
+        raise ValidationError("تغيّر السجل الأصلي منذ المعاينة. أعد التحقق قبل التأكيد.")
+    changed = case.status != desired
+    if changed:
+        previous = case.status
+        case.status = desired
+        case.resolved_at = timezone.now() if desired == OperationalReviewCase.Status.RESOLVED else None
+        case.save(update_fields=["status", "resolved_at", "reviewed_at"])
+        _project(day, case)
+        ActivityLog.objects.create(
+            actor=actor, action="operational.review_rechecked",
+            details={"business_day_id": day.pk, "case_id": case.pk, "before": previous, "after": desired},
+        )
+    return {"changed": changed, "status": desired}
 
 
 def _candidate_ids(*, product_ids, inventory_ids, internet_ids=None, purchase_ids=None, include_recent, limit):

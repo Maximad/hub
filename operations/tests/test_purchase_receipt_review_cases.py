@@ -104,7 +104,7 @@ class ReceivedPurchaseReviewTests(TestCase):
         self.client.force_login(self.manager)
         page = self.client.get(reverse("staff_operational_tasks"))
         self.assertEqual(page.status_code, 200)
-        self.assertContains(page, reverse("staff_purchase_detail", args=[self.purchase.pk]))
+        self.assertContains(page, reverse("staff_inventory_purchase_detail", args=[self.purchase.pk]))
 
     def test_editing_old_purchase_item_price_does_not_certify_posted_receipt(self):
         self.sync(apply=True)

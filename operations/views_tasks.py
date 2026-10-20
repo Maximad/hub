@@ -5,11 +5,13 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse
 from django.utils import timezone
 
 from .models import BusinessDay, BusinessDayTask, OperationalTaskTemplate, OperationalReviewCase
-from .review_cases import case_duty_holder, run_review_sync
+from .review_cases import (
+    can_recheck_case, case_duty_holder, confirm_case_recheck,
+    preview_case_recheck, review_presentation, run_review_sync,
+)
 from .reminders import reminders_enabled
 from .opening import active_staff_queryset
 from .services import current_business_date
@@ -87,6 +89,7 @@ def staff_operational_tasks(request):
 
     day = _current_day()
     can_manage = _can_manage(request.user)
+    recheck_preview = None
 
     if request.method == 'POST':
         if not day:
@@ -114,6 +117,25 @@ def staff_operational_tasks(request):
                     f"{c['resolved']} اكتملت، {c['reopened']} أعيد فتحها. "
                     'لم تُعدّل مواد المخزون أو الأسعار أو الوصفات.',
                 )
+
+            elif action == 'review_preview':
+                task_id = request.POST.get('task_id', '')
+                if not task_id.isdecimal():
+                    raise ValidationError('اختر متابعة صالحة من مهام اليوم.')
+                task = get_object_or_404(
+                    BusinessDayTask, pk=task_id, business_day=day,
+                    source_type='OperationalReviewCase',
+                )
+                if not task.source_id.isdecimal():
+                    raise ValidationError('رابط المتابعة غير صالح. اطلب مراجعة الإدارة.')
+                case = get_object_or_404(OperationalReviewCase, pk=task.source_id)
+                recheck_preview = preview_case_recheck(day, case, actor=request.user)
+
+            elif action == 'review_confirm':
+                result = confirm_case_recheck(
+                    day, actor=request.user, token=request.POST.get('confirmation_token', ''),
+                )
+                messages.success(request, 'تم تحديث المتابعة بناءً على السجل الأصلي.' if result['changed'] else 'حالة المتابعة لم تتغير.')
 
             elif action == 'manual_add':
                 if not can_manage:
@@ -190,7 +212,8 @@ def staff_operational_tasks(request):
                 raise ValidationError('إجراء المهمة غير معروف.')
         except ValidationError as exc:
             messages.error(request, _validation_text(exc))
-        return redirect('staff_operational_tasks')
+        if recheck_preview is None:
+            return redirect('staff_operational_tasks')
 
     tasks = (
         day.tasks.select_related('assigned_to', 'task_template', 'completed_by').all()
@@ -220,16 +243,11 @@ def staff_operational_tasks(request):
             continue
         task.review_case = case
         task.review_holder = holder
-        if case.issue_code == OperationalReviewCase.IssueCode.NEEDS_COUNT:
-            task.review_url = reverse('staff_inventory_stock_count') + f'?item={case.source_id}'
-        elif case.issue_code == OperationalReviewCase.IssueCode.RECIPE_REVIEW:
-            task.review_url = reverse('staff_recipe_edit', args=[case.source_id])
-        elif case.issue_code == OperationalReviewCase.IssueCode.NETWORK_REVIEW:
-            task.review_url = reverse('staff_internet_session', args=[case.source_id])
-        elif case.issue_code == OperationalReviewCase.IssueCode.RECEIPT_REVIEW:
-            task.review_url = reverse('staff_purchase_detail', args=[case.source_id])
-        else:
-            task.review_url = ''
+        presentation = review_presentation(case, request.user)
+        task.review_url = presentation['url']
+        task.review_reason = presentation['reason']
+        task.review_completion = presentation['completion']
+        task.can_recheck = day.status != BusinessDay.Status.CLOSED and can_recheck_case(day, case, request.user)
         filtered.append(task)
     tasks = filtered
 
@@ -252,6 +270,7 @@ def staff_operational_tasks(request):
         'tasks': tasks,
         'task_counts': counts,
         'can_manage_tasks': can_manage,
+        'recheck_preview': recheck_preview,
         'staff_options': active_staff_queryset() if can_manage else [],
         'task_templates': OperationalTaskTemplate.objects.order_by('-is_active', 'title_ar') if can_manage else [],
         'role_choices': role_choices,
