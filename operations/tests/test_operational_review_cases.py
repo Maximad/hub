@@ -1,5 +1,5 @@
 """Opt-in follow-up cannot turn legacy notebook rows into daily actions."""
-from datetime import date
+from datetime import timedelta
 from decimal import Decimal
 from io import StringIO
 
@@ -215,7 +215,7 @@ class OperationalReviewCasesTests(TestCase):
         self.day.status = BusinessDay.Status.CLOSED
         self.day.save(update_fields=['status'])
         next_day = open_business_day(
-            actor=self.manager, business_date=self.day.business_date + timezone.timedelta(days=1)
+            actor=self.manager, business_date=self.day.business_date + timedelta(days=1)
         )
         run_review_sync(next_day, include_recent=False, dry_run=False)
         self.assertEqual(
