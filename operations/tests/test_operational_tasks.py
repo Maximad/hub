@@ -7,7 +7,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from core.models import InventoryItem, NotificationEvent
+from core.models import ActivityLog, InventoryItem, NotificationEvent
 from events.models import Event
 from reservations.models import Reservation
 
@@ -133,7 +133,17 @@ class OperationalTaskTests(TestCase):
             low_stock_threshold=Decimal('2.000'),
             is_active=True,
         )
+        # An unverified imported balance never generates a shortage warning.
         day = open_business_day(actor=self.admin, business_date=self.business_date)
+        self.assertFalse(day.tasks.filter(fingerprint='inventory:low-stock-review').exists())
+
+        # The operator's actual physical count is the evidence gate.
+        ActivityLog.objects.create(
+            actor=self.admin,
+            action='inventory_stock_count_confirmed',
+            details={'item_id': item.pk, 'before': '1.000', 'counted': '1.000', 'difference': '0'},
+        )
+        sync_business_day_tasks(day, actor=self.admin)
         task = day.tasks.get(fingerprint='inventory:low-stock-review')
         self.assertEqual(task.kind, BusinessDayTask.Kind.INVENTORY)
         self.assertIn(item.pk, task.metadata['item_ids'])
@@ -145,6 +155,32 @@ class OperationalTaskTests(TestCase):
         self.assertEqual(result['auto_waived'], 1)
         self.assertEqual(task.status, BusinessDayTask.Status.WAIVED)
         self.assertIn('زوال سبب المهمة', task.completion_note)
+
+    def test_unverified_historical_zero_never_generates_shortage_task(self):
+        item = InventoryItem.objects.create(
+            name_ar='صنف مستورد برصيد صفر غير مؤكّد',
+            code='LEGACY-ZERO-UNKNOWN',
+            unit=InventoryItem.Unit.KG,
+            current_quantity=Decimal('0'),
+            low_stock_threshold=Decimal('1.000'),
+            is_active=True,
+        )
+        day = open_business_day(actor=self.admin, business_date=self.business_date)
+        self.assertFalse(day.tasks.filter(fingerprint='inventory:low-stock-review').exists())
+        sync_business_day_tasks(day, actor=self.admin)
+        self.assertFalse(day.tasks.filter(fingerprint='inventory:low-stock-review').exists())
+        self.assertEqual(item.current_quantity, Decimal('0'))
+
+        # A genuinely confirmed zero is eligible for a review task, not a purchase.
+        ActivityLog.objects.create(
+            actor=self.admin, action='inventory_stock_count_confirmed',
+            details={'item_id': item.pk, 'counted': '0', 'verified_no_change': True},
+        )
+        result = sync_business_day_tasks(day, actor=self.admin)
+        self.assertEqual(result['created'], 1)
+        task = day.tasks.get(fingerprint='inventory:low-stock-review')
+        self.assertEqual(task.metadata['item_ids'], [item.pk])
+        self.assertFalse(task.is_required)
 
     def test_cancelled_event_auto_closes_pending_generated_task(self):
         event = Event.objects.create(
