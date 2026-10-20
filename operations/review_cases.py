@@ -129,7 +129,7 @@ def _project(day, case):
             task.completion_note = AUTO_WAIVE_NOTE
             task.completed_at = timezone.now()
             task.save(update_fields=["status", "completion_note", "completed_at", "updated_at"])
-        return created
+        return False
     task, created = BusinessDayTask.objects.get_or_create(
         business_day=day, fingerprint=key, defaults=defaults,
     )
