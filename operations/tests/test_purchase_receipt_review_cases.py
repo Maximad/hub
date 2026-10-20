@@ -149,9 +149,12 @@ class ReceivedPurchaseReviewTests(TestCase):
         self.assertFalse(OperationalReviewCase.objects.exists())
 
     def test_purchase_is_never_auto_discovered_by_recent_mode(self):
-        result = self.sync(apply=True, purchase_ids=[], recent=True)
-        self.assertEqual(result["counts"]["created"], 0)
-        self.assertFalse(OperationalReviewCase.objects.exists())
+        # Recent receiving may legitimately select its InventoryItem for a
+        # count review, but does NOT select a Purchase receipt issue.
+        self.sync(apply=True, purchase_ids=[], recent=True)
+        self.assertFalse(OperationalReviewCase.objects.filter(
+            source_type=OperationalReviewCase.SourceType.PURCHASE,
+        ).exists())
 
     def test_command_preview_requires_explicit_purchase_id_and_apply_actor(self):
         out = StringIO()
