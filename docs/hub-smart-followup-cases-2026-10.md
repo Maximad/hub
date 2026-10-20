@@ -12,7 +12,9 @@ Historic purchases and aggregate sales imported from paper may be incorrect and 
 - Review tasks have no deadlines; they cause no overdue push reminders.
 
 ## Evidence and rollout
-- Candidates arise from genuine recent OrderItem operations in the past 14 days, explicitly excluding legacy aggregate lines containing import_key=, cancellations, and from actual recent purchase-receipt movements.
+- Automatically discovered products come only from the past 14 days of uncancelled OrderItem rows whose parent order has an existing, actor-attributed `staff_pos_order_created` ActivityLog receipt with the exact matching `order_public_code`. A recent creation timestamp **without** that staff POS evidence is **not** accepted: historic notebook rows may have been typed today, without an `import_key=` marker. Rows with that marker and cancellations remain excluded even if an order has a POS receipt. Candidate evaluation is capped at 400 recent lines per sync; when provenance is missing, discovery deliberately returns fewer suggestions rather than guessing.
+- This first conservative discovery scope does **not** automatically include customer-web orders or back-office manually created orders until those flows have their own durable proof. Managers can explicitly select a product ID for review at any time.
+- Only actual recent purchase-receipt inventory movements contribute automatically to ingredient candidates; purchase issue review remains explicitly selected because its origin must be known.
 - Initial cases can also be selected by exact product IDs or inventory IDs (not fuzzy name matches). At most 20 new source candidates per sync (maximum 30). Previously created cases are always rechecked.
 - The command defaults to an entirely rolled-back preview; the staff tasks UI offers a separate manager-only opt-in sync button.
 - Business day tick, web push, order-save signals and migration do not enable any follow-up sync.

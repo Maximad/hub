@@ -13,7 +13,7 @@ from django.utils import timezone
 
 from accounts.models import UserCapabilityOverride
 from core.models import (
-    Category, InventoryItem, Order, OrderItem, Product, ProductRecipeItem,
+    ActivityLog, Category, InventoryItem, Order, OrderItem, Product, ProductRecipeItem,
     StockMovement, Payment,
 )
 from operations.duty import (
@@ -146,12 +146,30 @@ class OperationalReviewCasesTests(TestCase):
         self.assertEqual(result['counts']['created'], 0)
         self.assertFalse(OperationalReviewCase.objects.exists())
 
-    def test_recent_operational_order_creates_one_recipe_review_only(self):
+    def test_unmarked_recent_paper_entry_cannot_trigger_automatic_review(self):
+        # Manually entering a historic sale TODAY may carry no import_key.
+        # A recent OrderItem timestamp alone is not operational evidence.
+        order = Order.objects.create(status=Order.Status.SERVED)
+        OrderItem.objects.create(
+            order=order, product=self.product, quantity=88,
+            product_name_ar_snapshot=self.product.name_ar,
+            unit_price_syp_snapshot=120, item_note='دفتر ورقي دون وسم استيراد',
+        )
+        output = run_review_sync(self.day, dry_run=False)
+        self.assertEqual(output['counts']['created'], 0)
+        self.assertFalse(OperationalReviewCase.objects.exists())
+
+    def test_recent_staff_pos_order_creates_one_recipe_review_only(self):
         order = Order.objects.create(status=Order.Status.SERVED)
         OrderItem.objects.create(
             order=order, product=self.product, quantity=1,
             product_name_ar_snapshot=self.product.name_ar,
             unit_price_syp_snapshot=120, item_note='',
+        )
+        ActivityLog.objects.create(
+            actor=self.manager,
+            action='staff_pos_order_created',
+            details={'order_public_code': str(order.public_code), 'source': 'staff_pos'},
         )
         output = run_review_sync(self.day, dry_run=False)
         self.assertEqual(output['counts']['created'], 1)
@@ -159,6 +177,35 @@ class OperationalReviewCasesTests(TestCase):
             source_type='product', source_id=self.product.pk,
             issue_code='recipe_review',
         ).exists())
+
+    def test_import_marked_row_never_triggers_review_even_with_pos_receipt(self):
+        order = Order.objects.create(status=Order.Status.SERVED)
+        OrderItem.objects.create(
+            order=order, product=self.product, quantity=80,
+            product_name_ar_snapshot=self.product.name_ar,
+            unit_price_syp_snapshot=120, item_note='import_key=legacy-2025',
+        )
+        ActivityLog.objects.create(
+            actor=self.manager, action='staff_pos_order_created',
+            details={'order_public_code': str(order.public_code)},
+        )
+        output = run_review_sync(self.day, dry_run=False)
+        self.assertEqual(output['counts']['created'], 0)
+
+    def test_unrelated_pos_receipt_cannot_prove_imported_order(self):
+        order = Order.objects.create(status=Order.Status.SERVED)
+        other = Order.objects.create(status=Order.Status.SERVED)
+        OrderItem.objects.create(
+            order=order, product=self.product, quantity=18,
+            product_name_ar_snapshot=self.product.name_ar,
+            unit_price_syp_snapshot=120, item_note='',
+        )
+        ActivityLog.objects.create(
+            actor=self.manager, action='staff_pos_order_created',
+            details={'order_public_code': str(other.public_code)},
+        )
+        output = run_review_sync(self.day, dry_run=False)
+        self.assertEqual(output['counts']['created'], 0)
 
     def test_explicit_operations_duty_holder_and_acceptance_change_visibility(self):
         # Cashier is a manager in this app and legitimately sees uncovered
