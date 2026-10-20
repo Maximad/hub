@@ -87,9 +87,15 @@ def staff_inventory_home(request):
 
 @inventory_required
 def staff_inventory_items(request):
+    from core.services.operational_completeness import counted_inventory_ids, inventory_completeness
+
     qs=InventoryItem.objects.select_related('preferred_vendor').all()
     if request.GET.get('q'): qs=qs.filter(Q(name_ar__icontains=request.GET['q'])|Q(name_en__icontains=request.GET['q'])|Q(code__icontains=request.GET['q']))
-    return render(request,'staff/inventory_items.html',{'items':qs,'types':InventoryItem.ItemType.choices,'units':InventoryItem.Unit.choices,'vendors':Vendor.objects.all(),'inventory_can_manage':_can_manage(request.user)})
+    items = list(qs)
+    counted_ids = counted_inventory_ids(item.pk for item in items)
+    for item in items:
+        item.operational_review = inventory_completeness(item, counted=item.pk in counted_ids)
+    return render(request,'staff/inventory_items.html',{'items':items,'types':InventoryItem.ItemType.choices,'units':InventoryItem.Unit.choices,'vendors':Vendor.objects.all(),'inventory_can_manage':_can_manage(request.user)})
 
 @inventory_required
 def staff_inventory_item_new(request):
