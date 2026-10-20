@@ -16,6 +16,20 @@ class PublicMenuMobileContractTests(SimpleTestCase):
             base.index("{% static 'css/hub.css' %}"),
         )
 
+    def test_table_entry_cards_stack_header_and_form_at_phone_widths(self):
+        css = self._read('static/css/public_menu_flow.css')
+        html = self._read('templates/menu/table_landing.html')
+
+        self.assertIn('.table-entry__choice{display:grid;grid-template-columns:minmax(0,1fr);', css)
+        self.assertIn('.table-entry__choice>form{display:grid;', css)
+        self.assertIn('.table-entry__choice>form .hub-input,.table-entry__choice>form .hub-button{width:100%;min-width:0}', css)
+        self.assertIn('.table-entry__choice>form{padding:0 .8rem .8rem}', css)
+        self.assertNotIn('grid-template-columns:52px minmax(0,1fr) auto', css)
+        self.assertNotIn('grid-template-columns:46px minmax(0,1fr) auto', css)
+        self.assertIn('class="table-entry__choice-header"', html)
+        self.assertIn('name="visit_action" value="join"', html)
+        self.assertIn('name="visit_action" value="create"', html)
+
     def test_mobile_cart_uses_one_scroll_body_and_separate_submit_footer(self):
         css = self._read('static/css/public_menu_flow.css')
         javascript = self._read('static/js/menu_cart.js')

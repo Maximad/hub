@@ -127,6 +127,21 @@ class TableEntryFlowTests(TestCase):
         self.assertContains(response, reverse('current_visit'))
         self.assertNotContains(response, 'ادخل إلى هَبّ من هذه الطاولة')
 
+    def test_existing_table_visit_keeps_pin_join_and_separate_account_actions(self):
+        other_browser = self.client_class()
+        created = other_browser.post(self.entry_url, {'visit_action': 'create'})
+        self.assertEqual(created.status_code, 302)
+
+        response = self.client.get(self.entry_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'menu/table_landing.html')
+        self.assertContains(response, 'name="visit_action" value="join"')
+        self.assertContains(response, 'name="visit_action" value="create"')
+        self.assertContains(response, 'name="pin"')
+        self.assertContains(response, 'pattern="[0-9٠-٩]{4}"')
+        self.assertNotContains(response, self.food.name_ar)
+        self.assertEqual(HubVisit.objects.count(), 1)
+
     def test_menu_choice_opens_catalog_without_generic_internet_product(self):
         self._bind_new_visit()
         response = self.client.get(self.menu_url)
