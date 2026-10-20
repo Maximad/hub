@@ -6,6 +6,8 @@ from io import StringIO
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.core.management.color import no_style
+from django.db import connection
 from django.test import TestCase
 
 from core.models import (
@@ -75,6 +77,15 @@ class HubReviewedMenuDecisionsTests(TestCase):
                 product_id=prod, inventory_item=inv_item,
                 unit=inv_item.unit, quantity_per_unit=Decimal(qty), is_active=False,
             )
+        # Test fixtures use the real production IDs to exercise hard identity
+        # guards. Explicit PostgreSQL PK inserts do not advance serial sequences.
+        # Reset just these two *test database* sequences before the command
+        # auto-creates new products and inventory items.
+        with connection.cursor() as cursor:
+            for sql in connection.ops.sequence_reset_sql(
+                no_style(), [Product, InventoryItem],
+            ):
+                cursor.execute(sql)
         self.operator = get_user_model().objects.create_user(
             username="menu-operator", password="test-password", is_staff=True,
         )
