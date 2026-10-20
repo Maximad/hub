@@ -268,7 +268,10 @@ def sync_business_day_tasks(day, *, actor=None):
                 'title_ar': f'مراجعة المواد المنخفضة في المخزون ({len(low_items)})',
                 'details': '؛ '.join(labels[:20]),
                 'priority': OperationalTaskTemplate.Priority.HIGH,
-                'due_at': _local_due(day, datetime.strptime('12:00', '%H:%M').time()),
+                # A verified shortage is a human review, not a timed demand
+                # for a purchase. Keep the task visible without overdue push
+                # broadcasts to all managers or cashiers.
+                'due_at': None,
                 'is_required': False,
                 'responsibility_role': '',
                 'source_type': 'InventoryItem',
