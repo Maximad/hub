@@ -11,6 +11,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from accounts.models import UserCapabilityOverride
 from core.models import (
     Category, InventoryItem, Order, OrderItem, Product, ProductRecipeItem,
     StockMovement, Payment,
@@ -160,6 +161,16 @@ class OperationalReviewCasesTests(TestCase):
         ).exists())
 
     def test_explicit_operations_duty_holder_and_acceptance_change_visibility(self):
+        # Cashier is a manager in this app and legitimately sees uncovered
+        # cases. Test the stricter on-duty visibility with non-manager staff
+        # who are individually granted the narrowly scoped count capability.
+        User = get_user_model()
+        for member in (self.tamer, self.salwa):
+            member.role = User.Role.WAITER
+            member.save(update_fields=['role'])
+            UserCapabilityOverride.objects.create(
+                user=member, capability='inventory_stock_count', allowed=True,
+            )
         self.sync(dry_run=False)
         case = OperationalReviewCase.objects.get(issue_code='needs_count')
         self.assertIsNone(case_duty_holder(self.day, case))
