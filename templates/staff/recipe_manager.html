@@ -7,7 +7,7 @@
   <div class="recipe-hero">
     <div>
       <h3>إدارة الوصفات</h3>
-      <p>تعديل مكوّنات كل منتج وكمياتها ونسبة الهدر. عند الحفظ تُعاد كلفة المنتج التقديرية تلقائياً من الوصفة.</p>
+      <p>تابع جاهزية المنتج للبيع بصورة مستقلة عن اكتمال وصفته. التاريخ والمواد غير المدققة لا تنتج كلفة مؤكدة. يمكنك تعديل المقادير هنا دون اعتبار ذلك تدقيقاً مالياً نهائياً.</p>
     </div>
     <form class="recipe-search" method="get">
       <input type="search" name="q" value="{{ query }}" placeholder="ابحث عن منتج أو قسم…" aria-label="بحث المنتجات">
@@ -24,14 +24,16 @@
           <h4>{{ row.product.name_ar|default:row.product.name_en }}</h4>
           <div class="recipe-card__category">{{ row.product.category.name_ar|default:"بدون قسم" }}</div>
         </div>
-        <span class="recipe-badge">{{ row.product.active_recipe_count }} مكوّن نشط</span>
+        <div><span class="recipe-badge">{{ row.product_status.label }}</span><span class="recipe-badge">{{ row.recipe_status.label }}</span></div>
       </div>
       <div class="recipe-stats">
         <div class="recipe-stat"><span>السعر</span><strong>{{ row.product.price_syp }}</strong></div>
-        <div class="recipe-stat"><span>كلفة الوصفة</span><strong>{{ row.recipe.recipe_estimated_unit_cost_syp|floatformat:0 }}</strong></div>
-        <div class="recipe-stat"><span>الهامش</span><strong>{{ row.recipe.recipe_margin_syp|floatformat:0 }}</strong></div>
+        <div class="recipe-stat"><span>كلفة أولية</span><strong>{% if row.cost_display_ready %}{{ row.recipe.recipe_estimated_unit_cost_syp|floatformat:0 }}{% else %}—{% endif %}</strong></div>
+        <div class="recipe-stat"><span>هامش أولي</span><strong>{% if row.cost_display_ready %}{{ row.recipe.recipe_margin_syp|floatformat:0 }}{% else %}—{% endif %}</strong></div>
       </div>
-      {% if row.recipe.missing_cost_items %}<div class="recipe-warning">بدون كلفة مخزون: {{ row.recipe.missing_cost_items|join:"، " }}</div>{% endif %}
+      {% if row.recipe_status.needs %}<div class="recipe-warning">{{ row.recipe_status.needs|join:"، " }}</div>{% endif %}
+      {% if row.product_status.needs %}<div class="recipe-warning">{{ row.product_status.needs|join:"، " }}</div>{% endif %}
+      {% if row.recipe.missing_cost_items %}<div class="recipe-warning">مكوّنات بلا كلفة مرجعية: {{ row.recipe.missing_cost_items|join:"، " }}</div>{% endif %}
       <div class="recipe-card__actions"><a class="recipe-action" href="{% url 'staff_recipe_edit' row.product.id %}">تعديل الوصفة</a></div>
     </article>
     {% endfor %}
