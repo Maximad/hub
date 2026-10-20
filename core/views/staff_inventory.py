@@ -79,8 +79,9 @@ def inventory_required(view):
 
 @inventory_required
 def staff_inventory_home(request):
-    low_ids=[i.pk for i in InventoryItem.objects.filter(is_active=True, low_stock_threshold__isnull=False) if i.is_low_stock]
-    ctx={'active_count':InventoryItem.objects.filter(is_active=True).count(),'low_items':InventoryItem.objects.filter(pk__in=low_ids),'recent_purchases':Purchase.objects.select_related('vendor').order_by('-business_date','-created_at')[:10],'recent_movements':StockMovement.objects.select_related('inventory_item').order_by('-business_date','-created_at')[:10],'unpaid_purchases':[p for p in Purchase.objects.exclude(status=Purchase.Status.CANCELLED) if p.remaining_syp][:10],'waste_value':StockMovement.objects.filter(movement_type=StockMovement.MovementType.WASTE,is_cancelled=False).aggregate(v=Sum('total_value_syp'))['v'] or 0}
+    from core.services.operational_completeness import verified_low_stock_items
+    low_items = verified_low_stock_items()
+    ctx={'active_count':InventoryItem.objects.filter(is_active=True).count(),'low_items':low_items,'recent_purchases':Purchase.objects.select_related('vendor').order_by('-business_date','-created_at')[:10],'recent_movements':StockMovement.objects.select_related('inventory_item').order_by('-business_date','-created_at')[:10],'unpaid_purchases':[p for p in Purchase.objects.exclude(status=Purchase.Status.CANCELLED) if p.remaining_syp][:10],'waste_value':StockMovement.objects.filter(movement_type=StockMovement.MovementType.WASTE,is_cancelled=False).aggregate(v=Sum('total_value_syp'))['v'] or 0}
     ctx['inventory_can_manage'] = _can_manage(request.user)
     return render(request,'staff/inventory_home.html',ctx)
 
@@ -274,8 +275,8 @@ def staff_inventory_movement_new(request):
 
 @inventory_required
 def staff_inventory_low_stock(request):
-    ids=[i.pk for i in InventoryItem.objects.filter(is_active=True, low_stock_threshold__isnull=False) if i.is_low_stock]
-    return render(request,'staff/inventory_low_stock.html',{'items':InventoryItem.objects.filter(pk__in=ids)})
+    from core.services.operational_completeness import verified_low_stock_items
+    return render(request,'staff/inventory_low_stock.html',{'items':verified_low_stock_items()})
 
 @inventory_required
 def staff_inventory_reports(request):
