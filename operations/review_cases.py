@@ -120,16 +120,19 @@ def _project(day, case):
             "source_id": case.source_id,
         },
     }
-    task, created = BusinessDayTask.objects.get_or_create(
-        business_day=day, fingerprint=key, defaults=defaults,
-    )
     if case.status == OperationalReviewCase.Status.RESOLVED:
+        task = BusinessDayTask.objects.filter(business_day=day, fingerprint=key).first()
+        if task is None:
+            return False
         if task.status == BusinessDayTask.Status.PENDING:
             task.status = BusinessDayTask.Status.WAIVED
             task.completion_note = AUTO_WAIVE_NOTE
             task.completed_at = timezone.now()
             task.save(update_fields=["status", "completion_note", "completed_at", "updated_at"])
         return created
+    task, created = BusinessDayTask.objects.get_or_create(
+        business_day=day, fingerprint=key, defaults=defaults,
+    )
     if task.status == BusinessDayTask.Status.WAIVED and task.completion_note == AUTO_WAIVE_NOTE:
         task.status = BusinessDayTask.Status.PENDING
         task.completion_note = ""
