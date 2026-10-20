@@ -17,7 +17,7 @@ The helper powers:
 - the staff inventory dashboard low-stock list
 - the staff low-stock review page
 
-An uncounted zero no longer creates a low-stock task. When the first actual count is confirmed, later Business Day synchronization can create the existing aggregated review task; when the threshold breach is no longer present, the existing task reconciliation can auto-waive the pending notification. No new task system, schema or timer was created.
+An uncounted zero no longer creates a low-stock task. When the first actual count is confirmed, later Business Day synchronization can create the existing aggregated review task; when the threshold breach is no longer present, the existing task reconciliation can auto-waive the pending notification. No new task system, schema or timer was created. The existing grouped task has no `due_at` deadline: it remains a visible human review, not an overdue notification broadcast.
 
 ## Limits and safety
 
