@@ -10,7 +10,10 @@
   </div>
   <div class="hub-toolbar">
     <a class="hub-button" href="{% url 'staff_close_day' %}">اليوم التشغيلي</a>
-    {% if can_manage_tasks and business_day and business_day.status != 'closed' %}<form method="post">{% csrf_token %}<input type="hidden" name="task_action" value="sync"><button class="hub-button" type="submit">تحديث من النظام</button></form>{% endif %}
+    {% if can_manage_tasks and business_day and business_day.status != 'closed' %}
+    <form method="post">{% csrf_token %}<input type="hidden" name="task_action" value="sync"><button class="hub-button" type="submit">تحديث من النظام</button></form>
+    <form method="post">{% csrf_token %}<input type="hidden" name="task_action" value="review_sync"><button class="hub-button" type="submit">مراجعات من العمليات الحديثة</button></form>
+    {% endif %}
   </div>
 </section>
 
@@ -65,6 +68,7 @@
           {% if task.source_type == 'Event' %}<a href="{% url 'staff_event_detail' task.source_id %}">الفعالية</a>{% endif %}
           {% if task.source_type == 'Reservation' %}<a href="{% url 'staff_reservation_detail' task.source_id %}">الحجز</a>{% endif %}
           {% if task.kind == 'inventory' %}<a href="{% url 'staff_inventory_low_stock' %}">المخزون</a>{% endif %}
+          {% if task.source_type == 'OperationalReviewCase' %}<span>مراجعة مرتبطة بالسجل الأصلي، لا تُغلق يدوياً</span>{% if task.review_url %}<a href="{{ task.review_url }}">فتح السجل</a>{% endif %}{% endif %}
         </div>
         {% if task.details %}<small>{{ task.details }}</small>{% endif %}
         {% if task.completion_note %}<small>ملاحظة: {{ task.completion_note }}</small>{% endif %}
@@ -72,13 +76,17 @@
       </div>
 
       <div class="ops-task__assignee">
-        {% if can_manage_tasks and business_day.status != 'closed' %}
+        {% if task.source_type == 'OperationalReviewCase' %}
+          {% if task.review_holder %}<strong>{{ task.review_holder }}</strong><small>المناوب المؤهّل حالياً</small>{% else %}<strong>تحتاج تغطية</strong><small>تظهر للإدارة حتى يُحدَّد مناوب مؤهّل</small>{% endif %}
+        {% elif can_manage_tasks and business_day.status != 'closed' %}
         <form method="post">{% csrf_token %}<input type="hidden" name="task_action" value="assign"><input type="hidden" name="task_id" value="{{ task.pk }}"><label class="hub-visually-hidden" for="task-assignee-{{ task.pk }}">المسؤول</label><select id="task-assignee-{{ task.pk }}" name="assigned_to" onchange="this.form.submit()"><option value="">غير معيّن</option>{% for staff_user in staff_options %}<option value="{{ staff_user.pk }}" {% if task.assigned_to_id == staff_user.pk %}selected{% endif %}>{{ staff_user }}</option>{% endfor %}</select></form>
         {% else %}<strong>{{ task.assigned_to|default:'غير معيّن' }}</strong>{% if task.responsibility_role %}<small>الدور: {{ task.responsibility_role }}</small>{% endif %}{% endif %}
       </div>
 
       <div class="ops-task__actions">
-        {% if business_day.status != 'closed' and can_manage_tasks or business_day.status != 'closed' and task.assigned_to_id == request.user.pk or business_day.status != 'closed' and task.responsibility_role == request.user.role %}
+        {% if task.source_type == 'OperationalReviewCase' %}
+          {% if task.review_url %}<a class="hub-button" href="{{ task.review_url }}">استكمال السجل</a>{% endif %}
+        {% elif business_day.status != 'closed' and can_manage_tasks or business_day.status != 'closed' and task.assigned_to_id == request.user.pk or business_day.status != 'closed' and task.responsibility_role == request.user.role %}
           {% if task.status == 'pending' %}
           <form method="post">{% csrf_token %}<input type="hidden" name="task_action" value="status"><input type="hidden" name="task_id" value="{{ task.pk }}"><input type="hidden" name="status" value="done"><button class="ops-action ops-action--done" type="submit">✓ تم</button></form>
           <details class="ops-inline-details"><summary class="ops-action ops-action--muted">تعذّر</summary><form method="post" class="ops-inline-details__panel">{% csrf_token %}<input type="hidden" name="task_action" value="status"><input type="hidden" name="task_id" value="{{ task.pk }}"><input type="hidden" name="status" value="waived"><input name="completion_note" placeholder="لماذا لم تُنفّذ؟" required><button class="ops-action ops-action--danger" type="submit">إغلاق بسبب</button></form></details>
