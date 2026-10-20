@@ -48,6 +48,8 @@ class HubReviewedMenuDecisionsTests(TestCase):
             Product.objects.create(
                 pk=pk, category=cat, name_ar=name, price_syp=price,
                 is_available=(pk != 322),
+                visible_on_pos=(pk != 322),
+                orderable_on_pos=(pk != 322),
             )
         for pk, (code, name, unit) in INVENTORY.items():
             InventoryItem.objects.create(
@@ -109,6 +111,8 @@ class HubReviewedMenuDecisionsTests(TestCase):
         self.assertTrue(report["applied"])
         self.assertFalse(report["read_only"])
         self.assertTrue(Product.objects.get(pk=322).is_available)
+        self.assertTrue(Product.objects.get(pk=322).visible_on_pos)
+        self.assertTrue(Product.objects.get(pk=322).orderable_on_pos)
         self.assertEqual(Product.objects.get(pk=322).price_syp, 100)
         self.assertEqual(Product.objects.get(pk=108).price_syp, 150)
         for name in [
