@@ -10,10 +10,11 @@ from datetime import timedelta
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from accounts.permissions import user_has_capability
-from core.models import ActivityLog, InternetSession, InventoryItem, Order, OrderItem, Product, Purchase, PurchaseReceipt, StockMovement, OperationsImportReceipt
+from core.models import ActivityLog, InternetSession, InventoryItem, Order, OrderItem, Product, Purchase, PurchaseReceipt, PurchaseReceiptLine, StockMovement, OperationsImportReceipt
 from internet.models import InternetSessionNetworkOperation
 from internet.session_network_backends import PROVISION_ERROR
 from core.services.operational_completeness import counted_inventory_ids, recipe_completeness
@@ -137,14 +138,17 @@ def case_spec(kind, source):
         # Check the posted receiving movement, not a mutable PurchaseItem price:
         # editing an old item cannot silently certify an already posted receipt.
         zero_receipt_cost = StockMovement.objects.filter(
-            related_purchase=source,
+            purchase_receipt_line__receipt__purchase=source,
             movement_type=StockMovement.MovementType.PURCHASE_RECEIVED,
             purchase_receipt_line__receipt__reversed_at__isnull=True,
             is_cancelled=False,
-            unit_cost_syp__lte=0,
+        ).filter(Q(unit_cost_syp__isnull=True) | Q(unit_cost_syp__lte=0)).exists()
+        missing_movement = PurchaseReceiptLine.objects.filter(
+            receipt__purchase=source, receipt__reversed_at__isnull=True,
+            stock_movement__isnull=True,
         ).exists()
         return {OperationalReviewCase.IssueCode.RECEIPT_REVIEW} if (
-            missing_supplier or zero_receipt_cost
+            missing_supplier or zero_receipt_cost or missing_movement
         ) else set()
     if kind == OperationalReviewCase.SourceType.INTERNET_SESSION:
         # Network provisioning failure is supported by the durable outbox,
