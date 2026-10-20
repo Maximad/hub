@@ -373,6 +373,8 @@ def set_task_status(task, *, actor, status, note=''):
     task = BusinessDayTask.objects.select_for_update().select_related('business_day').get(pk=task.pk)
     if task.business_day.status == BusinessDay.Status.CLOSED:
         raise ValidationError('لا يمكن تعديل مهمة يوم مغلق.')
+    if task.source_type == 'OperationalReviewCase':
+        raise ValidationError('هذه مراجعة مرتبطة بمصدرها، لا تُغلق يدوياً. أكمل السجل الأصلي ثم حدّث المراجعات.')
     if status not in BusinessDayTask.Status.values:
         raise ValidationError('حالة المهمة غير صالحة.')
     note = (note or '').strip()
@@ -396,6 +398,8 @@ def assign_task(task, *, actor, assigned_to):
     task = BusinessDayTask.objects.select_for_update().select_related('business_day').get(pk=task.pk)
     if task.business_day.status == BusinessDay.Status.CLOSED:
         raise ValidationError('لا يمكن تعديل مهمة يوم مغلق.')
+    if task.source_type == 'OperationalReviewCase':
+        raise ValidationError('إسناد هذه المراجعة يتبع التغطية الفعلية للمناوب، لا قائمة الفريق المسجّلة.')
     task.assigned_to = assigned_to
     task.save(update_fields=['assigned_to', 'updated_at'])
     _audit(actor, 'business_day.task_assigned', task_id=task.pk, assigned_to_id=getattr(assigned_to, 'pk', None))

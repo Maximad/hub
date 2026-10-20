@@ -5,9 +5,11 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 
-from .models import BusinessDay, BusinessDayTask, OperationalTaskTemplate
+from .models import BusinessDay, BusinessDayTask, OperationalTaskTemplate, OperationalReviewCase
+from .review_cases import case_duty_holder, run_review_sync
 from .reminders import reminders_enabled
 from .opening import active_staff_queryset
 from .services import current_business_date
@@ -101,6 +103,18 @@ def staff_operational_tasks(request):
                     f'تمت مزامنة المهام: {result["created"]} جديدة، {result["auto_waived"]} أُغلقت تلقائياً بعد زوال سببها.',
                 )
 
+            elif action == 'review_sync':
+                if not can_manage:
+                    raise PermissionDenied
+                result = run_review_sync(day, actor=request.user, dry_run=False, limit=20)
+                c = result['counts']
+                messages.info(
+                    request,
+                    f"متابعة البيانات من العمليات الحالية: {c['created']} جديدة، "
+                    f"{c['resolved']} اكتملت، {c['reopened']} أعيد فتحها. "
+                    'لم تُعدّل مواد المخزون أو الأسعار أو الوصفات.',
+                )
+
             elif action == 'manual_add':
                 if not can_manage:
                     raise PermissionDenied
@@ -182,15 +196,47 @@ def staff_operational_tasks(request):
         day.tasks.select_related('assigned_to', 'task_template', 'completed_by').all()
         if day else BusinessDayTask.objects.none()
     )
+    # Follow-ups are manager-visible, or visible only to the current
+    # checked-in, eligible holder of explicit operations duty. A roster or
+    # pending handover alone never authorizes access to a review case.
+    all_tasks = list(tasks)
+    review_ids = [
+        int(t.source_id) for t in all_tasks
+        if t.source_type == 'OperationalReviewCase' and t.source_id.isdecimal()
+    ]
+    review_cases = {
+        case.pk: case for case in OperationalReviewCase.objects.filter(pk__in=review_ids)
+    }
+    filtered = []
+    for task in all_tasks:
+        if task.source_type != 'OperationalReviewCase':
+            filtered.append(task)
+            continue
+        case = review_cases.get(int(task.source_id)) if task.source_id.isdecimal() else None
+        if case is None:
+            continue
+        holder = case_duty_holder(day, case)
+        if not can_manage and (holder is None or holder.pk != request.user.pk):
+            continue
+        task.review_case = case
+        task.review_holder = holder
+        if case.issue_code == OperationalReviewCase.IssueCode.NEEDS_COUNT:
+            task.review_url = reverse('staff_inventory_stock_count') + f'?item={case.source_id}'
+        elif case.issue_code == OperationalReviewCase.IssueCode.RECIPE_REVIEW:
+            task.review_url = reverse('staff_recipe_edit', args=[case.source_id])
+        else:
+            task.review_url = ''
+        filtered.append(task)
+    tasks = filtered
+
     now = timezone.now()
     counts = {
-        'pending': tasks.filter(status=BusinessDayTask.Status.PENDING).count() if day else 0,
-        'overdue': tasks.filter(
-            status=BusinessDayTask.Status.PENDING,
-            due_at__isnull=False,
-            due_at__lt=now,
-        ).count() if day else 0,
-        'done': tasks.filter(status=BusinessDayTask.Status.DONE).count() if day else 0,
+        'pending': sum(task.status == BusinessDayTask.Status.PENDING for task in tasks),
+        'overdue': sum(
+            task.status == BusinessDayTask.Status.PENDING
+            and task.due_at is not None and task.due_at < now for task in tasks
+        ),
+        'done': sum(task.status == BusinessDayTask.Status.DONE for task in tasks),
     }
     User = get_user_model()
     provider_role = getattr(User.Role, 'INTERNET_PROVIDER', 'internet_provider')

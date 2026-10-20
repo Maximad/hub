@@ -467,3 +467,50 @@ class BusinessDayException(models.Model):
 
     def __str__(self):
         return self.title_ar
+
+
+class OperationalReviewCase(models.Model):
+    """Persistent source-linked follow-up, separate from daily task projections.
+
+    Opened only from explicit pilot sync or verified recent operational evidence.
+    Historical aggregate imports do not create review cases. This is not
+    financial certification, a source record, or a reason to change inventory.
+    """
+
+    class SourceType(models.TextChoices):
+        INVENTORY = 'inventory', 'مادة مخزون'
+        PRODUCT = 'product', 'منتج'
+
+    class IssueCode(models.TextChoices):
+        NEEDS_COUNT = 'needs_count', 'يلزم جرد فعلي'
+        RECIPE_REVIEW = 'recipe_review', 'مراجعة الوصفة'
+        PRICE_REVIEW = 'price_review', 'مراجعة سعر البيع'
+
+    class Status(models.TextChoices):
+        OPEN = 'open', 'بانتظار الاستكمال'
+        RESOLVED = 'resolved', 'مكتملة بالدليل'
+
+    source_type = models.CharField(max_length=16, choices=SourceType.choices)
+    source_id = models.PositiveBigIntegerField()
+    issue_code = models.CharField(max_length=32, choices=IssueCode.choices)
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.OPEN)
+    source_label = models.CharField(max_length=180)
+    evidence = models.JSONField(default=dict, blank=True)
+    opened_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(auto_now=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['status', '-reviewed_at', 'pk']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['source_type', 'source_id', 'issue_code'],
+                name='unique_operational_review_source_issue',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['status', 'issue_code'], name='ops_review_open_issue_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.source_label}: {self.get_issue_code_display()}'
