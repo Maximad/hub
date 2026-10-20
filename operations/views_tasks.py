@@ -224,6 +224,8 @@ def staff_operational_tasks(request):
             task.review_url = reverse('staff_inventory_stock_count') + f'?item={case.source_id}'
         elif case.issue_code == OperationalReviewCase.IssueCode.RECIPE_REVIEW:
             task.review_url = reverse('staff_recipe_edit', args=[case.source_id])
+        elif case.issue_code == OperationalReviewCase.IssueCode.NETWORK_REVIEW:
+            task.review_url = reverse('staff_internet_session', args=[case.source_id])
         else:
             task.review_url = ''
         filtered.append(task)
