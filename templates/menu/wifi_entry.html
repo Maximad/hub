@@ -82,8 +82,8 @@
   {% if active_fast_wifi_session %}
     <div class="wifi-sheet__heading">
       {% if active_fast_wifi_network_ready %}
-        <h2 id="wifi-sheet-title">{% if active_fast_wifi_is_internal %}تم الاتصال بإنترنت {% if active_fast_wifi_session.entitlement.origin_type == 'internal_owner_grant' %}الإدارة{% else %}الفريق{% endif %}{% else %}تم الاتصال{% endif %}</h2>
-        <p>{% if active_fast_wifi_is_internal %}الاتصال الداخلي يعمل على هذا الجهاز.{% else %}الإنترنت السريع يعمل على هذا الجهاز.{% endif %}</p>
+        <h2 id="wifi-sheet-title">{% if active_fast_wifi_is_internal %}تم تجهيز إنترنت {% if active_fast_wifi_session.entitlement.origin_type == 'internal_owner_grant' %}الإدارة{% else %}الفريق{% endif %}{% else %}الإنترنت السريع جاهز{% endif %}</h2>
+        <p>الخدمة جاهزة في النظام. تحقّق من اتصال جهازك بالإنترنت.</p>
       {% else %}
         <h2 id="wifi-sheet-title">الاتصال قيد التجهيز</h2>
         <p>لن يبدأ احتساب الوقت قبل نجاح تجهيز الشبكة.</p>
@@ -105,8 +105,8 @@
   {% elif active_guest_wifi_session and not fast_registration_mode %}
     <div class="wifi-sheet__heading">
       {% if active_guest_wifi_network_ready %}
-        <h2 id="wifi-sheet-title">تم الاتصال</h2>
-        <p>الإنترنت الأساسي يعمل على هذا الجهاز.</p>
+        <h2 id="wifi-sheet-title">الإنترنت الأساسي جاهز</h2>
+        <p>تم تجهيز الوصول. تحقّق من اتصال جهازك بالإنترنت.</p>
       {% else %}
         <h2 id="wifi-sheet-title">الاتصال قيد التجهيز</h2>
         <p>يجري تجهيز الإنترنت الأساسي لهذا الجهاز.</p>

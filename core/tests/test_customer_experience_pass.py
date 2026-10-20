@@ -109,6 +109,21 @@ class CustomerExperienceStaticContractTests(SimpleTestCase):
         self.assertIn('تم التقديم', template)
         self.assertNotIn('position:sticky;top:.5rem', template)
 
+    def test_internet_status_only_claims_service_readiness_not_verified_device_connection(self):
+        root = Path(__file__).resolve().parents[2]
+        session_page = (root / 'templates/menu/current_visit.html').read_text()
+        wifi_page = (root / 'templates/menu/wifi_entry.html').read_text()
+
+        self.assertIn('أساسي · مفعّل', session_page)
+        self.assertIn('سريع · مفعّل', session_page)
+        self.assertIn('تحقّق من اتصال جهازك بالشبكة', session_page)
+        self.assertNotIn('أساسي · متصل', session_page)
+        self.assertNotIn('سريع · متصل', session_page)
+        self.assertIn('الإنترنت السريع جاهز', wifi_page)
+        self.assertIn('الإنترنت الأساسي جاهز', wifi_page)
+        self.assertIn('تحقّق من اتصال جهازك بالإنترنت', wifi_page)
+        self.assertNotIn('تم الاتصال', wifi_page)
+
     def test_customer_styles_hide_legacy_internet_storefront_on_menu(self):
         root = Path(__file__).resolve().parents[2]
         stylesheet = (root / 'static/css/customer_experience_v2.css').read_text()

@@ -60,14 +60,15 @@
     {% if active_internet_session %}
     <article class="customer-space-service-card current-visit__internet-status">
       {% if active_internet_session.billing_mode == 'free' %}
-        {% if active_internet_session.network_ready %}<span class="hub-badge hub-badge-info">أساسي · متصل</span>{% else %}<span class="hub-badge hub-badge-warning">جارٍ تجهيز الاتصال</span>{% endif %}
+        {% if active_internet_session.network_ready %}<span class="hub-badge hub-badge-info">أساسي · مفعّل</span>{% else %}<span class="hub-badge hub-badge-warning">جارٍ تجهيز الاتصال</span>{% endif %}
         <strong>إنترنت أساسي</strong>
       {% else %}
-        {% if active_internet_session.network_ready %}<span class="hub-badge hub-badge-success">سريع · متصل</span>{% else %}<span class="hub-badge hub-badge-warning">جارٍ تجهيز الاتصال</span>{% endif %}
+        {% if active_internet_session.network_ready %}<span class="hub-badge hub-badge-success">سريع · مفعّل</span>{% else %}<span class="hub-badge hub-badge-warning">جارٍ تجهيز الاتصال</span>{% endif %}
         <strong>{% if active_internet_session.package_id %}{{ active_internet_session.package.name_ar }}{% elif active_internet_session.entitlement.origin_type == 'internal_owner_grant' %}إنترنت الإدارة{% elif active_internet_session.entitlement.origin_type == 'internal_team_grant' %}إنترنت الفريق{% elif active_internet_session.billing_mode == 'open_metered' %}إنترنت سريع{% else %}رصيد إنترنت{% endif %}</strong>
       {% endif %}
 
       {% if active_internet_session.network_ready %}
+        <small class="hub-help-text">الجلسة مفعّلة في هَبّ. تحقّق من اتصال جهازك بالشبكة.</small>
         <p>منذ {{ active_internet_session.start_time|date:"H:i" }}{% if active_internet_session.authorized_until %} · حتى {{ active_internet_session.authorized_until|date:"H:i" }}{% elif active_internet_session.billing_mode == 'open_metered' %} · {{ active_internet_session.rate_per_hour_syp|format_syp }} / ساعة{% endif %}</p>
         {% if active_internet_session.billing_mode == 'open_metered' %}<small class="hub-help-text">التكلفة تُحسب حتى إيقاف الاتصال.</small>{% endif %}
       {% elif active_internet_session.billing_mode == 'open_metered' %}
