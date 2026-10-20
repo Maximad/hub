@@ -9,6 +9,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from accounts.permissions import require_staff_capability
 from core.models import InventoryItem, Product, ProductRecipeItem
 from core.stock_recipes import calculate_recipe_cost, update_product_cost_from_recipe
+from core.services.operational_completeness import recipe_completeness, product_completeness
 
 
 inventory_required = require_staff_capability('inventory')
@@ -27,6 +28,7 @@ def _decimal(value, label, minimum=None):
 def _product_rows(query=''):
     products = (
         Product.objects.select_related('category')
+        .prefetch_related('recipe_items__inventory_item')
         .annotate(
             active_recipe_count=Count(
                 'recipe_items',
@@ -47,7 +49,15 @@ def _product_rows(query=''):
     rows = []
     for product in products[:400]:
         recipe = calculate_recipe_cost(product)
-        rows.append({'product': product, 'recipe': recipe})
+        recipe_status = recipe_completeness(product)
+        rows.append({
+            'product': product, 'recipe': recipe,
+            'recipe_status': recipe_status,
+            'product_status': product_completeness(product, recipe_status),
+            'cost_display_ready': (
+                product.active_recipe_count > 0 and not recipe['missing_cost_items']
+            ),
+        })
     return rows
 
 

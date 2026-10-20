@@ -7,7 +7,7 @@
     <div class="staff-v2-page-head__copy">
       <p class="staff-v2-eyebrow">تشغيل هَبّ</p>
       <h2 class="staff-v2-title hub-page-header__title">العمليات</h2>
-      <p class="staff-v2-subtitle">الطلبات، الحساب، الدفع والإنترنت من مساحة واحدة.</p>
+      <p class="staff-v2-subtitle">البيع والشراء والجرد والإنترنت من مساحة واحدة، بحسب صلاحيات المناوب.</p>
     </div>
     <div class="staff-v2-actions">
       {% if staff_caps.orders and staff_caps.visit_manage %}
@@ -33,6 +33,12 @@
         </a>
       {% endfor %}
     </nav>
+    {% if workspace_caps.cashier %}
+    <div class="hub-toolbar" style="margin-top:.7rem;gap:.5rem">
+      <a class="hub-button" href="{% url 'staff_cashier' %}">القبض ومتابعة الحسابات المفتوحة</a>
+      {% if workspace_caps.kitchen_board %}<a class="hub-button hub-button-secondary" href="{% url 'staff_kitchen' %}">التحضير</a>{% endif %}
+    </div>
+    {% endif %}
     {% if workspace_more_actions %}
     <details class="hub-daily-start__more">
       <summary>مهام أخرى حسب صلاحياتك</summary>

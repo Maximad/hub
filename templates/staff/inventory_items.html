@@ -5,10 +5,14 @@
   {% if inventory_can_manage %}<a class="hub-button" href="{% url 'staff_inventory_item_new' %}">إضافة مادة</a>{% endif %}
   <a class="hub-button hub-button-secondary" href="{% url 'staff_inventory_items_csv' %}">CSV</a>
 </div>
+<p class="hub-help-text">الأرصدة التاريخية، وخصوصاً الصفرية، لا تُعتبر جرداً موثّقاً. تشير «مكتملة تشغيلياً» إلى تأكيد كمية المادة وهويتها فقط، وليس إلى تدقيق كلفتها المالية.</p>
 <div class="hub-table-wrap">
   <table class="hub-table">
-    <tr><th>مادة مخزون</th><th>نوع المادة</th><th>وحدة القياس</th><th>الكمية الحالية</th><th>حد التنبيه</th></tr>
-    {% for i in items %}<tr><td>{{ i.name_ar }}</td><td>{{ i.get_item_type_display }}</td><td>{{ i.get_unit_display }}</td><td>{{ i.current_quantity }}</td><td>{{ i.low_stock_threshold|default:'—' }}{% if i.is_low_stock %} <span class="hub-status-chip hub-status-chip--warning">منخفضة</span>{% endif %}</td></tr>{% endfor %}
+    <tr><th>مادة مخزون</th><th>نوع المادة</th><th>وحدة القياس</th><th>الكمية المسجّلة</th><th>حالة التحقق</th><th>التكلفة</th><th>حد التنبيه</th></tr>
+    {% for i in items %}<tr><td>{{ i.name_ar }}</td><td>{{ i.get_item_type_display }}</td><td>{{ i.get_unit_display }}</td><td>{{ i.current_quantity }}</td><td>
+      <span class="hub-status-chip{% if i.operational_review.count_verified %} hub-status-chip--success{% else %} hub-status-chip--warning{% endif %}">{{ i.operational_review.label }}</span>
+      {% if staff_caps.inventory_stock_count and not i.operational_review.count_verified %}<a href="{% url 'staff_inventory_stock_count' %}?item={{ i.pk }}">جرد هذه المادة</a>{% endif %}
+    </td><td>{% if i.operational_review.has_reference_cost %}مرجع تقديري غير مدقّق{% else %}بانتظار توثيق التكلفة{% endif %}</td><td>{{ i.low_stock_threshold|default:'—' }}{% if i.operational_review.count_verified and i.is_low_stock %} <span class="hub-status-chip hub-status-chip--warning">منخفضة</span>{% elif i.is_low_stock %} <small>حد نظري بانتظار الجرد</small>{% endif %}</td></tr>{% endfor %}
   </table>
 </div>
 {% endblock %}
