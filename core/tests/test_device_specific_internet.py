@@ -176,11 +176,11 @@ class DeviceSpecificInternetTests(TestCase):
         )
 
         first_page = first.get(reverse('current_visit'))
-        self.assertContains(first_page, 'سريع · متصل')
+        self.assertContains(first_page, 'سريع · مفعّل')
         self.assertContains(first_page, 'التكلفة تُحسب حتى إيقاف الاتصال')
         second_page = second.get(reverse('current_visit'))
         self.assertContains(second_page, 'اتصل بالإنترنت')
-        self.assertNotContains(second_page, 'سريع · متصل')
+        self.assertNotContains(second_page, 'سريع · مفعّل')
 
         second_session, _ = start_visit_metered_session(
             visit=self.visit,
@@ -189,7 +189,7 @@ class DeviceSpecificInternetTests(TestCase):
         self.assertNotEqual(first_session.pk, second_session.pk)
 
         second_active = second.get(reverse('current_visit'))
-        self.assertContains(second_active, 'سريع · متصل')
+        self.assertContains(second_active, 'سريع · مفعّل')
 
     def test_browser_cannot_stop_another_browser_session(self):
         session_a, _ = start_visit_metered_session(
