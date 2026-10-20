@@ -70,7 +70,7 @@ def _candidate_ids(*, product_ids, inventory_ids, internet_ids=None, include_rec
         for pk in operational_orders[:slots]:
             if pk not in given_products:
                 given_products.add(pk)
-        slots = limit - len(given_products) - len(given_inventory)
+        slots = limit - len(given_products) - len(given_inventory) - len(given_internet)
         if slots:
             for pk in receipts[:slots]:
                 if pk not in given_inventory:
