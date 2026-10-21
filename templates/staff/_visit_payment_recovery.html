@@ -1,0 +1,6 @@
+{% if payment_recovery %}
+<div class="hub-message hub-message-warning" role="alert">
+  <p>راجع الرسالة والرصيد الحالي قبل إعادة المحاولة. احتُفظ بالقيم المدخلة ومرجع الطلب في النموذج نفسه. أدخل موافقة المدير مجدداً عند الحاجة.</p>
+  <form method="get" action="{% url 'staff_cashier_order' visit.public_code %}"><button class="hub-button" type="submit">تحديث الرصيد وسجل الدفعات</button></form>
+</div>
+{% endif %}

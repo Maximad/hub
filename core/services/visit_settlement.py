@@ -1,10 +1,11 @@
+from dataclasses import replace
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from core.models import ActivityLog, HubVisit, Order, Payment
+from core.models import ActivityLog, HubVisit, Order, Payment, PostingCommand
 from core.services.consumption_labels import zero_balance_consumption_label
 from core.services.posting.engine import dispatch
 from core.services.posting.order_payments import collect as collect_order_payment
@@ -51,6 +52,18 @@ def visit_financials(visit, *, orders=None):
     }
 
 
+def visit_payment_receipt(visit, key):
+    """Recognize only a completed receipt belonging to this original account."""
+    receipt = PostingCommand.objects.filter(key=key).first()
+    if receipt and (receipt.command != 'visit_payment.collect'
+                    or receipt.source_type != visit._meta.label
+                    or receipt.source_id != str(visit.pk)
+                    or receipt.result_type != visit._meta.label
+                    or receipt.result_id != str(visit.pk)):
+        raise ValidationError('مرجع الدفع مستخدم لعملية أخرى. حدّث صفحة الحساب قبل المتابعة.')
+    return receipt
+
+
 def allocate_visit_payment(visit, context, amount_syp, method, notes=''):
     """Collect one visit payment and allocate it across unpaid orders.
 
@@ -65,9 +78,13 @@ def allocate_visit_payment(visit, context, amount_syp, method, notes=''):
     if method not in dict(COLLECTIBLE_PAYMENT_METHODS):
         raise ValidationError('طريقة الدفع المختارة غير قابلة للتحصيل.')
 
+    payload = {'amount_syp': format(amount.normalize(), 'f'), 'method': method, 'notes': notes}
+    context = replace(context, request_metadata={**context.request_metadata, 'visit_payment': payload})
     allocations = []
 
     def handle(locked_visit):
+        if locked_visit.status != HubVisit.Status.OPEN:
+            raise ValidationError('هذه الجلسة مغلقة ولا تقبل دفعات جديدة.')
         orders = list(active_visit_orders(locked_visit, for_update=True))
         financial = visit_financials(locked_visit, orders=orders)
         if amount > Decimal(str(financial['remaining'])):
@@ -117,5 +134,11 @@ def allocate_visit_payment(visit, context, amount_syp, method, notes=''):
         return locked_visit
 
     with transaction.atomic():
-        result = dispatch('visit_payment.collect', visit, context, handle)
+        locked_visit = HubVisit.objects.select_for_update().get(pk=visit.pk)
+        receipt = visit_payment_receipt(locked_visit, context.idempotency_key)
+        if receipt and receipt.request_metadata.get('visit_payment', payload) != payload:
+            raise ValidationError('تغيّرت تفاصيل طلب الدفع. حدّث صفحة الحساب قبل تسجيل دفعة أخرى.')
+        result = dispatch('visit_payment.collect', locked_visit, context, handle)
+        # Also reject a globally colliding key won concurrently by another visit.
+        visit_payment_receipt(locked_visit, context.idempotency_key)
     return result, allocations

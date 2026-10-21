@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import uuid
 
 from django.contrib import messages
@@ -23,6 +24,7 @@ from core.services.visit_settlement import (
     active_visit_orders,
     allocate_visit_payment,
     visit_financials,
+    visit_payment_receipt,
 )
 from core.settings_helpers import get_page_setting, get_system_settings
 from core.services.visits import customer_visit_queryset
@@ -80,6 +82,21 @@ def _digest_for_request(request, prefix):
     return request.headers.get('Idempotency-Key') or request.POST.get('idempotency_key') or f'{prefix}:{request.user.pk}:{digest}'
 
 
+class PartialApprovalRequired(PermissionDenied):
+    def __init__(self, visit, amount, anchor_order):
+        super().__init__('الدفع الجزئي يحتاج موافقة مدير.')
+        self.visit, self.amount, self.anchor_order = visit, amount, anchor_order
+
+    def notify(self, request):
+        label = str(self.visit.table) if self.visit.table_id else f'جلسة {self.visit.display_number}'
+        for event, title, body in (
+            ('manager_approval_needed', 'مطلوب موافقة المدير', f'دفع جزئي لحساب {label}'),
+            ('partial_payment_requested', 'دفع جزئي يحتاج موافقة', f'{self.amount} ل.س — {label}'),
+        ):
+            create_notification(event, title, body, order=self.anchor_order,
+                                target_role='admin', created_by=request.user)
+
+
 def _approval_for_partial(request, amount, remaining, *, visit, anchor_order=None):
     if amount >= remaining:
         return None
@@ -91,28 +108,11 @@ def _approval_for_partial(request, amount, remaining, *, visit, anchor_order=Non
         if candidate and can_approve_partial_payment(candidate):
             manager = candidate
     if manager is None:
-        label = str(visit.table) if visit.table_id else f'جلسة {visit.display_number}'
-        create_notification(
-            'manager_approval_needed',
-            'مطلوب موافقة المدير',
-            f'دفع جزئي لحساب {label}',
-            order=anchor_order,
-            target_role='admin',
-            created_by=request.user,
-        )
-        create_notification(
-            'partial_payment_requested',
-            'دفع جزئي يحتاج موافقة',
-            f'{amount} ل.س — {label}',
-            order=anchor_order,
-            target_role='admin',
-            created_by=request.user,
-        )
-        raise PermissionDenied('الدفع الجزئي يحتاج موافقة مدير.')
+        raise PartialApprovalRequired(visit, amount, anchor_order)
     return manager
 
 
-def _visit_detail_context(request, visit):
+def _visit_detail_context(request, visit, *, recovery=None):
     orders = list(active_visit_orders(visit))
     for order in orders:
         order.consumption_request_key = str(uuid.uuid4())
@@ -128,15 +128,24 @@ def _visit_detail_context(request, visit):
         for payment in order.payments.all()
         if payment.is_active and not payment.is_reversed and payment.method != Payment.Method.UNPAID
     ]
+    recovery = recovery or {}
+    form_values = {'currency_amount': financial['remaining'], 'method': Payment.Method.CASH}
+    settlement_values = {'method': Payment.Method.CASH}
+    if recovery.get('action') == 'payment':
+        form_values = recovery['values']
+    elif recovery.get('action') == 'settle_close':
+        settlement_values = recovery['values']
     return {
+        'form_values': form_values, 'settlement_values': settlement_values,
+        'payment_recovery': bool(recovery),
         'visit': visit,
         **financial,
         'payments': payments,
         'can_reverse_payments': is_finance_user(request.user),
         # Fresh form tokens distinguish separate, legitimate same-value collections.
         # Retries of the original form retain their token for exactly-once posting.
-        'collection_request_key': f'visit-pay:{visit.pk}:{uuid.uuid4().hex}',
-        'settlement_request_key': f'visit-settle:{visit.pk}:{uuid.uuid4().hex}',
+        'collection_request_key': recovery.get('key') if recovery.get('action') == 'payment' else f'visit-pay:{visit.pk}:{uuid.uuid4().hex}',
+        'settlement_request_key': recovery.get('key') if recovery.get('action') == 'settle_close' else f'visit-settle:{visit.pk}:{uuid.uuid4().hex}',
         'active_internet_sessions': active_sessions,
         'methods': COLLECTIBLE_PAYMENT_METHODS,
         'payment_amount_default': financial['remaining'],
@@ -145,9 +154,9 @@ def _visit_detail_context(request, visit):
     }
 
 
-def _payment_panel_response(request, public_code):
+def _payment_panel_response(request, public_code, *, recovery=None):
     visit = get_object_or_404(_visit_queryset(), public_code=public_code)
-    return render(request, 'staff/_visit_payment_panel.html', _visit_detail_context(request, visit))
+    return render(request, 'staff/_visit_payment_panel.html', _visit_detail_context(request, visit, recovery=recovery))
 
 
 @require_staff_capability('cashier')
@@ -194,74 +203,85 @@ def staff_cashier_visit(request, public_code):
     return render(request, 'staff/cashier_visit.html', context)
 
 
+def _payment_fingerprint(request):
+    # Credentials and CSRF tokens are deliberately excluded from durable metadata.
+    values = {name: request.POST.get(name, '') for name in (
+        'currency_currency', 'currency_acknowledged', 'currency_allow_stale_rate', 'method', 'notes')}
+    values['amount'] = request.POST.get('currency_amount') or request.POST.get('amount_syp', '')
+    return hashlib.sha256(repr(sorted(values.items())).encode()).hexdigest()
+
+
+def _payment_failure_response(request, public_code, key, action):
+    values = {name: request.POST.get(name, '') for name in (
+        'currency_currency', 'currency_acknowledged', 'currency_allow_stale_rate', 'method', 'notes')}
+    values['currency_amount'] = request.POST.get('currency_amount') or request.POST.get('amount_syp', '')
+    recovery = {'key': key, 'action': action, 'values': values}
+    if request.GET.get('panel') == 'payment':
+        return _payment_panel_response(request, public_code, recovery=recovery)
+    visit = get_object_or_404(_visit_queryset(), public_code=public_code)
+    return render(request, 'staff/cashier_visit.html', _visit_detail_context(request, visit, recovery=recovery))
+
+
 @require_staff_capability('cashier')
 @require_POST
 def staff_cashier_visit_pay(request, public_code):
-    visit = get_object_or_404(HubVisit.objects.select_related('table'), public_code=public_code)
-    if visit.status != HubVisit.Status.OPEN:
-        messages.error(request, 'هذه الجلسة مغلقة ولا تقبل دفعات جديدة.')
-        if request.GET.get('panel') == 'payment':
-            return _payment_panel_response(request, public_code)
-        return redirect('staff_cashier_order', public_code=visit.public_code)
-
-    current = visit_financials(visit)
-    remaining = current['remaining']
-    currency_service = CurrencyEntryFormService(request, operation='payment')
+    visit = get_object_or_404(HubVisit, public_code=public_code)
+    posting_key = _digest_for_request(request, f'visit-cashier:{visit.pk}')
+    fingerprint = _payment_fingerprint(request)
     try:
-        currency_entry = currency_service.clean(request.POST.get('amount_syp'))
-        amount = currency_entry.base_amount
-        if amount <= 0:
-            raise ValidationError('المبلغ يجب أن يكون أكبر من صفر.')
-        if amount > remaining:
-            raise ValidationError('المبلغ لا يجوز أن يتجاوز رصيد الجلسة المتبقي.')
-        anchor_order = next((order for order in current['orders'] if order.remaining_syp > 0), None)
-        approver = _approval_for_partial(
-            request,
-            amount,
-            remaining,
-            visit=visit,
-            anchor_order=anchor_order,
-        )
-        method = request.POST.get('method', '')
-        if method not in dict(COLLECTIBLE_PAYMENT_METHODS):
-            raise ValidationError('اختر طريقة دفع صالحة.')
-        posting_key = _digest_for_request(request, f'visit-cashier:{visit.pk}')
-        context = PostingContext(
-            actor=request.user,
-            approver=approver,
-            business_date=timezone.localdate(),
-            idempotency_key=posting_key,
-            channel='cashier',
-            request_metadata={'path': request.path, 'visit_id': visit.pk},
-        )
-        settled_visit, _allocations = allocate_visit_payment(
-            visit,
-            context,
-            amount,
-            method,
-            request.POST.get('notes', '').strip(),
-        )
-        currency_service.snapshot(
-            settled_visit,
-            currency_entry,
-            f'visit_payment_{posting_key[-24:]}',
-        )
-        if approver:
-            ActivityLog.objects.create(
-                actor=request.user,
-                action='visit_partial_payment_approved',
-                details={
-                    'visit_id': visit.pk,
-                    'amount_syp': str(amount),
-                    'remaining_before_payment': remaining,
-                    'approving_manager_username': approver.username,
-                    'cashier_username': request.user.username,
-                },
-            )
-        messages.success(request, f'تم تسجيل دفعة على الجلسة بقيمة {amount} ل.س.')
+        with transaction.atomic():
+            visit = HubVisit.objects.select_for_update().get(pk=visit.pk)
+            receipt = visit_payment_receipt(visit, posting_key)
+            if receipt:
+                if (receipt.actor_id != request.user.pk or
+                        receipt.request_metadata.get('cashier_payment_fingerprint', fingerprint) != fingerprint):
+                    raise ValidationError('تغيّرت تفاصيل طلب الدفع أو الموظف. حدّث صفحة الحساب قبل المتابعة.')
+                result_message = 'هذه الدفعة مسجلة بالفعل. لم تُنشأ دفعة أو حركة صندوق إضافية.'
+            else:
+                if visit.status != HubVisit.Status.OPEN:
+                    raise ValidationError('هذه الجلسة مغلقة ولا تقبل دفعات جديدة.')
+                current = visit_financials(visit)
+                remaining = current['remaining']
+                currency_service = CurrencyEntryFormService(request, operation='payment')
+                currency_entry = currency_service.clean(request.POST.get('amount_syp'))
+                amount = currency_entry.base_amount
+                if amount <= 0:
+                    raise ValidationError('المبلغ يجب أن يكون أكبر من صفر.')
+                if amount > remaining:
+                    raise ValidationError('المبلغ لا يجوز أن يتجاوز رصيد الجلسة المتبقي.')
+                anchor_order = next((order for order in current['orders'] if order.remaining_syp > 0), None)
+                approver = _approval_for_partial(request, amount, remaining, visit=visit, anchor_order=anchor_order)
+                method = request.POST.get('method', '')
+                if method not in dict(COLLECTIBLE_PAYMENT_METHODS):
+                    raise ValidationError('اختر طريقة دفع صالحة.')
+                context = PostingContext(actor=request.user, approver=approver,
+                    business_date=timezone.localdate(), idempotency_key=posting_key, channel='cashier',
+                    request_metadata={'path': request.path, 'visit_id': visit.pk,
+                                      'cashier_payment_fingerprint': fingerprint})
+                settled_visit, _allocations = allocate_visit_payment(
+                    visit, context, amount, method, request.POST.get('notes', '').strip())
+                currency_service.snapshot(settled_visit, currency_entry,
+                    'visit_payment_' + hashlib.sha256(posting_key.encode()).hexdigest())
+                if approver:
+                    ActivityLog.objects.create(actor=request.user, action='visit_partial_payment_approved', details={
+                        'visit_id': visit.pk, 'amount_syp': str(amount), 'remaining_before_payment': remaining,
+                        'approving_manager_username': approver.username, 'cashier_username': request.user.username})
+                result_message = f'تم تسجيل دفعة على الجلسة بقيمة {amount} ل.س.'
+        messages.success(request, result_message)
+    except PartialApprovalRequired as error:
+        try:
+            error.notify(request)
+        except Exception:
+            logging.getLogger(__name__).exception('Partial approval notification failed')
+        messages.error(request, str(error))
+        return _payment_failure_response(request, public_code, posting_key, 'payment')
     except (ValidationError, PermissionDenied) as error:
         messages.error(request, ' '.join(getattr(error, 'messages', [str(error)])))
-
+        return _payment_failure_response(request, public_code, posting_key, 'payment')
+    except Exception:
+        logging.getLogger(__name__).exception('Visit payment save failed')
+        messages.error(request, 'تعذر تأكيد حفظ الدفعة. راجع الرصيد وسجل الدفعات قبل إعادة المحاولة من النموذج نفسه.')
+        return _payment_failure_response(request, public_code, posting_key, 'payment')
     if request.GET.get('panel') == 'payment':
         return _payment_panel_response(request, public_code)
     return redirect('staff_cashier_order', public_code=visit.public_code)
@@ -340,6 +360,11 @@ def staff_cashier_visit_settle(request, public_code):
                          else 'تم تسديد كامل حساب الجلسة وإغلاقها.')
     except (ValidationError, PermissionDenied) as error:
         messages.error(request, ' '.join(getattr(error, 'messages', [str(error)])))
+        return _payment_failure_response(request, public_code, posting_key, 'settle_close')
+    except Exception:
+        logging.getLogger(__name__).exception('Visit settlement save failed')
+        messages.error(request, 'تعذر تأكيد تسديد وإغلاق الحساب. راجع الحالة وسجل الدفعات قبل إعادة المحاولة من النموذج نفسه.')
+        return _payment_failure_response(request, public_code, posting_key, 'settle_close')
 
     if request.GET.get('panel') == 'payment':
         return _payment_panel_response(request, public_code)
