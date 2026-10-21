@@ -59,5 +59,7 @@ with sync_playwright() as p:
         button = page.locator('.consumption-issue-form button').bounding_box()
         assert button['y'] >= confirmation['y'] + confirmation['height'], 'Confirmation text overlaps issue button'
         page.screenshot(path=str(output / f'consumption-{width}.png'), full_page=True, animations='disabled')
+    from check_inventory_provenance_mobile import verify_inventory_provenance
+    verify_inventory_provenance(browser, output, assets)
     browser.close()
 print(f'RTL mobile layout and conversion passed; screenshots in {output}')
