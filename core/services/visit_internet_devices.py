@@ -17,6 +17,7 @@ from django.utils import timezone
 from core.models import ActivityLog, HubVisit, InternetEntitlement, InternetPackage, InternetSession, Payment
 from core.services.internet_access import create_commercial_sale, start_usage_session
 from core.services.fast_internet_identity import ensure_fast_visit_identity
+from core.services.fast_internet_approval import require_fast_internet_approval
 from core.services.visit_internet import (
     _apply_customer_bandwidth_profile,
     _customer_bandwidth_profile_code,
@@ -115,6 +116,7 @@ def create_visit_internet_sale_and_start(*, visit, credential, package, request_
     """Purchase/start one package for this browser while sharing the visit bill."""
     visit = HubVisit.objects.select_for_update().get(pk=visit.pk)
     _validate_open_visit_credential(visit, credential)
+    require_fast_internet_approval(visit, credential)
     ensure_fast_visit_identity(visit, guest_name=guest_name, guest_phone=guest_phone, member=member)
     package = InternetPackage.objects.select_for_update().get(pk=package.pk)
     error = package_customer_error(package, member, at)
@@ -173,6 +175,7 @@ def start_visit_metered_session(*, visit, credential, member=None, guest_name=''
     """Start/reuse this browser's package-less metered session on a shared bill."""
     visit = HubVisit.objects.select_for_update().get(pk=visit.pk)
     _validate_open_visit_credential(visit, credential)
+    require_fast_internet_approval(visit, credential)
 
     settings_obj = get_system_settings()
     error = metered_customer_error(settings_obj, member)
@@ -248,6 +251,7 @@ def start_existing_visit_entitlement(*, visit, credential, entitlement, actor=No
     _validate_open_visit_credential(visit, credential)
     entitlement = InternetEntitlement.objects.select_for_update().get(pk=entitlement.pk)
     authorize_entitlement(visit, entitlement, at, staff_user=staff_user)
+    require_fast_internet_approval(visit, credential, entitlement=entitlement)
 
     active_for_device = _active_for_fast_start(visit, credential, actor=actor, at=at)
     if active_for_device:

@@ -1,18 +1,22 @@
 """Internet sessions and Wi‑Fi management views for staff workflows."""
 from datetime import timedelta
+import logging
 
 from django import forms
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.paginator import Paginator
 from django.db.models import Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from accounts.permissions import is_owner_or_admin, user_has_capability
-from core.models import InternetBandwidthProfile, InternetEntitlement, InternetPackage
+from core.models import HubVisitBrowserCredential, InternetBandwidthProfile, InternetEntitlement, InternetPackage
+from core.services.fast_internet_approval import approval_required, review_approval
 from internet.models import StaffInternetDeviceEvidence, StaffInternetObservedInterval
 from core.services.staff_internet_observation import (
     observation_is_fresh, observed_concurrent_limit_state,
@@ -206,7 +210,40 @@ def _internal_access_page(request, form=None):
 
 
 def staff_internet(request):
+    if user_has_capability(request.user, 'members/internet'):
+        # The legacy screen renders directly. Attach only authorized, paginated
+        # presentation data here rather than duplicating its operational view.
+        requests = HubVisitBrowserCredential.objects.filter(
+            fast_internet_approval='pending', revoked_at__isnull=True, visit__status='open',
+        ).select_related('visit__table', 'visit__member').order_by('fast_internet_requested_at', 'pk')
+        request.fast_internet_requests = Paginator(requests, 20).get_page(request.GET.get('approval_page'))
+        request.fast_internet_rejected = HubVisitBrowserCredential.objects.filter(
+            fast_internet_approval='rejected', revoked_at__isnull=True, visit__status='open',
+        ).select_related('visit__table', 'visit__member').order_by('-fast_internet_reviewed_at', '-pk')[:10]
+        request.fast_internet_approval_required = approval_required()
     return _legacy_staff_internet(request)
+
+
+@require_POST
+@login_required
+def staff_fast_internet_approval(request, credential_id):
+    if not user_has_capability(request.user, 'members/internet'):
+        raise PermissionDenied
+    get_object_or_404(HubVisitBrowserCredential, pk=credential_id)
+    try:
+        result = review_approval(credential_id=credential_id, actor=request.user, decision=request.POST.get('decision'),
+                        expected_state=request.POST.get('expected_state', 'pending'))
+    except ValidationError as exc:
+        messages.error(request, ' '.join(exc.messages))
+    except Exception:
+        logging.getLogger(__name__).exception('Fast Internet review failed for device %s', credential_id)
+        messages.error(request, 'تعذر حفظ قرار الطلب. أعد المحاولة؛ لم يبدأ اتصال جديد.')
+    else:
+        if result.fast_internet_approval == 'approved':
+            messages.success(request, 'تمت الموافقة لهذا الجهاز. على الزبون تحديث الصفحة وبدء الاتصال من جهازه.')
+        else:
+            messages.success(request, 'رُفض طلب الموافقة لهذا الجهاز.')
+    return redirect('staff_internet')
 
 
 @login_required

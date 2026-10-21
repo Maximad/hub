@@ -233,10 +233,20 @@ class HubVisit(TimeStampedModel, PublicCodeModel):
 
 
 class HubVisitBrowserCredential(TimeStampedModel):
+    class FastInternetApproval(models.TextChoices):
+        NOT_REQUESTED = 'not_requested', 'لم يُطلب'
+        PENDING = 'pending', 'بانتظار موافقة الموظف'
+        APPROVED = 'approved', 'موافق عليه'
+        REJECTED = 'rejected', 'لم تتم الموافقة'
+
     visit = models.ForeignKey(HubVisit, on_delete=models.CASCADE, related_name='browser_credentials')
     token_hash = models.CharField(max_length=64, unique=True, editable=False)
     last_seen_at = models.DateTimeField(default=timezone.now)
     revoked_at = models.DateTimeField(null=True, blank=True)
+    fast_internet_approval = models.CharField(max_length=16, choices=FastInternetApproval.choices, default=FastInternetApproval.NOT_REQUESTED, db_default=FastInternetApproval.NOT_REQUESTED)
+    fast_internet_requested_at = models.DateTimeField(null=True, blank=True)
+    fast_internet_reviewed_at = models.DateTimeField(null=True, blank=True)
+    fast_internet_reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_fast_internet_devices')
 
     class Meta:
         indexes = [models.Index(fields=['token_hash', 'revoked_at'])]
@@ -2366,6 +2376,7 @@ class SystemSetting(TimeStampedModel):
     posting_reports_enabled = models.BooleanField(default=False, verbose_name='استخدام القيود الجديدة في التقارير')
     customer_visits_enabled = models.BooleanField(default=False, verbose_name='تفعيل جلسات الزبائن في المنيو')
     customer_internet_self_service_enabled = models.BooleanField(default=False, verbose_name='تفعيل خدمة الإنترنت الذاتية للزبائن')
+    fast_internet_staff_approval_required = models.BooleanField(default=True, db_default=True, verbose_name='اشتراط موافقة الموظف على الإنترنت السريع')
     class Language(models.TextChoices):
         ARABIC = 'ar', 'العربية'
         ENGLISH = 'en', 'English'

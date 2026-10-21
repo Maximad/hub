@@ -68,6 +68,7 @@ class CustomerInternetFlowMixin:
         settings_obj = SystemSetting.objects.create(
             customer_visits_enabled=True,
             customer_internet_self_service_enabled=True,
+            fast_internet_staff_approval_required=False,
             internet_metered_enabled=True,
             default_rate_per_hour_syp=600,
             default_minimum_minutes=30,

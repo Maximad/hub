@@ -82,6 +82,7 @@ def _decorate_session_network_state(session):
 
 
 def _internet_context(visit=None, member=None, credential=None, staff_user=None):
+    from core.services.fast_internet_approval import approval_context
     packages = customer_packages(member)
     for package in packages:
         package.customer_price_syp = int(resolve_internet_price(member, package)[0])
@@ -97,6 +98,7 @@ def _internet_context(visit=None, member=None, credential=None, staff_user=None)
     for session in sessions:
         _decorate_session_network_state(session)
     return {
+        **approval_context(credential),
         'internet_packages': packages,
         'internet_entitlements': entitlements,
         'internet_sessions': sessions,

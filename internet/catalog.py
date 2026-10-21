@@ -174,7 +174,7 @@ def _internet_items(order):
 
 
 @transaction.atomic
-def fulfill_internet_items_for_order(order):
+def fulfill_internet_items_for_order(order, *, credential=None):
     """Fulfill any legacy Internet cart line on the already-created customer Order.
 
     This compatibility path remains atomic for existing clients/bookmarks even
@@ -195,6 +195,10 @@ def fulfill_internet_items_for_order(order):
         raise ValidationError('باقات الإنترنت متاحة من QR الطاولة أثناء جلسة مفتوحة فقط.')
     if len(pairs) != 1 or pairs[0][0].quantity != 1:
         raise ValidationError('اختر باقة إنترنت واحدة فقط في كل طلب.')
+
+    from core.services.fast_internet_approval import require_fast_internet_approval
+    order.visit = type(order.visit).objects.select_for_update().get(pk=order.visit_id)
+    require_fast_internet_approval(order.visit, credential)
 
     item, package = pairs[0]
     package = InternetPackage.objects.select_for_update().get(pk=package.pk)
@@ -235,6 +239,9 @@ def fulfill_internet_items_for_order(order):
         if entitlement.sessions.exists():
             raise ValidationError('تم استخدام هذه الباقة مسبقاً.')
         active = start_usage_session(entitlement, visit=order.visit)
+        if credential is not None:
+            from core.services.visit_internet_devices import bind_session_to_credential
+            bind_session_to_credential(active, credential)
 
     enqueue_network_operation(
         entitlement,

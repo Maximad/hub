@@ -7,6 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from core.internet_billing import finalize_internet_session
+from core.services.fast_internet_approval import require_fast_internet_approval
 from core.models import (ActivityLog, HubVisit, InternetEntitlement, InternetPackage,
                          InternetSession, Order, OrderItem, Payment)
 from core.services.internet_access import (create_commercial_sale, effectively_active_entitlements,
@@ -199,6 +200,7 @@ def create_visit_internet_sale_and_start(*, visit, credential, package, request_
     visit = HubVisit.objects.select_for_update().get(pk=visit.pk)
     if not credential or credential.visit_id != visit.pk or visit.status != HubVisit.Status.OPEN:
         raise ValidationError('الجلسة مغلقة.')
+    require_fast_internet_approval(visit, credential)
     package = InternetPackage.objects.select_for_update().get(pk=package.pk)
     error = package_customer_error(package, member, at)
     if error:
@@ -245,6 +247,7 @@ def start_visit_metered_session(*, visit, credential, member=None, guest_phone='
     visit = HubVisit.objects.select_for_update().get(pk=visit.pk)
     if not credential or credential.visit_id != visit.pk or visit.status != HubVisit.Status.OPEN:
         raise ValidationError('الجلسة مغلقة.')
+    require_fast_internet_approval(visit, credential)
 
     settings_obj = get_system_settings()
     error = metered_customer_error(settings_obj, member)
@@ -438,6 +441,7 @@ def start_existing_visit_entitlement(*, visit, credential, entitlement, actor=No
     visit = HubVisit.objects.select_for_update().get(pk=visit.pk)
     if not credential or credential.visit_id != visit.pk or visit.status != HubVisit.Status.OPEN:
         raise ValidationError('الجلسة مغلقة.')
+    require_fast_internet_approval(visit, credential)
     entitlement = InternetEntitlement.objects.select_for_update().get(pk=entitlement.pk)
     authorize_entitlement(visit, entitlement, at)
     active = entitlement.sessions.filter(status=InternetSession.Status.ACTIVE).first()

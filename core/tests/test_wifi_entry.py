@@ -44,6 +44,7 @@ class WifiEntryTests(TestCase):
         SystemSetting.objects.create(
             customer_visits_enabled=True,
             customer_internet_self_service_enabled=True,
+            fast_internet_staff_approval_required=False,
         )
         get_system_settings.cache_clear()
         policy = GuestWifiPolicy.objects.get(key='default')
@@ -186,6 +187,7 @@ class WifiEntryTests(TestCase):
         SystemSetting.objects.create(
             customer_visits_enabled=True,
             customer_internet_self_service_enabled=True,
+            fast_internet_staff_approval_required=False,
         )
         get_system_settings.cache_clear()
 
@@ -241,6 +243,7 @@ class WifiEntryTests(TestCase):
         SystemSetting.objects.create(
             customer_visits_enabled=True,
             customer_internet_self_service_enabled=True,
+            fast_internet_staff_approval_required=False,
             internet_metered_enabled=True,
             default_rate_per_hour_syp=600,
             default_minimum_minutes=1,
@@ -326,6 +329,7 @@ class WifiEntryTests(TestCase):
         SystemSetting.objects.create(
             customer_visits_enabled=True,
             customer_internet_self_service_enabled=True,
+            fast_internet_staff_approval_required=False,
         )
         get_system_settings.cache_clear()
         opened = self.client.post(reverse('wifi_entry'), {
@@ -389,6 +393,7 @@ class WifiEntryTests(TestCase):
         SystemSetting.objects.create(
             customer_visits_enabled=True,
             customer_internet_self_service_enabled=True,
+            fast_internet_staff_approval_required=False,
             internet_metered_enabled=True,
             default_rate_per_hour_syp=600,
             default_minimum_minutes=1,

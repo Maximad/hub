@@ -177,7 +177,7 @@ def _customer_order_from_menu(request, *, table=None):
             response = _create_order_from_menu(request, table=table)
             order = _created_order_from_response(response)
             if order is not None:
-                fulfill_internet_items_for_order(order)
+                fulfill_internet_items_for_order(order, credential=resolve_visit_credential(request))
                 if table is not None and order.visit_id:
                     messages.success(request, f'تم إرسال الطلب {order.display_number}. يمكنك متابعته من «جلستي».')
                     return redirect('menu_table', qr_token=table.qr_token)

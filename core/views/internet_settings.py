@@ -1,7 +1,10 @@
+import logging
+
 from django import forms
 from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -14,6 +17,7 @@ from core.models import (
     InternetPackage,
     InternetPartner,
     InternetSession,
+    SystemSetting,
 )
 from core.services.internet_operations import (
     requeue_failed_network_operation,
@@ -29,6 +33,30 @@ from core.services.internet_readiness import (
 from core.services.mikrotik_portal_policy import configured_router_mappings
 from internet.guest_wifi import current_venue_code
 from internet.models import GuestWifiPolicy, InternetSessionNetworkOperation, WifiNetwork
+from core.settings_helpers import get_system_settings
+
+
+class FastInternetApprovalForm(forms.ModelForm):
+    class Meta:
+        model = SystemSetting
+        fields = ('fast_internet_staff_approval_required',)
+
+
+@transaction.atomic
+def _save_fast_approval_policy(request):
+    policy = SystemSetting.objects.select_for_update().order_by('-updated_at', '-pk').first() or SystemSetting()
+    form = FastInternetApprovalForm(request.POST, instance=policy)
+    if not form.is_valid():
+        raise ValidationError(form.errors)
+    policy.fast_internet_staff_approval_required = form.cleaned_data['fast_internet_staff_approval_required']
+    if policy.pk:
+        policy.save(update_fields=['fast_internet_staff_approval_required', 'updated_at'])
+    else:
+        policy.save()
+    ActivityLog.objects.create(actor=request.user, action='internet.fast_approval_policy_changed', details={
+        'required': policy.fast_internet_staff_approval_required,
+    })
+    transaction.on_commit(get_system_settings.cache_clear)
 
 
 class PartnerForm(forms.ModelForm):
@@ -276,6 +304,17 @@ def _save_guest_wifi_policy(request, policy):
 def internet_settings(request):
     guest_wifi_policy, _ = GuestWifiPolicy.objects.get_or_create(key='default')
     if request.method == 'POST':
+        if request.POST.get('settings_action') == 'save_fast_approval_policy':
+            try:
+                _save_fast_approval_policy(request)
+            except ValidationError as exc:
+                messages.error(request, ' '.join(exc.messages))
+            except Exception:
+                logging.getLogger(__name__).exception('Fast Internet approval policy save failed')
+                messages.error(request, 'تعذر حفظ شرط الموافقة. أعد المحاولة.')
+            else:
+                messages.success(request, 'حُفظ شرط موافقة الموظف على الاتصالات الجديدة.')
+            return redirect('staff_internet_settings')
         if request.POST.get('settings_action') == 'save_basic_wifi_policy':
             _save_guest_wifi_policy(request, guest_wifi_policy)
             return redirect('staff_internet_settings')
@@ -349,6 +388,7 @@ def internet_settings(request):
     )
 
     context = {
+        'fast_approval_form': FastInternetApprovalForm(instance=SystemSetting.objects.order_by('-updated_at', '-pk').first() or SystemSetting()),
         'partners': InternetPartner.objects.order_by('-is_default', 'name'),
         'profiles': profiles,
         'networks': WifiNetwork.objects.select_related('bandwidth_profile').order_by('name_ar'),
