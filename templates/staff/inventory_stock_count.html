@@ -33,6 +33,7 @@
 <section class="hub-card hub-section" dir="rtl">
   <h3 class="hub-section-title">{{ item.name_ar }}</h3>
   <p>المسجّل في النظام: <strong>{{ item.current_quantity }} {{ item.get_unit_display }}</strong></p>
+  {% include 'staff/_inventory_quantity_provenance.html' %}
   <p class="hub-help-text">وحدة المخزون المعتمدة: <strong>{{ item.get_unit_display }}</strong>. يمكنك استخدام وحدة مكافئة وسيظهر التحويل قبل التأكيد.</p>
 
   {% if preview %}

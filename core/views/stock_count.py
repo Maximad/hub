@@ -19,6 +19,7 @@ from django.views.decorators.http import require_http_methods
 from accounts.permissions import require_staff_capability
 from core.models import ActivityLog, AuditEvent, InventoryItem, PostingCommand, StockMovement
 from core.services.inventory_unit_entry import allowed_entry_units, to_base_quantity
+from core.services.inventory_provenance import quantity_provenance
 
 
 SIGNING_SALT = 'hub.staff.inventory.stock_count.v1'
@@ -66,6 +67,7 @@ def _page(request, *, item=None, preview=None, error='', values=None):
     return render(request, 'staff/inventory_stock_count.html', {
         'items': items,
         'item': item,
+        'quantity_provenance': quantity_provenance([item]).get(item.pk) if item else None,
         'count_units': [(code, label) for code, label in InventoryItem.Unit.choices
                         if item and code in allowed_entry_units(item.unit)],
         'preview': preview,
