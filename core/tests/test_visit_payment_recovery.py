@@ -214,8 +214,9 @@ class VisitPaymentRecoveryTests(TestCase):
                 raise RuntimeError('PRIVATE settlement error')
             return create(*args, **kwargs)
         with patch('core.views.staff_cashier_visits.ActivityLog.objects.create', side_effect=audit), self.assertLogs('core.views.staff_cashier_visits', level='ERROR'):
-            failed = self.client.post(self.pay_url(visit, True), payload)
+            failed = self.client.post(self.pay_url(visit), payload)
         self.assertContains(failed, 'تعذر تأكيد تسديد وإغلاق الحساب.')
+        self.assertContains(failed, payload['notes'], count=1)
         self.assertNotContains(failed, 'PRIVATE settlement error')
         self.assertEqual(failed.context['settlement_request_key'], 'settle-recovery')
         self.assertEqual(failed.context['settlement_values']['notes'], payload['notes'])
