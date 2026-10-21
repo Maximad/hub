@@ -16,7 +16,7 @@ from core.finance import sync_cash_expense_movement
 from core.models import CashMovement, Expense, ExpenseCategory, InventoryItem, Purchase, PurchaseItem, StockMovement, Product, ProductRecipeItem
 from core.services.posting.context import PostingContext
 from core.services.posting import purchases as purchase_posting
-from core.services.purchase_receipt_ui import purchase_receipt_ui
+from core.services.purchase_receipt_ui import purchase_receipt_ui, receipt_posting_context, receipt_failure_messages
 from core.services.inventory_unit_entry import allowed_entry_units, to_base_quantity, to_base_unit_cost, receipt_quantities_from_post
 from core.services.inventory_provenance import physical_count_audits, quantity_provenance
 
@@ -231,7 +231,14 @@ def staff_inventory_purchase_new(request):
 @inventory_required
 def staff_inventory_purchase_detail(request,purchase_id):
     p=get_object_or_404(Purchase.objects.select_related('vendor','related_expense'),pk=purchase_id)
-    return render(request,'staff/inventory_purchase_detail.html',{'purchase':p, **purchase_receipt_ui(p), 'inventory_can_receive': _can_manage(request.user)})
+    return _purchase_detail_response(request, p)
+
+
+def _purchase_detail_response(request, purchase, *, data=None, errors=None):
+    return render(request, 'staff/inventory_purchase_detail.html', {
+        'purchase': purchase, **purchase_receipt_ui(purchase, data=data, errors=errors),
+        'inventory_can_receive': _can_manage(request.user),
+    })
 
 @inventory_required
 def staff_inventory_purchase_receive(request,purchase_id):
@@ -241,9 +248,13 @@ def staff_inventory_purchase_receive(request,purchase_id):
         if p.status==Purchase.Status.CANCELLED: messages.error(request,'لا يمكن استلام شراء ملغى.'); return redirect('staff_inventory_purchase_detail',purchase_id=p.pk)
         try:
             quantities = receipt_quantities_from_post(request, p)
-            purchase_posting.receive(p, _posting_context(request, p.business_date), quantities)
+            context = receipt_posting_context(request, p, _posting_context(request, p.business_date))
+            purchase_posting.receive(p, context, quantities)
             messages.success(request,'تم استلام الشراء وتحديث المخزون.')
-        except Exception as e: messages.error(request,f'تعذر إكمال الربط المالي أو المخزني: {e}')
+        except Exception as error:
+            return _purchase_detail_response(
+                request, p, data=request.POST, errors=receipt_failure_messages(error, p),
+            )
     return redirect('staff_inventory_purchase_detail',purchase_id=p.pk)
 
 @inventory_required

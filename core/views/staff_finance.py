@@ -18,7 +18,7 @@ from core.services.posting import order_payments as order_payment_posting
 from core.services.posting.policy import is_finance_user
 from core.services.posting.exceptions import InvalidTransition, ClosedPeriodError, IdempotencyConflict
 from core.services.posting import expenses as expense_posting, purchases as purchase_posting, closing as closing_posting, transfers as transfer_posting
-from core.services.purchase_receipt_ui import purchase_receipt_ui
+from core.services.purchase_receipt_ui import purchase_receipt_ui, receipt_posting_context, receipt_failure_messages
 from core.services.inventory_unit_entry import receipt_quantities_from_post
 from core.models import ActivityLog, CancellationReason, CashMovement, DailyClose, Expense, ExpenseCategory, FinanceReviewItem, FinancialAccount, InventoryItem, Payment, PostingBatch, PostingCommand, Purchase, PurchaseItem, PurchasePayment, StockMovement, Transfer
 from core.views_legacy import DAMASCUS_TZ, _build_day_report, _parse_report_date
@@ -386,11 +386,15 @@ def staff_purchase_detail(request,purchase_id):
         except Exception as error:
             for message in _validation_messages(error): messages.error(request,message)
         return redirect('staff_purchase_detail',purchase_id=p.pk)
+    return _purchase_detail_response(request, p)
+
+
+def _purchase_detail_response(request, p, *, data=None, errors=None):
     state=purchase_posting.financial_state(p)
     accounts=FinancialAccount.objects.filter(is_active=True,business_unit='',code__in=purchase_posting.SETTLEMENT_CODES).order_by('code')
     reviews=FinanceReviewItem.objects.filter(resolved_at__isnull=True).filter(Q(record_type=p._meta.label,record_id=str(p.pk))|Q(details__purchase_id=p.pk))
     approvers=get_user_model().objects.filter(is_active=True).filter(Q(is_superuser=True)|Q(role='admin'))
-    return render(request,'staff/finance_purchase_detail.html',{'purchase':p,'business_date':current_business_date(),'financial_state':state,'settlement_accounts':accounts,'approvers':approvers,'finance_reviews':reviews,'approval_limit':purchase_posting.approval_limit(),'currency_component':CurrencyEntryFormService(request,operation='purchase_payment').context,**purchase_receipt_ui(p)})
+    return render(request,'staff/finance_purchase_detail.html',{'purchase':p,'business_date':current_business_date(),'financial_state':state,'settlement_accounts':accounts,'approvers':approvers,'finance_reviews':reviews,'approval_limit':purchase_posting.approval_limit(),'currency_component':CurrencyEntryFormService(request,operation='purchase_payment').context,**purchase_receipt_ui(p, data=data, errors=errors)})
 
 @require_staff_capability('finance')
 def staff_purchase_edit(request,purchase_id):
@@ -403,9 +407,12 @@ def staff_purchase_edit(request,purchase_id):
 def _receive_purchase(request,p):
     try:
         quantities = receipt_quantities_from_post(request, p)
-        purchase_posting.receive(p, _posting_context(request, p.business_date), quantities)
-    except ValidationError as error:
-        for message in _validation_messages(error): messages.error(request, message)
+        context = receipt_posting_context(request, p, _posting_context(request, p.business_date))
+        purchase_posting.receive(p, context, quantities)
+    except Exception as error:
+        return _purchase_detail_response(
+            request, p, data=request.POST, errors=receipt_failure_messages(error, p),
+        )
     else:
         messages.success(request,'تم الاستلام وتحديث المخزون.')
     return redirect('staff_purchase_detail', purchase_id=p.pk)

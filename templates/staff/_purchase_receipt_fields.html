@@ -1,5 +1,6 @@
 {% load l10n static %}
 {# Shared between Inventory and Finance. Number-input attributes must be unlocalized. #}
+<input type="hidden" name="receipt_token" value="{{ receipt_token }}">
 <fieldset>
   <legend>الكميات التي استلمتها الآن (بعد خصم الاستلام السابق)</legend>
   <p class="hub-help-text">الكميات الظاهرة هي المتبقية غير المستلمة. عند الاستلام الجزئي عدّلها إلى الكمية التي وصلت فعلياً، واكتب صفرًا للبنود التي لم تصل.</p>
@@ -9,14 +10,15 @@
     <p class="hub-help-text">المطلوب: {{ row.ordered }} {{ row.item.get_unit_display }} · المستلم سابقاً: {{ row.received }} · المتبقي: {{ row.remaining }}</p>
     <div class="hub-grid hub-grid-2">
       <label>الكمية التي وصلت
-        <input class="hub-input" type="number" min="0" max="{{ row.remaining|unlocalize }}" step="any"
+        <input class="hub-input" type="number" min="0" max="{{ row.entry_max|unlocalize }}" step="any" required
                inputmode="decimal" name="quantity_{{ row.item.pk }}"
-               value="{{ row.remaining|unlocalize }}" data-receipt-quantity aria-label="الكمية المستلمة الآن: {{ row.item.inventory_item }}">
+               value="{{ row.entered_quantity|unlocalize }}" data-receipt-quantity aria-label="الكمية المستلمة الآن: {{ row.item.inventory_item }}">
       </label>
       <label>وحدة الاستلام
         <select class="hub-input" name="quantity_unit_{{ row.item.pk }}" data-receipt-unit>
+          {% if row.invalid_entry_unit %}<option value="{{ row.entered_unit }}" selected>وحدة غير صالحة — اختر وحدة الاستلام</option>{% endif %}
           {% for code, label in row.entry_units %}
-            <option value="{{ code }}"{% if code == row.item.unit %} selected{% endif %}>{{ label }}</option>
+            <option value="{{ code }}"{% if code == row.entered_unit %} selected{% endif %}>{{ label }}</option>
           {% endfor %}
         </select>
       </label>

@@ -12,6 +12,7 @@
 
 <h4>البنود</h4><div class="hub-table-wrap"><table class="hub-table"><tr><th>المادة</th><th>الكمية</th><th>الوحدة</th><th>الكلفة</th><th>الإجمالي</th></tr>{% for i in purchase.items.all %}<tr><td>{{ i.inventory_item }}</td><td>{{ i.quantity }}</td><td>{{ i.get_unit_display }}</td><td>{{ i.unit_cost_syp }}</td><td>{{ i.line_total_syp }}</td></tr>{% endfor %}</table></div>
 
+{% include "staff/_purchase_receipt_errors.html" %}
 {% if can_receive_purchase %}
 <form class="hub-form-section" method="post">
   {% csrf_token %}
