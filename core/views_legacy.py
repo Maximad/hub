@@ -1026,6 +1026,12 @@ def _staff_menu_tools_queryset(params):
     products = Product.objects.select_related('category', 'prep_station_ref', 'vendor').prefetch_related('menu_sections', 'tags').annotate(
         has_active_image=Exists(active_visual_media)
     )
+    selected_product = params.get('product', '').strip()
+    if selected_product:
+        if selected_product.isascii() and selected_product.isdecimal() and len(selected_product) <= 18:
+            products = products.filter(pk=selected_product)
+        else:
+            products = products.none()
     query = params.get('q', '').strip()
     if query:
         products = products.filter(Q(name_ar__icontains=query) | Q(name_en__icontains=query))
