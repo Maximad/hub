@@ -1,1 +1,23 @@
-{% extends "staff/inventory_base.html" %}{% block inventory_content %}<p><a class="hub-button" href="{% url 'staff_inventory_movement_new' %}">حالة تسجيل الحركات</a> <a href="{% url 'staff_inventory_movements_csv' %}">CSV</a></p><p class="hub-help-text">هذه قائمة قراءة للحركات المسجلة. إضافة حركة جديدة أو هدر معلقة حتى اعتماد سياسة D10.</p><div class="hub-table-wrap"><table class="hub-table"><tr><th>التاريخ</th><th>المادة</th><th>حركة مخزون</th><th>إدخال/إخراج</th><th>الكمية</th><th>سبب الحركة</th></tr>{% for m in movements %}<tr><td>{{ m.business_date }}</td><td>{{ m.inventory_item }}</td><td>{{ m.get_movement_type_display }}</td><td>{{ m.get_direction_display }}</td><td>{{ m.quantity }}</td><td>{{ m.reason }}</td></tr>{% endfor %}</table></div>{% endblock %}
+{% extends "staff/inventory_base.html" %}
+{% load hub_time %}
+{% block inventory_content %}
+<p><a class="hub-button" href="{% url 'staff_inventory_movement_new' %}">حالة تسجيل الحركات</a> <a href="{% url 'staff_inventory_movements_csv' %}">CSV لكل الحركات</a></p>
+<p class="hub-help-text">هذه قائمة قراءة للحركات المسجلة. إضافة حركة جديدة أو هدر معلقة حتى اعتماد سياسة D10. تاريخ العمل قد يختلف عن وقت تسجيل الحركة، والسجل وحده لا يثبت تطبيقه على الرصيد.</p>
+{% if error %}<div class="hub-alert hub-alert--warning" role="alert">{{ error }}</div>{% endif %}
+{% if selected_item %}
+<h2>{{ selected_item.name_ar }}</h2>
+<p>الرصيد الحالي: <strong>{{ selected_item.current_quantity }} {{ selected_item.get_unit_display }}</strong></p>
+{% include 'staff/_inventory_quantity_provenance.html' with item=selected_item %}
+{% if after_count %}<p>الحركات المسجّلة منذ الجرد بتاريخ {{ after_count.created_at|ar_datetime }}.</p>{% endif %}
+<p><a class="hub-button" href="{% url 'staff_inventory_movements' %}?item={{ selected_item.pk }}">جميع حركات هذه المادة</a>{% if staff_caps.inventory_stock_count and selected_item.is_active %} <a class="hub-button" href="{% url 'staff_inventory_stock_count' %}?item={{ selected_item.pk }}">جرد هذه المادة</a>{% endif %}</p>
+{% endif %}
+<div class="hub-table-wrap"><table class="hub-table">
+  <tr><th>وقت التسجيل / تاريخ العمل</th><th>المادة</th><th>حركة مخزون</th><th>إدخال/إخراج</th><th>الكمية</th><th>المصدر</th><th>حالة السجل</th><th>سبب الحركة</th></tr>
+  {% for m in movements %}<tr>
+    <td>{{ m.created_at|ar_datetime }}<div><small>تاريخ العمل: {{ m.business_date|ar_date }}</small></div></td><td>{{ m.inventory_item }}</td>
+    <td>{{ m.get_movement_type_display }}</td><td>{{ m.get_direction_display }}</td><td>{{ m.quantity }} {{ m.get_unit_display }}</td>
+    <td>{% if m.related_purchase_id %}<a href="{% url 'staff_inventory_purchase_detail' m.related_purchase_id %}">شراء #{{ m.related_purchase_id }}</a>{% if m.purchase_receipt_line_id %}<div><small>مرتبط ببند استلام موثّق</small></div>{% endif %}{% elif m.related_order_id %}طلب #{{ m.related_order_id }}{% elif m.related_batch_id %}دفعة تحضير #{{ m.related_batch_id }}{% else %}لا يوجد مرجع عملية مرتبط{% endif %}</td>
+    <td>{% if m.is_cancelled %}ملغاة{% if m.cancellation_reason %}<div>{{ m.cancellation_reason }}</div>{% endif %}{% else %}سجل غير ملغى{% endif %}</td><td>{{ m.reason }}</td>
+  </tr>{% empty %}<tr><td colspan="8">لا توجد حركات مسجّلة ضمن هذا الاختيار.</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

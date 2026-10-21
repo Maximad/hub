@@ -18,6 +18,7 @@ from core.services.posting.context import PostingContext
 from core.services.posting import purchases as purchase_posting
 from core.services.purchase_receipt_ui import purchase_receipt_ui
 from core.services.inventory_unit_entry import allowed_entry_units, to_base_quantity, to_base_unit_cost, receipt_quantities_from_post
+from core.services.inventory_provenance import physical_count_audits, quantity_provenance
 
 
 def _dec(value, default='0'):
@@ -94,8 +95,10 @@ def staff_inventory_items(request):
     if request.GET.get('q'): qs=qs.filter(Q(name_ar__icontains=request.GET['q'])|Q(name_en__icontains=request.GET['q'])|Q(code__icontains=request.GET['q']))
     items = list(qs)
     counted_ids = counted_inventory_ids(item.pk for item in items)
+    provenance = quantity_provenance(items)
     for item in items:
         item.operational_review = inventory_completeness(item, counted=item.pk in counted_ids)
+        item.quantity_provenance = provenance[item.pk]
     return render(request,'staff/inventory_items.html',{'items':items,'types':InventoryItem.ItemType.choices,'units':InventoryItem.Unit.choices,'vendors':Vendor.objects.all(),'inventory_can_manage':_can_manage(request.user)})
 
 @inventory_required
@@ -246,11 +249,35 @@ def staff_inventory_purchase_receive(request,purchase_id):
 @inventory_required
 def staff_inventory_movements(request):
     qs=StockMovement.objects.select_related('inventory_item','created_by')
-    if request.GET.get('item'): qs=qs.filter(inventory_item_id=request.GET['item'])
+    item = None
+    audit = None
+    error = ''
+    raw_item = request.GET.get('item', '').strip()
+    raw_count = request.GET.get('count', '').strip()
+    if raw_item:
+        if raw_item.isascii() and raw_item.isdecimal() and len(raw_item) <= 18:
+            item = get_object_or_404(InventoryItem, pk=raw_item)
+            qs = qs.filter(inventory_item=item)
+        else:
+            error = 'اختر مادة مخزون صالحة.'
+    if raw_count:
+        if item and raw_count.isascii() and raw_count.isdecimal() and len(raw_count) <= 18:
+            audit = physical_count_audits([item.pk]).filter(pk=raw_count).first()
+        if audit is None:
+            error = 'مرجع الجرد لا يعود لهذه المادة أو لم يعد صالحاً. لم نعرض حركات مواد أخرى.'
+        else:
+            qs = qs.filter(created_at__gte=audit.created_at).order_by('-created_at', '-pk')
+    if error:
+        qs = qs.none()
     if request.GET.get('movement_type'): qs=qs.filter(movement_type=request.GET['movement_type'])
     if request.GET.get('direction'): qs=qs.filter(direction=request.GET['direction'])
     if request.GET.get('q'): qs=qs.filter(Q(inventory_item__name_ar__icontains=request.GET['q'])|Q(reason__icontains=request.GET['q']))
-    return render(request,'staff/inventory_movements.html',{'movements':qs[:300],'items':InventoryItem.objects.filter(is_active=True),'types':StockMovement.MovementType.choices,'directions':StockMovement.Direction.choices})
+    return render(request,'staff/inventory_movements.html',{
+        'movements': qs[:300], 'selected_item': item, 'after_count': audit,
+        'quantity_provenance': quantity_provenance([item]).get(item.pk) if item else None,
+        'error': error, 'items': InventoryItem.objects.filter(is_active=True),
+        'types': StockMovement.MovementType.choices, 'directions': StockMovement.Direction.choices,
+    })
 
 @inventory_required
 def staff_inventory_movement_new(request):

@@ -1,0 +1,12 @@
+{% load hub_time %}
+<div class="hub-card hub-form-section" aria-label="مصدر الكمية المسجلة">
+  <strong>{{ quantity_provenance.label }}</strong>
+  {% if quantity_provenance.counted_at %}
+    <p>آخر جرد موثّق: {{ quantity_provenance.counted_at|ar_datetime }}{% if quantity_provenance.counted_quantity != None %} · <strong>{{ quantity_provenance.counted_quantity }} {{ quantity_provenance.counted_unit }}</strong>{% endif %}</p>
+  {% endif %}
+  {% if quantity_provenance.latest_movement %}
+    <p>آخر حركة مسجّلة بعده: {{ quantity_provenance.latest_movement.label }} · {{ quantity_provenance.latest_movement.created_at|ar_datetime }}{% if quantity_provenance.latest_movement.is_cancelled %} · ملغاة{% endif %}</p>
+  {% endif %}
+  <p class="hub-help-text">الرصيد الحالي قد يختلف عن الكمية التي جُردت. تاريخ تسجيل الحركة لا يثبت وقت الاستلام أو الاستهلاك الفعلي، ولا يؤكد تطبيقها على الرصيد.</p>
+  {% if staff_caps.inventory %}<a class="hub-button" href="{% url 'staff_inventory_movements' %}?item={{ item.pk }}{% if quantity_provenance.count_id %}&amp;count={{ quantity_provenance.count_id }}{% endif %}">{% if quantity_provenance.count_id %}الحركات المسجّلة بعد الجرد{% else %}عرض حركات المادة{% endif %}</a>{% endif %}
+</div>
