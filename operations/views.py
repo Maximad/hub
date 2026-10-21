@@ -326,6 +326,10 @@ def staff_business_day(request):
         unassigned_duty_alerts_for_manager(day, request.user, limit=30)
         if day and duty_alerts_enabled else []
     )
+    from .handover_brief import visible_handover_reviews
+    handover_review_brief = visible_handover_reviews(
+        day, user=request.user, can_manage=can_manage,
+    )
     metrics = business_day_metrics(day) if day and can_manage else None
     anomalies = detect_anomalies(day) if day and can_manage else []
     recent_days = BusinessDay.objects.select_related('opened_by', 'closed_by').order_by('-business_date')[:14]
@@ -345,6 +349,7 @@ def staff_business_day(request):
         'assigned_staff_ids': assigned_staff_ids,
         'opening_checklist_items': checklist_items,
         'handover_notes': handover_notes,
+        'handover_review_brief': handover_review_brief,
         'reconciliation': report,
         'business_day_exceptions': exceptions,
         'code_receipts': receipts,
