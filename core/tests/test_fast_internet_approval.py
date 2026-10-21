@@ -265,6 +265,8 @@ class FastInternetApprovalTests(TestCase):
             page = self.client.get(url)
             self.assertContains(page, 'بانتظار موافقة الموظف')
             self.assertContains(page, 'تحديث حالة الطلب')
+            target = reverse('current_visit') if 'focus=' in url else reverse('wifi_entry')
+            self.assertContains(page, f'<form method="get" action="{target}">')
             self.assertNotContains(page, 'value="start_fast_wifi"')
         self.review()
         page = self.client.get(reverse('current_visit') + '?focus=internet')

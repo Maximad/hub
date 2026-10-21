@@ -2,7 +2,10 @@
   <h3>موافقة الإنترنت السريع{% if fast_approval_reference %} · طلب #{{ fast_approval_reference }}{% endif %}</h3>
   {% if fast_approval_state == 'pending' %}
     <p role="status">بانتظار موافقة الموظف على هذا الجهاز. لم يبدأ الإنترنت السريع أو احتساب تكلفته بعد.</p>
-    <a class="hub-button" href="{% if approval_return_to_visit %}{% url 'current_visit' %}?focus=internet#internet{% else %}{% url 'wifi_entry' %}?mode=internet{% endif %}">تحديث حالة الطلب</a>
+    <form method="get" action="{% if approval_return_to_visit %}{% url 'current_visit' %}{% else %}{% url 'wifi_entry' %}{% endif %}">
+      {% if approval_return_to_visit %}<input type="hidden" name="focus" value="internet">{% else %}<input type="hidden" name="mode" value="internet">{% endif %}
+      <button class="hub-button" type="submit">تحديث حالة الطلب</button>
+    </form>
   {% elif fast_approval_state == 'rejected' %}
     <p role="status">لم تتم الموافقة على الطلب. تواصل مع الفريق.</p>
   {% else %}

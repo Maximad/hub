@@ -29,17 +29,24 @@ def verify_fast_internet_approval(browser, output, assets):
         for width in (320, 390, 768):
             page = browser.new_page(viewport={'width': width, 'height': 844}, java_script_enabled=False)
             page.route('**/*', assets)
-            page.set_content(html.replace('/static/', 'http://preview.test/static/'), wait_until='networkidle')
+            page.set_content(html.replace('/static/', 'http://preview.test/static/').replace('<head>', '<head><base href="http://preview.test/">', 1), wait_until='networkidle')
             assert page.locator('html').get_attribute('dir') == 'rtl'
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), (kind, width)
             if kind == 'customer':
                 assert page.get_by_text('بانتظار موافقة الموظف', exact=False).count() > 0
-                assert page.get_by_role('link', name='تحديث حالة الطلب').count() == 1
+                assert page.get_by_role('button', name='تحديث حالة الطلب').count() == 1
                 assert page.locator('[value="start_fast_wifi"]').count() == 0
             else:
                 for decision in ('approved', 'rejected'):
                     box = page.locator(f'button[value="{decision}"]').bounding_box()
                     assert box and box['x'] >= 0 and box['x'] + box['width'] <= width
             page.screenshot(path=str(output / f'fast-approval-{kind}-{width}.png'), full_page=True, animations='disabled')
+            if kind == 'customer':
+                page.route('http://preview.test/wifi/**', lambda route: route.fulfill(
+                    status=200, content_type='text/html', body='<html dir="rtl">تم تحديث الحالة</html>',
+                ))
+                with page.expect_request(lambda request: '/wifi/' in request.url and request.method == 'GET') as refresh:
+                    page.get_by_role('button', name='تحديث حالة الطلب').click()
+                assert refresh.value.url == 'http://preview.test/wifi/?mode=internet'
             page.close()
     print('Fast Internet approval RTL/no-JavaScript customer and staff layouts passed at 320, 390 and 768px')
