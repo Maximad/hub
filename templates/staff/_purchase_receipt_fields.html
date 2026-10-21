@@ -3,7 +3,7 @@
 <input type="hidden" name="receipt_token" value="{{ receipt_token }}">
 <fieldset>
   <legend>الكميات التي استلمتها الآن (بعد خصم الاستلام السابق)</legend>
-  <p class="hub-help-text">الكميات الظاهرة هي المتبقية غير المستلمة. عند الاستلام الجزئي عدّلها إلى الكمية التي وصلت فعلياً، واكتب صفرًا للبنود التي لم تصل.</p>
+  <p class="hub-help-text">المتبقي غير المستلم موضح لكل بند. أدخل الكمية التي وصلت فعلياً الآن، واكتب صفرًا للبنود التي لم تصل.</p>
   {% for row in receipt_rows %}
   <div class="hub-receipt-unit-row" data-receipt-unit-row data-base-unit="{{ row.item.unit }}" data-remaining="{{ row.remaining|unlocalize }}">
     <strong>{{ row.item.inventory_item }}</strong>
