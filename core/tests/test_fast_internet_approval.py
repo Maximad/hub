@@ -243,6 +243,22 @@ class FastInternetApprovalTests(TestCase):
         self.assertTrue(approval_required())
         self.assertEqual(ActivityLog.objects.filter(action='internet.fast_approval_policy_changed').count(), 2)
 
+    def test_failed_staff_writes_return_safe_retry_messages_and_roll_back(self):
+        self.request()
+        self.client.force_login(self.cashier)
+        url = reverse('staff_fast_internet_approval', args=[self.credential.pk])
+        with patch('core.services.fast_internet_approval.ActivityLog.objects.create', side_effect=RuntimeError('private audit detail')), self.assertLogs('core.views.staff_internet', level='ERROR'):
+            response = self.client.post(url, {'decision': 'approved'})
+        self.assertEqual(response.status_code, 302)
+        self.credential.refresh_from_db()
+        self.assertEqual(self.credential.fast_internet_approval, 'pending')
+        self.client.force_login(self.admin)
+        with patch('core.views.internet_settings.ActivityLog.objects.create', side_effect=RuntimeError('private audit detail')), self.assertLogs('core.views.internet_settings', level='ERROR'):
+            response = self.client.post(reverse('staff_internet_settings'), {'settings_action': 'save_fast_approval_policy'})
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(approval_required())
+        self.assertFalse(ActivityLog.objects.filter(action='internet.fast_approval_policy_changed').exists())
+
     def test_pending_and_approved_customer_ui_offer_clear_next_action(self):
         self.request()
         for url in (reverse('wifi_entry') + '?mode=internet', reverse('current_visit') + '?focus=internet'):

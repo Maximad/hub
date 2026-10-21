@@ -1,5 +1,6 @@
 """Internet sessions and Wi‑Fi management views for staff workflows."""
 from datetime import timedelta
+import logging
 
 from django import forms
 from django.contrib import messages
@@ -234,6 +235,9 @@ def staff_fast_internet_approval(request, credential_id):
                         expected_state=request.POST.get('expected_state', 'pending'))
     except ValidationError as exc:
         messages.error(request, ' '.join(exc.messages))
+    except Exception:
+        logging.getLogger(__name__).exception('Fast Internet review failed for device %s', credential_id)
+        messages.error(request, 'تعذر حفظ قرار الطلب. أعد المحاولة؛ لم يبدأ اتصال جديد.')
     else:
         messages.success(request, 'حُفظ قرار الطلب. يبدأ الزبون الاتصال من جهازه بعد تحديث الصفحة.')
     return redirect('staff_internet')
