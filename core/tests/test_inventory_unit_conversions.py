@@ -178,7 +178,8 @@ class UnitConversionTests(TestCase):
             f'quantity_{line.pk}': '2',
             f'quantity_unit_{line.pk}': 'kg',
         })
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'غير متوافقة')
         self.ml.refresh_from_db()
         self.assertEqual(self.ml.current_quantity, Decimal('200.000'))
         self.assertEqual(StockMovement.objects.count(), 0)
