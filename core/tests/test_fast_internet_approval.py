@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import close_old_connections
+from django.db import close_old_connections, connection
 from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -65,6 +65,26 @@ class FastInternetApprovalTests(TestCase):
     def counts(self):
         return [model.objects.count() for model in (Order, Payment, InternetEntitlement,
             InternetSession, InternetNetworkOperation, InternetSessionNetworkOperation)]
+
+    def test_additive_columns_have_database_defaults_for_previous_code_inserts(self):
+        # Simulate the credential INSERT emitted before the new fields existed.
+        now = timezone.now()
+        with connection.cursor() as cursor:
+            cursor.execute(
+                'INSERT INTO core_hubvisitbrowsercredential (visit_id, token_hash, created_at, updated_at, last_seen_at) '
+                'VALUES (%s, %s, %s, %s, %s) RETURNING id',
+                [self.visit.pk, 'a' * 64, now, now, now],
+            )
+            legacy_id = cursor.fetchone()[0]
+            cursor.execute(
+                'SELECT column_default FROM information_schema.columns '
+                'WHERE table_schema = current_schema() AND table_name = %s AND column_name = %s',
+                ['core_systemsetting', 'fast_internet_staff_approval_required'],
+            )
+            self.assertIn('true', cursor.fetchone()[0].lower())
+        credential = HubVisitBrowserCredential.objects.get(pk=legacy_id)
+        self.assertEqual(credential.fast_internet_approval, 'not_requested')
+        self.assertIsNone(credential.fast_internet_reviewed_at)
 
     def test_default_is_on_and_request_retries_make_one_audited_pending_device(self):
         self.assertTrue(approval_required())
@@ -135,7 +155,11 @@ class FastInternetApprovalTests(TestCase):
             start_visit_metered_session(visit=self.visit, credential=new_device)
 
     def test_rejection_is_not_changed_by_stale_posts_or_customer_retries(self):
-        self.request(); self.review('rejected')
+        self.request()
+        self.client.force_login(self.cashier)
+        response = self.client.post(reverse('staff_fast_internet_approval', args=[self.credential.pk]), {'decision': 'rejected'}, follow=True)
+        self.assertContains(response, 'رُفض طلب الموافقة لهذا الجهاز.')
+        self.assertNotContains(response, 'على الزبون تحديث الصفحة وبدء الاتصال')
         self.assertEqual(self.request().fast_internet_approval, 'rejected')
         with self.assertRaises(ValidationError):
             self.review()

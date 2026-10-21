@@ -160,7 +160,7 @@
       <input class="hub-input" id="fast-guest-phone" name="guest_phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="30" required>
       <button class="wifi-sheet__primary" type="submit">{% if fast_approval_required %}طلب موافقة على الإنترنت السريع{% elif fast_registration_next == 'options' %}فتح خيارات الإنترنت{% else %}ابدأ الإنترنت السريع{% endif %}</button>
     </form>
-    <p class="wifi-sheet__primary-note">{% if fast_registration_next == 'options' %}سترى تفاصيل الباقات قبل الشراء.{% else %}{{ internet_metered_rate_syp|format_syp }} / ساعة · يبدأ الاحتساب بعد جاهزية الشبكة ويستمر حتى إيقاف الجلسة.{% endif %}</p>
+    <p class="wifi-sheet__primary-note">{% if fast_approval_required %}إرسال طلب الموافقة لا يبدأ الاتصال ولا يرتب تكلفة. بعد الموافقة تختار الخدمة وتبدأ من هذا الجهاز.{% elif fast_registration_next == 'options' %}سترى تفاصيل الباقات قبل الشراء.{% else %}{{ internet_metered_rate_syp|format_syp }} / ساعة · يبدأ الاحتساب بعد جاهزية الشبكة ويستمر حتى إيقاف الجلسة.{% endif %}</p>
 
   {% else %}
     <div class="wifi-sheet__heading">

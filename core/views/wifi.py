@@ -387,7 +387,9 @@ def _request_fast_approval(request):
                 guest_phone=request.POST.get('guest_phone', ''),
                 member=member_context.member if member_context else visit.member,
             )
-        if result.fast_internet_approval == result.FastInternetApproval.PENDING:
+        if not approval_context(result)['fast_approval_required']:
+            messages.success(request, 'يمكنك الآن اختيار الإنترنت السريع وبدء الاتصال.')
+        elif result.fast_internet_approval == result.FastInternetApproval.PENDING:
             messages.success(request, 'أُرسل طلب الموافقة. لم يبدأ الإنترنت السريع أو احتساب تكلفته بعد.')
         elif result.fast_internet_approval == result.FastInternetApproval.REJECTED:
             messages.warning(request, 'لم تتم الموافقة على الطلب. تواصل مع الفريق.')

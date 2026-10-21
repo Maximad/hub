@@ -231,7 +231,7 @@ def staff_fast_internet_approval(request, credential_id):
         raise PermissionDenied
     get_object_or_404(HubVisitBrowserCredential, pk=credential_id)
     try:
-        review_approval(credential_id=credential_id, actor=request.user, decision=request.POST.get('decision'),
+        result = review_approval(credential_id=credential_id, actor=request.user, decision=request.POST.get('decision'),
                         expected_state=request.POST.get('expected_state', 'pending'))
     except ValidationError as exc:
         messages.error(request, ' '.join(exc.messages))
@@ -239,7 +239,10 @@ def staff_fast_internet_approval(request, credential_id):
         logging.getLogger(__name__).exception('Fast Internet review failed for device %s', credential_id)
         messages.error(request, 'تعذر حفظ قرار الطلب. أعد المحاولة؛ لم يبدأ اتصال جديد.')
     else:
-        messages.success(request, 'حُفظ قرار الطلب. يبدأ الزبون الاتصال من جهازه بعد تحديث الصفحة.')
+        if result.fast_internet_approval == 'approved':
+            messages.success(request, 'تمت الموافقة لهذا الجهاز. على الزبون تحديث الصفحة وبدء الاتصال من جهازه.')
+        else:
+            messages.success(request, 'رُفض طلب الموافقة لهذا الجهاز.')
     return redirect('staff_internet')
 
 

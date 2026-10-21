@@ -16,7 +16,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='hubvisitbrowsercredential',
             name='fast_internet_approval',
-            field=models.CharField(choices=[('not_requested', 'لم يُطلب'), ('pending', 'بانتظار موافقة الموظف'), ('approved', 'موافق عليه'), ('rejected', 'لم تتم الموافقة')], default='not_requested', max_length=16),
+            field=models.CharField(choices=[('not_requested', 'لم يُطلب'), ('pending', 'بانتظار موافقة الموظف'), ('approved', 'موافق عليه'), ('rejected', 'لم تتم الموافقة')], db_default='not_requested', default='not_requested', max_length=16),
         ),
         migrations.AddField(
             model_name='hubvisitbrowsercredential',
@@ -36,6 +36,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='systemsetting',
             name='fast_internet_staff_approval_required',
-            field=models.BooleanField(default=True, verbose_name='اشتراط موافقة الموظف على الإنترنت السريع'),
+            field=models.BooleanField(db_default=True, default=True, verbose_name='اشتراط موافقة الموظف على الإنترنت السريع'),
         ),
     ]

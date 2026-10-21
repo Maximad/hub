@@ -15,7 +15,7 @@ Builds on main `6ce96d6`, including purchase receipt recovery PR #335. This is t
 
 ## Schema and release
 
-Core migration `0060_fast_internet_staff_approval` adds the policy Boolean (default true) and approval state/request/reviewer metadata to the existing `HubVisitBrowserCredential`. No new task engine, access model or RouterOS setting is introduced. Existing credentials start as not requested; existing active sessions are grandfathered. No history is backfilled with fabricated approval evidence.
+Core migration `0060_fast_internet_staff_approval` adds the policy Boolean (default true) and approval state/request/reviewer metadata to the existing `HubVisitBrowserCredential`. The two non-null columns have persistent database defaults, so previous code can still insert records during a code rollback. No new task engine, access model or RouterOS setting is introduced. Existing credentials start as not requested; existing active sessions are grandfathered. No history is backfilled with fabricated approval evidence.
 
 The full Django/PostgreSQL suite and existing browser CI verify the package. The new browser helper renders real customer/staff templates at 320, 390 and 768px with JavaScript disabled and unsaved synthetic data. CI results are recorded in the PR.
 
