@@ -192,6 +192,7 @@ class InternetSessionRecoveryTests(TestCase):
 
     def test_manual_and_free_sessions_keep_existing_billing_presentation(self):
         self.session.start_time = timezone.now() - timedelta(minutes=40)
+        self.session.started_at = self.session.start_time
         self.session.network_provider = 'manual'
         self.session.network_status = ''
         self.session.save()
