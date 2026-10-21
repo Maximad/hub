@@ -2,6 +2,7 @@
 from decimal import Decimal
 from types import SimpleNamespace
 from uuid import uuid4
+from unittest.mock import patch, PropertyMock
 
 from django.contrib.auth import get_user_model
 from django.template.loader import get_template
@@ -35,7 +36,12 @@ def verify_purchase_receipt(browser, output, assets):
         'finance_reviews': [],
     }
     for kind in ('inventory', 'finance'):
-        html = get_template(f'staff/{kind}_purchase_detail.html').render(context)
+        # Supplier totals are an aggregate property; substitute only this value
+        # and fail on any unexpected database access during synthetic rendering.
+        with patch.object(Purchase, 'amount_paid_syp', new_callable=PropertyMock, return_value=Decimal('0')), patch(
+            'django.db.backends.utils.CursorWrapper.execute', side_effect=AssertionError('Synthetic preview accessed the database'),
+        ):
+            html = get_template(f'staff/{kind}_purchase_detail.html').render(context)
         for javascript in (False, True):
             for width in (320, 390, 768):
                 page = browser.new_page(viewport={'width': width, 'height': 844}, java_script_enabled=javascript)
