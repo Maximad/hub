@@ -14,9 +14,10 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from accounts.permissions import is_owner_or_admin, user_has_capability
+from accounts.permissions import is_owner_or_admin, user_has_capability, require_staff_capability
 from core.models import HubVisitBrowserCredential, InternetBandwidthProfile, InternetEntitlement, InternetPackage
 from core.services.fast_internet_approval import approval_required, review_approval
+from core.services.internet_operations import requeue_failed_network_operation
 from internet.models import StaffInternetDeviceEvidence, StaffInternetObservedInterval
 from core.services.staff_internet_observation import (
     observation_is_fresh, observed_concurrent_limit_state,
@@ -36,6 +37,29 @@ from core.views_legacy import (
     staff_internet_start,
     staff_wifi,
 )
+
+
+@require_POST
+@require_staff_capability('members/internet')
+@require_staff_capability('settings')
+def staff_internet_session_retry(request, session_id):
+    from core.models import InternetSession
+
+    get_object_or_404(InternetSession, pk=session_id)
+    try:
+        operation_id = int(request.POST.get('operation_id', ''))
+        requeue_failed_network_operation(kind='session', operation_id=operation_id,
+                                        actor=request.user, session_id=session_id)
+    except (ValueError, TypeError):
+        messages.error(request, 'اختر عملية الشبكة المطلوبة لإعادة المحاولة.')
+    except ValidationError as exc:
+        messages.error(request, ' '.join(exc.messages))
+    except Exception:
+        logging.getLogger(__name__).exception('Session network retry failed')
+        messages.error(request, 'تعذر حفظ إعادة المحاولة. حدّث الصفحة وحاول مجدداً.')
+    else:
+        messages.success(request, 'أُعيدت العملية إلى الانتظار. سيحاول عامل الإنترنت تنفيذها دون إنشاء جلسة أو دفعة جديدة.')
+    return redirect('staff_internet_session', session_id=session_id)
 
 
 class InternalAccessGrantForm(forms.Form):

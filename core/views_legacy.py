@@ -2027,7 +2027,12 @@ def staff_internet_start(request):
 
 
 def _session_preview(session):
+    from core.internet_billing import _managed_metered_network_activated
+
     ended_at = timezone.now()
+    if not _managed_metered_network_activated(session):
+        return {'ended_at': ended_at, 'duration': 0, 'billable_minutes': 0,
+                'calculated_total': 0, 'subscription': None, 'network_waiting': True}
     duration = calculate_session_duration_minutes(session.effective_started_at, ended_at)
     billable = calculate_billable_minutes(duration, session.minimum_minutes, session.free_grace_minutes, session.rounding_increment_minutes)
     calculated_total = 0 if session.billing_mode in {InternetSession.BillingMode.FREE, InternetSession.BillingMode.PREPAID} else calculate_metered_session_total(
@@ -2039,6 +2044,8 @@ def _session_preview(session):
 
 @login_required
 def staff_internet_session(request, session_id):
+    from core.services.internet_session_recovery import session_recovery_context
+
     _assert_staff_capability(request.user, 'members/internet')
     session = get_object_or_404(InternetSession.objects.select_related('member', 'package', 'linked_order', 'linked_payment', 'started_by', 'ended_by'), pk=session_id)
     ledger_entries = session.member.credit_ledger.order_by('-created_at')[:20] if session.member_id else []
@@ -2046,6 +2053,7 @@ def staff_internet_session(request, session_id):
     entitlement = session.entitlement
     return render(request, 'staff/internet_session.html', {
         'session': session,
+        'recovery': session_recovery_context(session, can_retry=user_has_capability(request.user, 'settings')),
         'preview': preview,
         'ledger_entries': ledger_entries,
         'can_cancel_sessions': can_override_session_total(request.user),

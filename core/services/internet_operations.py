@@ -3,7 +3,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from core.models import ActivityLog, InternetNetworkOperation
+from core.models import ActivityLog, InternetNetworkOperation, InternetSession
 from core.services.internet_readiness import get_operations_state
 from core.services.mikrotik import (
     MikroTikAuthenticationError,
@@ -30,6 +30,20 @@ def _readonly_health_failure(exc):
     return 'unknown', 'تعذر إكمال فحص القراءة لسبب غير معروف.'
 
 
+def safe_operation_error(value):
+    """Collapse stored network errors into operator-safe categories for the UI."""
+    text = (value or '').replace('\r', ' ').replace('\n', ' ').strip()
+    if not text:
+        return '—'
+    lowered = text.lower()
+    if any(marker in lowered for marker in ('tls', 'certificate', 'شهادة', 'timeout', 'connection', 'اتصال')):
+        return 'تعذر الاتصال بالشبكة أو التحقق من TLS.'
+    if any(marker in lowered for marker in ('authentication', 'authorization', 'credential', 'اعتماد', '401', '403')):
+        return 'تعذر إكمال العملية باستخدام حساب الخدمة الحالي.'
+    if any(marker in lowered for marker in ('profile', 'routeros', 'hotspot', 'ملف', 'مورد')):
+        return 'تعذر استخدام مورد الشبكة المطلوب لهذه العملية.'
+    return 'فشلت عملية الشبكة؛ راجع نوع العملية ووقت الفشل قبل إعادة المحاولة.'
+
 def _operation_model(kind):
     if kind == 'entitlement':
         return InternetNetworkOperation
@@ -39,12 +53,28 @@ def _operation_model(kind):
 
 
 @transaction.atomic
-def requeue_failed_network_operation(*, kind, operation_id, actor=None):
+def requeue_failed_network_operation(*, kind, operation_id, actor=None, session_id=None):
     """Move one failed durable operation back to pending without doing network I/O."""
+    # Session-page retries retain the same settings permission at the HTTP
+    # boundary and must refer to this exact session, never a posted foreign job.
     model = _operation_model(kind)
+    session = None
+    if session_id is not None and kind != 'session':
+        raise ValidationError('أعد محاولة عمليات الباقة من إعدادات الإنترنت.')
+    if kind == 'session':
+        target_id = session_id or model.objects.filter(pk=operation_id).values_list('session_id', flat=True).first()
+        session = InternetSession.objects.select_for_update().filter(pk=target_id).first()
+        if session is None:
+            raise ValidationError('عملية الشبكة غير موجودة.')
     job = model.objects.select_for_update().filter(pk=operation_id).first()
     if job is None:
         raise ValidationError('عملية الشبكة غير موجودة.')
+    if session is not None:
+        if job.session_id != session.pk:
+            raise ValidationError('عملية الشبكة لا تخص هذه الجلسة.')
+        if (job.operation in {'provision', 'refresh'}
+                and session.status != InternetSession.Status.ACTIVE):
+            raise ValidationError('لا يمكن إعادة تفعيل جلسة منتهية أو ملغاة.')
     if job.status != job.Status.FAILED:
         raise ValidationError('يمكن إعادة محاولة العمليات الفاشلة فقط.')
 
