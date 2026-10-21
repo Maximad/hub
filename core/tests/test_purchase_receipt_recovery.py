@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from accounts.models import UserCapabilityOverride
 from core.models import (
-    AuditEvent, CashMovement, FinancialAccount, InventoryItem, PostingBatch,
+    ActivityLog, AuditEvent, CashMovement, FinancialAccount, InventoryItem, PostingBatch,
     PostingCommand, PostingEntry, Purchase, PurchaseItem, PurchasePayment,
     PurchaseReceipt, PurchaseReceiptLine, StockMovement,
 )
@@ -67,7 +67,7 @@ class PurchaseReceiptRecoveryTests(TestCase):
 
     def snapshot(self):
         models = (PurchaseReceipt, PurchaseReceiptLine, StockMovement, PostingCommand,
-                  PostingBatch, PostingEntry, AuditEvent, PurchasePayment, CashMovement)
+                  PostingBatch, PostingEntry, AuditEvent, ActivityLog, PurchasePayment, CashMovement)
         return ([model.objects.count() for model in models],
                 list(InventoryItem.objects.order_by('pk').values_list('current_quantity', flat=True)),
                 list(Purchase.objects.order_by('pk').values_list('status', 'received_at')))
@@ -187,7 +187,7 @@ class PurchaseReceiptRecoveryTests(TestCase):
             purchase = self.purchase()
             data = self.data(purchase, self.form(purchase, mode))
             before = self.snapshot()
-            with patch('core.services.posting.purchases._batch', side_effect=RuntimeError('private database detail')), self.assertLogs('core.services.purchase_receipt_ui', level='ERROR'):
+            with patch('core.services.posting.purchases._audit', side_effect=RuntimeError('private database detail')), self.assertLogs('core.services.purchase_receipt_ui', level='ERROR'):
                 response = self.client.post(self.url(purchase, mode, submit=True), data)
             self.assertEqual(response.status_code, 200)
             self.assertContains(response, 'أعد المحاولة بالقيم نفسها')
