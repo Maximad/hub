@@ -266,7 +266,7 @@ def staff_inventory_movements(request):
         if audit is None:
             error = 'مرجع الجرد لا يعود لهذه المادة أو لم يعد صالحاً. لم نعرض حركات مواد أخرى.'
         else:
-            qs = qs.filter(created_at__gte=audit.created_at)
+            qs = qs.filter(created_at__gte=audit.created_at).order_by('-created_at', '-pk')
     if error:
         qs = qs.none()
     if request.GET.get('movement_type'): qs=qs.filter(movement_type=request.GET['movement_type'])

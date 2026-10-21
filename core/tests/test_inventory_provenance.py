@@ -112,6 +112,15 @@ class InventoryProvenanceTests(TestCase):
         self.assertEqual([m.pk for m in page.context['movements']], [movement.pk])
         self.assertContains(page, 'أُلغي قبل التطبيق')
 
+    def test_post_count_history_orders_by_entry_time_and_inactive_material_has_no_count_action(self):
+        audit, _ = self.count()
+        first = self.movement(business_date=timezone.localdate())
+        last = self.movement(business_date=timezone.localdate() - timedelta(days=20))
+        InventoryItem.objects.filter(pk=self.item.pk).update(is_active=False)
+        page = self.client.get(self.history_url, {'item': self.item.pk, 'count': audit.pk})
+        self.assertEqual([m.pk for m in page.context['movements']], [last.pk, first.pk])
+        self.assertNotContains(page, 'جرد هذه المادة')
+
     def test_unlogged_balance_change_and_unit_change_are_separate_conditions(self):
         self.count()
         InventoryItem.objects.filter(pk=self.item.pk).update(current_quantity=Decimal('2'))
