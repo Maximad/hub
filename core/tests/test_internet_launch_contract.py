@@ -48,6 +48,7 @@ class InternetLaunchContractTests(TestCase):
         SystemSetting.objects.create(
             customer_visits_enabled=True,
             customer_internet_self_service_enabled=True,
+            fast_internet_staff_approval_required=False,
         )
         get_system_settings.cache_clear()
         policy = GuestWifiPolicy.objects.get(key='default')

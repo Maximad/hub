@@ -91,6 +91,7 @@ class StaffWorkspaceTests(TestCase):
         SystemSetting.objects.create(
             customer_visits_enabled=True,
             customer_internet_self_service_enabled=True,
+            fast_internet_staff_approval_required=False,
             internet_metered_enabled=True,
             allow_guest_internet_sessions=True,
             default_rate_per_hour_syp=600,

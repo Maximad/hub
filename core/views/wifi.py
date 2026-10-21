@@ -16,6 +16,7 @@ from catalog.models import MediaAsset
 from core.models import ActivityLog, HubVisit, InternetEntitlement, InternetSession
 from core.services.hotspot_connect import one_tap_connect_configured, one_tap_session_connect_configured
 from core.services.fast_internet_identity import selected_fast_identity, ensure_fast_visit_identity
+from core.services.fast_internet_approval import approval_context, request_approval
 from core.services.internet_internal_access import INTERNAL_ORIGINS, usable_internal_grant_for_user
 from core.services.table_visit_access import resolve_table_number
 from core.services.visit_internet import (customer_packages, metered_customer_error,
@@ -374,6 +375,36 @@ def _start_fast_wifi(request):
     return set_visit_cookie(response, raw_cookie) if raw_cookie else response
 
 
+def _request_fast_approval(request):
+    raw_cookie = None
+    try:
+        # Creation/identity/request evidence succeed or roll back together.
+        with transaction.atomic():
+            visit, credential, raw_cookie, member_context = _ensure_wifi_visit(request, source='wifi_fast_approval')
+            result = request_approval(
+                visit=visit, credential=credential,
+                guest_name=request.POST.get('guest_name', ''),
+                guest_phone=request.POST.get('guest_phone', ''),
+                member=member_context.member if member_context else visit.member,
+            )
+        if result.fast_internet_approval == result.FastInternetApproval.PENDING:
+            messages.success(request, 'أُرسل طلب الموافقة. لم يبدأ الإنترنت السريع أو احتساب تكلفته بعد.')
+        elif result.fast_internet_approval == result.FastInternetApproval.REJECTED:
+            messages.warning(request, 'لم تتم الموافقة على الطلب. تواصل مع الفريق.')
+        else:
+            messages.success(request, 'يمكنك الآن اختيار الإنترنت السريع وبدء الاتصال.')
+    except ValidationError as exc:
+        raw_cookie = None
+        messages.error(request, _validation_message(exc))
+    except Exception:
+        raw_cookie = None
+        logger.exception('Fast Internet approval request failed')
+        messages.error(request, 'تعذر إرسال طلب الموافقة. أعد المحاولة.')
+    target = reverse('current_visit') + '?focus=internet#internet' if request.POST.get('next') == 'current_visit' else _wifi_internet_path()
+    response = redirect(target)
+    return set_visit_cookie(response, raw_cookie) if raw_cookie else response
+
+
 def _retire_legacy_staff_wifi_visit(request, *, actor):
     """Close the old synthetic customer visit created only for internal staff Wi-Fi."""
     credential = resolve_visit_credential(request, touch=False)
@@ -520,6 +551,8 @@ def wifi_entry(request):
     """
     if request.method == 'POST':
         action = request.POST.get('wifi_action')
+        if action == 'request_fast_approval':
+            return _request_fast_approval(request)
         if action == 'start_guest_wifi':
             return _start_guest_wifi(request)
         if action == 'start_member_wifi':
@@ -637,7 +670,10 @@ def wifi_entry(request):
         }
     )
 
+    fast_approval = approval_context(credential)
+    fast_approval['fast_approval_required'] = bool(internet_options_available and fast_approval['fast_approval_required'])
     response = render(request, 'menu/wifi_entry.html', {
+        **fast_approval,
         'table_number_error': table_number_error,
         'table_number_value': raw_number,
         'current_visit': visit,

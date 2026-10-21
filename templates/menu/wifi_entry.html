@@ -115,12 +115,14 @@
 
     {% if active_guest_wifi_network_ready %}
       <a class="wifi-sheet__primary" href="{{ menu_url }}"><span>افتح المنيو</span><span aria-hidden="true">‹</span></a>
-      {% if member_primary_internet_entitlement %}
+      {% if fast_approval_required %}
+        {% include "menu/_fast_internet_approval.html" %}
+      {% elif member_primary_internet_entitlement and not fast_approval_required %}
         <form method="post" action="{% url 'wifi_entry' %}">
           {% csrf_token %}<input type="hidden" name="wifi_action" value="start_member_wifi"><input type="hidden" name="entitlement" value="{{ member_primary_internet_entitlement.public_code }}">
           <button class="wifi-sheet__secondary" type="submit">استخدم إنترنت حسابك</button>
         </form>
-      {% elif member_has_internet_entitlements %}
+      {% elif member_has_internet_entitlements and not fast_approval_required %}
         <form method="post" action="{% url 'wifi_entry' %}">{% csrf_token %}<input type="hidden" name="wifi_action" value="internet_options"><button class="wifi-sheet__secondary" type="submit">خيارات إنترنت حسابك</button></form>
       {% elif internet_metered_available %}
         <form method="post" action="{% url 'wifi_entry' %}">
@@ -151,12 +153,12 @@
     </form>
     <form method="post" action="{% url 'wifi_entry' %}" class="wifi-sheet__code-form">
       {% csrf_token %}
-      <input type="hidden" name="wifi_action" value="{% if fast_registration_next == 'options' %}internet_options{% else %}start_fast_wifi{% endif %}">
+      <input type="hidden" name="wifi_action" value="{% if fast_approval_required %}request_fast_approval{% elif fast_registration_next == 'options' %}internet_options{% else %}start_fast_wifi{% endif %}">
       <label for="fast-guest-name">بدون طاولة · الاسم</label>
       <input class="hub-input" id="fast-guest-name" name="guest_name" maxlength="120" autocomplete="name" required>
       <label for="fast-guest-phone">رقم الهاتف</label>
       <input class="hub-input" id="fast-guest-phone" name="guest_phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="30" required>
-      <button class="wifi-sheet__primary" type="submit">{% if fast_registration_next == 'options' %}فتح خيارات الإنترنت{% else %}ابدأ الإنترنت السريع{% endif %}</button>
+      <button class="wifi-sheet__primary" type="submit">{% if fast_approval_required %}طلب موافقة على الإنترنت السريع{% elif fast_registration_next == 'options' %}فتح خيارات الإنترنت{% else %}ابدأ الإنترنت السريع{% endif %}</button>
     </form>
     <p class="wifi-sheet__primary-note">{% if fast_registration_next == 'options' %}سترى تفاصيل الباقات قبل الشراء.{% else %}{{ internet_metered_rate_syp|format_syp }} / ساعة · يبدأ الاحتساب بعد جاهزية الشبكة ويستمر حتى إيقاف الجلسة.{% endif %}</p>
 
@@ -165,7 +167,7 @@
       <h2 id="wifi-sheet-title">الاتصال بالإنترنت</h2>
       {% if staff_internal_access_available %}
         <p>منحتك الداخلية جاهزة على هذا الحساب.</p>
-      {% elif member_has_internet_entitlements %}
+      {% elif member_has_internet_entitlements and not fast_approval_required %}
         <p>لديك إنترنت متاح ضمن حساب هَبّ.</p>
       {% elif guest_wifi_available and guest_wifi_can_start %}
         <p>اتصل بخطوة واحدة.</p>
@@ -187,7 +189,7 @@
         </button>
       </form>
 
-    {% elif member_primary_internet_entitlement %}
+    {% elif member_primary_internet_entitlement and not fast_approval_required %}
       <form method="post" action="{% url 'wifi_entry' %}">
         {% csrf_token %}
         <input type="hidden" name="wifi_action" value="start_member_wifi">
@@ -195,7 +197,7 @@
         <button class="wifi-sheet__primary" type="submit"><span>اتصل بإنترنت حسابك</span><span aria-hidden="true">‹</span></button>
       </form>
 
-    {% elif member_has_internet_entitlements %}
+    {% elif member_has_internet_entitlements and not fast_approval_required %}
       <form method="post" action="{% url 'wifi_entry' %}">
         {% csrf_token %}<input type="hidden" name="wifi_action" value="internet_options">
         <button class="wifi-sheet__primary" type="submit"><span>اختر إنترنت حسابك</span><span aria-hidden="true">‹</span></button>
@@ -206,7 +208,9 @@
         {% csrf_token %}<input type="hidden" name="wifi_action" value="start_guest_wifi">
         <button class="wifi-sheet__primary" type="submit"><span>اتصل الآن</span><span aria-hidden="true">‹</span></button>
       </form>
-      {% if internet_metered_available %}
+      {% if fast_approval_required %}
+        {% include "menu/_fast_internet_approval.html" %}
+      {% elif internet_metered_available %}
         <form method="post" action="{% url 'wifi_entry' %}">
           {% csrf_token %}<input type="hidden" name="wifi_action" value="start_fast_wifi">
           <button class="wifi-sheet__secondary" type="submit">إنترنت أسرع · {{ internet_metered_rate_syp|format_syp }} / ساعة</button>
@@ -220,13 +224,17 @@
         <input class="hub-input wifi-venue-code" id="venue-code" name="venue_code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9٠-٩۰-۹]{4}" maxlength="4" placeholder="••••" required>
         <button class="wifi-sheet__primary" type="submit"><span>اتصال</span><span aria-hidden="true">‹</span></button>
       </form>
-      {% if internet_metered_available %}
+      {% if fast_approval_required %}
+        {% include "menu/_fast_internet_approval.html" %}
+      {% elif internet_metered_available %}
         <form method="post" action="{% url 'wifi_entry' %}">
           {% csrf_token %}<input type="hidden" name="wifi_action" value="start_fast_wifi">
           <button class="wifi-sheet__secondary" type="submit">إنترنت أسرع · {{ internet_metered_rate_syp|format_syp }} / ساعة</button>
         </form>
       {% endif %}
 
+    {% elif fast_approval_required and internet_options_available %}
+      {% include "menu/_fast_internet_approval.html" %}
     {% elif internet_metered_available %}
       <form method="post" action="{% url 'wifi_entry' %}" class="wifi-sheet__code-form">
         {% csrf_token %}<input type="hidden" name="wifi_action" value="start_fast_wifi">

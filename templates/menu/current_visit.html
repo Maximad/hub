@@ -100,6 +100,10 @@
         <h3>خيارات الإنترنت لهذا الجهاز</h3>
         <p>اختر ما يناسبك. يمكنك العودة إلى المنيو أو حسابك من دون مسح رمز جديد.</p>
       </div>
+      {% if fast_approval_required %}
+        {% include "menu/_fast_internet_approval.html" with approval_return_to_visit=True %}
+      {% else %}
+      {% if fast_approval_state == 'approved' %}<p class="hub-help-text" role="status">وافق الموظف على الإنترنت السريع لهذا الجهاز. اختر الخدمة لبدء الاتصال.</p>{% endif %}
       {% if internet_entitlements %}
         <div class="current-visit__internet-choice">
           <h3>إنترنت مشمول بحسابك</h3>
@@ -131,6 +135,7 @@
         </details>
       {% endif %}
 
+      {% endif %}
       {% if not internet_metered_available and not internet_entitlements and not internet_packages and internet_metered_unavailable_reason %}
         <p class="hub-help-text">{{ internet_metered_unavailable_reason }}</p>
       {% endif %}

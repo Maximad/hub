@@ -31,6 +31,7 @@ class InternetMenuCartTests(TestCase):
         self.settings = SystemSetting.objects.create(
             customer_visits_enabled=True,
             customer_internet_self_service_enabled=True,
+            fast_internet_staff_approval_required=False,
         )
 
         self.food_category = Category.objects.create(name_ar='سناك')

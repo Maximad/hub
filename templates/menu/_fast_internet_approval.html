@@ -1,0 +1,20 @@
+<section class="hub-card current-visit__internet-choice" aria-label="موافقة الإنترنت السريع">
+  <h3>موافقة الإنترنت السريع{% if fast_approval_reference %} · طلب #{{ fast_approval_reference }}{% endif %}</h3>
+  {% if fast_approval_state == 'pending' %}
+    <p role="status">بانتظار موافقة الموظف على هذا الجهاز. لم يبدأ الإنترنت السريع أو احتساب تكلفته بعد.</p>
+    <a class="hub-button" href="{% if approval_return_to_visit %}{% url 'current_visit' %}?focus=internet#internet{% else %}{% url 'wifi_entry' %}?mode=internet{% endif %}">تحديث حالة الطلب</a>
+  {% elif fast_approval_state == 'rejected' %}
+    <p role="status">لم تتم الموافقة على الطلب. تواصل مع الفريق.</p>
+  {% else %}
+    <p>اطلب موافقة الموظف لهذا الجهاز خلال زيارتك، ثم اختر الباقة أو ابدأ الإنترنت حسب الوقت. إرسال الطلب لا يرتب تكلفة.</p>
+    <form method="post" action="{% url 'wifi_entry' %}" class="hub-form">
+      {% csrf_token %}<input type="hidden" name="wifi_action" value="request_fast_approval">
+      {% if approval_return_to_visit %}<input type="hidden" name="next" value="current_visit">{% endif %}
+      {% if fast_registration_required or internet_identity_required %}
+        <label>الاسم<input class="hub-input" name="guest_name" maxlength="120" autocomplete="name" required></label>
+        <label>رقم الهاتف<input class="hub-input" name="guest_phone" type="tel" inputmode="tel" maxlength="30" autocomplete="tel" required></label>
+      {% endif %}
+      <button class="hub-button hub-button-primary" type="submit">طلب موافقة على الإنترنت السريع</button>
+    </form>
+  {% endif %}
+</section>

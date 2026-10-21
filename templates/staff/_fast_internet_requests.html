@@ -1,0 +1,31 @@
+<section class="hub-section hub-card" aria-label="طلبات موافقة الإنترنت السريع">
+  <h2 class="hub-section-title">طلبات الإنترنت السريع <span class="hub-badge">{{ request.fast_internet_requests.paginator.count }}</span></h2>
+  <p>{% if request.fast_internet_approval_required %}موافقة الموظف مطلوبة لكل جهاز خلال زيارته.{% else %}شرط الموافقة متوقف. يستطيع الزبون بدء الاتصال من جهازه مباشرة.{% endif %}</p>
+  <p class="hub-help-text">الموافقة تسمح لهذا الجهاز بالبدء، وتبقى التسعيرة أو الباقة كما هي. لا يبدأ الاتصال أو الاحتساب من زر الموافقة.</p>
+  {% for device in request.fast_internet_requests %}
+    <article class="hub-card hub-section">
+      <h3>جهاز #{{ device.pk }} · حساب {{ device.visit.display_number }}</h3>
+      <p>{% if device.visit.table %}{{ device.visit.table }}{% else %}بدون طاولة{% endif %} · {% if device.visit.member %}{{ device.visit.member.name_ar }}{% else %}{{ device.visit.guest_name|default:'زائر' }}{% endif %}</p>
+      <p class="hub-help-text">{{ device.fast_internet_requested_at }} · يطلب الزبون الموافقة من الجهاز الذي سيستخدمه.</p>
+      {% if staff_caps.visit_manage %}<p><a href="{% url 'staff_visit_detail' device.visit.public_code %}">فتح الحساب الأصلي</a></p>{% endif %}
+      <form method="post" action="{% url 'staff_fast_internet_approval' device.pk %}" class="hub-toolbar">
+        {% csrf_token %}
+        <button class="hub-button hub-button-primary" name="decision" value="approved" type="submit">موافقة لهذا الجهاز</button>
+        <button class="hub-button" name="decision" value="rejected" type="submit">رفض الطلب</button>
+      </form>
+    </article>
+  {% empty %}<p class="hub-help-text">لا توجد طلبات موافقة معلّقة.</p>{% endfor %}
+  {% if request.fast_internet_requests.has_previous %}<a class="hub-button" href="?approval_page={{ request.fast_internet_requests.previous_page_number }}">الطلبات السابقة</a>{% endif %}
+  {% if request.fast_internet_requests.has_next %}<a class="hub-button" href="?approval_page={{ request.fast_internet_requests.next_page_number }}">طلبات أخرى</a>{% endif %}
+  {% if request.fast_internet_rejected %}
+  <details><summary>آخر الطلبات المرفوضة · إعادة النظر</summary>
+    {% for device in request.fast_internet_rejected %}
+    <form method="post" action="{% url 'staff_fast_internet_approval' device.pk %}" class="hub-form-section">
+      {% csrf_token %}<input type="hidden" name="expected_state" value="rejected">
+      <p>جهاز #{{ device.pk }} · حساب {{ device.visit.display_number }} · {{ device.visit.table|default:'بدون طاولة' }}</p>
+      <button class="hub-button" name="decision" value="approved" type="submit">موافقة بعد إعادة النظر</button>
+    </form>
+    {% endfor %}
+  </details>
+  {% endif %}
+</section>

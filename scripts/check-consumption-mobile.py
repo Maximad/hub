@@ -63,5 +63,7 @@ with sync_playwright() as p:
     verify_inventory_provenance(browser, output, assets)
     from check_purchase_receipt_mobile import verify_purchase_receipt
     verify_purchase_receipt(browser, output, assets)
+    from check_fast_internet_approval_mobile import verify_fast_internet_approval
+    verify_fast_internet_approval(browser, output, assets)
     browser.close()
 print(f'RTL mobile layout and conversion passed; screenshots in {output}')

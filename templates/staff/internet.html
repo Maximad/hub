@@ -13,6 +13,7 @@
   {% for message in messages %}<p class="hub-badge hub-badge-info">{{ message }}</p>{% endfor %}
 </section>
 
+{% include "staff/_fast_internet_requests.html" %}
 <section class="hub-section hub-card">
   <h3 class="hub-section-title">أ. بيع صلاحية إنترنت</h3>
   <form class="hub-form hub-grid hub-grid-2" method="post" action="{% url 'staff_internet_sale' %}">{% csrf_token %}
