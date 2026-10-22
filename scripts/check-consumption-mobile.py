@@ -45,6 +45,8 @@ with sync_playwright() as p:
         else:
             route.abort()
     page.route('**/*', assets)
+    from check_cashier_recovery_mobile import verify_cashier_recovery
+    verify_cashier_recovery(browser, output, assets)
     page.set_content(html.replace('/static/', 'http://preview.test/static/'), wait_until='networkidle')
     page.locator('#consumption-quantity').fill('1.5')
     page.locator('#consumption-unit').select_option('kg')
@@ -65,6 +67,8 @@ with sync_playwright() as p:
     verify_purchase_receipt(browser, output, assets)
     from check_fast_internet_approval_mobile import verify_fast_internet_approval
     verify_fast_internet_approval(browser, output, assets)
+    from check_internet_session_recovery_mobile import verify_internet_session_recovery
+    verify_internet_session_recovery(browser, output, assets)
     from check_standalone_cashier_recovery_mobile import verify_standalone_cashier_recovery
     verify_standalone_cashier_recovery(browser, output, assets)
     browser.close()

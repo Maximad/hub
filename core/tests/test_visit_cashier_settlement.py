@@ -269,7 +269,7 @@ class VisitCashierSettlementTests(TestCase):
         denied = self.payment_post(
             visit, 50, key='visit:partial-denied', user=self.cashier,
         )
-        self.assertEqual(denied.status_code, 302)
+        self.assertEqual(denied.status_code, 200)
         self.assertFalse(Payment.objects.filter(order__visit=visit).exists())
 
         approved = self.payment_post(
@@ -418,7 +418,7 @@ class VisitCashierSettlementTests(TestCase):
             HTTP_IDEMPOTENCY_KEY='visit:settle-invalid',
         )
 
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
         visit.refresh_from_db(); session.refresh_from_db()
         self.assertEqual(visit.status, HubVisit.Status.OPEN)
         self.assertGreater(visit.remaining_syp, 0)

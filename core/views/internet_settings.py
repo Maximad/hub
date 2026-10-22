@@ -21,6 +21,7 @@ from core.models import (
 )
 from core.services.internet_operations import (
     requeue_failed_network_operation,
+    safe_operation_error as _safe_operation_error,
     run_readonly_mikrotik_healthcheck,
 )
 from core.services.internet_readiness import (
@@ -101,21 +102,6 @@ def _speed_label(kbps):
     if kbps >= 1000 and kbps % 1000 == 0:
         return f'{kbps // 1000} Mbps'
     return f'{kbps} Kbps'
-
-
-def _safe_operation_error(value):
-    """Collapse stored network errors into operator-safe categories for the UI."""
-    text = (value or '').replace('\r', ' ').replace('\n', ' ').strip()
-    if not text:
-        return '—'
-    lowered = text.lower()
-    if any(marker in lowered for marker in ('tls', 'certificate', 'شهادة', 'timeout', 'connection', 'اتصال')):
-        return 'تعذر الاتصال بالشبكة أو التحقق من TLS.'
-    if any(marker in lowered for marker in ('authentication', 'authorization', 'credential', 'اعتماد', '401', '403')):
-        return 'تعذر إكمال العملية باستخدام حساب الخدمة الحالي.'
-    if any(marker in lowered for marker in ('profile', 'routeros', 'hotspot', 'ملف', 'مورد')):
-        return 'تعذر استخدام مورد الشبكة المطلوب لهذه العملية.'
-    return 'فشلت عملية الشبكة؛ راجع نوع العملية ووقت الفشل قبل إعادة المحاولة.'
 
 
 def _latest_failed_operation():

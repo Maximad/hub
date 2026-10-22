@@ -11,6 +11,8 @@
 
   {% if messages %}<div class="staff-payment-panel__messages">{% for message in messages %}<div class="hub-message hub-message-{{ message.tags|default:'info' }}">{{ message }}</div>{% endfor %}</div>{% endif %}
 
+  {% include "staff/_visit_payment_recovery.html" %}
+
   <section class="staff-order-panel__totals" aria-label="حساب الجلسة">
     <div><span>الإجمالي</span><strong>{{ total|format_syp }}</strong></div>
     <div><span>المدفوع</span><strong>{{ paid|format_syp }}</strong></div>
@@ -31,8 +33,8 @@
           <label>اسم المدير<input class="hub-input" type="text" name="manager_username" autocomplete="username"></label>
           <label>كلمة المرور<input class="hub-input" type="password" name="manager_password" autocomplete="current-password"></label>
         </div>
-        <label>طريقة الدفع<select class="hub-input" name="method" required>{% for value,label in methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
-        <details class="hub-ux5-module__more"><summary>ملاحظات الدفعة (اختياري)</summary><label>ملاحظات الدفع<textarea class="hub-input" name="notes" rows="2"></textarea></label></details>
+        <label>طريقة الدفع<select class="hub-input" name="method" required><option value="">اختر طريقة الدفع</option>{% for value,label in methods %}<option value="{{ value }}"{% if form_values.method == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+        <details class="hub-ux5-module__more"><summary>ملاحظات الدفعة (اختياري)</summary><label>ملاحظات الدفع<textarea class="hub-input" name="notes" rows="2">{{ form_values.notes }}</textarea></label></details>
         <button class="hub-button" type="submit">حفظ الدفعة فقط</button>
       </form>
     </section>
@@ -46,8 +48,8 @@
       {% csrf_token %}
       <input type="hidden" name="action" value="settle_close">
       <input type="hidden" name="idempotency_key" value="{{ settlement_request_key }}">
-      {% if remaining > 0 or active_internet_sessions %}<label>طريقة تسديد الرصيد النهائي<select class="hub-input" name="method" required>{% for value,label in methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>{% endif %}
-      <details class="hub-ux5-module__more"><summary>ملاحظات الإغلاق (اختياري)</summary><label>ملاحظات<textarea class="hub-input" name="notes" rows="2"></textarea></label></details>
+      {% if remaining > 0 or active_internet_sessions %}<label>طريقة تسديد الرصيد النهائي<select class="hub-input" name="method" required><option value="">اختر طريقة الدفع</option>{% for value,label in methods %}<option value="{{ value }}"{% if settlement_values.method == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>{% endif %}
+      <details class="hub-ux5-module__more"><summary>ملاحظات الإغلاق (اختياري)</summary><label>ملاحظات<textarea class="hub-input" name="notes" rows="2">{{ settlement_values.notes }}</textarea></label></details>
       <button class="hub-button hub-button-primary" type="submit">{% if remaining == 0 and not active_internet_sessions %}إغلاق الجلسة دون تحصيل{% else %}تسديد المتبقي وإغلاق الحساب{% endif %}</button>
     </form>
   </section>

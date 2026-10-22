@@ -4,13 +4,14 @@
 <section class="hub-section hub-card">
   <h2 class="hub-page-header__title">جلسة #{{ session.id }}</h2>
   {% for message in messages %}<p class="hub-badge hub-badge-info">{{ message }}</p>{% endfor %}
+  {% include "staff/_internet_session_recovery.html" %}
   <div class="hub-grid hub-grid-2">
     <p><strong>الحالة:</strong> {{ session.get_status_display }}</p>
     <p><strong>نوع الجلسة:</strong> {{ session.get_session_type_display }}</p>
     <p><strong>الفوترة:</strong> {{ session.get_billing_mode_display }}</p>
     <p><strong>العضو:</strong> {% if session.member %}{{ session.member.name_ar }} — {{ session.member.phone }}{% else %}-{% endif %}</p>
     <p><strong>الزائر:</strong> {{ session.display_guest_name|default:'-' }} — {{ session.display_guest_phone|default:'-' }}</p>
-    <p><strong>البدء:</strong> {{ session.effective_started_at }}</p>
+    <p><strong>البدء:</strong> {% if recovery.billing_ready %}{{ session.effective_started_at }}{% else %}لم يبدأ احتساب الوقت{% endif %}</p>
     <p><strong>الانتهاء:</strong> {{ session.effective_ended_at|default:'-' }}</p>
     <p><strong>الوقت الفعلي:</strong> {{ session.effective_duration_minutes|default:'-' }} دقيقة</p>
     <p><strong>الحد لهذه الجلسة:</strong> {{ session.authorized_minutes|default_if_none:'غير محدود' }} دقيقة</p>
@@ -32,10 +33,10 @@
   {% if session.is_overdue %}<p class="hub-badge hub-badge-danger">تجاوزت الجلسة الوقت المصرّح به وتحتاج إلى إيقاف يدوي.</p>{% endif %}
   <p><strong>سبب الإلغاء:</strong> {{ session.cancellation_reason|default:"-" }}</p>
   <p><strong>ملاحظات:</strong> {{ session.notes|default:'-' }}</p>
-  <details><summary>معلومات الشبكة المستقبلية</summary><p>المزوّد: {{ session.get_network_provider_display }} — كود الوصول: {{ session.access_code|default:'-' }} — جلسة الشبكة: {{ session.network_session_id|default:'-' }} — MAC: {{ session.device_mac|default:'-' }} — IP: {{ session.ip_address|default:'-' }} — البروفايل: {{ session.bandwidth_profile|default:'-' }} — الحالة: {{ session.network_status|default:'-' }}</p></details>
-  {% if preview %}<div class="hub-card"><strong>معاينة الإنهاء الآن:</strong> {{ preview.duration }} دقيقة، {{ preview.billable_minutes }} دقيقة قابلة للفوترة، {{ preview.calculated_total }} ل.س.</div>{% endif %}
+  <details><summary>تفاصيل سجل الشبكة</summary><p>المزوّد: {{ session.get_network_provider_display }} — كود الوصول: {{ session.access_code|default:'-' }} — جلسة الشبكة: {{ session.network_session_id|default:'-' }} — MAC: {{ session.device_mac|default:'-' }} — IP: {{ session.ip_address|default:'-' }} — البروفايل: {{ session.bandwidth_profile|default:'-' }}</p></details>
+  {% if preview and not preview.network_waiting %}<div class="hub-card"><strong>معاينة الإنهاء الآن:</strong> {{ preview.duration }} دقيقة، {{ preview.billable_minutes }} دقيقة قابلة للفوترة، {{ preview.calculated_total }} ل.س.</div>{% endif %}
   <div class="hub-toolbar">
-    {% if session.status == 'active' %}<a class="hub-button hub-button-primary" href="{% url 'staff_internet_end' session.id %}">إنهاء الجلسة</a>{% endif %}
+    {% if session.status == 'active' and recovery.billing_ready %}<a class="hub-button hub-button-primary" href="{% url 'staff_internet_end' session.id %}">إنهاء الجلسة</a>{% endif %}
     {% if session.linked_order %}<a class="hub-button" href="{% url 'staff_cashier_order' session.linked_order.public_code %}">فتح طلب الكاشير</a>{% endif %}
     {% if can_cancel_sessions and session.status == 'active' %}<form class="hub-form-section" method="post" action="{% url 'staff_internet_cancel' session.id %}" onsubmit="return confirm('إلغاء الجلسة؟');">{% csrf_token %}<input name="cancellation_reason" placeholder="سبب الإلغاء" required><button class="hub-button" type="submit">إلغاء</button></form>{% endif %}
   </div>
