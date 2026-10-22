@@ -1,8 +1,11 @@
 """Regression tests for exactly-once standalone cashier collections."""
 from unittest.mock import patch
+from concurrent.futures import ThreadPoolExecutor
+
+from django.db import close_old_connections
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 
 from core.models import (ActivityLog, CashMovement, CurrencyEntrySnapshot,
@@ -187,3 +190,46 @@ class StandaloneCashierRecoveryTests(TestCase):
         response = self.client.post(pay, self.payload('standalone:unauthorized'))
         self.assertNotEqual(response.status_code, 200)
         self.assertFalse(Payment.objects.filter(order=order).exists())
+
+
+@override_settings(**WEB)
+class StandalonePaymentConcurrencyTests(TransactionTestCase):
+    setUp = fixtures.VisitCashierSettlementTests.setUp
+    tearDown = fixtures.VisitCashierSettlementTests.tearDown
+    order = fixtures.VisitCashierSettlementTests.order
+
+    def run_two(self, order, keys):
+        url = reverse('staff_cashier_pay', args=[order.public_code])
+        session_cookie = self.client.cookies['sessionid'].value
+
+        def post(key):
+            close_old_connections()
+            try:
+                client = Client()
+                client.cookies['sessionid'] = session_cookie
+                return client.post(url, {
+                    'currency_amount': '100', 'currency_currency': 'SYP_NEW',
+                    'method': 'cash', 'notes': 'race', 'idempotency_key': key,
+                }).status_code
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            return list(pool.map(post, keys))
+
+    def test_concurrent_same_key_posts_single_cash_and_ledger_entry(self):
+        order = self.order(100)
+        self.assertEqual(self.run_two(order, ('race:same', 'race:same')), [302, 302])
+        self.assertEqual(Payment.objects.filter(order=order).count(), 1)
+        self.assertEqual(CashMovement.objects.filter(related_order=order).count(), 1)
+        self.assertEqual(PostingBatch.objects.filter(operation_type='order_payment.collect').count(), 1)
+        self.assertEqual(CurrencyEntrySnapshot.objects.count(), 1)
+
+    def test_concurrent_distinct_full_collections_cannot_overpay(self):
+        order = self.order(100)
+        statuses = self.run_two(order, ('race:one', 'race:two'))
+        self.assertEqual(sorted(statuses), [200, 302])
+        self.assertEqual(Payment.objects.filter(order=order).count(), 1)
+        self.assertEqual(CashMovement.objects.filter(related_order=order).count(), 1)
+        self.assertEqual(PostingBatch.objects.filter(operation_type='order_payment.collect').count(), 1)
+        self.assertEqual(CurrencyEntrySnapshot.objects.count(), 1)
