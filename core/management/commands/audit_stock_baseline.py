@@ -10,14 +10,16 @@ import json
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand, CommandError
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
 from core.models import (
     InventoryItem, Order, OrderItem, Product, ProductRecipeItem, StockMovement,
 )
+from core.services.inventory_provenance import quantity_provenance
 
 HISTORICAL_IMPORT_MARKER = "import_key="
+HISTORICAL_ORDER_MARKER = "[PRE_SYSTEM_HISTORICAL_SALES]"
 
 
 def _served_lines():
@@ -39,9 +41,11 @@ def _sales_by_product(queryset):
     }
 
 
-def build_stock_baseline(*, limit=20, days=28):
+def build_stock_baseline(*, limit=20, days=28, include_pilot=False):
     if not (1 <= limit <= 100):
         raise ValueError("limit must be between 1 and 100")
+    if include_pilot and not (10 <= limit <= 20):
+        raise ValueError("pilot limit must be between 10 and 20")
     if not (1 <= days <= 365):
         raise ValueError("days must be between 1 and 365")
 
@@ -51,15 +55,21 @@ def build_stock_baseline(*, limit=20, days=28):
     recipes = ProductRecipeItem.objects.all()
 
     served = _served_lines()
-    legacy = served.filter(item_note__contains=HISTORICAL_IMPORT_MARKER)
+    # Imports may be marked at the line OR order level. Unmarked historic
+    # aggregates remain an uncertainty, not certified live sales.
+    legacy_marker = Q(item_note__contains=HISTORICAL_IMPORT_MARKER) | Q(
+        order__notes__contains=HISTORICAL_ORDER_MARKER
+    )
+    legacy = served.filter(legacy_marker)
     # This is operational served-order evidence, not proof of settled payment.
-    operational = served.exclude(item_note__contains=HISTORICAL_IMPORT_MARKER)
+    operational = served.exclude(legacy_marker)
     recent = operational.filter(created_at__gte=now - timedelta(days=days))
     recent_by_product = _sales_by_product(recent)
     lifetime_by_product = _sales_by_product(operational)
     aggregate_by_product = _sales_by_product(legacy)
 
     review_rows = []
+    physical_candidates = []
     for product in (
         products.filter(is_available=True)
         .prefetch_related("recipe_items__inventory_item")
@@ -101,6 +111,18 @@ def build_stock_baseline(*, limit=20, days=28):
                 else "no_recipe"
             ),
         })
+
+        # A stock/recipe pilot concerns drinks and food, not time-based services,
+        # tickets or memberships. Legacy OTHER + food/beverage needs human
+        # confirmation; availability by itself is not evidence of sales.
+        if (
+            product.product_type in (Product.ProductType.FOOD, Product.ProductType.DRINK)
+            or (
+                product.product_type == Product.ProductType.OTHER
+                and product.item_type in (Product.ItemType.FOOD, Product.ItemType.BEVERAGE)
+            )
+        ):
+            physical_candidates.append((product, review_rows[-1]))
 
     review_rows.sort(
         key=lambda x: (
@@ -148,6 +170,110 @@ def build_stock_baseline(*, limit=20, days=28):
         "priority_products": review_rows[:limit],
         "priority_selection": "Available products ranked by served line units, then separately labeled aggregate history; not a purchase order.",
     }
+    if include_pilot:
+        # No legacy-aggregate volume in pilot ranking, regardless of its size.
+        # Where operational sales evidence is absent, candidates are explicitly
+        # labelled a catalogue fallback, not claimed as bestsellers.
+        physical_candidates.sort(key=lambda pair: (
+            -pair[1]["served_line_units_in_window"],
+            -pair[1]["served_line_units_lifetime_excluding_legacy"],
+            -int(bool(pair[0].price_syp) and (
+                pair[0].orderable_on_pos or pair[0].orderable_on_qr)),
+            -int(bool(pair[0].recipe_items.all())),
+            pair[0].pk,
+        ))
+        selected = physical_candidates[:limit]
+        materials = {
+            recipe.inventory_item_id: recipe.inventory_item
+            for product, row in selected for recipe in product.recipe_items.all()
+        }
+        provenance = quantity_provenance(materials.values())
+        pilot_rows = []
+        for product, row in selected:
+            reasons = []
+            if row["served_line_units_in_window"]:
+                evidence = "recent_served_order_lines_not_payment_proof"
+            elif row["served_line_units_lifetime_excluding_legacy"]:
+                evidence = "older_served_order_lines_not_payment_proof"
+            elif row["legacy_import_served_units"]:
+                evidence = "historical_import_only_not_demand_proof"
+            else:
+                evidence = "catalogue_fallback_no_sales_evidence"
+            if product.price_syp <= 0:
+                reasons.append("review_unpriced_product")
+            if not (
+                (product.visible_on_pos and product.orderable_on_pos)
+                or (product.visible_on_qr and product.orderable_on_qr)
+            ):
+                reasons.append("review_sales_visibility")
+            if product.product_type == Product.ProductType.OTHER:
+                reasons.append("verify_legacy_product_classification")
+            recipes = list(product.recipe_items.all())
+            if not recipes:
+                reasons.append("map_recipe_ingredients")
+            elif not any(recipe.is_active for recipe in recipes):
+                reasons.append("review_inactive_recipe_not_auto_activate")
+            ingredients = []
+            for recipe in recipes:
+                ingredient = recipe.inventory_item
+                count = provenance.get(ingredient.pk, {"state": "no_snapshot"})
+                component_issues = []
+                if not ingredient.code:
+                    component_issues.append("map_missing_sku")
+                if not ingredient.is_active:
+                    component_issues.append("review_inactive_ingredient")
+                if recipe.unit != ingredient.unit:
+                    component_issues.append("review_unit_mismatch")
+                if count["state"] == "no_snapshot":
+                    component_issues.append("physical_count_required")
+                elif count["state"] != "matches_count":
+                    component_issues.append("review_count_provenance")
+                if ingredient.estimated_unit_cost_syp is None:
+                    component_issues.append("missing_reference_cost")
+                # Non-null estimates are NOT evidence of a supplier invoice.
+                component_issues.append("invoice_cost_not_verified")
+                ingredients.append({
+                    "inventory_id": ingredient.pk,
+                    "inventory_code": ingredient.code,
+                    "inventory_name": ingredient.name_ar,
+                    "inventory_unit": ingredient.unit,
+                    "recipe_unit": recipe.unit,
+                    "quantity_per_unit": str(recipe.quantity_per_unit),
+                    "recipe_active": recipe.is_active,
+                    "count_provenance": count["state"],
+                    "count_id": count.get("count_id"),
+                    "reference_cost_present": ingredient.estimated_unit_cost_syp is not None,
+                    "issues": component_issues,
+                })
+            pilot_rows.append({
+                "product_id": product.pk,
+                "product_public_code": str(product.public_code),
+                "product": product.name_ar,
+                "product_type": product.product_type,
+                "configured_sale_price_syp": product.price_syp,
+                "sales_evidence": evidence,
+                "served_units_in_window": row["served_line_units_in_window"],
+                "served_units_lifetime_excluding_legacy": row["served_line_units_lifetime_excluding_legacy"],
+                "legacy_aggregate_units_excluded_from_ranking": row["legacy_import_served_units"],
+                "review_reasons": reasons,
+                "ingredients": ingredients,
+                "pilot_approved": False,
+            })
+        report["pilot_products"] = pilot_rows
+        report["pilot_selection"] = {
+            "eligible_active_food_drink_products": len(physical_candidates),
+            "selected": len(pilot_rows),
+            "limit": limit,
+            "order": "recent served operational units, older served units, catalogued availability/recipe, product ID",
+            "legacy_imports_ranked_as_sales": False,
+            "approval_state": "proposed_for_staff_review_not_approved",
+            "data_source": "current database at command execution; not a live production export from GitHub",
+        }
+        report["cautions"].extend([
+            "The list is a review queue, not verified top sellers; unmarked historic imports may remain.",
+            "Stock count provenance requires review after subsequent movements; estimates are not invoice-backed costs.",
+            "No recipe, stock movement, purchasing, sale price or financial posting is approved by this pilot.",
+        ])
     return report
 
 
@@ -158,10 +284,11 @@ class Command(BaseCommand):
         parser.add_argument("--limit", type=int, default=20)
         parser.add_argument("--days", type=int, default=28)
         parser.add_argument("--json", action="store_true", dest="as_json")
+        parser.add_argument("--pilot", action="store_true", help="Explainable 10-20-product food/drink pilot; read-only")
 
     def handle(self, *args, **options):
         try:
-            report = build_stock_baseline(limit=options["limit"], days=options["days"])
+            report = build_stock_baseline(limit=options["limit"], days=options["days"], include_pilot=options["pilot"])
         except ValueError as exc:
             raise CommandError(str(exc)) from exc
         if options["as_json"]:
@@ -171,6 +298,19 @@ class Command(BaseCommand):
         self.stdout.write("Hub stock baseline (READ ONLY)")
         for key, value in summary.items():
             self.stdout.write(f"{key}={value}")
+        if options["pilot"]:
+            selection = report["pilot_selection"]
+            self.stdout.write(f"Pilot proposals: {selection['selected']} of {selection['eligible_active_food_drink_products']} eligible food/drink products")
+            for row in report["pilot_products"]:
+                self.stdout.write(
+                    f"  {row['product_id']}: {row['product']} "
+                    f"served_{report['window_days']}d={row['served_units_in_window']} "
+                    f"evidence={row['sales_evidence']} "
+                    f"mapped_ingredients={len(row['ingredients'])} "
+                    f"review={','.join(row['review_reasons']) or 'inspect_component_issues'}"
+                )
+            self.stdout.write("No database changes made. Requires physical counts and source verification.")
+            return
         self.stdout.write("Priority products (not a stockout/purchase forecast):")
         for row in report["priority_products"]:
             self.stdout.write(
