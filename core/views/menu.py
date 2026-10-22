@@ -376,5 +376,8 @@ def staff_cashier_pay(request, public_code):
     )
     response = _legacy_staff_cashier_pay(request, public_code)
     if panel_request and response.status_code < 400:
+        # A recoverable error has already rendered the drawer, including messages.
+        if getattr(request, '_standalone_payment_recovery', None):
+            return response
         return render_payment_panel(request, public_code)
     return response
