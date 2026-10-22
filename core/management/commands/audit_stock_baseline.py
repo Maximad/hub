@@ -44,6 +44,8 @@ def _sales_by_product(queryset):
 def build_stock_baseline(*, limit=20, days=28, include_pilot=False):
     if not (1 <= limit <= 100):
         raise ValueError("limit must be between 1 and 100")
+    if include_pilot and not (10 <= limit <= 20):
+        raise ValueError("pilot limit must be between 10 and 20")
     if not (1 <= days <= 365):
         raise ValueError("days must be between 1 and 365")
 
