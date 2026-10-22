@@ -513,4 +513,5 @@ class StaffWorkspaceTests(TestCase):
         self.assertEqual(self.visit.status, HubVisit.Status.CLOSED)
         self.assertNotEqual(session.status, InternetSession.Status.ACTIVE)
         self.assertEqual(self.visit.remaining_syp, 0)
-        self.assertContains(settled, 'تم تسديد كامل حساب الجلسة وإغلاقها')
+        self.assertContains(settled, 'تم تحصيل 450 ل.س وإغلاق الحساب')
+        self.assertContains(settled, 'رسوم الإنترنت التي حُسبت عند الإغلاق')
