@@ -188,11 +188,17 @@ def collect_standalone_payment(request, public_code):
             _notify_partial_approval(request, order, amount_for_notice)
         messages.error(request, ' '.join(getattr(error, 'messages', [str(error)])))
         request._standalone_payment_recovery = {'key': key, 'values': values}
+        if request.GET.get('panel') == 'payment':
+            from core.views.staff_context import render_payment_panel
+            return render_payment_panel(request, public_code)
         return staff_cashier_order(request, public_code)
     except Exception:
         logger.exception('Standalone payment save failed')
         messages.error(request, 'تعذر تأكيد حفظ الدفعة. راجع الرصيد وسجل الدفعات قبل إعادة المحاولة من النموذج نفسه.')
         request._standalone_payment_recovery = {'key': key, 'values': values}
+        if request.GET.get('panel') == 'payment':
+            from core.views.staff_context import render_payment_panel
+            return render_payment_panel(request, public_code)
         return staff_cashier_order(request, public_code)
 
     return redirect('staff_cashier_order', public_code=order.public_code)
