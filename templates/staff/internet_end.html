@@ -4,6 +4,10 @@
 <section class="hub-section hub-card">
   <h2 class="hub-page-header__title">إنهاء جلسة #{{ session.id }}</h2>
   {% for message in messages %}<p class="hub-badge hub-badge-warning">{{ message }}</p>{% endfor %}
+  {% if preview.network_waiting %}
+  <p>لم يبدأ احتساب الوقت لأن تفعيل الشبكة لم يكتمل. راجع حالة الاتصال قبل الإنهاء.</p>
+  <a class="hub-button" href="{% url 'staff_internet_session' session.id %}">الرجوع إلى الجلسة</a>
+  {% else %}
   <div class="hub-grid hub-grid-2">
     <p><strong>البدء:</strong> {{ session.effective_started_at }}</p>
     <p><strong>الانتهاء المتوقع:</strong> {{ preview.ended_at }}</p>
@@ -23,5 +27,6 @@
     {% endif %}
     <div class="hub-toolbar"><button class="hub-button hub-button-primary" type="submit">تأكيد الإنهاء</button><a class="hub-button" href="{% url 'staff_internet_session' session.id %}">رجوع</a></div>
   </form>
+  {% endif %}
 </section>
 {% endblock %}

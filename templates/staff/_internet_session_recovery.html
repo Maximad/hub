@@ -1,0 +1,27 @@
+<section class="hub-card hub-form-section" aria-label="حالة الاتصال والاحتساب">
+  <h3>حالة الاتصال والاحتساب</h3>
+  <p><strong>آخر حالة مسجلة للشبكة:</strong> {{ recovery.network_label }}</p>
+  <p>{{ recovery.billing_text }}</p>
+  {% if recovery.activated_at %}<p><strong>وقت نجاح التفعيل:</strong> {{ recovery.activated_at }}</p>{% endif %}
+  <p class="hub-muted">جاهزية الوصول لا تثبت اتصال جهاز الزبون فعلياً.</p>
+  {% if not recovery.billing_ready %}<p>انتظر نتيجة المحاولة أو اطلب من موظف مخوّل إعادة المحاولة. يمكن للإدارة إلغاء الجلسة من إجراء الإلغاء الموجود أدناه.</p>{% endif %}
+  {% if recovery.uses_entitlement %}
+    <p>الوصول مرتبط بباقة. {% if recovery.can_retry %}<a href="{% url 'staff_internet_settings' %}">مراجعة عمليات الباقة في إعدادات الإنترنت</a>{% else %}تحتاج مراجعة عمليات الباقة إلى موظف مخوّل بالإعدادات.{% endif %}</p>
+  {% endif %}
+  {% for operation in recovery.operations %}
+    <div class="hub-card hub-form-section">
+      <p><strong>{{ operation.action_label }} #{{ operation.pk }}:</strong> {{ operation.state_label }}</p>
+      <p>عدد المحاولات: {{ operation.attempt_count }}{% if operation.last_attempt_at %} · آخر محاولة: {{ operation.last_attempt_at }}{% endif %}</p>
+      {% if operation.safe_error %}<p>{{ operation.safe_error }}</p>{% endif %}
+      {% if operation.status == 'pending' or operation.status == 'processing' %}<p>العملية في قائمة العامل. حدّث الحالة بعد قليل.</p>{% endif %}
+      {% if operation.next_attempt_at and operation.status == 'failed' %}<p>المحاولة التلقائية التالية: {{ operation.next_attempt_at }}</p>{% endif %}
+      {% if operation.can_retry %}
+        <form method="post" action="{% url 'staff_internet_session_retry' session.id %}">
+          {% csrf_token %}<input type="hidden" name="operation_id" value="{{ operation.pk }}">
+          <button class="hub-button" type="submit">إعادة محاولة {{ operation.action_label }}</button>
+        </form>
+      {% elif operation.status == 'failed' %}<p>تحتاج إعادة المحاولة إلى صلاحية الإعدادات وإجراء صالح لحالة الجلسة.</p>{% endif %}
+    </div>
+  {% endfor %}
+  <form method="get" action="{% url 'staff_internet_session' session.id %}"><button class="hub-button" type="submit">تحديث حالة الاتصال</button></form>
+</section>
