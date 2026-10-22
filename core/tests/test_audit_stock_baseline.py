@@ -7,7 +7,8 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
 
-from core.models import Category, InventoryItem, Order, OrderItem, Product, ProductRecipeItem
+from core.models import (AuditEvent, Category, InventoryItem, Order, OrderItem, Product,
+                         ProductRecipeItem, StockMovement, Purchase, Payment, PostingBatch)
 
 
 class StockBaselineCommandTests(TestCase):
@@ -80,3 +81,102 @@ class StockBaselineCommandTests(TestCase):
             call_command("audit_stock_baseline", "--days", "0")
         with self.assertRaises(CommandError):
             call_command("audit_stock_baseline", "--apply")
+
+
+    def test_pilot_prefers_real_recent_sales_over_huge_historical_aggregate(self):
+        category = self.product.category
+        recent = Product.objects.create(category=category, name_ar="شاي مبيعات يومية",
+            price_syp=100, is_available=True, product_type=Product.ProductType.DRINK,
+            item_type=Product.ItemType.BEVERAGE)
+        legacy = Product.objects.create(category=category, name_ar="قهوة تاريخية",
+            price_syp=100, is_available=True, product_type=Product.ProductType.DRINK,
+            item_type=Product.ItemType.BEVERAGE)
+        service = Product.objects.create(category=category, name_ar="إنترنت",
+            price_syp=100, is_available=True, product_type=Product.ProductType.INTERNET,
+            item_type=Product.ItemType.SERVICE)
+        hidden = Product.objects.create(category=category, name_ar="منتج غير متاح",
+            price_syp=100, is_available=False, product_type=Product.ProductType.DRINK)
+        live_order = Order.objects.create(status=Order.Status.SERVED)
+        historical = Order.objects.create(status=Order.Status.SERVED,
+            notes="[PRE_SYSTEM_HISTORICAL_SALES] month=2026-08")
+        for product, order, quantity in [
+            (recent, live_order, 2), (legacy, historical, 500),
+            (service, live_order, 100), (hidden, live_order, 200),
+        ]:
+            OrderItem.objects.create(
+                order=order, product=product, quantity=quantity,
+                product_name_ar_snapshot=product.name_ar, unit_price_syp_snapshot=100,
+            )
+        before = tuple(model.objects.count() for model in
+            (InventoryItem, ProductRecipeItem, StockMovement, Purchase, Payment, PostingBatch))
+        result = self.report("--pilot")
+        proposals = result["pilot_products"]
+        self.assertEqual([p["product_id"] for p in proposals[:2]],
+                         [recent.pk, legacy.pk])
+        self.assertNotIn(service.pk, [p["product_id"] for p in proposals])
+        self.assertNotIn(hidden.pk, [p["product_id"] for p in proposals])
+        self.assertEqual(proposals[0]["sales_evidence"], "recent_served_order_lines_not_payment_proof")
+        self.assertEqual(proposals[1]["sales_evidence"], "historical_import_only_not_demand_proof")
+        self.assertEqual(proposals[1]["served_units_in_window"], 0)
+        self.assertEqual(proposals[1]["legacy_aggregate_units_excluded_from_ranking"], 500)
+        self.assertEqual(result["summary"]["served_operational_units_in_window"], 302)
+        self.assertEqual(result["summary"]["served_legacy_aggregate_units"], 500)
+        self.assertFalse(proposals[0]["pilot_approved"])
+        self.assertFalse(result["pilot_selection"]["legacy_imports_ranked_as_sales"])
+        self.assertEqual(
+            before,
+            tuple(model.objects.count() for model in
+                (InventoryItem, ProductRecipeItem, StockMovement, Purchase, Payment, PostingBatch)),
+        )
+
+    def test_ingredient_review_reuses_count_provenance_without_certifying_cost(self):
+        missing = self.report("--pilot")["pilot_products"][0]
+        ingredient = missing["ingredients"][0]
+        self.assertEqual(ingredient["inventory_code"], "COFFEE-AR")
+        self.assertEqual(ingredient["count_provenance"], "no_snapshot")
+        self.assertIn("physical_count_required", ingredient["issues"])
+        self.assertIn("missing_reference_cost", ingredient["issues"])
+        self.assertIn("invoice_cost_not_verified", ingredient["issues"])
+        self.assertIn("review_inactive_recipe_not_auto_activate", missing["review_reasons"])
+        AuditEvent.objects.create(
+            action="inventory_physical_count_verified", channel="staff-stock-count",
+            before_snapshot={"item_id": self.inventory.pk, "unit": "kg"},
+            after_snapshot={"item_id": self.inventory.pk, "quantity": "0"},
+        )
+        self.inventory.estimated_unit_cost_syp = Decimal("120.00")
+        self.inventory.save(update_fields=["estimated_unit_cost_syp"])
+        matched = self.report("--pilot")["pilot_products"][0]["ingredients"][0]
+        self.assertEqual(matched["count_provenance"], "matches_count")
+        self.assertNotIn("physical_count_required", matched["issues"])
+        self.assertNotIn("missing_reference_cost", matched["issues"])
+        self.assertIn("invoice_cost_not_verified", matched["issues"])
+        self.recipe.refresh_from_db()
+        self.assertFalse(self.recipe.is_active)
+        self.assertEqual(self.inventory.current_quantity, Decimal("0"))
+
+    def test_pilot_explains_unpriced_missing_sku_and_unit_mismatch(self):
+        self.product.price_syp = 0
+        self.product.visible_on_qr = False
+        self.product.orderable_on_qr = False
+        self.product.visible_on_pos = False
+        self.product.orderable_on_pos = False
+        self.product.save()
+        self.inventory.code = None
+        self.inventory.save()
+        self.recipe.unit = InventoryItem.Unit.G
+        self.recipe.save()
+        candidate = self.report("--pilot")["pilot_products"][0]
+        self.assertIn("review_unpriced_product", candidate["review_reasons"])
+        self.assertIn("review_sales_visibility", candidate["review_reasons"])
+        issues = candidate["ingredients"][0]["issues"]
+        self.assertIn("map_missing_sku", issues)
+        self.assertIn("review_unit_mismatch", issues)
+        self.assertEqual(candidate["product_id"], self.product.pk)
+
+    def test_pilot_is_opt_in_and_bounds_and_unknown_apply_are_refused(self):
+        report = self.report()
+        self.assertNotIn("pilot_products", report)
+        with self.assertRaises(CommandError):
+            call_command("audit_stock_baseline", "--pilot", "--limit", "5")
+        with self.assertRaises(CommandError):
+            call_command("audit_stock_baseline", "--pilot", "--apply")
