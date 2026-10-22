@@ -26,7 +26,7 @@
       <div><span>المتبقي</span><strong>{{ remaining|format_syp }}</strong></div>
     </div>
     <p><span class="hub-badge {% if remaining == 0 %}hub-badge-success{% else %}hub-badge-info{% endif %}">{{ payment_label }}</span></p>
-    {% if active_internet_sessions %}<div class="hub-message hub-message-warning"><strong>الإنترنت ما زال فعالاً.</strong> عند استخدام «تسديد كامل وإغلاق الجلسة» سيوقف النظام جلسات الإنترنت أولاً ويضيف أي كلفة مترية مستحقة قبل احتساب المبلغ النهائي.</div>{% endif %}
+    {% if active_metered_sessions %}<div class="hub-message hub-message-warning" role="alert"><strong>الإنترنت ما زال فعالاً، والرصيد الظاهر ليس المبلغ النهائي.</strong> هناك {{ active_metered_sessions|length }} جلسة إنترنت فعالة قد تضيف رسوماً عند الإغلاق. سيُوقِف النظام الجلسات، ويحسب كلفة الاستخدام وفق التعرفة المحفوظة، ثم يحصّل المبلغ النهائي. أخبر الزبون أن الرصيد الحالي لا يتضمن رسوم الاستخدام غير المنتهي، ولا تقدّمه كسعر نهائي.</div>{% elif active_internet_sessions %}<div class="hub-message hub-message-warning"><strong>الإنترنت ما زال فعالاً.</strong> ستُنهى الجلسات النشطة عند إغلاق الحساب. الرصيد الظاهر هو الرصيد المسجل حالياً.</div>{% endif %}
   </section>
 
   <section class="hub-card hub-section">
