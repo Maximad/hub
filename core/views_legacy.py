@@ -35,6 +35,7 @@ from core.models import ActivityLog, CancellationReason, CashMovement, Category,
 from core.services.visits import issue_visit_credential, resolve_visit_credential, set_visit_cookie
 from core.services.posting.context import PostingContext
 from core.services.posting.order_payments import collect as collect_order_payment
+from core.views.staff_standalone_payments import recovery_context
 from events.models import Event
 from reservations.models import Reservation
 from reservations.services import change_reservation_status, create_reservation
@@ -1385,81 +1386,14 @@ def staff_cashier_order(request, public_code):
     order = get_object_or_404(Order.objects.select_related('table', 'table__room').prefetch_related('items', 'payments', 'discounts'), public_code=public_code)
     total, paid, remaining, payment_label = _order_financials(order)
     methods = Payment.Method.choices
-    return render(request, 'staff/cashier_order.html', {'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods, 'discount_types': [(code, label) for code, label in OrderDiscount.DiscountType.choices if code != OrderDiscount.DiscountType.COMP], 'can_manage_discounts': _can_approve_partial_payment(request.user), 'consumption_request_key': str(uuid.uuid4()), 'payment_amount_default': remaining, 'collection_request_key': f'order-pay:{order.pk}:{uuid.uuid4().hex}', 'qr_url': reverse('order_qr', kwargs={'public_code': order.public_code}), 'currency_component': CurrencyEntryFormService(request, operation='payment').context})
+    return render(request, 'staff/cashier_order.html', {'order': order, 'total': total, 'paid': paid, 'remaining': remaining, 'payment_label': payment_label, 'methods': methods, 'discount_types': [(code, label) for code, label in OrderDiscount.DiscountType.choices if code != OrderDiscount.DiscountType.COMP], 'can_manage_discounts': _can_approve_partial_payment(request.user), 'consumption_request_key': str(uuid.uuid4()), 'payment_amount_default': remaining, **recovery_context(request, order, remaining), 'qr_url': reverse('order_qr', kwargs={'public_code': order.public_code}), 'currency_component': CurrencyEntryFormService(request, operation='payment').context})
 
 
 @require_staff_capability('cashier')
 def staff_cashier_pay(request, public_code):
-    if request.method != 'POST':
-        raise Http404()
-    order = get_object_or_404(Order, public_code=public_code)
-    method = request.POST.get('method', Payment.Method.CASH)
-    valid_methods = {m[0] for m in Payment.Method.choices}
-    if method not in valid_methods:
-        method = Payment.Method.CASH
-    _total, _paid, remaining, _payment_label = _order_financials(
-        Order.objects.prefetch_related('items', 'payments').get(pk=order.pk)
-    )
-    currency_service = CurrencyEntryFormService(request, operation='payment')
-    try:
-        currency_entry = currency_service.clean(request.POST.get('amount_syp'))
-        amount_val = currency_entry.base_amount
-    except (ValidationError, PermissionDenied) as error:
-        messages.error(request, ' '.join(getattr(error, 'messages', [str(error)])))
-        return redirect('staff_cashier_order', public_code=order.public_code)
-    if amount_val <= 0:
-        messages.error(request, 'المبلغ يجب أن يكون أكبر من صفر.')
-        return redirect('staff_cashier_order', public_code=order.public_code)
-    if amount_val > remaining:
-        messages.error(request, 'المبلغ لا يجوز أن يتجاوز المتبقي.')
-        return redirect('staff_cashier_order', public_code=order.public_code)
-    if amount_val < remaining:
-        approving_manager = request.user if _can_approve_partial_payment(request.user) else None
-        if approving_manager is None:
-            manager_username = request.POST.get('manager_username', '').strip()
-            manager_password = request.POST.get('manager_password', '')
-            manager = authenticate(request, username=manager_username, password=manager_password)
-            if manager and _can_approve_partial_payment(manager):
-                approving_manager = manager
-        if approving_manager is None:
-            create_notification('manager_approval_needed', 'مطلوب موافقة المدير', f'دفع جزئي يحتاج موافقة — {order.display_number}', order=order, target_role='admin', created_by=request.user)
-            create_notification('partial_payment_requested', 'دفع جزئي يحتاج موافقة', f'{amount_val} ل.س — {order.display_number}', order=order, target_role='admin', created_by=request.user)
-            messages.error(request, 'الدفع الجزئي يحتاج موافقة المدير أو صاحب المحل.')
-            return redirect('staff_cashier_order', public_code=order.public_code)
-        ActivityLog.objects.create(
-            actor=request.user,
-            action='partial_payment_approved',
-            details={
-                'order_display_number': order.display_number,
-                'order_public_code': str(order.public_code),
-                'payment_amount': str(amount_val),
-                'remaining_before_payment': remaining,
-                'approving_manager_username': approving_manager.username,
-                'cashier_username': request.user.username,
-            },
-        )
-    if not method:
-        messages.error(request, 'طريقة الدفع مطلوبة.')
-        return redirect('staff_cashier_order', public_code=order.public_code)
-    import hashlib
-    digest=hashlib.sha256(repr(sorted((key, request.POST.getlist(key)) for key in request.POST)).encode()).hexdigest()[:24]
-    posting_key=request.headers.get('Idempotency-Key') or request.POST.get('idempotency_key') or f'cashier:{order.pk}:{request.user.pk}:{digest}'
-    duplicate = PostingCommand.objects.filter(key=posting_key).exists()
-    try:
-        payment = collect_order_payment(order, PostingContext(actor=request.user,approver=locals().get('approving_manager'),business_date=timezone.localdate(),idempotency_key=posting_key,channel='cashier',request_metadata={'path':request.path}), amount_val, method, request.POST.get('notes', '').strip())
-        currency_service.snapshot(payment, currency_entry, 'amount_syp')
-    except ValidationError as error:
-        messages.error(request, ' '.join(error.messages))
-        return redirect('staff_cashier_order', public_code=order.public_code)
-    if duplicate:
-        messages.warning(request, 'طلب دفع مكرر: لم يتم إنشاء دفعة أو حركة صندوق إضافية.')
-    if order.remaining_syp > 0:
-        create_notification('payment_pending', f'الدفع بانتظار الكاشير {order.display_number}', f'المتبقي {order.remaining_syp} ل.س', order=order, target_role='cashier', created_by=request.user)
-    try:
-        ActivityLog.objects.create(actor=request.user, action='payment_added', details={'order_public_code': str(order.public_code), 'payment_id': payment.id, 'amount_syp': str(amount_val), 'method': method})
-    except Exception:
-        pass
-    return redirect('staff_cashier_order', public_code=order.public_code)
+    # Standalone collection owns atomic currency/audit evidence and safe retries.
+    from core.views.staff_standalone_payments import collect_standalone_payment
+    return collect_standalone_payment(request, public_code)
 
 
 @require_staff_capability('cashier')
