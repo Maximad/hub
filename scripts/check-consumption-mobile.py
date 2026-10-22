@@ -65,5 +65,7 @@ with sync_playwright() as p:
     verify_purchase_receipt(browser, output, assets)
     from check_fast_internet_approval_mobile import verify_fast_internet_approval
     verify_fast_internet_approval(browser, output, assets)
+    from check_standalone_cashier_recovery_mobile import verify_standalone_cashier_recovery
+    verify_standalone_cashier_recovery(browser, output, assets)
     browser.close()
 print(f'RTL mobile layout and conversion passed; screenshots in {output}')
