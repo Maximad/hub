@@ -18,6 +18,8 @@ def verify_cashier_recovery(browser, output, assets):
     context = {'request': request, 'visit': visit, 'orders': [], 'payments': [],
         'remaining': 300, 'paid': 0, 'total': 300, 'payment_label': 'غير مدفوع',
         'payment_recovery': True, 'settings_obj': SystemSetting(),
+        'active_internet_sessions': [SimpleNamespace(entitlement_id=None)],
+        'active_metered_sessions': [SimpleNamespace(entitlement_id=None)],
         'staff_caps': {'staff_home': True, 'cashier': True, 'visit_manage': True},
         'csrf_token': 'synthetic-preview-token', 'methods': COLLECTIBLE_PAYMENT_METHODS,
         'collection_request_key': 'visit-pay:11:synthetic-retry',
@@ -34,6 +36,7 @@ def verify_cashier_recovery(browser, output, assets):
         page.route('**/*', assets)
         page.set_content(html.replace('/static/', 'http://preview.test/static/').replace('<head>', '<head><base href="http://preview.test/">', 1), wait_until='networkidle')
         assert page.locator('html').get_attribute('dir') == 'rtl'
+        assert 'ليس المبلغ النهائي' in page.locator('body').inner_text()
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), width
         form = page.locator('#visit-payment-form')
         assert form.locator('[name="currency_amount"]').input_value() == '999'
