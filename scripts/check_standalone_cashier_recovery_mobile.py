@@ -40,12 +40,12 @@ def verify_standalone_cashier_recovery(browser, output, assets):
         ('full', full, '#cashier-payment-form'),
         ('panel', panel, '.staff-payment-panel__form'),
     ):
+        if label == 'panel':
+            html = '<html lang="ar" dir="rtl"><head></head><body>' + html + '</body></html>'
         for width in (320, 390, 768):
             page = browser.new_page(viewport={'width': width, 'height': 844},
                                     java_script_enabled=False)
             page.route('**/*', assets)
-            if label == 'panel':
-                html = '<html lang="ar" dir="rtl"><head></head><body>' + html + '</body></html>'
             page.set_content(html.replace('/static/', 'http://preview.test/static/')
                              .replace('<head>', '<head><base href="http://preview.test/">', 1),
                              wait_until='networkidle')
