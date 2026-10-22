@@ -45,6 +45,8 @@ with sync_playwright() as p:
         else:
             route.abort()
     page.route('**/*', assets)
+    from check_cashier_recovery_mobile import verify_cashier_recovery
+    verify_cashier_recovery(browser, output, assets)
     page.set_content(html.replace('/static/', 'http://preview.test/static/'), wait_until='networkidle')
     page.locator('#consumption-quantity').fill('1.5')
     page.locator('#consumption-unit').select_option('kg')
