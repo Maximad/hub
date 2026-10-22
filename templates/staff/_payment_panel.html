@@ -15,6 +15,13 @@
     </div>
   {% endif %}
 
+{% if payment_recovery %}
+<div class="hub-message hub-message-warning" role="alert">
+  <p>احتُفظ بالمبلغ والعملة ومرجع المحاولة. راجع الرصيد وسجل الدفعات قبل إعادة الإرسال، وأدخل موافقة المدير مجدداً عند الحاجة.</p>
+  <form method="get" action="{% url 'staff_cashier_order' order.public_code %}"><button class="hub-button" type="submit">تحديث الرصيد وسجل الدفعات</button></form>
+</div>
+{% endif %}
+
   <section class="staff-order-panel__totals" aria-label="حساب الطلب">
     <div><span>الإجمالي</span><strong>{{ total|format_syp }}</strong></div>
     <div><span>المدفوع</span><strong>{{ paid|format_syp }}</strong></div>
@@ -40,10 +47,11 @@
 
       <label>طريقة الدفع
         <select class="hub-input" name="method" required>
-          {% for value, label in methods %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+          <option value="">اختر طريقة الدفع</option>
+          {% for value, label in methods %}<option value="{{ value }}"{% if form_values.method == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
         </select>
       </label>
-      <details class="hub-ux5-module__more"><summary>ملاحظات الدفع (اختياري)</summary><label>ملاحظات الدفع<textarea class="hub-input" name="notes" rows="2"></textarea></label></details>
+      <details class="hub-ux5-module__more"><summary>ملاحظات الدفع (اختياري)</summary><label>ملاحظات الدفع<textarea class="hub-input" name="notes" rows="2">{{ form_values.notes }}</textarea></label></details>
       <button class="hub-button hub-button-primary" type="submit">حفظ الدفعة</button>
     </form>
   {% else %}

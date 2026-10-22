@@ -13,6 +13,7 @@ from accounts.permissions import user_has_capability
 from core.currency_forms import CurrencyEntryFormService
 from core.models import Order, OrderDiscount, Payment
 from core.views_legacy import _order_edit_block_reason, _order_financials
+from core.views.staff_standalone_payments import recovery_context
 
 
 def _order_queryset():
@@ -69,7 +70,7 @@ def render_payment_panel(request, public_code):
         "methods": Payment.Method.choices,
         "discount_types": OrderDiscount.DiscountType.choices,
         "payment_amount_default": financial["remaining"],
-        "collection_request_key": f'order-pay:{order.pk}:{uuid.uuid4().hex}',
+        **recovery_context(request, order, financial["remaining"]),
         "currency_component": CurrencyEntryFormService(
             request,
             operation="payment",
