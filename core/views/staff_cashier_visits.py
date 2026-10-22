@@ -147,6 +147,7 @@ def _visit_detail_context(request, visit, *, recovery=None):
         'collection_request_key': recovery.get('key') if recovery.get('action') == 'payment' else f'visit-pay:{visit.pk}:{uuid.uuid4().hex}',
         'settlement_request_key': recovery.get('key') if recovery.get('action') == 'settle_close' else f'visit-settle:{visit.pk}:{uuid.uuid4().hex}',
         'active_internet_sessions': active_sessions,
+        'active_metered_sessions': [session for session in active_sessions if not session.entitlement_id],
         'methods': COLLECTIBLE_PAYMENT_METHODS,
         'payment_amount_default': financial['remaining'],
         'currency_component': CurrencyEntryFormService(request, operation='payment').context,
@@ -306,6 +307,8 @@ def staff_cashier_visit_settle(request, public_code):
                     return _payment_panel_response(request, public_code)
                 return redirect('staff_cashier_order', public_code=visit.public_code)
 
+            # The displayed due excludes any still-running metered sessions.
+            recorded_due_before_finalization = visit_financials(visit)['remaining']
             now = timezone.now()
             sessions = list(
                 InternetSession.objects.select_for_update()
@@ -320,6 +323,7 @@ def staff_cashier_visit_settle(request, public_code):
 
             financial = visit_financials(visit)
             remaining = financial['remaining']
+            metered_added_due = max(remaining - recorded_due_before_finalization, 0)
             if remaining > 0:
                 if method not in dict(COLLECTIBLE_PAYMENT_METHODS):
                     raise ValidationError('اختر طريقة الدفع قبل تسديد وإغلاق الجلسة.')
@@ -351,13 +355,19 @@ def staff_cashier_visit_settle(request, public_code):
                 details={
                     'visit_id': visit.pk,
                     'amount_syp': str(remaining),
+                    'recorded_due_before_finalization_syp': str(recorded_due_before_finalization),
+                    'new_metered_due_syp': str(metered_added_due),
                     'method': method if remaining else '',
                     'posting_key': posting_key,
                     'ended_internet_sessions': [session.pk for session in sessions],
                 },
             )
-        messages.success(request, 'أُغلقت الجلسة دون تحصيل دفعة جديدة.' if remaining == 0
-                         else 'تم تسديد كامل حساب الجلسة وإغلاقها.')
+        if remaining == 0:
+            messages.success(request, 'أُغلقت الجلسة دون تحصيل دفعة جديدة.')
+        elif metered_added_due:
+            messages.success(request, f'تم تحصيل {remaining} ل.س وإغلاق الحساب. يتضمن المبلغ {metered_added_due} ل.س من رسوم الإنترنت التي حُسبت عند الإغلاق.')
+        else:
+            messages.success(request, f'تم تحصيل {remaining} ل.س وإغلاق الحساب.')
     except (ValidationError, PermissionDenied) as error:
         messages.error(request, ' '.join(getattr(error, 'messages', [str(error)])))
         return _payment_failure_response(request, public_code, posting_key, 'settle_close')
