@@ -35,7 +35,6 @@ from core.models import ActivityLog, CancellationReason, CashMovement, Category,
 from core.services.visits import issue_visit_credential, resolve_visit_credential, set_visit_cookie
 from core.services.posting.context import PostingContext
 from core.services.posting.order_payments import collect as collect_order_payment
-from core.views.staff_standalone_payments import recovery_context
 from events.models import Event
 from reservations.models import Reservation
 from reservations.services import change_reservation_status, create_reservation
@@ -1383,6 +1382,7 @@ def staff_cashier(request):
 
 @require_staff_capability('cashier')
 def staff_cashier_order(request, public_code):
+    from core.views.staff_standalone_payments import recovery_context
     order = get_object_or_404(Order.objects.select_related('table', 'table__room').prefetch_related('items', 'payments', 'discounts'), public_code=public_code)
     total, paid, remaining, payment_label = _order_financials(order)
     methods = Payment.Method.choices
