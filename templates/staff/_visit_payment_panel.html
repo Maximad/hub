@@ -19,7 +19,7 @@
     <div><span>المتبقي</span><strong>{{ remaining|format_syp }}</strong></div>
   </section>
 
-  {% if active_metered_sessions %}<div class="hub-message hub-message-warning" role="alert"><strong>الرصيد المعروض ليس المبلغ النهائي.</strong> توجد {{ active_metered_sessions|length }} جلسة إنترنت غير منتهية قد تضيف رسوماً. عند «تسديد وإغلاق» سيُنهى الاستخدام أولاً وتُحسب رسومه حسب التعرفة المسجلة ثم يُحصّل المبلغ النهائي. أخبر الزبون قبل تنفيذ العملية، ولا تعتبر الرصيد الحالي عرض سعر نهائياً.</div>{% elif active_internet_sessions %}<div class="hub-message hub-message-warning">هناك {{ active_internet_sessions|length }} جلسة إنترنت فعالة. سيوقف النظام الجلسات قبل إغلاق الحساب. المبلغ الظاهر يعكس الرصيد المسجل حالياً.</div>{% endif %>
+  {% if active_metered_sessions %}<div class="hub-message hub-message-warning" role="alert"><strong>الرصيد المعروض ليس المبلغ النهائي.</strong> توجد {{ active_metered_sessions|length }} جلسة إنترنت غير منتهية قد تضيف رسوماً. عند «تسديد وإغلاق» سيُنهى الاستخدام أولاً وتُحسب رسومه حسب التعرفة المسجلة ثم يُحصّل المبلغ النهائي. أخبر الزبون قبل تنفيذ العملية، ولا تعتبر الرصيد الحالي عرض سعر نهائياً.</div>{% elif active_internet_sessions %}<div class="hub-message hub-message-warning">هناك {{ active_internet_sessions|length }} جلسة إنترنت فعالة. سيوقف النظام الجلسات قبل إغلاق الحساب. المبلغ الظاهر يعكس الرصيد المسجل حالياً.</div>{% endif %}
 
   {% if visit.status == 'open' and remaining > 0 %}
     <section class="hub-card">
