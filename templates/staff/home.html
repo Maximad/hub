@@ -53,7 +53,7 @@
           <div class="ops-v2__order-place">{% if order.table %}{{ order.table }}{% else %}{{ order.get_fulfillment_label }}{% endif %}</div>
           <nav class="ops-v2__order-links" aria-label="إجراءات الطلب {{ order.display_number }}">
             {% if staff_caps.order_edit %}
-              <a class="ops-attention-link ops-attention-link--main" href="{% url 'staff_order_edit' order.public_code %}" data-staff-context-url="{% url 'staff_order_edit' order.public_code %}?panel=context" data-context-title="{% if order.workspace_can_edit_items %}تعديل الطلب{% else %}تفاصيل الطلب{% endif %}" aria-haspopup="dialog">{% if order.workspace_can_edit_items %}تعديل{% else %}التفاصيل{% endif %}</a>
+              <a class="ops-attention-link ops-attention-link--main" href="{% url 'staff_order_edit' order.public_code %}" data-staff-context-url="{% url 'staff_order_edit' order.public_code %}?panel=context" data-context-title="{% if order.workspace_can_edit_items %}تعديل سريع للطلب{% else %}تفاصيل الطلب{% endif %}" aria-haspopup="dialog">{% if order.workspace_can_edit_items %}تعديل{% else %}التفاصيل{% endif %}</a>
             {% endif %}
             {% if workspace_caps.cashier and order.remaining_syp > 0 %}
               {% if order.visit_id %}<a class="ops-attention-link ops-attention-link--pay" href="{% url 'staff_cashier_order' order.visit.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' order.visit.public_code %}?panel=payment" data-context-title="الدفع وإغلاق الحساب" aria-haspopup="dialog">قبض</a>
