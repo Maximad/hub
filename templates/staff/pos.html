@@ -47,6 +47,17 @@
         <label for="customer_phone"><strong>هاتف اختياري</strong></label>
         <input class="hub-input" type="tel" name="customer_phone" id="customer_phone" value="{{ form_values.customer_phone|default:'' }}" inputmode="tel" autocomplete="off">
       </div>
+      <div class="hub-card" aria-label="المستفيد من الطلب">
+        <label for="recipient_kind"><strong>لمن هذا الطلب؟</strong></label>
+        <select class="hub-input" name="recipient_kind" id="recipient_kind">
+          <option value="customer" {% if not form_values.recipient_kind or form_values.recipient_kind == 'customer' %}selected{% endif %}>زبون عادي</option>
+          <option value="neighbor" {% if form_values.recipient_kind == 'neighbor' %}selected{% endif %}>جار هَبّ</option>
+          <option value="staff" {% if form_values.recipient_kind == 'staff' %}selected{% endif %}>أحد أفراد الفريق</option>
+        </select>
+        <label for="recipient_note"><strong>اسم المستفيد أو ملاحظة تعريفية (اختياري)</strong></label>
+        <input class="hub-input" id="recipient_note" name="recipient_note" type="text" maxlength="120" value="{{ form_values.recipient_note|default:'' }}">
+        <p class="hub-help-text">هذا توصيف للتوثيق فقط. اختيار جار أو موظف لا يضيف خصماً أو ضيافة، ولا يغيّر التسعير أو القبض.</p>
+      </div>
       <div class="hub-card" data-delivery-fields hidden>
         <h3 class="hub-page-header__title">بيانات التوصيل</h3>
         <label>منطقة التوصيل<input class="hub-input" type="text" name="delivery_area" value="{{ form_values.delivery_area|default:'' }}"></label>
