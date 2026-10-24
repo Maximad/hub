@@ -45,9 +45,22 @@ class StaffMembershipPlanPreviewTests(TestCase):
         self.assertIn('أولوية الحجز', info['configured_only'])
         self.assertIn('نسبة خصم على فعالية', info['configured_only'])
 
-    def test_purchase_form_shows_live_price_term_and_cautions(self):
+    def test_unscoped_and_excluded_product_discounts_are_not_promised(self):
         MembershipBenefitRule.objects.create(
             plan=self.plan, benefit_type='product_discount_percent', value_decimal=10)
+        self.product.not_discountable = True
+        self.product.save(update_fields=['not_discountable'])
+        MembershipBenefitRule.objects.create(
+            plan=self.plan, benefit_type='product_discount_percent',
+            product=self.product, value_decimal=30)
+        item = staff_plan_presentations([self.plan])[0]
+        self.assertEqual(item['benefits'], [])
+        self.assertEqual(len(item['configured_only']), 2)
+
+    def test_purchase_form_shows_live_price_term_and_cautions(self):
+        MembershipBenefitRule.objects.create(
+            plan=self.plan, benefit_type='product_discount_percent', value_decimal=10,
+            scope_type='all_hub_products')
         self.client.force_login(self.staff)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
