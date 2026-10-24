@@ -11,8 +11,20 @@
 <div class="hub-table-wrap"><table class="hub-table" style="width:100%"><tr><th>تاريخ التفعيل</th><th>آخر استخدام</th><th>الجهاز</th><th></th></tr>{% for d in devices %}<tr><td>{{ d.created_at }}</td><td>{{ d.last_used_at|default:'—' }}</td><td>{{ d.device_label|default:'جهاز' }}</td><td><form class="hub-form-section" method="post" action="{% url 'staff_member_device_revoke' member.public_code d.uuid %}">{% csrf_token %}<button>إلغاء</button></form></td></tr>{% empty %}<tr><td colspan="4">لا توجد أجهزة.</td></tr>{% endfor %}</table></div>
 <a href="{% url 'staff_member_subscribe' member.public_code %}">إضافة اشتراك</a> | <a href="{% url 'staff_internet' %}">بدء جلسة إنترنت/عمل</a>
 <h3>الاشتراكات</h3>
-<div class="hub-table-wrap"><table class="hub-table" style="width:100%"><tr><th>الخطة</th><th>الحالة</th><th>الدقائق</th><th>الرصيد</th></tr>
-{% for s in subscriptions %}<tr><td>{{ s.plan.name_ar }}</td><td>{{ s.get_status_display }}</td><td>{{ s.remaining_internet_minutes }}</td><td>{{ s.remaining_credit_syp }}</td></tr>{% empty %}<tr><td colspan="4">لا يوجد.</td></tr>{% endfor %}</table></div>
+<div class="hub-table-wrap"><table class="hub-table" style="width:100%"><tr><th>الخطة</th><th>الحالة الحالية</th><th>الفترة</th><th>الدقائق (قديمة)</th><th>الرصيد</th><th>إجراء</th></tr>
+{% for s in subscriptions %}<tr>
+<td>{{ s.plan.name_ar }}</td>
+<td>{{ s.effective_status }}{% if s.activation_error and can_retry_membership %}<p class="hub-help-text">تعذّر التفعيل، تحتاج مراجعة.</p><small>{{ s.activation_error }}</small>{% endif %}</td>
+<td>{{ s.starts_at }} — {{ s.ends_at|default:'مفتوح' }}</td>
+<td>{{ s.remaining_internet_minutes|default_if_none:'—' }}</td><td>{{ s.remaining_credit_syp|default_if_none:'—' }}</td>
+<td>
+<a href="{% url 'staff_member_subscribe' member.public_code %}?renew_from={{ s.uuid }}">تجديد عبر بيع جديد</a>
+{% if can_retry_membership and s.status == 'pending' and s.starts_at <= now %}
+<form method="post" action="{% url 'staff_member_retry_activation' member.public_code s.pk %}">
+{% csrf_token %}<button class="hub-button" type="submit">التحقق وإعادة التفعيل</button>
+</form>
+{% endif %}
+</td></tr>{% empty %}<tr><td colspan="6">لا يوجد.</td></tr>{% endfor %}</table></div>
 <h3>حركات الرصيد/الدقائق</h3>
 <div class="hub-table-wrap"><table class="hub-table" style="width:100%"><tr><th>النوع</th><th>الدقائق</th><th>الرصيد</th><th>التاريخ</th><th>ملاحظات</th></tr>
 {% for l in ledger %}<tr><td>{{ l.get_change_type_display }}</td><td>{{ l.minutes_delta }}</td><td>{{ l.credit_delta_syp }}</td><td>{{ l.created_at }}</td><td>{{ l.notes }}</td></tr>{% empty %}<tr><td colspan="5">لا يوجد.</td></tr>{% endfor %}</table></div>
