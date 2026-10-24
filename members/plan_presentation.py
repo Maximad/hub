@@ -49,6 +49,25 @@ def _target(rule):
 
 def _benefit_line(rule):
     kind = rule.benefit_type
+    is_product_discount = kind in (
+        MembershipBenefitRule.BenefitType.PRODUCT_DISCOUNT_PERCENT,
+        MembershipBenefitRule.BenefitType.PRODUCT_DISCOUNT_FIXED)
+    if is_product_discount:
+        # The runtime engine rejects unscoped rules and excluded products.
+        has_target = any((
+            rule.product_id, rule.category_id, rule.menu_section_id, rule.tag_id,
+            rule.item_type, rule.beverage_type, rule.food_type, rule.service_type,
+            rule.scope_type in ('all_hub_products', 'beverages', 'food'),
+            rule.scope_type in ('product', 'category') and bool(rule.scope_code),
+        ))
+        if not has_target:
+            return '', False
+        if rule.product_id:
+            product = rule.product
+            if (product.not_discountable or not product.is_available
+                    or (product.vendor_id and not (rule.metadata or {}).get('allow_vendor'))
+                    or (product.is_alcoholic and not rule.applies_to_alcohol)):
+                return '', False
     if kind == MembershipBenefitRule.BenefitType.PRODUCT_DISCOUNT_PERCENT:
         amount = rule.value_decimal if rule.value_decimal is not None else rule.discount_percent
         if amount is not None:
