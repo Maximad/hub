@@ -84,25 +84,8 @@ def _membership_product(plan):
 
 
 def _activate_committed_subscription(subscription_id, actor_id):
-    subscription = MembershipSubscription.objects.get(pk=subscription_id)
-    try:
-        subscription.activate()
-        ActivityLog.objects.create(
-            actor_id=actor_id, action='membership.sale_activated',
-            details={'subscription_id': str(subscription.uuid)})
-    except Exception as exc:
-        # activate() currently saves before provisioning. Restore a recoverable state
-        # without touching the already committed order or payment.
-        MembershipSubscription.objects.filter(pk=subscription_id).update(
-            status=MembershipSubscription.Status.PENDING, activated_at=None,
-            activation_error=str(exc)[:1000])
-        ActivityLog.objects.create(
-            actor_id=actor_id, action='membership.internet_activation_failed',
-            details={'subscription_id': str(subscription.uuid), 'error': str(exc)[:500]})
-        # Retain the established aggregate event name for existing audit consumers.
-        ActivityLog.objects.create(
-            actor_id=actor_id, action='membership.sale_activation_failed',
-            details={'subscription_id': str(subscription.uuid), 'error': str(exc)[:500]})
+    from members.activation import attempt_membership_sale_activation
+    attempt_membership_sale_activation(subscription_id, actor_id=actor_id)
 
 
 def create_membership_sale(*, member, plan, payment_method, actor, idempotency_key,

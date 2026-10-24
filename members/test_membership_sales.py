@@ -1,4 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
+from io import StringIO
+import json
 from datetime import timedelta
 from unittest import skipUnless
 from unittest.mock import patch
@@ -6,12 +8,14 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import close_old_connections, connection
+from django.core.management import call_command
 from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from core.models import ActivityLog, FinancialAccount, Member, Order, OrderItem, Payment
 from members.membership_sales import create_membership_sale
+from members.activation import attempt_membership_sale_activation
 from members.models import MembershipPlan, MembershipSubscription
 
 
@@ -146,6 +150,106 @@ class MembershipSaleTests(TestCase):
         subscription = MembershipSubscription.objects.get()
         self.assertTrue(subscription.order_id and subscription.payment_id)
         self.assertEqual(subscription.payment.amount_syp, 50_000)
+
+
+    def test_due_future_sale_activates_from_lifecycle_once_without_new_money(self):
+        future = timezone.now() + timedelta(minutes=3)
+        with self.captureOnCommitCallbacks(execute=True):
+            subscription = self.sale('future-worker', starts_at=future).subscription
+        self.assertEqual(subscription.status, MembershipSubscription.Status.PENDING)
+        self.assertEqual((Order.objects.count(), Payment.objects.count()), (1, 1))
+        before = StringIO()
+        call_command('reconcile_internet_lifecycle', dry_run=True, json=True, stdout=before)
+        self.assertNotIn(subscription.pk, json.loads(before.getvalue())['subscriptions_to_activate'])
+        with patch('django.utils.timezone.now', return_value=future + timedelta(minutes=1)):
+            due = StringIO()
+            call_command('reconcile_internet_lifecycle', dry_run=True, json=True, stdout=due)
+            self.assertIn(subscription.pk, json.loads(due.getvalue())['subscriptions_to_activate'])
+            with self.captureOnCommitCallbacks(execute=True):
+                call_command('reconcile_internet_lifecycle', json=True, stdout=StringIO())
+            with self.captureOnCommitCallbacks(execute=True):
+                call_command('reconcile_internet_lifecycle', json=True, stdout=StringIO())
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.status, MembershipSubscription.Status.ACTIVE)
+        self.assertEqual(subscription.activation_error, '')
+        self.assertEqual((Order.objects.count(), Payment.objects.count()), (1, 1))
+        self.assertEqual(ActivityLog.objects.filter(
+            action='membership.sale_activated').count(), 1)
+
+    def test_failed_activation_can_retry_without_duplicate_sale(self):
+        with patch('members.models.MembershipSubscription.activate',
+                   side_effect=RuntimeError('temporary provisioning failure')):
+            with self.captureOnCommitCallbacks(execute=True):
+                subscription = self.sale('retry-failed').subscription
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.status, MembershipSubscription.Status.PENDING)
+        self.assertTrue(subscription.activation_error)
+        result = attempt_membership_sale_activation(subscription.pk, actor_id=self.actor.pk)
+        subscription.refresh_from_db()
+        self.assertEqual(result.status, 'activated')
+        self.assertEqual(subscription.activation_error, '')
+        self.assertEqual(attempt_membership_sale_activation(subscription.pk).status, 'already_active')
+        self.assertEqual((Order.objects.count(), Payment.objects.count()), (1, 1))
+
+    def test_unpaid_or_invalid_provenance_cannot_activate(self):
+        future = timezone.now() + timedelta(minutes=1)
+        subscription = self.sale('invalid-provenance', starts_at=future).subscription
+        payment = subscription.payment
+        payment.is_active = False
+        payment.save(update_fields=['is_active'])
+        with patch('django.utils.timezone.now', return_value=future + timedelta(minutes=1)):
+            attempt = attempt_membership_sale_activation(subscription.pk)
+        self.assertEqual(attempt.status, 'failed')
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.status, MembershipSubscription.Status.PENDING)
+        self.assertTrue(subscription.activation_error)
+        self.assertFalse(ActivityLog.objects.filter(
+            action='membership.sale_activated').exists())
+
+    def test_legacy_manual_grant_never_automatically_activates(self):
+        legacy = MembershipSubscription.objects.create(
+            member=self.member, plan=self.plan, status='pending',
+            starts_at=timezone.now() - timedelta(days=1),
+            ends_at=timezone.now() + timedelta(days=1))
+        preview = StringIO()
+        call_command('reconcile_internet_lifecycle', dry_run=True, json=True, stdout=preview)
+        self.assertNotIn(legacy.pk, json.loads(preview.getvalue())['subscriptions_to_activate'])
+        self.assertEqual(attempt_membership_sale_activation(legacy.pk).status, 'failed')
+
+    def test_staff_retry_requires_manager_and_csrf(self):
+        future = timezone.now() + timedelta(minutes=1)
+        subscription = self.sale('manual-retry', starts_at=future).subscription
+        url = reverse('staff_member_retry_activation',
+                      args=[self.member.public_code, subscription.pk])
+        self.client.force_login(self.actor)
+        self.assertEqual(self.client.post(url).status_code, 403)
+        admin = get_user_model().objects.create_user(
+            username='membership-admin', phone='0911000100',
+            password='x', role='admin')
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(admin)
+        self.assertEqual(csrf_client.post(url).status_code, 403)
+        self.client.force_login(admin)
+        self.assertEqual(self.client.get(url).status_code, 405)
+        self.assertEqual(self.client.post(url).status_code, 302)
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.status, MembershipSubscription.Status.PENDING)
+        with patch('django.utils.timezone.now', return_value=future + timedelta(minutes=1)):
+            self.assertEqual(self.client.post(url).status_code, 302)
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.status, MembershipSubscription.Status.ACTIVE)
+
+    def test_renewal_prefill_uses_previous_end_as_new_paid_start(self):
+        start = timezone.now() - timedelta(days=10)
+        with self.captureOnCommitCallbacks(execute=True):
+            subscription = self.sale('first-term', starts_at=start).subscription
+        url = reverse('staff_member_subscribe', args=[self.member.public_code])
+        self.client.force_login(self.actor)
+        response = self.client.get(url, {'renew_from': str(subscription.uuid)})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['form_values']['plan'], str(self.plan.pk))
+        self.assertEqual(response.context['form_values']['starts_at'],
+                         timezone.localtime(subscription.ends_at).strftime('%Y-%m-%dT%H:%M'))
 
 
 @skipUnless(connection.vendor == 'postgresql', 'PostgreSQL locking semantics required')
