@@ -22,8 +22,9 @@ class ActivationAttempt:
 @transaction.atomic
 def _activate_verified_sale(subscription_id, *, at=None, actor_id=None):
     at = at or timezone.now()
-    subscription = (MembershipSubscription.objects.select_for_update()
-                    .select_related('member', 'order', 'payment')
+    # Nullable payment/order joins must not be locked by FOR UPDATE on PostgreSQL.
+    subscription = (MembershipSubscription.objects.select_for_update(of=('self',))
+                    .select_related('member')
                     .get(pk=subscription_id))
     if subscription.status == MembershipSubscription.Status.ACTIVE:
         return 'already_active'
