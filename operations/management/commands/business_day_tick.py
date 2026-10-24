@@ -9,6 +9,7 @@ from operations.opening import maybe_send_opening_reminder, send_daily_code_remi
 from operations.services import current_business_date, open_business_day
 from operations.tasks import send_overdue_task_reminders, sync_business_day_tasks
 from operations.reminders import reminders_enabled, sync_task_reminders, tick_reminders
+from core.services.fast_internet_approval import expire_pending_approvals
 
 
 class Command(BaseCommand):
@@ -22,6 +23,13 @@ class Command(BaseCommand):
         active = BusinessDay.objects.filter(
             status__in=[BusinessDay.Status.OPEN, BusinessDay.Status.CLOSING, BusinessDay.Status.REOPENED]
         ).order_by('-business_date').first()
+
+        # This cleanup must run even without an open Business Day. Expiry is
+        # independent of opening/closing the venue and is never a network action.
+        stale_approvals = expire_pending_approvals(dry_run=dry_run)
+        self.stdout.write(
+            f'fast_approvals_{"would_expire" if dry_run else "expired"}={stale_approvals}'
+        )
 
         if active is None and getattr(settings, 'BUSINESS_DAY_AUTO_OPEN_ENABLED', False):
             local_now = timezone.localtime()

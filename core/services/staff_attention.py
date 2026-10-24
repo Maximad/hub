@@ -9,7 +9,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from core.models import HubVisit, HubVisitBrowserCredential
-from core.services.fast_internet_approval import approval_required
+from core.services.fast_internet_approval import approval_required, pending_approvals_queryset
 from operations.models import BusinessDay, BusinessDayTask, OperationalTaskTemplate
 
 
@@ -80,11 +80,9 @@ def get_staff_attention(user, capabilities, *, now=None):
 
     show_internet = bool(capabilities.get('members/internet') and approval_required())
     if show_internet:
-        approvals = HubVisitBrowserCredential.objects.filter(
-            fast_internet_approval=HubVisitBrowserCredential.FastInternetApproval.PENDING,
-            revoked_at__isnull=True,
-            visit__status=HubVisit.Status.OPEN,
-        ).select_related('visit__table', 'visit__member').order_by(
+        approvals = pending_approvals_queryset().select_related(
+            'visit__table', 'visit__member',
+        ).order_by(
             'fast_internet_requested_at', 'pk',
         )
         internet_count = approvals.count()

@@ -15,8 +15,8 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from accounts.permissions import is_owner_or_admin, user_has_capability, require_staff_capability
-from core.models import HubVisitBrowserCredential, InternetBandwidthProfile, InternetEntitlement, InternetPackage
-from core.services.fast_internet_approval import approval_required, review_approval
+from core.models import ActivityLog, HubVisitBrowserCredential, InternetBandwidthProfile, InternetEntitlement, InternetPackage
+from core.services.fast_internet_approval import approval_required, review_approval, pending_approvals_queryset
 from core.services.internet_operations import requeue_failed_network_operation
 from internet.models import StaffInternetDeviceEvidence, StaffInternetObservedInterval
 from core.services.staff_internet_observation import (
@@ -237,14 +237,21 @@ def staff_internet(request):
     if user_has_capability(request.user, 'members/internet'):
         # The legacy screen renders directly. Attach only authorized, paginated
         # presentation data here rather than duplicating its operational view.
-        requests = HubVisitBrowserCredential.objects.filter(
-            fast_internet_approval='pending', revoked_at__isnull=True, visit__status='open',
-        ).select_related('visit__table', 'visit__member').order_by('fast_internet_requested_at', 'pk')
+        requests = pending_approvals_queryset().select_related(
+            'visit__table', 'visit__member',
+        ).order_by('fast_internet_requested_at', 'pk')
         request.fast_internet_requests = Paginator(requests, 20).get_page(request.GET.get('approval_page'))
         request.fast_internet_rejected = HubVisitBrowserCredential.objects.filter(
             fast_internet_approval='rejected', revoked_at__isnull=True, visit__status='open',
         ).select_related('visit__table', 'visit__member').order_by('-fast_internet_reviewed_at', '-pk')[:10]
         request.fast_internet_approval_required = approval_required()
+        # Keep immutable request/decision history separate from the live queue.
+        # Repeat requests on the same device are preserved as distinct events.
+        request.fast_internet_history = ActivityLog.objects.filter(action__in=[
+            'internet.fast_approval_requested',
+            'internet.fast_approval_reviewed',
+            'internet.fast_approval_expired',
+        ]).select_related('actor').order_by('-created_at', '-pk')[:40]
     return _legacy_staff_internet(request)
 
 
