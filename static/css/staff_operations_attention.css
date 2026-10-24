@@ -98,3 +98,63 @@ body.staff-workspace-page .ops-quick-actions__links :is(a,button):hover { backgr
 @media print {
   body.staff-workspace-page .ops-quick-actions { display: none; }
 }
+/* Urgent tasks and browser approvals share a compact, responsive attention strip. */
+body.staff-workspace-page .ops-inbox {
+  min-width: 0; border: 1px solid var(--hub-border, #ddd2c0);
+  border-radius: 15px; padding: 12px;
+  background: var(--hub-surface, #fff);
+}
+body.staff-workspace-page .ops-inbox__head,
+body.staff-workspace-page .ops-inbox__group-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+body.staff-workspace-page .ops-inbox__head h3 { font-size: 1.03rem; margin: 0; }
+body.staff-workspace-page .ops-inbox__total { font-size: .78rem; font-weight: 700; color: var(--hub-muted, #666); }
+body.staff-workspace-page .ops-inbox__groups {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 9px;
+}
+body.staff-workspace-page .ops-inbox__groups:has(> :only-child) { grid-template-columns: minmax(0, 1fr); }
+body.staff-workspace-page .ops-inbox__group {
+  min-width: 0; border: 1px solid var(--hub-border, #ddd2c0);
+  border-radius: 12px; padding: 9px;
+}
+body.staff-workspace-page .ops-inbox__group-head { margin-bottom: 8px; }
+body.staff-workspace-page .ops-inbox__group-head h4 { font-size: .88rem; margin: 0; }
+body.staff-workspace-page .ops-inbox__group-head span {
+  display: inline-flex; justify-content: center; align-items: center; min-width: 23px;
+  padding: 3px 6px; border-radius: 999px; background: var(--hub-surface-alt, #f7f1e8);
+  font-weight: 700; font-variant-numeric: tabular-nums;
+}
+body.staff-workspace-page .ops-inbox__item {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 9px 0; border-top: 1px solid var(--hub-border, #ddd2c0);
+}
+body.staff-workspace-page .ops-inbox__item-info { display: grid; flex: 1 1 150px; gap: 3px; min-width: 0; }
+body.staff-workspace-page .ops-inbox__item-info strong { font-size: .87rem; overflow-wrap: anywhere; }
+body.staff-workspace-page .ops-inbox__item-info span,
+body.staff-workspace-page .ops-inbox__item-info small { font-size: .77rem; color: var(--hub-muted, #666); }
+body.staff-workspace-page .ops-inbox__actions { display: flex; flex-wrap: wrap; gap: 6px; }
+body.staff-workspace-page .ops-inbox__actions form { margin: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+body.staff-workspace-page .ops-inbox__button {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 68px;
+  min-height: 40px; padding: 8px 10px; border: 1px solid var(--hub-border, #ddd2c0);
+  border-radius: 9px; color: var(--hub-primary, #176b5a); background: var(--hub-surface, #fff);
+  text-decoration: none; cursor: pointer; font: inherit; font-size: .81rem; font-weight: 750;
+}
+body.staff-workspace-page .ops-inbox__button--primary {
+  background: var(--hub-primary, #176b5a); color: #fff; border-color: var(--hub-primary, #176b5a);
+}
+body.staff-workspace-page .ops-inbox__more {
+  display: inline-block; min-height: 36px; padding: 8px 3px 2px;
+  font-size: .8rem; font-weight: 750; text-decoration: underline; text-underline-offset: 3px;
+}
+body.staff-workspace-page .ops-inbox :is(button,a):focus-visible { outline: 3px solid #168776; outline-offset: 2px; }
+@media(max-width: 800px) {
+  body.staff-workspace-page .ops-inbox__groups { grid-template-columns: minmax(0, 1fr); }
+  body.staff-workspace-page .ops-inbox { padding: 9px; }
+}
+@media(max-width: 380px) {
+  body.staff-workspace-page .ops-inbox__actions { width: 100%; }
+  body.staff-workspace-page .ops-inbox__actions form { width: 100%; }
+  body.staff-workspace-page .ops-inbox__button { flex: 1; }
+}

@@ -267,7 +267,7 @@ def staff_fast_internet_approval(request, credential_id):
             messages.success(request, 'تمت الموافقة لهذا الجهاز. على الزبون تحديث الصفحة وبدء الاتصال من جهازه.')
         else:
             messages.success(request, 'رُفض طلب الموافقة لهذا الجهاز.')
-    return redirect('staff_internet')
+    return redirect('staff_home' if request.POST.get('return_to') == 'operations' else 'staff_internet')
 
 
 @login_required
