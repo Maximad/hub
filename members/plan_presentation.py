@@ -75,9 +75,10 @@ def staff_plan_presentations(plans):
             label, operational = _benefit_line(rule)
             if operational:
                 supported.append(label)
-            elif rule.benefit_type in NOT_AUTOMATIC or not operational:
-                configured.append(rule.get_benefit_type_display() if rule.benefit_type
-                                  else 'قاعدة قديمة تحتاج مراجعة')
+            elif rule.benefit_type in NOT_AUTOMATIC:
+                configured.append(rule.get_benefit_type_display())
+            else:
+                configured.append('قاعدة غير مكتملة أو قديمة تحتاج مراجعة')
         results.append({
             'plan': plan,
             'term': plan_term_summary(plan),
