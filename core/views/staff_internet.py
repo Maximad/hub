@@ -237,9 +237,9 @@ def staff_internet(request):
     if user_has_capability(request.user, 'members/internet'):
         # The legacy screen renders directly. Attach only authorized, paginated
         # presentation data here rather than duplicating its operational view.
-        requests = HubVisitBrowserCredential.objects.filter(
-            fast_internet_approval='pending', revoked_at__isnull=True, visit__status='open',
-        ).select_related('visit__table', 'visit__member').order_by('fast_internet_requested_at', 'pk')
+        requests = pending_approvals_queryset().select_related(
+            'visit__table', 'visit__member',
+        ).order_by('fast_internet_requested_at', 'pk')
         request.fast_internet_requests = Paginator(requests, 20).get_page(request.GET.get('approval_page'))
         request.fast_internet_rejected = HubVisitBrowserCredential.objects.filter(
             fast_internet_approval='rejected', revoked_at__isnull=True, visit__status='open',
