@@ -183,7 +183,7 @@ def staff_home(request):
         order.workspace_can_edit_items = not (
             order.status == Order.Status.CANCELLED
             or bool(order.consumptions.all())
-            or (order.total_syp > 0 and order.remaining_syp == 0)
+            or order.paid_syp > 0
         )
         order.workspace_next_step = {
             Order.Status.READY: "جاهز للتسليم",
