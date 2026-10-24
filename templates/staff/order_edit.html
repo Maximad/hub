@@ -5,7 +5,7 @@
   <header class="hub-card hub-section">
     <div class="hub-toolbar">
       <a class="hub-button hub-button-secondary" href="{% url 'staff_orders' %}">← لوحة الطلبات</a>
-      <a class="hub-button hub-button-secondary" href="{% url 'staff_cashier_order' order.public_code %}">الكاشير</a>
+      {% if staff_caps.cashier %}<a class="hub-button hub-button-secondary" href="{% url 'staff_cashier_order' order.public_code %}">الكاشير</a>{% endif %}
     </div>
     <p class="menu-public__brand">Staff order editing</p>
     <h2 class="hub-section-title hub-page-header__title">{% if can_edit %}تعديل طلب مفتوح{% else %}تفاصيل الطلب{% endif %}</h2>
