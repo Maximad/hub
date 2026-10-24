@@ -1717,7 +1717,7 @@ def staff_member_detail(request, member_id):
     devices = member.device_tokens.filter(revoked_at__isnull=True).order_by('-last_used_at', '-created_at')
     activation_url = request.session.pop('member_activation_url', None)
     recent_orders = member.orders.prefetch_related('discounts').order_by('-created_at')[:20]
-    return render(request, 'staff/member_detail.html', {'member': member, 'subscriptions': subscriptions, 'ledger': ledger, 'sessions': sessions, 'active_subscription': active_subscription, 'devices': devices, 'activation_url': activation_url, 'recent_orders': recent_orders})
+    return render(request, 'staff/member_detail.html', {'member': member, 'subscriptions': subscriptions, 'ledger': ledger, 'sessions': sessions, 'active_subscription': active_subscription, 'devices': devices, 'activation_url': activation_url, 'recent_orders': recent_orders, 'can_retry_membership': is_owner_or_admin(request.user)})
 
 
 @login_required
@@ -1726,8 +1726,20 @@ def staff_member_subscribe(request, member_id):
     member = _get_member_or_404(member_id)
     if request.method != 'POST':
         plans = MembershipPlan.objects.filter(is_active=True, visible_to_staff=True).order_by('name_ar')
+        renewal_from = (request.GET.get('renew_from') or '').strip()
+        initial_values = {}
+        if renewal_from:
+            try:
+                previous = member.subscriptions.select_related('plan').get(uuid=renewal_from)
+            except (MembershipSubscription.DoesNotExist, ValueError, ValidationError):
+                previous = None
+            if previous and previous.plan.is_active and previous.plan.visible_to_staff:
+                start = max(timezone.now(), previous.ends_at) if previous.ends_at else timezone.now()
+                local_start = timezone.localtime(start).strftime('%Y-%m-%dT%H:%M')
+                initial_values = {'plan': str(previous.plan_id), 'starts_at': local_start}
         return render(request, 'staff/member_subscribe.html', {
             'member': member, 'plans': plans, 'now': timezone.now(),
+            'form_values': initial_values,
             'idempotency_key': str(uuid.uuid4()), 'payment_methods': (
                 (Payment.Method.CASH, Payment.Method.CASH.label),
                 (Payment.Method.MANUAL_TRANSFER, Payment.Method.MANUAL_TRANSFER.label),
