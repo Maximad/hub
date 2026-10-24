@@ -39,7 +39,7 @@ class MembershipInternetPresentationTests(TestCase):
     def test_new_allowance_uses_entitlement_not_subscription_legacy_field(self):
         self.entitlement()
         summary = membership_subscription_rows([self.subscription], at=self.at)[0]
-        self.assertEqual(summary['status_label'], 'Active')
+        self.assertEqual(summary['status_label'], 'فعّال')
         self.assertEqual(len(summary['internet']), 1)
         benefit = summary['internet'][0]
         self.assertEqual(benefit['remaining_minutes'], 425)
@@ -66,7 +66,7 @@ class MembershipInternetPresentationTests(TestCase):
         self.entitlement()
         future = self.at + timedelta(days=2)
         summary = membership_subscription_rows([self.subscription], at=future)[0]
-        self.assertEqual(summary['status_label'], 'Expired')
+        self.assertEqual(summary['status_label'], 'منتهي')
         self.assertFalse(summary['internet'][0]['available'])
 
     def test_direct_purchase_is_not_mixed_into_membership_benefits(self):
