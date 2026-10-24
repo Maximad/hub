@@ -133,7 +133,8 @@ class GuestWifiOperationsTests(TestCase):
         )
         display = self.client.get(reverse('staff_home'))
         self.assertContains(display, expected)
-        self.assertContains(display, 'مهمة اليوم: تحديث اللوحة')
+        self.assertContains(display, 'مهمة تحديث اللوحة')
+        self.assertContains(display, 'class="ops-pin-compact"')
 
         done = self.client.post(reverse('staff_operational_tasks'), {
             'task_action': 'status', 'task_id': task.pk, 'status': 'done',

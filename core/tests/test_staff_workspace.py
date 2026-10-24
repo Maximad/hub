@@ -211,7 +211,7 @@ class StaffWorkspaceTests(TestCase):
                 self.assertEqual([action['key'] for action in primary], expected)
                 self.assertLessEqual(len(primary), 4)
                 self.assertContains(response, 'data-daily-start')
-                self.assertContains(response, 'class="hub-daily-start__grid"')
+                self.assertContains(response, 'class="hub-daily-start__grid ops-quick-actions__links"')
                 for action in primary + secondary:
                     self.assertContains(
                         response,

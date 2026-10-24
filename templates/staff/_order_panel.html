@@ -28,9 +28,9 @@
     {% if order_caps.cashier and remaining > 0 %}
       {% if order.visit %}<a class="hub-button hub-button-primary" href="{% url 'staff_cashier_order' order.visit.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' order.visit.public_code %}?panel=payment" data-context-title="قبض حساب الجلسة" aria-haspopup="dialog">دفع حساب الجلسة</a>{% else %}<a class="hub-button hub-button-primary" href="{% url 'staff_cashier_order' order.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' order.public_code %}?panel=payment" data-context-title="قبض الطلب" aria-haspopup="dialog">دفع</a>{% endif %}
     {% endif %}
-    {% if order_caps.edit %}<a class="hub-button" href="{% url 'staff_order_edit' order.public_code %}">تعديل الطلب</a>{% endif %}
+    {% if order_caps.edit %}<a class="hub-button" href="{% url 'staff_order_edit' order.public_code %}">{% if order_edit_block_reason %}تفاصيل الطلب{% else %}تعديل الطلب{% endif %}</a>{% endif %}
     {% if order_caps.cashier %}{% if order.visit %}<a class="hub-button" href="{% url 'staff_cashier_order' order.visit.public_code %}">الحساب المجمع</a>{% else %}<a class="hub-button" href="{% url 'staff_cashier_order' order.public_code %}">تفاصيل الكاشير</a>{% endif %}{% endif %}
-    {% if order.visit %}<a class="hub-button" href="{% url 'staff_pos' %}?visit={{ order.visit.public_code }}">+ طلب لنفس الجلسة</a>{% endif %}
+    {% if order.visit and staff_caps.pos %}<a class="hub-button" href="{% url 'staff_pos' %}?visit={{ order.visit.public_code }}">+ طلب لنفس الجلسة</a>{% endif %}
   </nav>
 
   <section class="staff-order-panel__section">

@@ -1,0 +1,100 @@
+/* Operations: foreground unfinished work; keep routine navigation on demand. */
+body.staff-workspace-page .ops-v2 { gap: 12px; }
+body.staff-workspace-page .ops-v2__layout {
+  display: grid;
+  grid-template-columns: minmax(0,1.4fr) minmax(0,1fr);
+  align-items: start;
+  gap: 14px;
+}
+body.staff-workspace-page .ops-v2__orders-panel { position: static; min-width: 0; max-height: none; overflow: visible; }
+body.staff-workspace-page .ops-v2__account-grid { min-width: 0; }
+body.staff-workspace-page .ops-v2__order-list { max-height: none; overflow: visible; }
+body.staff-workspace-page .ops-v2__order { border-inline-start: 3px solid var(--hub-primary, #176b5a); }
+body.staff-workspace-page .ops-v2__order-links { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+body.staff-workspace-page .ops-v2__order-links .ops-attention-link {
+  display: inline-flex; justify-content: center; align-items: center;
+  min-height: 40px; min-width: 78px; padding: 8px 12px;
+  font-size: .86rem; font-weight: 700; text-decoration: none;
+  border: 1px solid var(--hub-border, #ddd2c0); border-radius: 10px;
+  background: var(--hub-surface, #fff); color: var(--hub-primary, #176b5a);
+}
+body.staff-workspace-page .ops-v2__order-links .ops-attention-link--main {
+  color: #fff; background: var(--hub-primary, #176b5a); border-color: var(--hub-primary, #176b5a);
+}
+body.staff-workspace-page .ops-v2__order-links .ops-attention-link--pay {
+  color: #543809; background: #f7e9c9; border-color: #bb9252;
+}
+body.staff-workspace-page .ops-attention-link:hover,
+body.staff-workspace-page .ops-attention-more:hover,
+body.staff-workspace-page .ops-attention-collection:hover { filter: brightness(.94); }
+body.staff-workspace-page :is(.ops-attention-link,.ops-attention-more,.ops-quick-actions summary,.ops-quick-actions a,.ops-quick-actions button,.ops-pin-compact summary):focus-visible {
+  outline: 3px solid #168776; outline-offset: 3px;
+}
+body.staff-workspace-page .ops-attention-more,
+body.staff-workspace-page .ops-attention-footer a { display: inline-flex; margin-top: 10px; padding: 8px 4px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+body.staff-workspace-page .ops-attention-collections {
+  padding: 10px 13px; margin-top: 12px; border-top: 1px solid var(--hub-border, #ddd2c0);
+}
+body.staff-workspace-page .ops-attention-collections h4 { font-size: .91rem; margin: 0 0 8px; }
+body.staff-workspace-page .ops-attention-collection {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  min-height: 44px; margin-top: 6px; padding: 8px 10px;
+  color: var(--hub-text, #262626); text-decoration: none; border: 1px solid var(--hub-border, #ddd2c0);
+  border-radius: 10px; background: var(--hub-surface, #fff);
+}
+body.staff-workspace-page .ops-attention-collection b { color: var(--hub-primary, #176b5a); }
+body.staff-workspace-page .ops-attention-footer { padding: 0 13px 10px; }
+body.staff-workspace-page .ops-pin-compact {
+  margin-top: 10px; border: 1px solid var(--hub-border, #ddd2c0);
+  border-radius: 10px; padding: 6px 10px; font-size: .82rem; max-width: 380px;
+}
+body.staff-workspace-page .ops-pin-compact summary { cursor: pointer; font-weight: 700; min-height: 36px; align-content: center; }
+body.staff-workspace-page .ops-pin-compact__body { padding: 8px 0; }
+body.staff-workspace-page .ops-pin-compact__body strong { display: block; font-size: 1.4rem; letter-spacing: .1em; }
+body.staff-workspace-page .ops-pin-compact__body p { margin: 5px 0; }
+body.staff-workspace-page .ops-extra-actions { flex-basis: 100%; }
+body.staff-workspace-page .ops-extra-actions summary { cursor: pointer; padding: 10px 2px; font-weight: 700; }
+body.staff-workspace-page .ops-extra-actions nav { padding: 8px 0; }
+/* One reachable floating control rather than four permanent floating buttons. */
+body.staff-workspace-page .ops-quick-actions {
+  position: fixed; inset-inline-end: 18px; bottom: 24px; z-index: 55;
+  width: max-content; max-width: calc(100vw - 30px);
+}
+body.staff-workspace-page .ops-quick-actions > summary {
+  display: flex; justify-content: center; align-items: center; gap: 8px; cursor: pointer;
+  min-height: 48px; min-width: 48px; padding: 8px 16px;
+  color: #fff; background: var(--hub-primary, #176b5a);
+  border-radius: 999px; font-weight: 800; font-size: .91rem;
+  box-shadow: 0 5px 16px rgba(0,0,0,.22); list-style: none;
+}
+body.staff-workspace-page .ops-quick-actions > summary::marker { content: ''; }
+body.staff-workspace-page .ops-quick-actions > summary::-webkit-details-marker { display: none; }
+body.staff-workspace-page .ops-quick-actions__links {
+  position: absolute; bottom: calc(100% + 8px); inset-inline-end: 0;
+  display: none; flex-direction: column; gap: 5px; width: max-content;
+  min-width: 180px; max-width: calc(100vw - 30px); padding: 8px;
+  border: 1px solid var(--hub-border, #ddd2c0); border-radius: 14px;
+  background: var(--hub-surface, #fff); box-shadow: 0 10px 28px rgba(0,0,0,.18);
+}
+body.staff-workspace-page .ops-quick-actions[open] .ops-quick-actions__links { display: flex; }
+body.staff-workspace-page .ops-quick-actions__links :is(a,button) {
+  display: block; width: 100%; min-height: 42px; padding: 10px 12px;
+  background: transparent; border: 0; border-radius: 8px; color: var(--hub-text, #262626);
+  text-decoration: none; text-align: start; font: inherit; font-weight: 650; cursor: pointer;
+}
+body.staff-workspace-page .ops-quick-actions__links :is(a,button):hover { background: var(--hub-surface-alt, #f8f5ef); }
+@media (max-width: 900px) {
+  body.staff-workspace-page .ops-v2__layout { grid-template-columns: minmax(0,1fr); }
+  body.staff-workspace-page .ops-quick-actions {
+    bottom: calc(85px + env(safe-area-inset-bottom, 0px)); inset-inline-end: 14px;
+  }
+  body.staff-workspace-page .ops-v2__order-links .ops-attention-link { flex: 1 1 90px; }
+}
+@media (max-width: 480px) {
+  body.staff-workspace-page .ops-v2__stats { gap: 5px; }
+  body.staff-workspace-page .ops-v2__stat { min-height: 64px; padding: 8px; }
+  body.staff-workspace-page .ops-quick-actions > summary { padding: 8px 12px; font-size: .82rem; }
+}
+@media print {
+  body.staff-workspace-page .ops-quick-actions { display: none; }
+}
