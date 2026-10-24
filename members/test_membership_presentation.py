@@ -76,6 +76,14 @@ class MembershipInternetPresentationTests(TestCase):
         self.assertEqual(len(benefits), 1)
         self.assertEqual(benefits[0]['remaining_minutes'], 425)
 
+    def test_mismatched_entitlement_member_is_never_disclosed(self):
+        self.entitlement()
+        another = Member.objects.create(name_ar='عضو آخر', phone='0944500156')
+        self.entitlement(member=another, total_minutes_allowed=5000, minutes_used=0)
+        benefit_rows = membership_subscription_rows([self.subscription], at=self.at)[0]['internet']
+        self.assertEqual(len(benefit_rows), 1)
+        self.assertEqual(benefit_rows[0]['remaining_minutes'], 425)
+
     def test_staff_detail_and_account_show_same_authoritative_balance(self):
         self.entitlement()
         staff = get_user_model().objects.create_user(
