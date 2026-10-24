@@ -16,7 +16,7 @@ from django.views.decorators.http import require_POST
 
 from accounts.permissions import is_owner_or_admin, user_has_capability, require_staff_capability
 from core.models import ActivityLog, HubVisitBrowserCredential, InternetBandwidthProfile, InternetEntitlement, InternetPackage
-from core.services.fast_internet_approval import approval_required, review_approval
+from core.services.fast_internet_approval import approval_required, review_approval, pending_approvals_queryset
 from core.services.internet_operations import requeue_failed_network_operation
 from internet.models import StaffInternetDeviceEvidence, StaffInternetObservedInterval
 from core.services.staff_internet_observation import (
