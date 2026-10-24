@@ -541,7 +541,7 @@ def _prep_defaults_for_product(product):
             station = None
     return station, OrderItem.PrepStatus.NEW
 
-def _create_order_from_selected_items(table, selected, note_parts, status=None, service_mode=None, fulfillment_mode=None, delivery_data=None, member_context=None, visit=None):
+def _create_order_from_selected_items(table, selected, note_parts, status=None, service_mode=None, fulfillment_mode=None, delivery_data=None, member_context=None, visit=None, *, entered_by=None, entry_source=Order.EntrySource.UNKNOWN, recipient_kind=Order.RecipientKind.CUSTOMER, recipient_note=''):
     note = '\n'.join([part for part in note_parts if part])
     if table and service_mode is None:
         service_mode = Order.ServiceMode.TABLE
@@ -549,7 +549,7 @@ def _create_order_from_selected_items(table, selected, note_parts, status=None, 
     fulfillment_mode = fulfillment_mode or (Order.FulfillmentMode.TABLE if table else Order.FulfillmentMode.INSIDE_SPACE)
     delivery_data = delivery_data or {}
     with transaction.atomic():
-        order = Order.objects.create(table=table, visit=visit, member=member_context.member if member_context else None, service_mode=service_mode, fulfillment_mode=fulfillment_mode, status=status or Order.Status.NEW, notes=note, **delivery_data)
+        order = Order.objects.create(table=table, visit=visit, member=member_context.member if member_context else None, service_mode=service_mode, fulfillment_mode=fulfillment_mode, status=status or Order.Status.NEW, notes=note, entered_by=entered_by, entry_source=entry_source, recipient_kind=recipient_kind, recipient_note=recipient_note, **delivery_data)
         membership_discount = 0
         benefit_snapshots = []
         for product, qty, item_note, selected_options_snapshot, option_delta in selected:
@@ -641,7 +641,7 @@ def _create_order_from_menu(request, table=None):
                 _credential, raw_visit_token = issue_visit_credential(visit)
                 ActivityLog.objects.create(action='visit.created', details={'visit_id': visit.pk, 'source': 'public_order'})
                 ActivityLog.objects.create(action='visit.browser_bound', details={'visit_id': visit.pk})
-        order = _create_order_from_selected_items(table, selected, note_parts, service_mode=service_mode, fulfillment_mode=fulfillment_mode, delivery_data=delivery_data, member_context=member_context, visit=visit)
+        order = _create_order_from_selected_items(table, selected, note_parts, service_mode=service_mode, fulfillment_mode=fulfillment_mode, delivery_data=delivery_data, member_context=member_context, visit=visit, entry_source=Order.EntrySource.PUBLIC_MENU)
         if visit:
             HubVisit.objects.filter(pk=visit.pk).update(last_activity_at=timezone.now())
             ActivityLog.objects.create(action='visit.order_linked', details={'visit_id': visit.pk, 'order_id': order.pk})
@@ -892,6 +892,15 @@ def staff_pos(request):
             context.update({'error': ' '.join(validation_errors), 'form_values': request.POST, 'selected_table_id': table_id})
             return render(request, 'staff/pos.html', context)
 
+        recipient_kind = request.POST.get('recipient_kind', Order.RecipientKind.CUSTOMER)
+        recipient_note = request.POST.get('recipient_note', '').strip()
+        if recipient_kind not in Order.RecipientKind.values:
+            validation_errors.append('نوع المستفيد غير صالح.')
+        if len(recipient_note) > 120:
+            validation_errors.append('اسم المستفيد أطول من الحد المسموح.')
+        if validation_errors:
+            context.update({'error': ' '.join(validation_errors), 'form_values': request.POST, 'selected_table_id': table_id})
+            return render(request, 'staff/pos.html', context)
         general_note = request.POST.get('general_note', '').strip()
         service_mode = Order.ServiceMode.TABLE if fulfillment_mode == Order.FulfillmentMode.TABLE else (Order.ServiceMode.TAKEAWAY if fulfillment_mode == Order.FulfillmentMode.TAKEAWAY else Order.ServiceMode.DINE_IN)
         table_label = _order_location_note(table, service_mode, fulfillment_mode)
@@ -903,7 +912,7 @@ def staff_pos(request):
             f'العضو: {member.name_ar} / {member.phone}' if member else '',
             general_note,
         ]
-        order = _create_order_from_selected_items(table, selected, note_parts, status=Order.Status.NEW, service_mode=service_mode, fulfillment_mode=fulfillment_mode, delivery_data=delivery_data, member_context=member_context, visit=visit)
+        order = _create_order_from_selected_items(table, selected, note_parts, status=Order.Status.NEW, service_mode=service_mode, fulfillment_mode=fulfillment_mode, delivery_data=delivery_data, member_context=member_context, visit=visit, entered_by=request.user, entry_source=Order.EntrySource.STAFF_POS, recipient_kind=recipient_kind, recipient_note=recipient_note)
         if visit:
             HubVisit.objects.filter(pk=visit.pk).update(last_activity_at=timezone.now())
             ActivityLog.objects.create(actor=request.user, action='visit.order_linked', details={'visit_id': visit.pk, 'order_id': order.pk, 'source': 'staff_pos'})
