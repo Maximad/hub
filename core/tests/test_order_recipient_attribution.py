@@ -131,6 +131,18 @@ class OrderRecipientAttributionTests(TestCase):
         self.assertEqual(Order.objects.count(), 0)
         self.assertContains(response, 'نوع المستفيد غير صالح')
 
+    def test_public_menu_order_is_recognized_as_customer_entry(self):
+        self.client.logout()
+        response = self.client.post(reverse('menu_public'), {
+            'fulfillment_mode': Order.FulfillmentMode.INSIDE_SPACE,
+            f'qty_{self.drink.pk}': '1',
+        })
+        self.assertEqual(response.status_code, 302)
+        order = Order.objects.get()
+        self.assertEqual(order.entry_source, Order.EntrySource.PUBLIC_MENU)
+        self.assertIsNone(order.entered_by_id)
+        self.assertEqual(order.recipient_kind, Order.RecipientKind.CUSTOMER)
+
     def test_existing_orders_keep_unknown_provenance_without_guessing(self):
         order = Order.objects.create()
         self.assertEqual(order.entry_source, Order.EntrySource.UNKNOWN)
