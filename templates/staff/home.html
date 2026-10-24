@@ -64,7 +64,7 @@
           </nav>
         </article>
         {% empty %}<div class="staff-v2-empty">لا توجد طلبات تحتاج تحضيراً أو تسليماً حالياً.</div>{% endfor %}
-        {% if workspace_stats.more_active_orders %}<a class="ops-attention-more" href="{% url 'staff_orders' %}">عرض باقي الطلبات ({{ workspace_stats.active_orders }})</a>{% endif %}
+        {% if workspace_stats.more_active_orders %}{% if staff_caps.order_edit %}<a class="ops-attention-more" href="{% url 'staff_orders' %}">عرض باقي الطلبات ({{ workspace_stats.active_orders }})</a>{% elif staff_caps.kitchen_board %}<a class="ops-attention-more" href="{% url 'staff_kitchen' %}">متابعة بقية التحضير</a>{% endif %}{% endif %}
       </div>
       {% if workspace_caps.cashier and standalone_to_collect %}
       <div class="ops-attention-collections">
@@ -78,7 +78,7 @@
       </div>
       {% endif %}
       <div class="ops-attention-footer">
-        <a href="{% url 'staff_orders' %}">كل الطلبات</a>
+        {% if staff_caps.order_edit %}<a href="{% url 'staff_orders' %}">كل الطلبات</a>{% elif staff_caps.kitchen_board %}<a href="{% url 'staff_kitchen' %}">لوحة التحضير</a>{% endif %}
       </div>
     </aside>
     {% if staff_caps.visit_manage %}
