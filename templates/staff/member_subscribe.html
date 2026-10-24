@@ -10,6 +10,26 @@
 <select id="membership-plan" data-hub-searchable-select="true" name="plan" required style="display:block; width:100%; margin-bottom:.5rem;">
 {% for p in plans %}<option value="{{ p.id }}" data-price="{{ p.price_syp }}" data-term-value="{{ p.term_value|default_if_none:'' }}" data-term-unit="{{ p.term_unit|default_if_none:'' }}" {% if form_values.plan == p.id|stringformat:'s' %}selected{% endif %}>{{ p.name_ar }} ({{ p.code }}) — {% if p.price_syp == 0 %}مجاني{% else %}{{ p.price_syp }} ل.س{% endif %}</option>{% endfor %}
 </select>
+{% if not plans %}<p role="alert">لا توجد خطط عضوية متاحة للبيع حالياً.</p>{% endif %}
+<section class="hub-card" aria-label="تفاصيل الخطة المختارة" id="membership-plan-preview">
+{% for item in plan_presentations %}
+  <div data-membership-preview="{{ item.plan.pk }}">
+    <h3>{{ item.plan.name_ar }}</h3>
+    {% if item.plan.description_ar %}<p>{{ item.plan.description_ar }}</p>{% endif %}
+    <p><strong>السعر:</strong> {% if item.plan.price_syp == 0 %}مجاني{% else %}{{ item.plan.price_syp }} ل.س{% endif %}</p>
+    <p><strong>مدة الاشتراك:</strong> {{ item.term }}</p>
+    <h4>المزايا المدعومة حالياً</h4>
+    {% if item.benefits %}<ul>{% for benefit in item.benefits %}<li>{{ benefit }}</li>{% endfor %}</ul>
+    {% else %}<p>لا توجد مزايا تلقائية مفعلة لهذه الخطة حالياً.</p>{% endif %}
+    {% if item.configured_only %}
+      <details><summary>قواعد أخرى مُعدّة تحتاج مراجعة قبل الوعد بها</summary>
+        <ul>{% for benefit in item.configured_only %}<li>{{ benefit }}</li>{% endfor %}</ul>
+        <p>هذه القواعد موجودة في الإعدادات، لكنها ليست تأكيداً على توفر الاستفادة منها في مسار البيع الحالي.</p>
+      </details>
+    {% endif %}
+  </div>
+{% endfor %}
+</section>
 <p><strong>السعر / المبلغ المستحق:</strong> <span id="membership-price"></span></p>
 <label for="membership-payment-method">طريقة الدفع</label>
 <select id="membership-payment-method" name="payment_method" required style="display:block; width:100%; margin-bottom:.5rem;">
@@ -17,16 +37,19 @@
 </select>
 <label for="membership-start">تاريخ البداية</label><input id="membership-start" type="datetime-local" name="starts_at" value="{{ form_values.starts_at }}" style="display:block; width:100%; margin-bottom:.5rem;">
 <label for="membership-end">تاريخ الانتهاء</label><input id="membership-end" type="datetime-local" name="ends_at" value="{{ form_values.ends_at }}" style="display:block; width:100%; margin-bottom:.5rem;">
-<small>إذا تُرك تاريخ الانتهاء فارغاً فسيُحسب من مدة الخطة. الاشتراكات المستقبلية تبقى معلّقة حتى تفعيلها لاحقاً.</small>
-<button type="submit">تحصيل السعر وإنشاء العضوية</button>
+<p class="hub-help-text">إذا تُرك تاريخ الانتهاء فارغاً فسيُحسب من مدة الخطة. الاشتراكات المستقبلية تبقى معلّقة حتى موعد البداية. يُنشئ التجديد عملية بيع جديدة بالسعر الحالي ولا يمدد الاشتراك القديم.</p>
+<p class="hub-help-text">عند تأكيد الدفع، يُسجَّل المبلغ الكامل وفق الخطة المختارة. تُطبَّق شروط العضوية عند تفعيلها.</p>
+<button type="submit" {% if not plans %}disabled{% endif %}>تحصيل السعر وإنشاء العضوية</button>
 </form>
 <script>
 (() => {
   const plan = document.getElementById('membership-plan');
   const price = document.getElementById('membership-price');
   const payment = document.getElementById('membership-payment-method');
+  const preview = document.querySelectorAll('[data-membership-preview]');
   function refreshPrice() {
     const amount = Number(plan.selectedOptions[0]?.dataset.price || 0);
+    preview.forEach(item => { item.hidden = item.dataset.membershipPreview !== plan.value; });
     price.textContent = amount === 0 ? 'مجاني' : `${amount.toLocaleString('ar-SY')} ل.س`;
     payment.disabled = amount === 0;
   }
