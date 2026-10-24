@@ -15,12 +15,14 @@ class MemberRecognitionTests(TestCase):
     def setUp(self):
         self.member = Member.objects.create(name_ar='عضو تجريبي', phone='0999999999')
         self.plan = MembershipPlan.objects.create(code='member', name_ar='الخطة', price_syp=0)
+        self.category = Category.objects.create(name_ar='مشروبات')
+        self.product = Product.objects.create(category=self.category, name_ar='قهوة', price_syp=1000, is_available=True)
+        self.rule = MembershipBenefitRule.objects.create(
+            plan=self.plan, product=self.product, benefit_type='product_discount_percent',
+            value_decimal=20, discount_percent=20, priority=10)
         self.subscription = MembershipSubscription.objects.create(
             member=self.member, plan=self.plan, starts_at=timezone.now() - timedelta(days=1),
             ends_at=timezone.now() + timedelta(days=30), status='active')
-        self.category = Category.objects.create(name_ar='مشروبات')
-        self.product = Product.objects.create(category=self.category, name_ar='قهوة', price_syp=1000, is_available=True)
-        self.rule = MembershipBenefitRule.objects.create(plan=self.plan, product=self.product, discount_percent=20, priority=10)
 
     def activate(self):
         token, raw = create_activation_token(self.member)
@@ -143,8 +145,11 @@ class MemberRecognitionTests(TestCase):
         context.device.save(update_fields=['revoked_at'])
         self.assertIsNone(resolve_member_from_request(request))
 
-    def test_engine_uses_priority_without_stacking_and_respects_exclusion(self):
-        MembershipBenefitRule.objects.create(plan=self.plan, category=self.category, discount_percent=50, priority=1)
+    def test_ordering_uses_purchased_snapshot_and_respects_exclusion(self):
+        MembershipBenefitRule.objects.create(
+            plan=self.plan, category=self.category, benefit_type='product_discount_percent',
+            value_decimal=50, discount_percent=50, priority=1)
+        # An added plan rule must not retroactively reprice an existing subscription.
         result = evaluate_membership_benefit(get_active_member_context(self.member), self.product, 2)
         self.assertEqual(result.discount, 400)
         self.product.not_discountable = True
