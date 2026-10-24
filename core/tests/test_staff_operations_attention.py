@@ -57,6 +57,21 @@ class StaffOperationsAttentionTests(TestCase):
         self.assertContains(edit, 'تفاصيل الطلب')
         self.assertNotContains(edit, '<h2 class="hub-section-title hub-page-header__title">تعديل طلب مفتوح</h2>', html=False)
 
+    def test_partially_collected_order_is_details_only_and_item_update_blocked(self):
+        order = self.order(status=Order.Status.NEW, amount=200)
+        self.pay(order, amount=50)
+        response = self.client.get(reverse('staff_home'))
+        row = next(o for o in response.context['active_orders'] if o.pk == order.pk)
+        self.assertFalse(row.workspace_can_edit_items)
+        self.assertContains(response, 'data-context-title="تفاصيل الطلب"')
+        item = order.items.get()
+        url = reverse('staff_order_edit_update_item', args=[order.public_code, item.pk])
+        blocked = self.client.post(url, {'quantity': '3', 'edit_scope': 'basic'})
+        self.assertEqual(blocked.status_code, 302)
+        item.refresh_from_db()
+        self.assertEqual(item.quantity, 1)
+        self.assertEqual(order.payments.count(), 1)
+
     def test_paid_and_served_order_is_not_live_attention(self):
         visit = HubVisit.objects.create(table=self.table)
         order = self.order(status=Order.Status.SERVED, visit=visit, table=self.table)
