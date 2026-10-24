@@ -135,7 +135,7 @@ def create_membership_sale(*, member, plan, payment_method, actor, idempotency_k
             raise ValidationError({'payment_method': 'الخطة المجانية لا تسجل دفعة محصلة.'})
 
         product = _membership_product(plan)
-        order = Order.objects.create(member=member, notes=f'Membership sale: {plan.code}')
+        order = Order.objects.create(member=member, notes=f'Membership sale: {plan.code}', entry_source=Order.EntrySource.SYSTEM, entered_by=actor if getattr(actor, 'is_authenticated', False) else None)
         OrderItem.objects.create(
             order=order, product=product, quantity=1,
             product_name_ar_snapshot=plan.name_ar,
