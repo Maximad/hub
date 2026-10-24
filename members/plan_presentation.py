@@ -3,6 +3,8 @@
 These labels describe configured rules, not a promise that every benefit type
 has an operational redemption workflow. Checkout remains authoritative.
 """
+from decimal import Decimal
+
 from members.models import MembershipBenefitRule, MembershipPlan
 
 
@@ -47,6 +49,10 @@ def _target(rule):
     return 'وفق شروط القاعدة'
 
 
+def _format_value(value):
+    return format(Decimal(str(value)).normalize(), 'f')
+
+
 def _benefit_line(rule):
     kind = rule.benefit_type
     is_product_discount = kind in (
@@ -71,11 +77,11 @@ def _benefit_line(rule):
     if kind == MembershipBenefitRule.BenefitType.PRODUCT_DISCOUNT_PERCENT:
         amount = rule.value_decimal if rule.value_decimal is not None else rule.discount_percent
         if amount is not None:
-            return f'خصم {amount:g}٪ {_target(rule)}', True
+            return f'خصم {_format_value(amount)}٪ {_target(rule)}', True
     elif kind == MembershipBenefitRule.BenefitType.PRODUCT_DISCOUNT_FIXED:
         amount = rule.value_decimal if rule.value_decimal is not None else rule.discount_amount_syp
         if amount is not None:
-            return f'خصم {amount:g} ل.س لكل وحدة {_target(rule)}', True
+            return f'خصم {_format_value(amount)} ل.س لكل وحدة {_target(rule)}', True
     elif kind == MembershipBenefitRule.BenefitType.INTERNET_MINUTES:
         minutes = rule.value_integer or rule.included_minutes
         if minutes and minutes > 0:
