@@ -125,6 +125,8 @@
     </section>
   {% endif %}
 
+  {% include "staff/_order_attribution_summary.html" with can_update_recipient=order_caps.recipient_update %}
+
   <section class="staff-order-panel__section staff-order-panel__summary">
     <div><span>طريقة الطلب</span><strong>{{ order.get_fulfillment_label }}</strong></div>
     {% if order.location_detail %}<div><span>المكان</span><strong>{{ order.location_detail }}</strong></div>{% endif %}
