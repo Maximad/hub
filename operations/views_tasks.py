@@ -213,6 +213,8 @@ def staff_operational_tasks(request):
         except ValidationError as exc:
             messages.error(request, _validation_text(exc))
         if recheck_preview is None:
+            if action == 'status' and request.POST.get('return_to') == 'operations':
+                return redirect('staff_home')
             return redirect('staff_operational_tasks')
 
     tasks = (
