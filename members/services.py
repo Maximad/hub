@@ -3,13 +3,12 @@ import hmac
 import secrets
 from dataclasses import dataclass
 from datetime import timedelta
-from decimal import Decimal, ROUND_DOWN
 
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-from members.models import MemberActivationToken, MemberDeviceToken, MembershipBenefitRule, MembershipSubscription
+from members.models import MemberActivationToken, MemberDeviceToken, MembershipSubscription
 
 
 def _digest(raw):
@@ -26,7 +25,7 @@ class MemberContext:
 
 @dataclass(frozen=True)
 class BenefitResult:
-    rule: MembershipBenefitRule | None
+    benefit: object | None
     original_total: int
     discount: int
 
@@ -36,14 +35,12 @@ class BenefitResult:
 
 
 def get_active_member_context(member, at=None, device=None):
+    """Select a display subscription using the same effective-status policy as benefits."""
     at = at or timezone.now()
-    if not getattr(member, 'is_active', True):
+    if member is None or not getattr(member, 'is_active', True):
         return None
-    candidates = (MembershipSubscription.objects.select_related('plan')
-        .filter(member=member, status__in=['active', 'frozen'], starts_at__lte=at, plan__is_active=True)
-        .filter(models.Q(ends_at__isnull=True) | models.Q(ends_at__gt=at))
-        .order_by('-starts_at'))
-    subscription = next((candidate for candidate in candidates if candidate.is_active_at(at)), None)
+    subscriptions = get_active_subscriptions(member, at)
+    subscription = max(subscriptions, key=lambda item: (item.starts_at, item.pk), default=None)
     return MemberContext(member, subscription, subscription.plan, device) if subscription else None
 
 
@@ -54,10 +51,6 @@ def get_member_context(member, at=None, device=None):
         return None
     active = get_active_member_context(member, at, device)
     return active or MemberContext(member=member, subscription=None, plan=None, device=device)
-
-
-# Imported here to keep the public API above uncluttered.
-from django.db import models  # noqa: E402
 
 
 def create_activation_token(member, created_by=None):
@@ -137,38 +130,14 @@ def resolve_member_from_request(request, touch=True):
 
 
 def evaluate_membership_benefit(context, product, quantity=1, unit_price=None):
-    total = max(int(unit_price if unit_price is not None else product.price_syp), 0) * max(int(quantity), 0)
-    if not context or not context.plan or product.not_discountable or not product.is_available:
-        return BenefitResult(None, total, 0)
-    rules = context.plan.benefit_rules.filter(is_active=True).select_related('product', 'category', 'menu_section', 'tag').order_by('-priority', 'pk')
-    section_ids = set(product.menu_sections.values_list('pk', flat=True))
-    tag_ids = set(product.tags.values_list('pk', flat=True))
-    matches = []
-    for rule in rules:
-        targets = [(rule.product_id, product.pk), (rule.category_id, product.category_id), (rule.menu_section_id, section_ids), (rule.tag_id, tag_ids)]
-        relational = any(value for value, _ in targets)
-        ok = ((rule.product_id == product.pk) if rule.product_id else True) and ((rule.category_id == product.category_id) if rule.category_id else True)
-        ok = ok and ((rule.menu_section_id in section_ids) if rule.menu_section_id else True) and ((rule.tag_id in tag_ids) if rule.tag_id else True)
-        for field in ('item_type', 'beverage_type', 'food_type', 'service_type'):
-            wanted = getattr(rule, field)
-            if wanted and wanted != getattr(product, field): ok = False
-        if product.is_alcoholic and not rule.applies_to_alcohol: ok = False
-        if ok: matches.append(rule)
-    if not matches: return BenefitResult(None, total, 0)
-    # Priority is authoritative; at equal priority prefer the most specific rule, never stack.
-    def specificity(r):
-        return sum(bool(getattr(r, f)) for f in ('product_id','category_id','menu_section_id','tag_id','item_type','beverage_type','food_type','service_type'))
-    rule = sorted(matches, key=lambda r: (-r.priority, -specificity(r), r.pk))[0]
-    percent = int(rule.discount_percent or 0)
-    discount = int((Decimal(total) * Decimal(percent) / 100).quantize(Decimal('1'), rounding=ROUND_DOWN))
-    discount += max(int(rule.discount_amount_syp or 0), 0) * max(int(quantity), 0)
-    if rule.included_quantity:
-        discount += min(quantity, rule.included_quantity) * max(int(unit_price if unit_price is not None else product.price_syp), 0)
-    return BenefitResult(rule, total, min(discount, total))
+    """Compatibility adapter for menu/POS, backed by immutable subscription benefits."""
+    resolution = resolve_product_discount(
+        context.member if context else None, product,
+        quantity=quantity, unit_price=unit_price)
+    return BenefitResult(resolution.benefit, int(resolution.original_price), int(resolution.discount))
 
 
-# Generic benefit API.  The legacy evaluator above remains unchanged for the
-# existing Internet/commercial and member-recognition workflows.
+# All member-facing calculations use the snapshot-based benefit API below.
 from members.benefits import (  # noqa: E402,F401
     get_active_subscriptions, get_effective_benefits, get_internet_benefits,
     get_internet_member_pricing_eligibility, get_workspace_allowance,

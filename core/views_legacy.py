@@ -569,7 +569,18 @@ def _create_order_from_selected_items(table, selected, note_parts, status=None, 
             benefit = evaluate_membership_benefit(member_context, product, qty, unit_price)
             if benefit.discount:
                 membership_discount += benefit.discount
-                benefit_snapshots.append({'rule_uuid': str(benefit.rule.uuid), 'label': str(benefit.rule), 'product': product.name_ar, 'subtotal_before': benefit.original_total, 'discount': benefit.discount, 'subtotal_after': benefit.final_total, 'plan': member_context.plan.name_ar})
+                source = benefit.benefit
+                benefit_snapshots.append({
+                    'source_rule_id': source.definition.get('rule_id'),
+                    'benefit_type': source.benefit_type,
+                    'label': 'خصم عضوية',
+                    'product': product.name_ar,
+                    'subtotal_before': benefit.original_total,
+                    'discount': benefit.discount,
+                    'subtotal_after': benefit.final_total,
+                    'plan': source.subscription.plan.name_ar,
+                    'subscription_id': str(source.subscription.uuid),
+                })
             transaction.on_commit(lambda item_id=item.pk: deduct_order_item_stock(OrderItem.objects.select_related('order','product').get(pk=item_id)))
         if membership_discount:
             import json
@@ -1606,11 +1617,8 @@ def _get_member_or_404(member_id):
 
 
 def _active_subscription_for_member(member):
-    return (
-        member.subscriptions.filter(status='active')
-        .order_by('-starts_at', '-created_at')
-        .first()
-    )
+    context = get_active_member_context(member)
+    return context.subscription if context else None
 
 
 

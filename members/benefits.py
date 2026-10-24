@@ -110,19 +110,27 @@ def _product_scope_matches(definition, product):
     return False
 
 
-def resolve_product_discount(member, product, at=None):
-    price = Decimal(product.price_syp)
+def resolve_product_discount(member, product, at=None, *, quantity=1, unit_price=None):
+    """Resolve one non-stacking product benefit from purchased subscription snapshots.
+
+    unit_price includes selected POS modifiers; fixed benefits apply per unit.
+    No active plan edits can retroactively alter an existing subscription.
+    """
+    quantity = max(int(quantity), 0)
+    price = Decimal(str(product.price_syp if unit_price is None else unit_price))
+    price = max(price, Decimal('0')) * quantity
     candidates = []
     for benefit in get_effective_benefits(member, at):
         definition = benefit.definition
         if not _product_scope_matches(definition, product):
             continue
         if benefit.benefit_type == MembershipBenefitRule.BenefitType.PRODUCT_DISCOUNT_FIXED:
-            amount = _decimal(definition)
+            amount = _decimal(definition) * quantity
         elif benefit.benefit_type == MembershipBenefitRule.BenefitType.PRODUCT_DISCOUNT_PERCENT:
-            amount = (price * _decimal(definition) / Decimal('100')).quantize(Decimal('1'), rounding=ROUND_DOWN)
+            amount = price * _decimal(definition) / Decimal('100')
         else:
             continue
+        amount = amount.quantize(Decimal('1'), rounding=ROUND_DOWN)
         candidates.append((min(max(amount, Decimal('0')), price), benefit))
     if not candidates:
         return DiscountResolution(None, price, Decimal('0'))
@@ -131,7 +139,6 @@ def resolve_product_discount(member, product, at=None):
         item[1].subscription.plan.code, int(item[1].definition.get('rule_id') or 0),
     ))[0]
     return DiscountResolution(benefit, price, amount)
-
 
 def _event_price(event):
     if hasattr(event, 'price_syp'):
