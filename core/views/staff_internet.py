@@ -245,6 +245,13 @@ def staff_internet(request):
             fast_internet_approval='rejected', revoked_at__isnull=True, visit__status='open',
         ).select_related('visit__table', 'visit__member').order_by('-fast_internet_reviewed_at', '-pk')[:10]
         request.fast_internet_approval_required = approval_required()
+        # Keep immutable request/decision history separate from the live queue.
+        # Repeat requests on the same device are preserved as distinct events.
+        request.fast_internet_history = ActivityLog.objects.filter(action__in=[
+            'internet.fast_approval_requested',
+            'internet.fast_approval_reviewed',
+            'internet.fast_approval_expired',
+        ]).select_related('actor').order_by('-created_at', '-pk')[:40]
     return _legacy_staff_internet(request)
 
 
