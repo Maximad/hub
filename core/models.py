@@ -238,6 +238,7 @@ class HubVisitBrowserCredential(TimeStampedModel):
         PENDING = 'pending', 'بانتظار موافقة الموظف'
         APPROVED = 'approved', 'موافق عليه'
         REJECTED = 'rejected', 'لم تتم الموافقة'
+        EXPIRED = 'expired', 'انتهت مهلة الموافقة'
 
     visit = models.ForeignKey(HubVisit, on_delete=models.CASCADE, related_name='browser_credentials')
     token_hash = models.CharField(max_length=64, unique=True, editable=False)
@@ -2377,6 +2378,7 @@ class SystemSetting(TimeStampedModel):
     customer_visits_enabled = models.BooleanField(default=False, verbose_name='تفعيل جلسات الزبائن في المنيو')
     customer_internet_self_service_enabled = models.BooleanField(default=False, verbose_name='تفعيل خدمة الإنترنت الذاتية للزبائن')
     fast_internet_staff_approval_required = models.BooleanField(default=True, db_default=True, verbose_name='اشتراط موافقة الموظف على الإنترنت السريع')
+    fast_internet_approval_timeout_minutes = models.PositiveSmallIntegerField(default=30, db_default=30, verbose_name='مهلة طلب موافقة الإنترنت السريع بالدقائق')
     class Language(models.TextChoices):
         ARABIC = 'ar', 'العربية'
         ENGLISH = 'en', 'English'
