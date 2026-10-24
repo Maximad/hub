@@ -40,7 +40,16 @@ from core.settings_helpers import get_system_settings
 class FastInternetApprovalForm(forms.ModelForm):
     class Meta:
         model = SystemSetting
-        fields = ('fast_internet_staff_approval_required',)
+        fields = ('fast_internet_staff_approval_required', 'fast_internet_approval_timeout_minutes')
+        widgets = {'fast_internet_approval_timeout_minutes': forms.NumberInput(attrs={
+            'class': 'hub-input', 'min': 5, 'max': 240, 'inputmode': 'numeric',
+        })}
+
+    def clean_fast_internet_approval_timeout_minutes(self):
+        value = self.cleaned_data['fast_internet_approval_timeout_minutes']
+        if not 5 <= value <= 240:
+            raise forms.ValidationError('حدد مهلة بين 5 و240 دقيقة.')
+        return value
 
 
 @transaction.atomic
@@ -50,12 +59,14 @@ def _save_fast_approval_policy(request):
     if not form.is_valid():
         raise ValidationError(form.errors)
     policy.fast_internet_staff_approval_required = form.cleaned_data['fast_internet_staff_approval_required']
+    policy.fast_internet_approval_timeout_minutes = form.cleaned_data['fast_internet_approval_timeout_minutes']
     if policy.pk:
-        policy.save(update_fields=['fast_internet_staff_approval_required', 'updated_at'])
+        policy.save(update_fields=['fast_internet_staff_approval_required', 'fast_internet_approval_timeout_minutes', 'updated_at'])
     else:
         policy.save()
     ActivityLog.objects.create(actor=request.user, action='internet.fast_approval_policy_changed', details={
         'required': policy.fast_internet_staff_approval_required,
+        'timeout_minutes': policy.fast_internet_approval_timeout_minutes,
     })
     transaction.on_commit(get_system_settings.cache_clear)
 
