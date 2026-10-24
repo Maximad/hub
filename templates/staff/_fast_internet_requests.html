@@ -28,4 +28,25 @@
     {% endfor %}
   </details>
   {% endif %}
+  {% if request.fast_internet_history %}
+  <details class="hub-form-section" id="fast-internet-approval-history">
+    <summary>سجل طلبات الإنترنت السريع (آخر 40 إجراء)</summary>
+    <p class="hub-help-text">يشمل إرسال الطلب والموافقة والرفض وانتهاء المهلة، حتى لو أُغلق الحساب. هذه أحداث إدارية وليست مبيعات أو جلسات محسوبة.</p>
+    <div class="hub-list-stack">
+      {% for event in request.fast_internet_history %}
+      <div class="hub-list-card" data-fast-approval-audit="{{ event.action }}">
+        <strong>جهاز #{{ event.details.credential_id }} · حساب #{{ event.details.visit_id }}</strong>
+        <span>
+          {% if event.action == 'internet.fast_approval_requested' %}أُرسل الطلب
+          {% elif event.action == 'internet.fast_approval_expired' %}انتهت المهلة دون رد
+          {% elif event.details.decision == 'approved' %}موافقة
+          {% elif event.details.decision == 'rejected' %}رفض
+          {% else %}تمت المراجعة{% endif %}
+        </span>
+        <small>{{ event.created_at }} · {% if event.actor %}{{ event.actor.get_full_name|default:event.actor.username }}{% else %}النظام{% endif %}</small>
+      </div>
+      {% endfor %}
+    </div>
+  </details>
+  {% endif %}
 </section>
