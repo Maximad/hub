@@ -38,9 +38,22 @@
   <h3>الاشتراكات</h3>
   <div class="hub-table-wrap"><table class="hub-table">
     <tr><th>الخطة</th><th>الحالة</th><th>البداية</th><th>النهاية</th></tr>
-    {% for subscription in subscriptions %}
-      <tr><td>{{ subscription.plan.name_ar }}</td><td>{{ subscription.get_status_display }}</td><td>{{ subscription.starts_at }}</td><td>{{ subscription.ends_at|default:'—' }}</td></tr>
+    {% for row in subscription_rows %}{% with subscription=row.subscription %}
+      <tr><td>{{ subscription.plan.name_ar }}</td><td>{{ row.status_label }}</td><td>{{ subscription.starts_at }}</td><td>{{ subscription.ends_at|default:'—' }}</td></tr>{% endwith %}
     {% empty %}<tr><td colspan="4">لا توجد اشتراكات.</td></tr>{% endfor %}
+  </table></div>
+</section>
+
+<section class="hub-card">
+  <h3>مخصصات إنترنت العضوية</h3>
+  <p>الأرقام توضح الدقائق غير المستهلكة، وقد تكون بعض الدقائق محجوزة لجلسات جارية. قد تطبق حدود لكل جلسة أو يوم.</p>
+  <div class="hub-table-wrap"><table class="hub-table">
+    <tr><th>العضوية</th><th>المصدر</th><th>الرصيد</th><th>الإتاحة</th></tr>
+    {% for row in subscription_rows %}{% for benefit in row.internet %}
+    <tr><td>{{ row.subscription.plan.name_ar }}</td><td>{{ benefit.source }}</td>
+    <td>{% if benefit.remaining_minutes is not None %}{{ benefit.remaining_minutes }} دقيقة{% else %}غير محدد{% endif %}</td>
+    <td>{{ benefit.status_label }}</td></tr>{% endfor %}{% empty %}
+    <tr><td colspan="4">لا توجد اشتراكات.</td></tr>{% endfor %}
   </table></div>
 </section>
 
