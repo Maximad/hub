@@ -9,7 +9,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from core.models import HubVisit, HubVisitBrowserCredential
-from core.services.fast_internet_approval import approval_required
+from core.services.fast_internet_approval import approval_required, pending_approvals_queryset
 from operations.models import BusinessDay, BusinessDayTask, OperationalTaskTemplate
 
 
