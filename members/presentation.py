@@ -29,7 +29,13 @@ def membership_subscription_rows(subscriptions, *, at=None):
                 .order_by('created_at', 'pk')):
         by_subscription[ent.subscription_id].append(ent)
 
-    labels = dict(MembershipSubscription.Status.choices)
+    labels = {
+        MembershipSubscription.Status.PENDING: 'بانتظار التفعيل',
+        MembershipSubscription.Status.ACTIVE: 'فعّال',
+        MembershipSubscription.Status.FROZEN: 'مجمّد',
+        MembershipSubscription.Status.EXPIRED: 'منتهي',
+        MembershipSubscription.Status.CANCELLED: 'ملغى',
+    }
     access_labels = dict(InternetEntitlement.Status.choices)
     rows = []
     for sub in subscriptions:
