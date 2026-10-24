@@ -9,7 +9,6 @@ from django.utils import timezone
 
 from accounts.permissions import user_has_capability
 from core.models import ActivityLog, HubVisit, HubVisitBrowserCredential, InternetSession, SystemSetting
-from operations.services import current_business_date
 
 
 APPROVAL = HubVisitBrowserCredential.FastInternetApproval
@@ -40,6 +39,8 @@ def approval_expiry_cutoff(*, at=None):
     moments before cutoff. Its audit event remains in the ledger.
     """
     at = at or timezone.now()
+    # Deferred import avoids the operations.services -> visit_internet cycle.
+    from operations.services import current_business_date
     minutes = expiry_policy()
     cutoff_hour = int(getattr(settings, 'BUSINESS_DAY_CUTOFF_HOUR', 4))
     day_start = timezone.make_aware(
