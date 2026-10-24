@@ -2084,7 +2084,7 @@ def _create_order_for_internet_session(request, session, mark_paid=False):
             return None
         customer = session.member.name_ar if session.member_id else (session.display_guest_name or 'زائر')
         note = f'جلسة {session.get_session_type_display()} #{session.id}\nالوقت الفعلي: {session.effective_duration_minutes or 0} دقيقة\nالوقت المحسوب: {session.billable_minutes or 0} دقيقة\nالعميل: {customer}'
-        order = Order.objects.create(service_mode=Order.ServiceMode.DINE_IN, status=Order.Status.NEW, notes=note)
+        order = Order.objects.create(service_mode=Order.ServiceMode.DINE_IN, status=Order.Status.NEW, notes=note, entry_source=Order.EntrySource.SYSTEM, entered_by=request.user)
         prep_station, prep_status = _prep_defaults_for_product(product)
         OrderItem.objects.create(
             order=order,
