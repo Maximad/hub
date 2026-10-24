@@ -19,6 +19,7 @@ from members.models import MembershipBenefitRule, MembershipPlan, MembershipSubs
 from members.services import evaluate_membership_benefit, get_active_member_context, resolve_member_from_request
 from members.membership_sales import create_membership_sale
 from members.presentation import membership_subscription_rows
+from members.plan_presentation import staff_plan_presentations
 from internet.models import WifiNetwork
 from catalog.models import MenuSection, PrepStation, ProductMedia, ProductOption, ProductOptionGroup, ProductOptionGroupAssignment, Tag
 from core.settings_helpers import get_page_setting, get_system_settings
@@ -1727,7 +1728,8 @@ def staff_member_subscribe(request, member_id):
     _assert_staff_capability(request.user, 'members/internet')
     member = _get_member_or_404(member_id)
     if request.method != 'POST':
-        plans = MembershipPlan.objects.filter(is_active=True, visible_to_staff=True).order_by('name_ar')
+        plans = MembershipPlan.objects.filter(is_active=True, visible_to_staff=True).prefetch_related(
+            'benefit_rules__product', 'benefit_rules__category').order_by('name_ar')
         renewal_from = (request.GET.get('renew_from') or '').strip()
         initial_values = {}
         if renewal_from:
@@ -1740,13 +1742,14 @@ def staff_member_subscribe(request, member_id):
                 local_start = timezone.localtime(start).strftime('%Y-%m-%dT%H:%M')
                 initial_values = {'plan': str(previous.plan_id), 'starts_at': local_start}
         return render(request, 'staff/member_subscribe.html', {
-            'member': member, 'plans': plans, 'now': timezone.now(),
-            'form_values': initial_values,
+            'member': member, 'plans': plans, 'plan_presentations': staff_plan_presentations(plans),
+            'now': timezone.now(), 'form_values': initial_values,
             'idempotency_key': str(uuid.uuid4()), 'payment_methods': (
                 (Payment.Method.CASH, Payment.Method.CASH.label),
                 (Payment.Method.MANUAL_TRANSFER, Payment.Method.MANUAL_TRANSFER.label),
             )})
-    plans = MembershipPlan.objects.filter(is_active=True, visible_to_staff=True).order_by('name_ar')
+    plans = MembershipPlan.objects.filter(is_active=True, visible_to_staff=True).prefetch_related(
+        'benefit_rules__product', 'benefit_rules__category').order_by('name_ar')
     plan = MembershipPlan.objects.filter(pk=request.POST.get('plan')).first()
     errors = {}
     if not plan:
@@ -1757,7 +1760,8 @@ def staff_member_subscribe(request, member_id):
         errors['ends_at'] = 'تاريخ الانتهاء يجب أن يكون بعد تاريخ البداية.'
     if errors:
         return render(request, 'staff/member_subscribe.html', {
-            'member': member, 'plans': plans, 'now': timezone.now(), 'errors': errors,
+            'member': member, 'plans': plans, 'plan_presentations': staff_plan_presentations(plans),
+            'now': timezone.now(), 'errors': errors,
             'form_values': request.POST, 'idempotency_key': request.POST.get('idempotency_key'),
             'payment_methods': ((Payment.Method.CASH, Payment.Method.CASH.label),
                                 (Payment.Method.MANUAL_TRANSFER, Payment.Method.MANUAL_TRANSFER.label))})
@@ -1770,7 +1774,8 @@ def staff_member_subscribe(request, member_id):
     except ValidationError as exc:
         errors.update(exc.message_dict if hasattr(exc, 'message_dict') else {'sale': '; '.join(exc.messages)})
         return render(request, 'staff/member_subscribe.html', {
-            'member': member, 'plans': plans, 'now': timezone.now(), 'errors': errors,
+            'member': member, 'plans': plans, 'plan_presentations': staff_plan_presentations(plans),
+            'now': timezone.now(), 'errors': errors,
             'form_values': request.POST, 'idempotency_key': request.POST.get('idempotency_key'),
             'payment_methods': ((Payment.Method.CASH, Payment.Method.CASH.label),
                                 (Payment.Method.MANUAL_TRANSFER, Payment.Method.MANUAL_TRANSFER.label))})
