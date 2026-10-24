@@ -34,8 +34,6 @@ def _activate_verified_sale(subscription_id, *, at=None, actor_id=None):
         return 'not_due'
     if subscription.ends_at is not None and subscription.ends_at <= at:
         return 'out_of_term'
-    if not subscription.member.is_active:
-        raise ValidationError('Membership holder is inactive.')
 
     # Never automatically activate legacy/manual grants with no commercial trail.
     if not subscription.sale_idempotency_key or subscription.order_id is None:
