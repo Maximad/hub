@@ -6,7 +6,8 @@ from core.media_views import serve_media
 from core.views.staff_reports import staff_reports_home, staff_reports_day, staff_reports_day_csv, staff_product_margin_report, staff_product_margin_csv, staff_close_day, staff_close_day_print
 from core.views.staff_internet import staff_internet, staff_internet_sale, staff_internet_start, staff_internet_session, staff_internet_end, staff_internet_cancel, staff_wifi, staff_fast_internet_approval, staff_internet_session_retry
 from core.views.internet_settings import internet_settings, internet_partner_save, internet_profile_save
-from core.views.staff_members import staff_members, staff_member_new, staff_member_detail, staff_member_subscribe
+from core.views.staff_members import (staff_members, staff_member_new, staff_member_detail,
+                                      staff_member_subscribe, staff_member_retry_activation)
 from core.views.staff_events import staff_events, staff_event_new, staff_event_detail
 from core.views.staff_reservations import staff_reservations, staff_reservation_new, staff_reservation_detail, staff_reservation_status, staff_reservation_tables
 from core.views.staff_vendors import staff_vendors, staff_vendor_new, staff_vendor_detail, staff_vendor_participation_new
@@ -225,6 +226,8 @@ urlpatterns = [
     path('staff/members/new/', staff_member_new, name='staff_member_new'),
     path('staff/members/<str:member_id>/', staff_member_detail, name='staff_member_detail'),
     path('staff/members/<str:member_id>/subscribe/', staff_member_subscribe, name='staff_member_subscribe'),
+    path('staff/members/<str:member_id>/subscriptions/<int:subscription_id>/retry/',
+         staff_member_retry_activation, name='staff_member_retry_activation'),
     path('staff/members/<str:member_id>/activation/', member_device_views.generate_activation, name='staff_member_activation'),
     path('staff/members/<str:member_id>/activation/qr.svg', member_device_views.activation_qr, name='staff_member_activation_qr'),
     path('staff/members/<str:member_id>/devices/revoke/', member_device_views.revoke_device, name='staff_member_devices_revoke'),
