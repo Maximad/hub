@@ -17,6 +17,7 @@ from accounts.permissions import get_staff_capabilities, is_cashier, is_owner_or
 from core.models import HubVisit, InternetSession, Member, Order, Payment, TableArea
 from operations.services import current_business_date
 from core.services.visits import customer_visit_queryset
+from core.services.staff_attention import get_staff_attention
 from internet.guest_wifi import get_guest_wifi_policy, current_venue_code
 from operations.models import BusinessDayTask
 
@@ -210,6 +211,7 @@ def staff_home(request):
 
     capabilities = get_staff_capabilities(request.user)
     primary_actions, more_actions = _daily_workspace_actions(request.user, capabilities)
+    attention = get_staff_attention(request.user, capabilities)
 
     guest_policy = get_guest_wifi_policy()
     guest_pin_enabled = bool(guest_policy.enabled and guest_policy.require_venue_code)
@@ -226,6 +228,7 @@ def staff_home(request):
             "stale_visit_rows": stale_visit_rows[:40],
             "active_orders": active_orders,
             "standalone_to_collect": standalone_to_collect[:10],
+            "staff_attention": attention,
             "workspace_stats": {
                 "open_visits": len(live_visit_rows),
                 "stale_visits": len(stale_visit_rows),
