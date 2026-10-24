@@ -80,11 +80,9 @@ def get_staff_attention(user, capabilities, *, now=None):
 
     show_internet = bool(capabilities.get('members/internet') and approval_required())
     if show_internet:
-        approvals = HubVisitBrowserCredential.objects.filter(
-            fast_internet_approval=HubVisitBrowserCredential.FastInternetApproval.PENDING,
-            revoked_at__isnull=True,
-            visit__status=HubVisit.Status.OPEN,
-        ).select_related('visit__table', 'visit__member').order_by(
+        approvals = pending_approvals_queryset().select_related(
+            'visit__table', 'visit__member',
+        ).order_by(
             'fast_internet_requested_at', 'pk',
         )
         internet_count = approvals.count()
