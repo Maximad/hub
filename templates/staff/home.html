@@ -40,6 +40,66 @@
     {% if workspace_stats.stale_visits %}<a class="ops-v2__stat" href="#stale-accounts"><span class="ops-v2__stat-icon">{% include "includes/staff_icon.html" with name="clock" class="staff-icon--lg" %}</span><strong>{{ workspace_stats.stale_visits }}</strong><span>قديم بحاجة لمراجعة</span></a>{% elif workspace_caps.cashier %}<a class="ops-v2__stat" href="#open-accounts"><span class="ops-v2__stat-icon">{% include "includes/staff_icon.html" with name="users" class="staff-icon--lg" %}</span><strong>{{ workspace_stats.unpaid_orders }}</strong><span>بحاجة إلى تسديد</span></a>{% endif %}
   </section>
 
+  {% if staff_attention.tasks_count or staff_attention.internet_count %}
+  <section class="ops-inbox" id="staff-attention" aria-labelledby="ops-inbox-title">
+    <div class="ops-inbox__head">
+      <h3 id="ops-inbox-title">تحتاج متابعة الآن</h3>
+      <span class="ops-inbox__total">{{ staff_attention.tasks_count|add:staff_attention.internet_count }} متابعة</span>
+    </div>
+    <div class="ops-inbox__groups">
+      {% if staff_attention.internet_count %}
+      <div class="ops-inbox__group" aria-label="طلبات الإنترنت السريع">
+        <div class="ops-inbox__group-head"><h4>موافقة الإنترنت السريع</h4><span>{{ staff_attention.internet_count }}</span></div>
+        {% for device in staff_attention.internet_requests %}
+        <article class="ops-inbox__item" data-attention-internet="{{ device.pk }}">
+          <div class="ops-inbox__item-info">
+            <strong>جهاز #{{ device.pk }} · {{ device.visit.display_number }}</strong>
+            <span>{% if device.visit.table %}{{ device.visit.table }}{% else %}بدون طاولة{% endif %} · {% if device.visit.member %}{{ device.visit.member.name_ar }}{% else %}{{ device.visit.guest_name|default:'زائر' }}{% endif %}</span>
+            <small>بانتظار قرار منذ {{ device.fast_internet_requested_at|ar_since }}</small>
+          </div>
+          <form method="post" action="{% url 'staff_fast_internet_approval' device.pk %}" class="ops-inbox__actions">
+            {% csrf_token %}
+            <input type="hidden" name="return_to" value="operations">
+            <button class="ops-inbox__button ops-inbox__button--primary" type="submit" name="decision" value="approved">موافقة</button>
+            <button class="ops-inbox__button" type="submit" name="decision" value="rejected">رفض</button>
+          </form>
+        </article>
+        {% endfor %}
+        <a class="ops-inbox__more" href="{% url 'staff_internet' %}">{% if staff_attention.more_internet %}عرض بقية طلبات الموافقة{% else %}سجل الإنترنت{% endif %}</a>
+      </div>
+      {% endif %}
+      {% if staff_attention.tasks_count %}
+      <div class="ops-inbox__group" aria-label="مهام التشغيل المهمة">
+        <div class="ops-inbox__group-head"><h4>مهام الفريق المهمة</h4><span>{{ staff_attention.tasks_count }}</span></div>
+        {% for task in staff_attention.tasks %}
+        <article class="ops-inbox__item" data-attention-task="{{ task.pk }}">
+          <div class="ops-inbox__item-info">
+            <strong>{{ task.title_ar }}</strong>
+            <span>{% if task.attention_overdue %}متأخرة · {% endif %}{% if task.priority == 'high' %}أولوية عالية{% elif task.is_required %}مطلوبة{% else %}متابعة{% endif %}{% if task.due_at %} · {{ task.due_at|date:'H:i' }}{% endif %}</span>
+            {% if task.assigned_to %}<small>لـ {{ task.assigned_to.get_full_name|default:task.assigned_to.username }}</small>{% endif %}
+          </div>
+          <div class="ops-inbox__actions">
+            {% if task.attention_can_complete %}
+            <form method="post" action="{% url 'staff_operational_tasks' %}">
+              {% csrf_token %}
+              <input type="hidden" name="return_to" value="operations">
+              <input type="hidden" name="task_action" value="status">
+              <input type="hidden" name="task_id" value="{{ task.pk }}">
+              <input type="hidden" name="status" value="done">
+              <button class="ops-inbox__button ops-inbox__button--primary" type="submit">تم</button>
+            </form>
+            {% endif %}
+            <a class="ops-inbox__button" href="{% url 'staff_operational_tasks' %}">التفاصيل</a>
+          </div>
+        </article>
+        {% endfor %}
+        <a class="ops-inbox__more" href="{% url 'staff_operational_tasks' %}">{% if staff_attention.more_tasks %}عرض بقية المهام{% else %}كل المهام{% endif %}</a>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+  {% endif %}
+
   <div class="ops-v2__tabs" role="group" aria-label="نوع البيانات"><button class="is-active" type="button" data-ops-tab="all" aria-pressed="true">الكل</button>{% if staff_caps.visit_manage %}<button type="button" data-ops-tab="accounts" aria-pressed="false">الحسابات <b>{{ workspace_stats.open_visits }}</b></button>{% endif %}<button type="button" data-ops-tab="orders" aria-pressed="false">الطلبات <b>{{ workspace_stats.active_orders }}</b></button></div>
 
   <div class="ops-v2__layout">
