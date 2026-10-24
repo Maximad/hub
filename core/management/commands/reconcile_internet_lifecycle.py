@@ -1,6 +1,7 @@
 import json
 
 from django.core.management.base import BaseCommand, CommandError
+from django.db.models import Q
 from django.utils import timezone
 
 from core.models import InternetEntitlement, InternetNetworkOperation, InternetSession
@@ -15,6 +16,7 @@ from core.services.network_operations import enqueue_network_operation
 from internet.models import InternetSessionNetworkOperation
 from internet.session_network_operations import enqueue_session_network_operation
 from members.models import MembershipSubscription
+from members.activation import attempt_membership_sale_activation
 
 
 class Command(BaseCommand):
@@ -30,6 +32,12 @@ class Command(BaseCommand):
         if not 1 <= limit <= 1000:
             raise CommandError('--limit must be between 1 and 1000')
         now = timezone.now()
+        activating = list(MembershipSubscription.objects.filter(
+            status=MembershipSubscription.Status.PENDING,
+            starts_at__lte=now, sale_idempotency_key__isnull=False,
+            activation_error='',
+        ).filter(Q(ends_at__isnull=True) | Q(ends_at__gt=now))
+          .order_by('starts_at', 'pk').values_list('pk', flat=True)[:limit])
         expiring = list(MembershipSubscription.objects.filter(
             status=MembershipSubscription.Status.ACTIVE, ends_at__lte=now
         ).order_by('ends_at').values_list('pk', flat=True)[:limit])
@@ -43,12 +51,15 @@ class Command(BaseCommand):
         overdue = list(InternetSession.objects.filter(
             status=InternetSession.Status.ACTIVE, authorized_until__lte=now
         ).order_by('authorized_until').values_list('pk', flat=True)[:limit])
-        result = {'subscriptions_to_expire': expiring, 'freezes_to_thaw': thawing,
+        result = {'subscriptions_to_activate': activating, 'subscriptions_to_expire': expiring,
+                  'freezes_to_thaw': thawing,
                   'entitlements_to_expire': entitlement_ids,
                   'inactive_staff_grants_to_revoke': disabled_grants,
                   'overdue_sessions_to_close': overdue,
                   'network_operations_to_enqueue': len(set(entitlement_ids)) + len(overdue) + len(disabled_grants)}
         if not options['dry_run']:
+            for pk in activating:
+                attempt_membership_sale_activation(pk, at=now)
             revoke_disabled_staff_internet(limit=limit)
             for pk in thawing:
                 unfreeze_membership(MembershipSubscription(pk=pk), at=now)
