@@ -55,7 +55,13 @@ class FastInternetApprovalForm(forms.ModelForm):
 @transaction.atomic
 def _save_fast_approval_policy(request):
     policy = SystemSetting.objects.select_for_update().order_by('-updated_at', '-pk').first() or SystemSetting()
-    form = FastInternetApprovalForm(request.POST, instance=policy)
+    # Accept old clients posting only the original toggle during rolling deploy.
+    post_data = request.POST.copy()
+    post_data.setdefault(
+        'fast_internet_approval_timeout_minutes',
+        str(policy.fast_internet_approval_timeout_minutes),
+    )
+    form = FastInternetApprovalForm(post_data, instance=policy)
     if not form.is_valid():
         raise ValidationError(form.errors)
     policy.fast_internet_staff_approval_required = form.cleaned_data['fast_internet_staff_approval_required']
