@@ -16,7 +16,9 @@
   <form method="post" class="hub-form">
     {% csrf_token %}<input type="hidden" name="settings_action" value="save_fast_approval_policy">
     <label>{{ fast_approval_form.fast_internet_staff_approval_required }} اشتراط موافقة الموظف لكل جهاز خلال زيارته</label>
-    <p class="hub-help-text">عند إيقاف الشرط، يستطيع الزبون بدء الاتصال مباشرة. الجلسات الفعالة تبقى كما هي. الموافقة لا تغيّر السعر ولا تتجاوز رصيد الباقة.</p>
+    <label style="display:block;max-width:280px;">مهلة طلب الموافقة (بالدقائق) {{ fast_approval_form.fast_internet_approval_timeout_minutes }}</label>
+    {% if fast_approval_form.fast_internet_approval_timeout_minutes.errors %}<p class="hub-badge hub-badge-danger">{{ fast_approval_form.fast_internet_approval_timeout_minutes.errors }}</p>{% endif %}
+    <p class="hub-help-text">المهلة الافتراضية 30 دقيقة. الطلبات غير المجابة تختفي من قائمة الموافقات بعد انتهائها أو عند بداية يوم عمل جديد، ويمكن للزائر إرسال طلب جديد. يحتفظ النظام بسجل القرارات. عند إيقاف الشرط، يستطيع الزبون بدء الاتصال مباشرة. الجلسات الفعالة تبقى كما هي. الموافقة لا تغيّر السعر ولا تتجاوز رصيد الباقة.</p>
     <button class="hub-button hub-button-primary" type="submit">حفظ شرط الموافقة</button>
   </form>
 </section>
