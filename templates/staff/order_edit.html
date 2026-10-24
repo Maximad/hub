@@ -27,6 +27,8 @@
     {% endif %}
   </header>
 
+  {% include "staff/_order_attribution_summary.html" with can_update_recipient=staff_caps.cashier %}
+
   <section class="hub-card hub-section">
     <h3 class="hub-section-title">العناصر الحالية</h3>
     {% if item_rows %}
