@@ -3,7 +3,7 @@
 The authoritative task/approval services own all state changes. This module
 does not sync tasks, expire requests, post payments or touch a network backend.
 """
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from django.db.models import Q
 from django.utils import timezone
@@ -65,7 +65,7 @@ def get_staff_attention(user, capabilities, *, now=None):
         0 if task.due_at and task.due_at <= now else 1,
         0 if task.priority == OperationalTaskTemplate.Priority.HIGH else 1,
         0 if task.is_required else 1,
-        task.due_at or timezone.datetime.max.replace(tzinfo=now.tzinfo),
+        task.due_at or datetime.max.replace(tzinfo=now.tzinfo),
         task.pk,
     ))
     for task in task_list[:5]:
