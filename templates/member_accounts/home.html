@@ -49,11 +49,11 @@
   <p>الأرقام توضح الدقائق غير المستهلكة، وقد تكون بعض الدقائق محجوزة لجلسات جارية. قد تطبق حدود لكل جلسة أو يوم.</p>
   <div class="hub-table-wrap"><table class="hub-table">
     <tr><th>العضوية</th><th>المصدر</th><th>الرصيد</th><th>الإتاحة</th></tr>
-    {% for row in subscription_rows %}{% for benefit in row.internet %}
-    <tr><td>{{ row.subscription.plan.name_ar }}</td><td>{{ benefit.source }}</td>
+    {% for benefit in internet_rows %}
+    <tr><td>{{ benefit.plan_name }}</td><td>{{ benefit.source }}</td>
     <td>{% if benefit.remaining_minutes is not None %}{{ benefit.remaining_minutes }} دقيقة{% else %}غير محدد{% endif %}</td>
-    <td>{{ benefit.status_label }}</td></tr>{% endfor %}{% empty %}
-    <tr><td colspan="4">لا توجد اشتراكات.</td></tr>{% endfor %}
+    <td>{{ benefit.status_label }}</td></tr>{% empty %}
+    <tr><td colspan="4">لا توجد مخصصات إنترنت مرتبطة بعضوية.</td></tr>{% endfor %}
   </table></div>
 </section>
 
