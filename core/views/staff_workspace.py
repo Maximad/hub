@@ -8,7 +8,7 @@ domain services.
 from datetime import datetime, time
 
 from django.conf import settings
-from django.db.models import Prefetch, Q
+from django.db.models import Case, IntegerField, Prefetch, Q, Value, When
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils import timezone
@@ -85,7 +85,7 @@ def _payment_prefetch():
 def _workspace_order_queryset():
     return (
         Order.objects.select_related("table", "table__room")
-        .prefetch_related("items", "discounts", _payment_prefetch())
+        .prefetch_related("items", "discounts", "consumptions", _payment_prefetch())
         .order_by("-created_at")
     )
 
@@ -156,17 +156,41 @@ def staff_home(request):
     # Orders from stale visits belong in the stale-account review rather than the
     # live floor. A newly active order updates its visit and naturally returns to
     # the live workspace.
-    active_orders = list(
+    attention_queryset = (
         _workspace_order_queryset()
         .filter(status__in=ACTIVE_ORDER_STATUSES)
         .filter(
             Q(visit__isnull=True, created_at__gte=day_start)
             | Q(visit__status=HubVisit.Status.OPEN, visit__last_activity_at__gte=day_start)
         )
-        .select_related("visit")[:20]
+        .select_related("visit")
     )
-
-    ready_count = sum(order.status == Order.Status.READY for order in active_orders)
+    # Count before the display cap; handoff-ready work goes first, then new work.
+    active_orders_count = attention_queryset.count()
+    ready_count = attention_queryset.filter(status=Order.Status.READY).count()
+    active_orders = list(attention_queryset.order_by(
+        Case(
+            When(status=Order.Status.READY, then=Value(0)),
+            When(status=Order.Status.NEW, then=Value(1)),
+            When(status=Order.Status.ACCEPTED, then=Value(2)),
+            When(status=Order.Status.PREPARING, then=Value(3)),
+            default=Value(4), output_field=IntegerField(),
+        ), "created_at", "pk",
+    )[:20])
+    for order in active_orders:
+        # Mirrors the existing order-edit guard. Permission and POST checks
+        # remain enforced by the editing endpoint.
+        order.workspace_can_edit_items = not (
+            order.status == Order.Status.CANCELLED
+            or bool(order.consumptions.all())
+            or (order.total_syp > 0 and order.remaining_syp == 0)
+        )
+        order.workspace_next_step = {
+            Order.Status.READY: "جاهز للتسليم",
+            Order.Status.NEW: "طلب جديد للتحضير",
+            Order.Status.ACCEPTED: "بانتظار التحضير",
+            Order.Status.PREPARING: "قيد التحضير",
+        }[order.status]
 
     # One current open visit is one payable account. Stale unpaid accounts remain
     # visible in their dedicated review section rather than inflating the live floor.
@@ -178,6 +202,11 @@ def staff_home(request):
     )
     unpaid_standalone_accounts = sum(order.remaining_syp > 0 for order in standalone_orders)
     unpaid_count = unpaid_visit_accounts + unpaid_standalone_accounts
+    # Served standalone orders still owing money have a collection action.
+    standalone_to_collect = [
+        order for order in standalone_orders
+        if order.status == Order.Status.SERVED and order.remaining_syp > 0
+    ]
 
     capabilities = get_staff_capabilities(request.user)
     primary_actions, more_actions = _daily_workspace_actions(request.user, capabilities)
@@ -196,10 +225,13 @@ def staff_home(request):
             "visit_rows": live_visit_rows[:20],
             "stale_visit_rows": stale_visit_rows[:40],
             "active_orders": active_orders,
+            "standalone_to_collect": standalone_to_collect[:10],
             "workspace_stats": {
                 "open_visits": len(live_visit_rows),
                 "stale_visits": len(stale_visit_rows),
-                "active_orders": len(active_orders),
+                "active_orders": active_orders_count,
+                "more_active_orders": active_orders_count > len(active_orders),
+                "standalone_to_collect": len(standalone_to_collect),
                 "ready_orders": ready_count,
                 "unpaid_orders": unpaid_count,
             },
