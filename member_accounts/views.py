@@ -171,6 +171,8 @@ def member_home(request):
     member = identity.member
     subscriptions = member.subscriptions.select_related('plan').order_by('-created_at')[:20]
     subscription_rows = membership_subscription_rows(subscriptions)
+    internet_rows = [dict(plan_name=row['subscription'].plan.name_ar, **benefit)
+                     for row in subscription_rows for benefit in row['internet']]
     devices = member.device_tokens.filter(revoked_at__isnull=True).order_by('-created_at')
     sessions = InternetSession.objects.filter(member=member).select_related('package').order_by('-created_at')[:20]
     orders = member.orders.order_by('-created_at')[:20]
@@ -181,6 +183,7 @@ def member_home(request):
         'active_subscription': identity.active_subscription,
         'subscriptions': subscriptions,
         'subscription_rows': subscription_rows,
+        'internet_rows': internet_rows,
         'devices': devices,
         'sessions': sessions,
         'orders': orders,
