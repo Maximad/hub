@@ -744,8 +744,8 @@ def _order_edit_block_reason(order):
         return 'لا يمكن تعديل طلب ملغى.', total, paid, remaining
     if order.consumptions.exists():
         return 'سُجّل استهلاك أو ضيافة على هذا الطلب. لا يمكن تغيير بنوده؛ أضف طلباً منفصلاً عند الحاجة.', total, paid, remaining
-    if total > 0 and remaining == 0:
-        return 'لا يمكن تعديل طلب مدفوع بالكامل.', total, paid, remaining
+    if paid > 0:
+        return 'لا يمكن تعديل بنود طلب بدأ تحصيله. استخدم مسار تصحيح مالي موثق.', total, paid, remaining
     return '', total, paid, remaining
 
 
