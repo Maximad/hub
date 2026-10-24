@@ -18,6 +18,7 @@ import re
 from members.models import MembershipBenefitRule, MembershipPlan, MembershipSubscription, MemberCreditLedger
 from members.services import evaluate_membership_benefit, get_active_member_context, resolve_member_from_request
 from members.membership_sales import create_membership_sale
+from members.presentation import membership_subscription_rows
 from internet.models import WifiNetwork
 from catalog.models import MenuSection, PrepStation, ProductMedia, ProductOption, ProductOptionGroup, ProductOptionGroupAssignment, Tag
 from core.settings_helpers import get_page_setting, get_system_settings
@@ -1711,13 +1712,14 @@ def staff_member_detail(request, member_id):
     _assert_staff_capability(request.user, 'members/internet')
     member = _get_member_or_404(member_id)
     subscriptions = member.subscriptions.select_related('plan').order_by('-created_at')
+    subscription_rows = membership_subscription_rows(subscriptions)
     ledger = member.credit_ledger.select_related('subscription', 'created_by').order_by('-created_at')[:100]
     sessions = member.internet_sessions.select_related('package').order_by('-start_time')[:50]
     active_subscription = get_active_member_context(member)
     devices = member.device_tokens.filter(revoked_at__isnull=True).order_by('-last_used_at', '-created_at')
     activation_url = request.session.pop('member_activation_url', None)
     recent_orders = member.orders.prefetch_related('discounts').order_by('-created_at')[:20]
-    return render(request, 'staff/member_detail.html', {'member': member, 'subscriptions': subscriptions, 'ledger': ledger, 'sessions': sessions, 'active_subscription': active_subscription, 'devices': devices, 'activation_url': activation_url, 'recent_orders': recent_orders, 'can_retry_membership': is_owner_or_admin(request.user), 'now': timezone.now()})
+    return render(request, 'staff/member_detail.html', {'member': member, 'subscriptions': subscriptions, 'subscription_rows': subscription_rows, 'ledger': ledger, 'sessions': sessions, 'active_subscription': active_subscription, 'devices': devices, 'activation_url': activation_url, 'recent_orders': recent_orders, 'can_retry_membership': is_owner_or_admin(request.user), 'now': timezone.now()})
 
 
 @login_required

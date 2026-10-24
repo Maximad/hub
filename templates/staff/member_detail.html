@@ -11,12 +11,17 @@
 <div class="hub-table-wrap"><table class="hub-table" style="width:100%"><tr><th>تاريخ التفعيل</th><th>آخر استخدام</th><th>الجهاز</th><th></th></tr>{% for d in devices %}<tr><td>{{ d.created_at }}</td><td>{{ d.last_used_at|default:'—' }}</td><td>{{ d.device_label|default:'جهاز' }}</td><td><form class="hub-form-section" method="post" action="{% url 'staff_member_device_revoke' member.public_code d.uuid %}">{% csrf_token %}<button>إلغاء</button></form></td></tr>{% empty %}<tr><td colspan="4">لا توجد أجهزة.</td></tr>{% endfor %}</table></div>
 <a href="{% url 'staff_member_subscribe' member.public_code %}">إضافة اشتراك</a> | <a href="{% url 'staff_internet' %}">بدء جلسة إنترنت/عمل</a>
 <h3>الاشتراكات</h3>
-<div class="hub-table-wrap"><table class="hub-table" style="width:100%"><tr><th>الخطة</th><th>الحالة الحالية</th><th>الفترة</th><th>الدقائق (قديمة)</th><th>الرصيد</th><th>إجراء</th></tr>
-{% for s in subscriptions %}<tr>
+<p class="hub-help-text">دقائق الإنترنت أدناه هي الرصيد غير المستهلك. قد تقل الدقائق المتاحة لجلسة جديدة بسبب الحجز أو حدود اليوم والجلسة.</p>
+<div class="hub-table-wrap"><table class="hub-table" style="width:100%"><tr><th>الخطة</th><th>الحالة الحالية</th><th>الفترة</th><th>مخصصات الإنترنت</th><th>الرصيد القديم الآخر</th><th>إجراء</th></tr>
+{% for row in subscription_rows %}{% with s=row.subscription %}<tr>
 <td>{{ s.plan.name_ar }}</td>
-<td>{{ s.effective_status }}{% if s.activation_error and can_retry_membership %}<p class="hub-help-text">تعذّر التفعيل، تحتاج مراجعة.</p><small>{{ s.activation_error }}</small>{% endif %}</td>
+<td>{{ row.status_label }}{% if s.activation_error and can_retry_membership %}<p class="hub-help-text">تعذّر التفعيل، تحتاج مراجعة.</p><small>{{ s.activation_error }}</small>{% endif %}</td>
 <td>{{ s.starts_at }} — {{ s.ends_at|default:'مفتوح' }}</td>
-<td>{{ s.remaining_internet_minutes|default_if_none:'—' }}</td><td>{{ s.remaining_credit_syp|default_if_none:'—' }}</td>
+<td>{% for benefit in row.internet %}
+<p><strong>{{ benefit.source }}:</strong> {% if benefit.remaining_minutes is not None %}{{ benefit.remaining_minutes }} دقيقة غير مستهلكة{% else %}غير محدد{% endif %}
+( {{ benefit.status_label }} ){% if benefit.valid_until %} حتى {{ benefit.valid_until }}{% endif %}</p>
+{% empty %}لا توجد مخصصات إنترنت مرتبطة موثقة.{% endfor %}</td>
+<td>{{ s.remaining_credit_syp|default_if_none:'—' }}</td>
 <td>
 <a href="{% url 'staff_member_subscribe' member.public_code %}?renew_from={{ s.uuid }}">تجديد عبر بيع جديد</a>
 {% if can_retry_membership and s.status == 'pending' and s.starts_at <= now %}
@@ -24,7 +29,7 @@
 {% csrf_token %}<button class="hub-button" type="submit">التحقق وإعادة التفعيل</button>
 </form>
 {% endif %}
-</td></tr>{% empty %}<tr><td colspan="6">لا يوجد.</td></tr>{% endfor %}</table></div>
+</td></tr>{% endwith %}{% empty %}<tr><td colspan="6">لا يوجد.</td></tr>{% endfor %}</table></div>
 <h3>حركات الرصيد/الدقائق</h3>
 <div class="hub-table-wrap"><table class="hub-table" style="width:100%"><tr><th>النوع</th><th>الدقائق</th><th>الرصيد</th><th>التاريخ</th><th>ملاحظات</th></tr>
 {% for l in ledger %}<tr><td>{{ l.get_change_type_display }}</td><td>{{ l.minutes_delta }}</td><td>{{ l.credit_delta_syp }}</td><td>{{ l.created_at }}</td><td>{{ l.notes }}</td></tr>{% empty %}<tr><td colspan="5">لا يوجد.</td></tr>{% endfor %}</table></div>

@@ -45,3 +45,24 @@ allowance, but this change does not add RouterOS resources or external I/O insid
 accounting transactions. Reliable post-commit refresh/disconnect retries remain for
 the safe network provisioning/outbox work. Cancellation, expiry, freeze, reversal,
 and forced-disconnection orchestration remain separate lifecycle work.
+
+## Member and staff display policy (October 2026)
+
+Staff member detail and the member account page now present each linked Internet
+entitlement as a separate allowance. For `allowance` and other entitlements
+with `total_minutes_allowed`, remaining **unspent** minutes equal the
+entitlement's `total_minutes_allowed - minutes_used`. Only legacy
+`membership_credit` entitlements without their own total use
+`MembershipSubscription.remaining_internet_minutes`.
+
+The screen checks both subscription effective status and entitlement validity.
+An expired, cancelled, frozen, pending, or not-yet-valid entitlement is not
+advertised as immediately available. The amount is a historical unspent balance
+and can be narrower for session authorization due to active reservations,
+daily/session caps, and remaining validity. It is not a network connection
+guarantee. Staff lists link to the authoritative detail rather than showing
+the legacy balance as if it covered all Internet benefits.
+
+Do not combine standalone Internet purchases, unrelated members' entitlements,
+or multiple independent entitlements into a fictional shared wallet. No account
+balances, settlement records, price rules, or router configuration are changed.
