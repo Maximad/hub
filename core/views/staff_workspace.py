@@ -85,7 +85,7 @@ def _payment_prefetch():
 
 def _workspace_order_queryset():
     return (
-        Order.objects.select_related("table", "table__room")
+        Order.objects.select_related("table", "table__room", "entered_by")
         .prefetch_related("items", "discounts", "consumptions", _payment_prefetch())
         .order_by("-created_at")
     )

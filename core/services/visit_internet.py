@@ -407,6 +407,7 @@ def finalize_visit_metered_session(session, *, actor=None, at=None):
                 fulfillment_mode=(Order.FulfillmentMode.TABLE if visit.table_id else Order.FulfillmentMode.INSIDE_SPACE),
                 status=Order.Status.NEW,
                 notes=note,
+                entry_source=Order.EntrySource.SYSTEM,
             )
             OrderItem.objects.create(
                 order=order,

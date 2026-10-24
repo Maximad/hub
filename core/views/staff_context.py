@@ -25,8 +25,9 @@ def _order_queryset():
             "visit__table",
             "visit__table__room",
             "visit__member",
+            "entered_by",
         )
-        .prefetch_related("items", "payments", "discounts")
+        .prefetch_related("items", "payments", "discounts", "consumptions__order_item")
     )
 
 
@@ -52,6 +53,7 @@ def render_order_context_panel(request, public_code):
         "order_caps": {
             "edit": user_has_capability(request.user, "order_edit"),
             "cashier": user_has_capability(request.user, "cashier"),
+            "recipient_update": user_has_capability(request.user, "cashier"),
             "orders": user_has_capability(request.user, "orders"),
             "kitchen": user_has_capability(request.user, "kitchen_board"),
         },

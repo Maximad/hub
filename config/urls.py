@@ -57,6 +57,7 @@ from core.views.visits import (current_visit, current_visit_checkout_qr,
     visit_internet_purchase_start, visit_internet_entitlement_start,
     visit_internet_session_connect, visit_internet_session_stop)
 from core.views.staff_visits import staff_visits, staff_visit_detail
+from core.views.staff_order_attribution import staff_order_recipient_update
 from core.views.wifi import wifi_entry, wifi_staff_login
 from operations.views_tasks import staff_operational_tasks
 from operations.views_reminders import staff_reminders
@@ -113,6 +114,7 @@ urlpatterns = [
     path('staff/pos/', menu.staff_pos, name='staff_pos'),
     path('staff/visits/', staff_visits, name='staff_visits'),
     path('staff/visits/<uuid:public_code>/', staff_visit_detail, name='staff_visit_detail'),
+    path('staff/orders/<uuid:public_code>/recipient/', staff_order_recipient_update, name='staff_order_recipient_update'),
     path('staff/notifications/', staff_notifications, name='staff_notifications'),
     path('staff/notifications/poll/', staff_notifications_poll, name='staff_notifications_poll'),
     path('staff/notifications/mark-read/', staff_notifications_mark_read, name='staff_notifications_mark_read'),

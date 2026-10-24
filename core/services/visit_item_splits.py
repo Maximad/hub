@@ -130,6 +130,7 @@ def split_unposted_order_item(
         fulfillment_mode=order.fulfillment_mode,
         status=Order.Status.NEW,
         notes=f'قسم من الطلب {order.display_number}',
+        entered_by=actor, entry_source=Order.EntrySource.SYSTEM,
     )
     if quantity == original_quantity:
         # Preserve the original OrderItem ID and complete snapshots. No new

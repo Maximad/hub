@@ -1,0 +1,44 @@
+<section class="hub-card hub-section" aria-label="مصدر الطلب والمستفيد">
+  <h3 class="hub-section-title">مصدر الطلب والمستفيد</h3>
+  <div class="hub-toolbar">
+    <span class="hub-badge">قناة الإدخال: {{ order.get_entry_source_display }}</span>
+    <span class="hub-badge">أُدخل بواسطة:
+      {% if order.entered_by %}{{ order.entered_by.get_full_name|default:order.entered_by.username }}{% elif order.entry_source == 'public_menu' %}الزبون عبر القائمة{% else %}غير موثق{% endif %}
+    </span>
+    <span class="hub-badge">المستفيد: {{ order.get_recipient_kind_display }}</span>
+  </div>
+  {% if order.recipient_note %}<p><strong>بيان المستفيد:</strong> {{ order.recipient_note }}</p>{% endif %}
+  <p class="hub-help-text">نوع المستفيد للتوثيق فقط. لا يمنح خصماً أو ضيافة أو رصيد موظف.</p>
+  {% if order.consumptions.all %}
+    <h4>الاستهلاك المصنّف والمسجّل</h4>
+    {% for entry in order.consumptions.all %}
+      <p>
+        <strong>{{ entry.get_category_display }}</strong>
+        · {{ entry.order_item.product_name_ar_snapshot }} × {{ entry.quantity }}
+        · قيمة بيع {{ entry.retail_value_syp }} ل.س
+        {% if entry.beneficiary_note %} · {{ entry.beneficiary_note }}{% endif %}
+        {% if entry.reason %} · {{ entry.reason }}{% endif %}
+      </p>
+    {% endfor %}
+    <p class="hub-help-text">التصنيفات أعلاه صادرة عن سجلات الضيافة والاستخدام الشخصي المعتمدة، وليست مدفوعات نقدية.</p>
+  {% endif %}
+  {% if can_update_recipient %}
+    <details>
+      <summary class="hub-button hub-button-secondary">تصحيح توصيف المستفيد</summary>
+      <form method="post" action="{% url 'staff_order_recipient_update' order.public_code %}" class="hub-form hub-form-section">
+        {% csrf_token %}
+        <label>المستفيد
+          <select class="hub-input" name="recipient_kind">
+            <option value="customer" {% if order.recipient_kind == 'customer' %}selected{% endif %}>زبون عادي</option>
+            <option value="neighbor" {% if order.recipient_kind == 'neighbor' %}selected{% endif %}>جار هَبّ</option>
+            <option value="staff" {% if order.recipient_kind == 'staff' %}selected{% endif %}>أحد أفراد الفريق</option>
+          </select>
+        </label>
+        <label>اسم أو ملاحظة تعريفية
+          <input class="hub-input" type="text" name="recipient_note" maxlength="120" value="{{ order.recipient_note }}">
+        </label>
+        <button class="hub-button hub-button-primary" type="submit">حفظ التوصيف فقط</button>
+      </form>
+    </details>
+  {% endif %}
+</section>

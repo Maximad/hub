@@ -213,6 +213,20 @@ def staff_pos(request):
             })
             return render(request, 'staff/pos.html', context)
 
+        recipient_kind = request.POST.get('recipient_kind', Order.RecipientKind.CUSTOMER)
+        recipient_note = request.POST.get('recipient_note', '').strip()
+        if recipient_kind not in Order.RecipientKind.values:
+            validation_errors.append('نوع المستفيد غير صالح.')
+        if len(recipient_note) > 120:
+            validation_errors.append('اسم المستفيد أطول من الحد المسموح.')
+        if validation_errors:
+            context.update({
+                'error': ' '.join(validation_errors),
+                'form_values': request.POST,
+                'selected_table_id': table_id,
+                'selected_visit_id': visit_id,
+            })
+            return render(request, 'staff/pos.html', context)
         general_note = request.POST.get('general_note', '').strip()
         service_mode = (
             Order.ServiceMode.TABLE
@@ -242,6 +256,10 @@ def staff_pos(request):
             delivery_data=delivery_data,
             member_context=member_context,
             visit=visit,
+            entered_by=request.user,
+            entry_source=Order.EntrySource.STAFF_POS,
+            recipient_kind=recipient_kind,
+            recipient_note=recipient_note,
         )
         if visit:
             HubVisit.objects.filter(pk=visit.pk).update(last_activity_at=timezone.now())

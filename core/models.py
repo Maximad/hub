@@ -257,6 +257,17 @@ class HubVisitBrowserCredential(TimeStampedModel):
 
 
 class Order(TimeStampedModel, PublicCodeModel):
+    class EntrySource(models.TextChoices):
+        UNKNOWN = 'unknown', 'غير موثق'
+        STAFF_POS = 'staff_pos', 'نقطة البيع (الموظف)'
+        PUBLIC_MENU = 'public_menu', 'طلب ذاتي من القائمة'
+        SYSTEM = 'system', 'إنشاء آلي'
+
+    class RecipientKind(models.TextChoices):
+        CUSTOMER = 'customer', 'زبون'
+        NEIGHBOR = 'neighbor', 'جار هَبّ'
+        STAFF = 'staff', 'أحد أفراد الفريق'
+
     class ServiceMode(models.TextChoices):
         DINE_IN = 'dine_in', 'طلب عام داخل المكان'
         TABLE = 'table', 'طلب طاولة'
@@ -310,6 +321,20 @@ class Order(TimeStampedModel, PublicCodeModel):
         DeliveryStatus.CANCELLED: frozenset({DeliveryStatus.NEW, DeliveryStatus.CONFIRMED, DeliveryStatus.PREPARING, DeliveryStatus.READY_FOR_DELIVERY, DeliveryStatus.OUT_FOR_DELIVERY}),
     }
 
+    # Informational attribution only. Neither field applies discounts or changes settlement.
+    entered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='entered_orders',
+    )
+    entry_source = models.CharField(
+        max_length=20, choices=EntrySource.choices, default=EntrySource.UNKNOWN,
+        db_default=EntrySource.UNKNOWN,
+    )
+    recipient_kind = models.CharField(
+        max_length=12, choices=RecipientKind.choices, default=RecipientKind.CUSTOMER,
+        db_default=RecipientKind.CUSTOMER,
+    )
+    recipient_note = models.CharField(max_length=120, blank=True)
     table = models.ForeignKey(TableArea, on_delete=models.PROTECT, related_name='orders', null=True, blank=True)
     visit = models.ForeignKey(HubVisit, on_delete=models.SET_NULL, related_name='orders', null=True, blank=True)
     member = models.ForeignKey('Member', on_delete=models.PROTECT, related_name='orders', null=True, blank=True)
