@@ -134,7 +134,7 @@ class UnifiedStaffAttentionTests(TestCase):
     def test_private_and_irrelevant_tasks_are_not_shown_to_waiter(self):
         mine = self.task(fingerprint='waiter-role', role='waiter')
         another = self.task(fingerprint='assigned-other', assigned_to=self.cashier,
-                            role='waiter')
+                            role='cashier')
         manager_only = self.task(fingerprint='private-review',
                                  source_type='OperationalReviewCase')
         normal = self.task(fingerprint='normal', priority='normal')
