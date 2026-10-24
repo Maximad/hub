@@ -1717,7 +1717,7 @@ def staff_member_detail(request, member_id):
     devices = member.device_tokens.filter(revoked_at__isnull=True).order_by('-last_used_at', '-created_at')
     activation_url = request.session.pop('member_activation_url', None)
     recent_orders = member.orders.prefetch_related('discounts').order_by('-created_at')[:20]
-    return render(request, 'staff/member_detail.html', {'member': member, 'subscriptions': subscriptions, 'ledger': ledger, 'sessions': sessions, 'active_subscription': active_subscription, 'devices': devices, 'activation_url': activation_url, 'recent_orders': recent_orders, 'can_retry_membership': is_owner_or_admin(request.user)})
+    return render(request, 'staff/member_detail.html', {'member': member, 'subscriptions': subscriptions, 'ledger': ledger, 'sessions': sessions, 'active_subscription': active_subscription, 'devices': devices, 'activation_url': activation_url, 'recent_orders': recent_orders, 'can_retry_membership': is_owner_or_admin(request.user), 'now': timezone.now()})
 
 
 @login_required
