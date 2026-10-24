@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}تعديل الطلب{% endblock %}
+{% block title %}{% if can_edit %}تعديل الطلب{% else %}تفاصيل الطلب{% endif %}{% endblock %}
 {% block content %}
 <div class="staff-order-edit" dir="rtl">
   <header class="hub-card hub-section">
@@ -8,7 +8,7 @@
       <a class="hub-button hub-button-secondary" href="{% url 'staff_cashier_order' order.public_code %}">الكاشير</a>
     </div>
     <p class="menu-public__brand">Staff order editing</p>
-    <h2 class="hub-section-title hub-page-header__title">تعديل طلب مفتوح</h2>
+    <h2 class="hub-section-title hub-page-header__title">{% if can_edit %}تعديل طلب مفتوح{% else %}تفاصيل الطلب{% endif %}</h2>
     <div><strong>رقم الطلب:</strong> {{ order.display_number }}</div>
     <div><strong>المكان:</strong> {{ order.location_label }}{% if order.location_detail %}<div class="hub-location-detail">{{ order.location_detail }}</div>{% endif %}</div>
     <div><strong>الحالة:</strong> {{ order.get_status_display }}</div>
@@ -19,7 +19,7 @@
       <span class="hub-badge hub-badge-info">المتبقي: {{ remaining }} ل.س</span>
       <span class="hub-badge">{{ payment_label }}</span>
     </div>
-    {% if error %}<p class="hub-badge hub-badge-danger">{{ error }}</p>{% endif %}
+    {% if error %}<p class="hub-help-text">للعرض فقط: {{ error }}</p>{% endif %}
     {% if messages %}
       <div class="staff-order-edit__messages">
         {% for message in messages %}<p class="hub-badge {% if message.tags == 'error' %}hub-badge-danger{% else %}hub-badge-info{% endif %}">{{ message }}</p>{% endfor %}
