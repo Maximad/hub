@@ -42,6 +42,9 @@ def membership_subscription_rows(subscriptions, *, at=None):
         sub_status = sub.effective_status(at)
         entitlements = []
         for ent in by_subscription[sub.pk]:
+            # A malformed cross-member link must not disclose another member's allowance.
+            if ent.member_id != sub.member_id:
+                continue
             ent_status = ent.effective_status(at)
             available = (sub_status == MembershipSubscription.Status.ACTIVE
                          and ent_status == InternetEntitlement.Status.ACTIVE
