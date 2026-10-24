@@ -59,6 +59,7 @@
               {% if order.visit_id %}<a class="ops-attention-link ops-attention-link--pay" href="{% url 'staff_cashier_order' order.visit.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' order.visit.public_code %}?panel=payment" data-context-title="الدفع وإغلاق الحساب" aria-haspopup="dialog">قبض</a>
               {% else %}<a class="ops-attention-link ops-attention-link--pay" href="{% url 'staff_cashier_order' order.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' order.public_code %}?panel=payment" data-context-title="قبض الطلب" aria-haspopup="dialog">قبض</a>{% endif %}
             {% endif %}
+            {% if staff_caps.kitchen_board %}<a class="ops-attention-link" href="{% url 'staff_kitchen' %}">التحضير</a>{% endif %}
             {% if order.visit_id and staff_caps.visit_manage %}<a class="ops-attention-link" href="{% url 'staff_visit_detail' order.visit.public_code %}" data-visit-context-url="{% url 'staff_visit_detail' order.visit.public_code %}?panel=1" data-context-title="حساب الزبون" aria-haspopup="dialog">الحساب</a>{% endif %}
           </nav>
         </article>
@@ -107,6 +108,7 @@
   <section id="staff-today" class="staff-v2-panel hub-ux5-directory" aria-labelledby="staff-today-title">
     <div class="staff-v2-panel-head"><div><h3 id="staff-today-title">اليوم</h3><p>المتابعة الدورية خلال الوردية.</p></div></div>
     <nav class="staff-workspace__secondary-links hub-ux5-directory__links" aria-label="متابعة اليوم">
+      {% if workspace_caps.cashier %}<a href="{% url 'staff_cashier' %}">القبض ومتابعة الحسابات المفتوحة</a>{% endif %}
       <a href="{% url 'staff_operational_tasks' %}">مهام الفريق</a>
       <a href="{% url 'staff_close_day' %}">ملخص اليوم</a>
       {% if staff_caps.reservations %}<a href="{% url 'staff_reservations' %}">الحجوزات والوصول</a>{% endif %}
