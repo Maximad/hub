@@ -443,7 +443,7 @@ def create_commercial_sale(package, *, payment_method, member=None, guest_name='
             complimentary = package.access_mode == package.AccessMode.MEMBERSHIP_CREDIT or charged_price == 0
             order = payment = None
             if not complimentary:
-                order = Order.objects.create(member=member, visit=visit, notes=f'Internet package: {package.name_ar}')
+                order = Order.objects.create(member=member, visit=visit, notes=f'Internet package: {package.name_ar}', entry_source=Order.EntrySource.SYSTEM, entered_by=actor if getattr(actor, 'is_authenticated', False) else None)
                 # The package's catalog binding is its stable product identity.
                 # A name lookup is ambiguous when imported/legacy products share
                 # the same Arabic name, and can fail after the order is created.
