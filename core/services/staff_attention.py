@@ -18,8 +18,15 @@ ACTIVE_DAYS = (
 )
 
 
-def _active_day():
-    return BusinessDay.objects.filter(status__in=ACTIVE_DAYS).order_by('-business_date').first()
+def _active_day(*, now=None):
+    # A previous Business Day can legitimately remain open for financial
+    # reconciliation. Its unfinished tasks are *not* today's attention queue.
+    # The original day and tasks remain available for an authorized review.
+    from operations.services import current_business_date
+    return BusinessDay.objects.filter(
+        business_date=current_business_date(now),
+        status__in=ACTIVE_DAYS,
+    ).first()
 
 
 def _is_task_manager(user):
@@ -48,7 +55,7 @@ def _visible_pending_tasks(day, user):
 def get_staff_attention(user, capabilities, *, now=None):
     """Project urgent tasks and browser approvals; no DB writes."""
     now = now or timezone.now()
-    day = _active_day()
+    day = _active_day(now=now)
     tasks_query = _visible_pending_tasks(day, user)
     # Show assigned, required, high-priority and imminently due work. Regular
     # undated checklist items stay on the full Tasks page, avoiding noise.
