@@ -150,7 +150,17 @@ class FastInternetExpiryTests(TestCase):
         self.assertTrue(ActivityLog.objects.filter(
             action='internet.fast_approval_policy_changed',
             details__timeout_minutes=60).exists())
-        self.assertEqual(expire_pending_approvals(dry_run=True), 0)
+        # Evaluate the configurable window at a stable time well after the
+        # 04:00 business-day cutoff; a real 04:00 rollover must expire an
+        # older request regardless of whether its age is under 60 minutes.
+        reference = timezone.make_aware(
+            datetime(2026, 10, 25, 12, 0),
+            timezone.get_current_timezone(),
+        )
+        HubVisitBrowserCredential.objects.filter(pk=self.device.pk).update(
+            fast_internet_requested_at=reference - timedelta(minutes=31),
+        )
+        self.assertEqual(expire_pending_approvals(at=reference, dry_run=True), 0)
         invalid = self.client.post(reverse('staff_internet_settings'), {
             'settings_action': 'save_fast_approval_policy',
             'fast_internet_staff_approval_required': 'on',

@@ -19,7 +19,7 @@ from operations.services import current_business_date
 from core.services.visits import customer_visit_queryset
 from core.services.staff_attention import get_staff_attention
 from internet.guest_wifi import get_guest_wifi_policy, current_venue_code
-from operations.models import BusinessDayTask
+from operations.models import BusinessDay, BusinessDayTask
 
 
 ACTIVE_ORDER_STATUSES = (
@@ -154,21 +154,20 @@ def staff_home(request):
         else:
             live_visit_rows.append(row)
 
-    # Orders from stale visits belong in the stale-account review rather than the
-    # live floor. A newly active order updates its visit and naturally returns to
-    # the live workspace.
+    # Fulfillment handovers are real outstanding work across the 04:00 cutoff.
+    # A paid READY order must not disappear just because its visit is idle or
+    # because the order was entered on a previous business date. Closed-visit
+    # and served/cancelled work stays outside the live fulfillment queue.
     attention_queryset = (
         _workspace_order_queryset()
         .filter(status__in=ACTIVE_ORDER_STATUSES)
-        .filter(
-            Q(visit__isnull=True, created_at__gte=day_start)
-            | Q(visit__status=HubVisit.Status.OPEN, visit__last_activity_at__gte=day_start)
-        )
+        .filter(Q(visit__isnull=True) | Q(visit__status=HubVisit.Status.OPEN))
         .select_related("visit")
     )
     # Count before the display cap; handoff-ready work goes first, then new work.
     active_orders_count = attention_queryset.count()
     ready_count = attention_queryset.filter(status=Order.Status.READY).count()
+    carryover_order_count = attention_queryset.filter(created_at__lt=day_start).count()
     active_orders = list(attention_queryset.order_by(
         Case(
             When(status=Order.Status.READY, then=Value(0)),
@@ -179,6 +178,7 @@ def staff_home(request):
         ), "created_at", "pk",
     )[:20])
     for order in active_orders:
+        order.workspace_carryover = order.created_at < day_start
         # Mirrors the existing order-edit guard. Permission and POST checks
         # remain enforced by the editing endpoint.
         order.workspace_can_edit_items = not (
@@ -209,6 +209,26 @@ def staff_home(request):
         if order.status == Order.Status.SERVED and order.remaining_syp > 0
     ]
 
+    # Older standalone served orders remain payable even without a visit.
+    # Bound the historical scan so Operations stays responsive on large DBs;
+    # full order/cashier records remain authoritative and accessible.
+    old_standalone_candidates = list(
+        _workspace_order_queryset()
+        .filter(visit__isnull=True, status=Order.Status.SERVED, created_at__lt=day_start)
+        .order_by('-created_at', '-pk')[:501]
+    )
+    historical_collection_scan_limited = len(old_standalone_candidates) > 500
+    historical_to_collect = [
+        order for order in old_standalone_candidates[:500]
+        if order.remaining_syp > 0
+    ]
+    # An unclosed previous business day requires management reconciliation.
+    # Never finalize it on GET or silently start a new day.
+    previous_open_day = BusinessDay.objects.filter(
+        status__in=[BusinessDay.Status.OPEN, BusinessDay.Status.CLOSING, BusinessDay.Status.REOPENED],
+        business_date__lt=current_business_date(),
+    ).order_by('-business_date').first()
+
     capabilities = get_staff_capabilities(request.user)
     primary_actions, more_actions = _daily_workspace_actions(request.user, capabilities)
     attention = get_staff_attention(request.user, capabilities)
@@ -228,6 +248,9 @@ def staff_home(request):
             "stale_visit_rows": stale_visit_rows[:40],
             "active_orders": active_orders,
             "standalone_to_collect": standalone_to_collect[:10],
+            "historical_to_collect": historical_to_collect[:10],
+            "historical_collection_scan_limited": historical_collection_scan_limited,
+            "previous_open_business_day": previous_open_day,
             "staff_attention": attention,
             "workspace_stats": {
                 "open_visits": len(live_visit_rows),
@@ -235,6 +258,9 @@ def staff_home(request):
                 "active_orders": active_orders_count,
                 "more_active_orders": active_orders_count > len(active_orders),
                 "standalone_to_collect": len(standalone_to_collect),
+                "historical_to_collect": len(historical_to_collect),
+                "more_historical_to_collect": len(historical_to_collect) > 10 or historical_collection_scan_limited,
+                "carryover_orders": carryover_order_count,
                 "ready_orders": ready_count,
                 "unpaid_orders": unpaid_count,
             },
