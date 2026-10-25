@@ -158,3 +158,37 @@ body.staff-workspace-page .ops-inbox :is(button,a):focus-visible { outline: 3px 
   body.staff-workspace-page .ops-inbox__actions form { width: 100%; }
   body.staff-workspace-page .ops-inbox__button { flex: 1; }
 }
+
+/* Rollover is a review state, never an automatic cash/visit close. */
+body.staff-workspace-page .ops-rollover-alert {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--hub-border, #ddd2c0);
+  border-inline-start: 4px solid var(--hub-accent, #b9822b);
+  border-radius: 10px;
+  background: var(--hub-surface, #fff);
+  font-size: .84rem;
+}
+body.staff-workspace-page .ops-rollover-alert strong { flex: 0 1 auto; }
+body.staff-workspace-page .ops-rollover-alert span { flex: 1 1 240px; }
+body.staff-workspace-page .ops-rollover-alert a {
+  color: var(--hub-primary, #176b5a);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-weight: 750;
+}
+body.staff-workspace-page .ops-carryover-collections {
+  border-top: 1px solid var(--hub-border, #ddd2c0);
+  margin-top: 10px;
+  padding-top: 10px;
+}
+body.staff-workspace-page .ops-carryover-collections .hub-help-text {
+  margin: 5px 0 8px;
+  font-size: .8rem;
+}
+body.staff-workspace-page .ops-v2__order-main .staff-v2-badge--warning {
+  white-space: normal;
+}
