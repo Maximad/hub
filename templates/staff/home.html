@@ -13,6 +13,14 @@
   </header>
 
 
+  {% if previous_open_business_day %}
+  <section class="ops-rollover-alert" role="status" aria-label="يوم تشغيلي سابق مفتوح">
+    <strong>يوم {{ previous_open_business_day.business_date|date:'Y-m-d' }} ما زال {{ previous_open_business_day.get_status_display }}</strong>
+    <span>تُعرض مهامه في سجل يومه السابق، وليس ضمن مهام اليوم. يلزم إغلاق اليوم السابق عبر المسار المعتمد؛ لم تُغلق الحسابات أو تُمسح المهام تلقائياً.</span>
+    <a href="{% url 'staff_close_day' %}">مراجعة الإغلاق</a>
+  </section>
+  {% endif %}
+
   <details class="ops-quick-actions" data-daily-start>
     <summary aria-label="فتح الإجراءات السريعة">+ <span>إجراءات</span></summary>
     <nav class="hub-daily-start__grid ops-quick-actions__links" aria-label="الإجراءات السريعة">
@@ -104,11 +112,11 @@
 
   <div class="ops-v2__layout">
     <aside class="staff-v2-panel ops-v2__orders-panel" id="active-orders" data-ops-section="orders">
-      <div class="staff-v2-panel-head"><div><h3>طلبات تحتاج إجراء</h3><p>مطلوب تحضير أو تسليم، سواء كانت مدفوعة أم لا. المدفوع والمنفّذ لا يظهر هنا.</p></div>{% if staff_caps.kitchen_board %}<a class="staff-v2-panel-link" href="{% url 'staff_kitchen' %}">لوحة التحضير</a>{% endif %}</div>
+      <div class="staff-v2-panel-head"><div><h3>طلبات تحتاج إجراء</h3><p>مطلوب تحضير أو تسليم، سواء كانت مدفوعة أم لا. المدفوع والمنفّذ لا يظهر هنا.{% if workspace_stats.carryover_orders %} <strong>{{ workspace_stats.carryover_orders }} طلباً مرحّلاً ما زال يحتاج خدمة.</strong>{% endif %}</p></div>{% if staff_caps.kitchen_board %}<a class="staff-v2-panel-link" href="{% url 'staff_kitchen' %}">لوحة التحضير</a>{% endif %}</div>
       <div class="ops-v2__order-list">
         {% for order in active_orders %}
         <article class="ops-v2__order" data-attention-order="{{ order.status }}">
-          <div class="ops-v2__order-main"><strong class="hub-order-number">{{ order.display_number }}</strong><span class="staff-v2-badge {% if order.status == 'ready' %}staff-v2-badge--success{% else %}staff-v2-badge--brand{% endif %}">{{ order.workspace_next_step }}</span></div>
+          <div class="ops-v2__order-main"><strong class="hub-order-number">{{ order.display_number }}</strong><span class="staff-v2-badge {% if order.status == 'ready' %}staff-v2-badge--success{% else %}staff-v2-badge--brand{% endif %}">{{ order.workspace_next_step }}</span>{% if order.workspace_carryover %}<span class="staff-v2-badge staff-v2-badge--warning">من يوم عمل سابق</span>{% endif %}</div>
           <div class="ops-v2__order-money"><strong>{{ order.total_syp|format_syp }}</strong>{% if order.remaining_syp > 0 %}<span>متبقي {{ order.remaining_syp|format_syp }}</span>{% elif order.paid_syp > 0 %}<span>مدفوع · يحتاج خدمة</span>{% else %}<span>لا مستحقات · يحتاج خدمة</span>{% endif %}</div>
           <div class="ops-v2__order-place">{% if order.table %}{{ order.table }}{% else %}{{ order.get_fulfillment_label }}{% endif %} · <small>أدخله {% if order.entered_by %}{{ order.entered_by.get_full_name|default:order.entered_by.username }}{% elif order.entry_source == 'public_menu' %}الزبون{% else %}غير موثق{% endif %}</small>{% if order.recipient_kind != 'customer' %} · <small>{{ order.get_recipient_kind_display }}</small>{% endif %}</div>
           <nav class="ops-v2__order-links" aria-label="إجراءات الطلب {{ order.display_number }}">
@@ -135,6 +143,23 @@
           </a>
         {% endfor %}
         {% if workspace_stats.standalone_to_collect > 10 %}<a href="{% url 'staff_cashier' %}">مراجعة جميع الحسابات</a>{% endif %}
+      </div>
+      {% endif %}
+      {% if workspace_caps.cashier and historical_to_collect %}
+      <div class="ops-attention-collections ops-carryover-collections" id="old-standalone-balances">
+        <h4>طلبات منفردة من أيام سابقة تنتظر القبض</h4>
+        <p class="hub-help-text">هذه مبالغ مستحقة سابقة، وليست مبيعات اليوم. لم تُحصّل أو تُغلق تلقائياً.</p>
+        {% for order in historical_to_collect %}
+          <a href="{% url 'staff_cashier_order' order.public_code %}" class="ops-attention-collection">
+            <strong>{{ order.display_number }}</strong><span>متبقي {{ order.remaining_syp|format_syp }}</span><b>مراجعة القبض</b>
+          </a>
+        {% endfor %}
+        {% if workspace_stats.more_historical_to_collect %}<a href="{% url 'staff_orders' %}">مراجعة بقية الطلبات السابقة من سجل الطلبات</a>{% endif %}
+      </div>
+      {% elif workspace_caps.cashier and historical_collection_scan_limited %}
+      <div class="ops-attention-collections ops-carryover-collections">
+        <p class="hub-help-text">قد توجد مستحقات أقدم لم تُعرض ضمن أحدث 500 طلب منفرد. راجع سجل الطلبات كاملاً.</p>
+        <a href="{% url 'staff_orders' %}">مراجعة سجل الطلبات</a>
       </div>
       {% endif %}
       <div class="ops-attention-footer">
