@@ -67,3 +67,13 @@ def validate_membership_sale_configuration(plan):
                     + ' '.join(assessment['errors'])
         })
     return assessment
+
+
+def staff_plan_sale_presentations(plans):
+    """Only enrich existing compact staff plan previews with blocking findings."""
+    rows = staff_plan_presentations(plans)
+    for row in rows:
+        findings = assess_membership_plan(row['plan'])
+        row['sale_errors'] = findings['errors']
+        row['needs_review'] = bool(findings['warnings'])
+    return rows
