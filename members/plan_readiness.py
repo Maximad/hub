@@ -75,5 +75,12 @@ def staff_plan_sale_presentations(plans):
     for row in rows:
         findings = assess_membership_plan(row['plan'])
         row['sale_errors'] = findings['errors']
+        if findings['errors']:
+            # Internet minutes cannot be promised by a plan that would fail
+            # commercial activation. The warning gives the exact reason.
+            row['benefits'] = [
+                benefit for benefit in row['benefits']
+                if 'دقيقة إنترنت عند تفعيل العضوية' not in benefit
+            ]
         row['needs_review'] = bool(findings['warnings'])
     return rows
