@@ -39,12 +39,12 @@ class Command(BaseCommand):
                 'errors': finding['errors'],
                 'warnings': finding['warnings'],
             })
-        blocked = sum(bool(row['errors']) for row in rows)
+        blocked = sum(bool(row['errors']) and row['active'] and row['visible_to_staff'] for row in rows)
         warnings = sum(bool(row['warnings']) for row in rows)
         report = {
             'counts': {'plans': len(rows), 'blocked': blocked, 'review': warnings},
             'scope': 'all_plans' if options['include_inactive'] else 'active_staff_offers',
-            'production_data_verified': False,
+            'source': 'current_connected_django_database',
             'plans': rows,
         }
         if options['json_output']:
