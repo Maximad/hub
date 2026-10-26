@@ -76,11 +76,11 @@ def _benefit_line(rule):
                 return '', False
     if kind == MembershipBenefitRule.BenefitType.PRODUCT_DISCOUNT_PERCENT:
         amount = rule.value_decimal if rule.value_decimal is not None else rule.discount_percent
-        if amount is not None:
+        if amount is not None and Decimal(str(amount)) > 0 and Decimal(str(amount)) <= 100:
             return f'خصم {_format_value(amount)}٪ {_target(rule)}', True
     elif kind == MembershipBenefitRule.BenefitType.PRODUCT_DISCOUNT_FIXED:
         amount = rule.value_decimal if rule.value_decimal is not None else rule.discount_amount_syp
-        if amount is not None:
+        if amount is not None and Decimal(str(amount)) > 0:
             return f'خصم {_format_value(amount)} ل.س لكل وحدة {_target(rule)}', True
     elif kind == MembershipBenefitRule.BenefitType.INTERNET_MINUTES:
         minutes = rule.value_integer or rule.included_minutes

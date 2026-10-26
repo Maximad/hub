@@ -18,7 +18,8 @@
     {% if item.plan.description_ar %}<p>{{ item.plan.description_ar }}</p>{% endif %}
     <p><strong>السعر:</strong> {% if item.plan.price_syp == 0 %}مجاني{% else %}{{ item.plan.price_syp }} ل.س{% endif %}</p>
     <p><strong>مدة الاشتراك:</strong> {{ item.term }}</p>
-    <h4>المزايا المدعومة حالياً</h4>
+    {% if item.sale_errors %}<div class="alert alert-error" role="alert"><strong>الخطة تحتاج تصحيحاً قبل البيع:</strong><ul>{% for issue in item.sale_errors %}<li>{{ issue }}</li>{% endfor %}</ul><p>لا يمكن تحصيل هذه العضوية قبل إصلاح إعداداتها.</p></div>{% endif %}
+    <h4>المزايا التلقائية المؤكدة</h4>
     {% if item.benefits %}<ul>{% for benefit in item.benefits %}<li>{{ benefit }}</li>{% endfor %}</ul>
     {% else %}<p>لا توجد مزايا تلقائية مفعلة لهذه الخطة حالياً.</p>{% endif %}
     {% if item.configured_only %}
@@ -35,6 +36,7 @@
 <select id="membership-payment-method" name="payment_method" required style="display:block; width:100%; margin-bottom:.5rem;">
 {% for value, label in payment_methods %}<option value="{{ value }}" {% if form_values.payment_method == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
 </select>
+<p class="hub-help-text" id="membership-free-note" hidden>هذه عضوية مجانية: لا تُسجّل دفعة نقدية أو حوالة.</p>
 <label for="membership-start">تاريخ البداية</label><input id="membership-start" type="datetime-local" name="starts_at" value="{{ form_values.starts_at }}" style="display:block; width:100%; margin-bottom:.5rem;">
 <label for="membership-end">تاريخ الانتهاء</label><input id="membership-end" type="datetime-local" name="ends_at" value="{{ form_values.ends_at }}" style="display:block; width:100%; margin-bottom:.5rem;">
 <p class="hub-help-text">إذا تُرك تاريخ الانتهاء فارغاً فسيُحسب من مدة الخطة. الاشتراكات المستقبلية تبقى معلّقة حتى موعد البداية. يُنشئ التجديد عملية بيع جديدة بالسعر الحالي ولا يمدد الاشتراك القديم.</p>
@@ -52,6 +54,7 @@
     preview.forEach(item => { item.hidden = item.dataset.membershipPreview !== plan.value; });
     price.textContent = amount === 0 ? 'مجاني' : `${amount.toLocaleString('ar-SY')} ل.س`;
     payment.disabled = amount === 0;
+    document.getElementById('membership-free-note').hidden = amount !== 0;
   }
   plan.addEventListener('change', refreshPrice); refreshPrice();
 })();

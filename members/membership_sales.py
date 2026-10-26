@@ -15,6 +15,7 @@ from core.models import ActivityLog, Category, Order, OrderItem, Payment, Produc
 from core.services.posting.context import PostingContext
 from core.services.posting.order_payments import collect as collect_order_payment
 from members.models import MembershipPlan, MembershipSubscription
+from members.plan_readiness import validate_membership_sale_configuration
 
 
 @dataclass(frozen=True)
@@ -134,6 +135,9 @@ def create_membership_sale(*, member, plan, payment_method, actor, idempotency_k
         elif payment_method not in {'', None, Payment.Method.FREE}:
             raise ValidationError({'payment_method': 'الخطة المجانية لا تسجل دفعة محصلة.'})
 
+        # Preflight all known configuration-only Internet activation failures
+        # BEFORE creating an order or collecting the membership payment.
+        validate_membership_sale_configuration(plan)
         product = _membership_product(plan)
         order = Order.objects.create(member=member, notes=f'Membership sale: {plan.code}', entry_source=Order.EntrySource.SYSTEM, entered_by=actor if getattr(actor, 'is_authenticated', False) else None)
         OrderItem.objects.create(
