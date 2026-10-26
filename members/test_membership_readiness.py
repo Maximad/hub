@@ -10,7 +10,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from core.models import ActivityLog, Member, Order, Payment
+from core.models import ActivityLog, FinancialAccount, Member, Order, Payment
 from members.membership_sales import create_membership_sale
 from members.models import MembershipBenefitRule, MembershipPlan, MembershipSubscription
 from members.plan_readiness import assess_membership_plan
@@ -29,6 +29,15 @@ class MembershipReadinessTests(TestCase):
         self.plan = MembershipPlan.objects.create(
             code='readiness', name_ar='عضوية اختبار', price_syp=1000,
             billing_period=MembershipPlan.BillingPeriod.MONTHLY)
+        FinancialAccount.objects.create(
+            code='cash:member-readiness', name_ar='صندوق اختبار العضوية',
+            account_type='asset', scope='cashbox', is_active=True,
+            negative_balance_policy='allow',
+        )
+        FinancialAccount.objects.create(
+            code='revenue:member-readiness', name_ar='إيراد اختبار العضوية',
+            account_type='revenue', scope='operating', is_active=True,
+        )
         self.url = reverse('staff_member_subscribe', args=[self.member.public_code])
         self.client.force_login(self.cashier)
 
