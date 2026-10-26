@@ -19,7 +19,7 @@ from members.models import MembershipBenefitRule, MembershipPlan, MembershipSubs
 from members.services import evaluate_membership_benefit, get_active_member_context, resolve_member_from_request
 from members.membership_sales import create_membership_sale
 from members.presentation import membership_subscription_rows
-from members.plan_presentation import staff_plan_presentations
+from members.plan_readiness import staff_plan_sale_presentations
 from internet.models import WifiNetwork
 from catalog.models import MenuSection, PrepStation, ProductMedia, ProductOption, ProductOptionGroup, ProductOptionGroupAssignment, Tag
 from core.settings_helpers import get_page_setting, get_system_settings
@@ -1751,7 +1751,7 @@ def staff_member_subscribe(request, member_id):
                 local_start = timezone.localtime(start).strftime('%Y-%m-%dT%H:%M')
                 initial_values = {'plan': str(previous.plan_id), 'starts_at': local_start}
         return render(request, 'staff/member_subscribe.html', {
-            'member': member, 'plans': plans, 'plan_presentations': staff_plan_presentations(plans),
+            'member': member, 'plans': plans, 'plan_presentations': staff_plan_sale_presentations(plans),
             'now': timezone.now(), 'form_values': initial_values,
             'idempotency_key': str(uuid.uuid4()), 'payment_methods': (
                 (Payment.Method.CASH, Payment.Method.CASH.label),
@@ -1769,7 +1769,7 @@ def staff_member_subscribe(request, member_id):
         errors['ends_at'] = 'تاريخ الانتهاء يجب أن يكون بعد تاريخ البداية.'
     if errors:
         return render(request, 'staff/member_subscribe.html', {
-            'member': member, 'plans': plans, 'plan_presentations': staff_plan_presentations(plans),
+            'member': member, 'plans': plans, 'plan_presentations': staff_plan_sale_presentations(plans),
             'now': timezone.now(), 'errors': errors,
             'form_values': request.POST, 'idempotency_key': request.POST.get('idempotency_key'),
             'payment_methods': ((Payment.Method.CASH, Payment.Method.CASH.label),
@@ -1783,7 +1783,7 @@ def staff_member_subscribe(request, member_id):
     except ValidationError as exc:
         errors.update(exc.message_dict if hasattr(exc, 'message_dict') else {'sale': '; '.join(exc.messages)})
         return render(request, 'staff/member_subscribe.html', {
-            'member': member, 'plans': plans, 'plan_presentations': staff_plan_presentations(plans),
+            'member': member, 'plans': plans, 'plan_presentations': staff_plan_sale_presentations(plans),
             'now': timezone.now(), 'errors': errors,
             'form_values': request.POST, 'idempotency_key': request.POST.get('idempotency_key'),
             'payment_methods': ((Payment.Method.CASH, Payment.Method.CASH.label),
