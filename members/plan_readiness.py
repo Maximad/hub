@@ -41,6 +41,14 @@ def assess_membership_plan(plan):
     # There is a real operational member-Internet-price resolver, but the plan
     # sale UI does not guarantee a specific package or redemption workflow.
     presentation = staff_plan_presentations([plan])[0]
+    supported = presentation['benefits']
+    if errors:
+        # A broken Internet component cannot be marketed as an automatic
+        # allowance in either the operator preview or the JSON audit.
+        supported = [
+            benefit for benefit in supported
+            if 'دقيقة إنترنت عند تفعيل العضوية' not in benefit
+        ]
     if presentation['configured_only']:
         warnings.append(
             'قواعد مُعدّة وليست مزايا تلقائية مؤكدة: '
@@ -53,7 +61,7 @@ def assess_membership_plan(plan):
         'plan': plan,
         'errors': errors,
         'warnings': warnings,
-        'supported_benefits': presentation['benefits'],
+        'supported_benefits': supported,
         'configured_only': presentation['configured_only'],
         'can_sell': not errors,
     }
@@ -75,12 +83,6 @@ def staff_plan_sale_presentations(plans):
     for row in rows:
         findings = assess_membership_plan(row['plan'])
         row['sale_errors'] = findings['errors']
-        if findings['errors']:
-            # Internet minutes cannot be promised by a plan that would fail
-            # commercial activation. The warning gives the exact reason.
-            row['benefits'] = [
-                benefit for benefit in row['benefits']
-                if 'دقيقة إنترنت عند تفعيل العضوية' not in benefit
-            ]
+        row['benefits'] = findings['supported_benefits']
         row['needs_review'] = bool(findings['warnings'])
     return rows
