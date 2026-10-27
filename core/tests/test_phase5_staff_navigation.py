@@ -77,16 +77,13 @@ class Phase5StaffNavigationTests(TestCase):
         response = self.client.get(reverse("staff_home"))
         self.assertEqual(response.status_code, 302)
 
-    def test_help_shortcut_opens_real_role_aware_guidance(self):
+    def test_redundant_operations_help_is_removed(self):
         self.client.force_login(self.waiter)
         response = self.client.get(reverse("staff_home"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'href="/staff/#staff-help" aria-label="المساعدة"')
-        self.assertContains(response, 'id="staff-help"')
-        self.assertContains(response, "اختيار الطاولة وحده لا يجمع الفواتير.")
-        self.assertContains(response, "إذا انقطع الاتصال")
-        self.assertNotContains(response, "<strong>قبض الحساب</strong>")
-        self.assertNotContains(response, "<strong>جرد المخزون</strong>")
+        self.assertNotContains(response, 'id="staff-help"')
+        self.assertNotContains(response, 'href="/staff/#staff-help"')
+        self.assertContains(response, 'id="staff-more"')
 
     def test_pos_explains_shared_versus_separate_bills(self):
         self.client.force_login(self.waiter)

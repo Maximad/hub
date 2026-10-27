@@ -31,7 +31,6 @@
         <div id="staff-notification-dropdown" class="staff-notification-dropdown" hidden><div class="staff-notification-empty">لا توجد تنبيهات جديدة</div></div>
         <p id="staff-notification-status" class="hub-visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>
       </div>
-      <a class="staff-app-header__tool staff-app-header__help" href="{% url 'staff_home' %}#staff-help" aria-label="المساعدة">{% include "includes/staff_icon.html" with name="help" %}</a>
       <details class="staff-app-header__user staff-account-menu" data-staff-account-menu>
         <summary class="staff-account-menu__trigger" aria-label="حسابي والإعدادات">
           <span class="staff-app-header__avatar" aria-hidden="true">{{ request.user.username|slice:":1"|upper }}</span>
