@@ -1,0 +1,207 @@
+/* Hub Sweida Operations: structural redesign anchored to the selected mobile/tablet mockups. */
+body.staff-workspace-page .ops-designed{
+  --op-ink:#0f2d2e;--op-teal:#18b7a4;--op-mint:#25c98d;--op-orange:#f77732;
+  --op-purple:#a153d1;--op-yellow:#ffc929;--op-blue:#338ceb;--op-line:#e6e2da;
+  gap:13px;color:var(--op-ink);min-width:0;
+}
+body.staff-workspace-page .ops-designed .ops-v2__hero{padding:3px 2px;margin:0}
+body.staff-workspace-page .ops-designed .staff-v2-title{font-size:clamp(1.2rem,2vw,1.7rem);color:var(--op-ink)}
+body.staff-workspace-page .ops-designed .staff-v2-eyebrow{font-size:.64rem;color:#0e897c}
+body.staff-workspace-page .ops-designed .staff-v2-subtitle{font-size:.75rem;line-height:1.3}
+body.staff-workspace-page .ops-designed .ops-brand-more{order:0;margin:0}
+body.staff-workspace-page .ops-designed .ops-brand-more>summary{font-size:.75rem;padding:4px 7px;min-height:30px;color:#076c60}
+body.staff-workspace-page .ops-designed .ops-rollover-alert{padding:8px 12px;background:#fff8e7;border-radius:12px;border-color:#eedcbd}
+body.staff-workspace-page .ops-designed .ops-brand-shortcuts{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;margin:0}
+body.staff-workspace-page .ops-designed .ops-brand-shortcut{min-height:76px;padding:10px;grid-template-columns:auto 1fr;border-radius:15px;box-shadow:0 2px 8px #111a1a0b}
+body.staff-workspace-page .ops-designed .ops-brand-shortcut__icon{width:37px;height:37px;border-radius:11px}
+body.staff-workspace-page .ops-designed .ops-brand-shortcut strong{font-weight:750;font-size:.88rem}
+body.staff-workspace-page .ops-designed .ops-brand-internet{
+  display:grid;grid-template-columns:minmax(160px,.8fr) minmax(210px,1.1fr) auto;
+  gap:14px;padding:15px;border:1px solid #b7dafa;border-radius:19px;
+  background:linear-gradient(115deg,#eef7ff,#f6fbff 68%,#eaf5ff);box-shadow:0 4px 17px #338ceb0d;
+}
+body.staff-workspace-page .ops-designed .ops-brand-internet__title h3{font-size:1.13rem;font-weight:800}
+body.staff-workspace-page .ops-designed .ops-brand-internet__title p{font-size:.75rem}
+body.staff-workspace-page .ops-designed .ops-pin-compact{
+  margin:0;padding:0;max-width:none;background:none;border:0;
+}
+body.staff-workspace-page .ops-designed .ops-pin-compact summary{min-height:28px;font-size:.76rem;color:#175ca7}
+body.staff-workspace-page .ops-designed .ops-pin-compact__body{padding:3px 0}
+body.staff-workspace-page .ops-designed .ops-brand-pin__line{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
+body.staff-workspace-page .ops-designed .ops-brand-pin__line strong{
+  display:grid;place-items:center;border-radius:12px;background:#dbeeff;border:1px solid #b5d8fa;
+  color:#123f7c;font-size:1.5rem;font-variant-numeric:tabular-nums;letter-spacing:.09em;padding:4px 9px;min-height:47px;
+}
+body.staff-workspace-page .ops-designed .ops-brand-pin__copy{min-height:47px;background:#257bd6;border-radius:12px}
+body.staff-workspace-page .ops-designed .ops-brand-internet__actions{align-self:center}
+body.staff-workspace-page .ops-designed .ops-brand-internet__manage{background:#176fc7;min-height:43px;border-radius:11px}
+body.staff-workspace-page .ops-designed .ops-v2__stats{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;
+  margin:0;padding:0;min-width:0;overflow:visible;scroll-snap-type:none
+}
+body.staff-workspace-page .ops-designed .ops-v2__stat{
+  display:grid;grid-template-columns:42px 1fr;grid-template-rows:auto auto;gap:3px 10px;
+  flex:none;min-width:0;width:100%;max-width:none;min-height:91px;padding:13px;
+  border:1px solid #f1d1ad;border-radius:16px;box-shadow:0 2px 9px #00000008;background:#fff5df;
+}
+body.staff-workspace-page .ops-designed .ops-stat--orders{background:#ffece7;border-color:#ffd3cb}
+body.staff-workspace-page .ops-designed .ops-stat--ready{background:#e3f9ee;border-color:#b8f0d6}
+body.staff-workspace-page .ops-designed .ops-stat--old{background:#f3e6fc;border-color:#e4c5f6}
+body.staff-workspace-page .ops-designed .ops-stat--accounts{background:#fff2d7;border-color:#f7dba4}
+body.staff-workspace-page .ops-designed .ops-v2__stat-icon{width:40px;height:40px;border-radius:12px;background:#ffffff91;color:#b06205}
+body.staff-workspace-page .ops-designed .ops-stat--orders .ops-v2__stat-icon{color:#d84d2b}
+body.staff-workspace-page .ops-designed .ops-stat--ready .ops-v2__stat-icon{color:#078b67}
+body.staff-workspace-page .ops-designed .ops-stat--old .ops-v2__stat-icon{color:#863bb2}
+body.staff-workspace-page .ops-designed .ops-v2__stat strong{font-size:1.7rem;color:var(--op-ink);line-height:1}
+body.staff-workspace-page .ops-designed .ops-v2__stat span:last-child{font-size:.78rem;line-height:1.3;color:#374b4d}
+body.staff-workspace-page .ops-designed .ops-v2__stat::after{display:none}
+body.staff-workspace-page .ops-designed .ops-dashboard-filter{
+  border:1px solid var(--op-line);border-radius:13px;background:#fff;overflow:visible;
+}
+body.staff-workspace-page .ops-designed .ops-dashboard-filter>summary{
+  display:flex;align-items:center;gap:9px;min-height:39px;list-style:none;cursor:pointer;
+  padding:8px 13px;color:#486269;font-size:.81rem;font-weight:700;
+}
+body.staff-workspace-page .ops-designed .ops-dashboard-filter>summary::-webkit-details-marker{display:none}
+body.staff-workspace-page .ops-designed .ops-dashboard-filter__inside{display:grid;gap:10px;padding:4px 10px 12px}
+body.staff-workspace-page .ops-designed .ops-v2__toolbar{background:#f9faf9;box-shadow:none;margin:0}
+body.staff-workspace-page .ops-designed .ops-v2__tabs{width:100%;justify-content:stretch;display:flex}
+body.staff-workspace-page .ops-designed .ops-v2__tabs button{flex:1;min-width:0}
+body.staff-workspace-page .ops-designed .ops-v2__layout{grid-template-columns:1fr;gap:17px}
+body.staff-workspace-page .ops-designed .ops-v2__orders-panel{
+  position:static;max-height:none;min-width:0;margin:0;padding:13px;
+  border-radius:20px;background:#fff;box-shadow:0 2px 12px #00000008;
+}
+body.staff-workspace-page .ops-designed .ops-dashboard-orders__head{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  padding:4px 4px 12px;
+}
+body.staff-workspace-page .ops-designed .ops-dashboard-orders__head h3{
+  display:flex;align-items:center;gap:9px;font-size:1.16rem;font-weight:800;margin:0;color:var(--op-ink)
+}
+body.staff-workspace-page .ops-designed .ops-dashboard-orders__eyebrow{margin:0 0 3px;color:#0c947d;font-size:.68rem;font-weight:700}
+body.staff-workspace-page .ops-designed .ops-dashboard-orders__head p:not(.ops-dashboard-orders__eyebrow){font-size:.74rem;color:#67777a;margin:4px 0 0}
+body.staff-workspace-page .ops-designed .ops-dashboard-orders__number{
+  display:inline-grid;place-items:center;min-width:25px;height:25px;border-radius:999px;
+  background:#ffe3df;color:#d5362b;padding:0 6px;font-size:.84rem
+}
+body.staff-workspace-page .ops-designed .ops-dashboard-orders__board{
+  color:#087e71;font-size:.77rem;font-weight:700;text-decoration:none;padding:8px;
+}
+body.staff-workspace-page .ops-designed .ops-dashboard-order-grid{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;min-width:0
+}
+body.staff-workspace-page .ops-designed .ops-dashboard-order{
+  border:1px solid #e6e8e5;box-shadow:0 2px 8px #00000006;border-radius:16px;
+  background:#fff;padding:12px;min-width:0;display:grid;grid-template-columns:1fr;gap:10px;
+  border-inline-start:0;border-top:4px solid #ffc929;
+}
+body.staff-workspace-page .ops-designed .ops-dashboard-order[data-attention-order="ready"]{border-top-color:#25c98d}
+body.staff-workspace-page .ops-designed .ops-dashboard-order[data-attention-order="new"]{border-top-color:#f77732}
+body.staff-workspace-page .ops-designed .ops-dashboard-order[data-attention-order="preparing"]{border-top-color:#338ceb}
+body.staff-workspace-page .ops-designed .ops-dashboard-order__head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px}
+body.staff-workspace-page .ops-designed .ops-dashboard-order__identity{display:grid;gap:2px}
+body.staff-workspace-page .ops-designed .ops-dashboard-order__identity strong{font-size:1.15rem;font-variant-numeric:tabular-nums;color:var(--op-ink)}
+body.staff-workspace-page .ops-designed .ops-dashboard-order__age{font-size:.66rem;color:#839092}
+body.staff-workspace-page .ops-designed .ops-dashboard-status{display:inline-flex;align-items:center;border-radius:999px;padding:5px 9px;font-size:.75rem;font-weight:700;white-space:normal;background:#fff1d8;color:#9e6511}
+body.staff-workspace-page .ops-designed .ops-dashboard-status--ready{background:#e2f7ee;color:#087e5c}
+body.staff-workspace-page .ops-designed .ops-dashboard-status--new{background:#ffeddf;color:#bd551d}
+body.staff-workspace-page .ops-designed .ops-dashboard-status--prep{background:#e0efff;color:#236db6}
+body.staff-workspace-page .ops-designed .ops-dashboard-order__body{display:grid;grid-template-columns:1fr auto;gap:5px 8px;align-items:center}
+body.staff-workspace-page .ops-designed .ops-dashboard-order__place{font-size:.84rem;font-weight:700}
+body.staff-workspace-page .ops-designed .ops-dashboard-order__price{font-size:1rem;color:var(--op-ink);text-align:left;font-variant-numeric:tabular-nums}
+body.staff-workspace-page .ops-designed .ops-dashboard-order__meta{font-size:.71rem;color:#65787c}
+body.staff-workspace-page .ops-designed .ops-dashboard-order__balance{font-size:.7rem;color:#64777b;text-align:left}
+body.staff-workspace-page .ops-designed .ops-dashboard-order__actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+body.staff-workspace-page .ops-designed .ops-dashboard-order__actions .ops-attention-link{
+  flex:1 1 85px;min-height:39px;padding:7px 9px;border-radius:10px;
+  font-size:.8rem;font-weight:750;background:#e9f5f2;color:#076e5b;border:1px solid #c9eadd;
+}
+body.staff-workspace-page .ops-designed .ops-dashboard-order__actions .ops-attention-link--pay{
+  background:#fff0cb;color:#995b07;border-color:#ffdfa2
+}
+body.staff-workspace-page .ops-designed .ops-dashboard-order__actions .ops-attention-link--main{
+  background:#e4f0ff;color:#1d66b2;border-color:#cce1ff
+}
+body.staff-workspace-page .ops-designed .ops-dashboard-order__actions .ops-attention-link--prep{
+  background:#e4f7ef;color:#087e66;border-color:#c6eada
+}
+body.staff-workspace-page .ops-designed .ops-dashboard-empty{grid-column:1/-1;border:1px dashed #c9e5d9;border-radius:13px;background:#f2fbf6;font-size:.85rem}
+body.staff-workspace-page .ops-designed .ops-dashboard-carryover{
+  margin-top:10px;background:#fff9ec;border:1px solid #f1debd;border-radius:14px;padding:3px 12px
+}
+body.staff-workspace-page .ops-designed .ops-dashboard-carryover>summary{
+  display:flex;align-items:center;gap:10px;list-style:none;cursor:pointer;min-height:49px;
+}
+body.staff-workspace-page .ops-designed .ops-dashboard-carryover>summary::-webkit-details-marker{display:none}
+body.staff-workspace-page .ops-designed .ops-dashboard-carryover__symbol{color:#c77d0f}
+body.staff-workspace-page .ops-designed .ops-dashboard-carryover__count{
+  background:#ffe29f;color:#8d570b;padding:2px 8px;border-radius:999px;margin-inline-start:5px
+}
+body.staff-workspace-page .ops-designed .ops-dashboard-carryover__more{font-size:.72rem;color:#8d6431;margin-inline-start:auto}
+body.staff-workspace-page .ops-designed .ops-dashboard-carryover>p{font-size:.72rem;margin:4px 0 12px;color:#746958}
+body.staff-workspace-page .ops-designed .ops-dashboard-collections{padding:0 8px;margin-top:10px;border-top:1px solid #e9e6e0}
+body.staff-workspace-page .ops-designed .ops-dashboard-collections>summary{font-size:.78rem;font-weight:700;padding:11px 0;cursor:pointer}
+body.staff-workspace-page .ops-designed .ops-v2__accounts{min-width:0;background:#fff;border-radius:17px;padding:12px}
+body.staff-workspace-page .ops-designed .ops-v2__account-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+body.staff-workspace-page .ops-designed .ops-brand-more{margin:0;align-self:start}
+body.staff-workspace-page .ops-designed .ops-brand-more__panel{box-shadow:0 10px 28px #102e2e17}
+body.staff-workspace-page .ops-designed .ops-inbox{background:#faf5ff}
+body.staff-workspace-page .ops-designed :is(.ops-dashboard-filter>summary,.ops-dashboard-carryover>summary,.ops-dashboard-collections>summary):focus-visible{outline:3px solid #338ceb;outline-offset:3px}
+@media(max-width:1100px){
+ body.staff-workspace-page .ops-designed .ops-dashboard-order-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ body.staff-workspace-page .ops-designed .ops-v2__account-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:700px){
+ body.staff-workspace-page .ops-designed{gap:10px}
+ body.staff-workspace-page .ops-designed .ops-v2__hero{padding:0 3px}
+ body.staff-workspace-page .ops-designed .staff-v2-eyebrow,
+ body.staff-workspace-page .ops-designed .staff-v2-subtitle{display:none}
+ body.staff-workspace-page .ops-designed .staff-v2-title{font-size:1.12rem}
+ body.staff-workspace-page .ops-designed .ops-rollover-alert{padding:5px 9px}
+ body.staff-workspace-page .ops-designed .ops-brand-internet{
+   display:grid;grid-template-columns:1fr;gap:7px;padding:12px;
+   border-radius:17px;
+ }
+ body.staff-workspace-page .ops-designed .ops-brand-internet__title h3{font-size:1.04rem}
+ body.staff-workspace-page .ops-designed .ops-brand-internet__title p{font-size:.71rem}
+ body.staff-workspace-page .ops-designed .ops-brand-pin__line{display:grid;grid-template-columns:1fr auto;gap:7px}
+ body.staff-workspace-page .ops-designed .ops-brand-pin__line strong{font-size:1.32rem;min-height:44px}
+ body.staff-workspace-page .ops-designed .ops-brand-pin__copy{min-width:100px;min-height:44px}
+ body.staff-workspace-page .ops-designed .ops-brand-internet__manage{min-height:40px;width:100%}
+ body.staff-workspace-page .ops-designed .ops-brand-shortcuts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ body.staff-workspace-page .ops-designed .ops-brand-shortcut--internet{display:none}
+ body.staff-workspace-page .ops-designed .ops-brand-shortcut--day{display:grid}
+ body.staff-workspace-page .ops-designed .ops-brand-shortcut{min-height:80px;padding:9px;border-radius:14px}
+ body.staff-workspace-page .ops-designed .ops-brand-shortcut__icon{width:38px;height:38px}
+ body.staff-workspace-page .ops-designed .ops-brand-shortcut strong{font-size:.88rem}
+ body.staff-workspace-page .ops-designed .ops-brand-shortcut small{display:none}
+ body.staff-workspace-page .ops-designed .ops-v2__stats{
+   display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;
+   overflow:visible;margin:0;padding:0;width:100%;max-width:100%;min-width:0;scroll-snap-type:none
+ }
+ body.staff-workspace-page .ops-designed .ops-v2__stat{
+   display:grid;box-sizing:border-box;min-height:83px;width:100%;min-width:0;max-width:none;
+   flex:none;grid-template-columns:34px minmax(0,1fr);padding:10px;gap:2px 7px
+ }
+ body.staff-workspace-page .ops-designed .ops-v2__stat-icon{width:32px;height:32px}
+ body.staff-workspace-page .ops-designed .ops-v2__stat strong{font-size:1.45rem}
+ body.staff-workspace-page .ops-designed .ops-v2__stat span:last-child{font-size:.71rem}
+ body.staff-workspace-page .ops-designed .ops-dashboard-order-grid{grid-template-columns:1fr}
+ body.staff-workspace-page .ops-designed .ops-dashboard-order{padding:11px}
+ body.staff-workspace-page .ops-designed .ops-dashboard-orders__head{gap:4px;padding:3px 0 11px}
+ body.staff-workspace-page .ops-designed .ops-dashboard-orders__head h3{font-size:1.05rem}
+ body.staff-workspace-page .ops-designed .ops-dashboard-orders__board{font-size:.75rem}
+ body.staff-workspace-page .ops-designed .ops-v2__orders-panel{padding:12px}
+ body.staff-workspace-page .ops-designed .ops-v2__account-grid{grid-template-columns:1fr}
+ body.staff-workspace-page .ops-designed .ops-v2__tabs{max-width:100%}
+ body.staff-workspace-page .ops-designed .ops-v2__tabs button{font-size:.74rem;min-width:0}
+}
+@media(max-width:360px){
+ body.staff-workspace-page .ops-designed .ops-brand-shortcut strong{font-size:.79rem}
+ body.staff-workspace-page .ops-designed .ops-brand-shortcut__icon{width:32px;height:32px}
+ body.staff-workspace-page .ops-designed .ops-dashboard-order__actions .ops-attention-link{flex-basis:82px;font-size:.75rem}
+}
+@media(prefers-reduced-motion:reduce){
+ body.staff-workspace-page .ops-designed *{scroll-behavior:auto!important;transition:none!important}
+}

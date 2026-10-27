@@ -1,0 +1,21 @@
+<article class="ops-v2__order ops-dashboard-order" data-attention-order="{{ order.status }}">
+  <div class="ops-dashboard-order__head">
+    <div class="ops-dashboard-order__identity"><strong class="hub-order-number">{{ order.display_number }}</strong><span class="ops-dashboard-order__age">منذ {{ order.created_at|ar_since }}</span></div>
+    <span class="ops-dashboard-status {% if order.status == 'ready' %}ops-dashboard-status--ready{% elif order.status == 'new' %}ops-dashboard-status--new{% elif order.status == 'preparing' %}ops-dashboard-status--prep{% else %}ops-dashboard-status--waiting{% endif %}">{{ order.workspace_next_step }}</span>
+  </div>
+  <div class="ops-dashboard-order__body">
+    <span class="ops-dashboard-order__place">{% if order.table %}{{ order.table }}{% else %}{{ order.get_fulfillment_label }}{% endif %}</span>
+    <strong class="ops-dashboard-order__price">{{ order.total_syp|format_syp }}</strong>
+    <span class="ops-dashboard-order__meta">أدخله {% if order.entered_by %}{{ order.entered_by.get_full_name|default:order.entered_by.username }}{% elif order.entry_source == 'public_menu' %}الزبون{% else %}غير موثق{% endif %}{% if order.recipient_kind != 'customer' %} · {{ order.get_recipient_kind_display }}{% endif %}</span>
+    <span class="ops-dashboard-order__balance">{% if order.remaining_syp > 0 %}متبقي {{ order.remaining_syp|format_syp }}{% elif order.paid_syp > 0 %}مدفوع · يحتاج خدمة{% else %}لا مستحقات · يحتاج خدمة{% endif %}</span>
+  </div>
+  <nav class="ops-v2__order-links ops-dashboard-order__actions" aria-label="إجراءات الطلب {{ order.display_number }}">
+    {% if staff_caps.order_edit %}<a class="ops-attention-link ops-attention-link--main" href="{% url 'staff_order_edit' order.public_code %}" data-staff-context-url="{% url 'staff_order_edit' order.public_code %}?panel=context" data-context-title="{% if order.workspace_can_edit_items %}تعديل سريع للطلب{% else %}تفاصيل الطلب{% endif %}" aria-haspopup="dialog">{% if order.workspace_can_edit_items %}تعديل{% else %}التفاصيل{% endif %}</a>{% endif %}
+    {% if workspace_caps.cashier and order.remaining_syp > 0 %}
+      {% if order.visit_id %}<a class="ops-attention-link ops-attention-link--pay" href="{% url 'staff_cashier_order' order.visit.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' order.visit.public_code %}?panel=payment" data-context-title="الدفع وإغلاق الحساب" aria-haspopup="dialog">قبض</a>
+      {% else %}<a class="ops-attention-link ops-attention-link--pay" href="{% url 'staff_cashier_order' order.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' order.public_code %}?panel=payment" data-context-title="قبض الطلب" aria-haspopup="dialog">قبض</a>{% endif %}
+    {% endif %}
+    {% if staff_caps.kitchen_board %}<a class="ops-attention-link ops-attention-link--prep" href="{% url 'staff_kitchen' %}">التحضير</a>{% endif %}
+    {% if order.visit_id and staff_caps.visit_manage %}<a class="ops-attention-link" href="{% url 'staff_visit_detail' order.visit.public_code %}" data-visit-context-url="{% url 'staff_visit_detail' order.visit.public_code %}?panel=1" data-context-title="حساب الزبون" aria-haspopup="dialog">الحساب</a>{% endif %}
+  </nav>
+</article>

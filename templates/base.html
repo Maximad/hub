@@ -57,6 +57,7 @@
   {% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %}<link rel="stylesheet" href="{% static 'css/staff_account_menu.css' %}">{% endif %}
   {% if request.user.is_authenticated and request.path == "/staff/" %}<link rel="stylesheet" href="{% static 'css/staff_operations_attention.css' %}">{% endif %}
   {% if request.user.is_authenticated and request.path == "/staff/" %}<link rel="stylesheet" href="{% static 'css/staff_operations_brand.css' %}">{% endif %}
+  {% if request.user.is_authenticated and request.path == "/staff/" %}<link rel="stylesheet" href="{% static 'css/staff_operations_designed.css' %}">{% endif %}
   {% include "includes/hub_theme.html" %}
   {% comment %}Legacy density choices map onto the semantic token layer.{% endcomment %}
   {% if system_settings %}<style>:root{
