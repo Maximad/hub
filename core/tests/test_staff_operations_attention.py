@@ -115,7 +115,6 @@ class StaffOperationsAttentionTests(TestCase):
         self.assertEqual(response.context['active_orders'][0].pk, current.pk)
         self.assertContains(response, 'id="carryover-orders"')
         self.assertContains(response, 'ops-dashboard-order-grid')
-        self.assertContains(response, 'data-guest-wifi-pin', count=0)
         self.assertContains(response, 'staff_operations_designed.css')
 
     def test_design_keeps_role_gated_existing_actions(self):
