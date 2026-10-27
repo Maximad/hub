@@ -2,6 +2,7 @@
 <article class="ops-v2__order ops-dashboard-order" data-attention-order="{{ order.status }}">
   <div class="ops-dashboard-order__head">
     <div class="ops-dashboard-order__identity"><strong class="hub-order-number">{{ order.display_number }}</strong><span class="ops-dashboard-order__age">منذ {{ order.created_at|ar_since }}</span></div>
+    {% if order.workspace_carryover %}<span class="staff-v2-badge staff-v2-badge--warning">من يوم عمل سابق</span>{% endif %}
     <span class="ops-dashboard-status {% if order.status == 'ready' %}ops-dashboard-status--ready{% elif order.status == 'new' %}ops-dashboard-status--new{% elif order.status == 'preparing' %}ops-dashboard-status--prep{% else %}ops-dashboard-status--waiting{% endif %}">{{ order.workspace_next_step }}</span>
   </div>
   <div class="ops-dashboard-order__body">
