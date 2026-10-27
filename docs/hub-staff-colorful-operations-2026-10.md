@@ -26,3 +26,6 @@ Reference: user-selected Hub Sweida brand-board palette and approved mockups for
 4. Verify guest PIN when code policy is enabled, disabled and board reminder is due. Test copy HTTPS and manual copy fallback.
 5. Test the More anchor navigation from staff header/bottom nav, account drawer links, inbox approvals, search, filters, POS/kitchen/cashier paths, 04:00 handovers, and accessibility.
 6. Confirm production revision independently before releasing. Release through normal staging, backup and operational authorization. Do not adjust MikroTik.
+
+## 27 October 2026 — Android follow-up
+Screenshots prompted a compact native details warning for the old open Business Day, four mobile quick actions (close-day still in persistent Today), a two-column KPI grid overriding the old horizontal scrolling rule, and smaller Internet/order/toolbar spacing. The redundant dashboard quick-help section and header help link are removed; contextual POS guidance remains. No business data, payment, network or router mutations. Requires mobile and role acceptance before release.
