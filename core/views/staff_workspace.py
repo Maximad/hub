@@ -166,9 +166,16 @@ def staff_home(request):
     )
     # Count before the display cap; handoff-ready work goes first, then new work.
     active_orders_count = attention_queryset.count()
+    today_active_count = attention_queryset.filter(created_at__gte=day_start).count()
+    today_ready_count = attention_queryset.filter(created_at__gte=day_start, status=Order.Status.READY).count()
     ready_count = attention_queryset.filter(status=Order.Status.READY).count()
     carryover_order_count = attention_queryset.filter(created_at__lt=day_start).count()
     active_orders = list(attention_queryset.order_by(
+        # Presentation only: current-day work first; all old obligations remain.
+        Case(
+            When(created_at__gte=day_start, then=Value(0)),
+            default=Value(1), output_field=IntegerField(),
+        ),
         Case(
             When(status=Order.Status.READY, then=Value(0)),
             When(status=Order.Status.NEW, then=Value(1)),
@@ -261,6 +268,8 @@ def staff_home(request):
                 "historical_to_collect": len(historical_to_collect),
                 "more_historical_to_collect": len(historical_to_collect) > 10 or historical_collection_scan_limited,
                 "carryover_orders": carryover_order_count,
+                "today_active_orders": today_active_count,
+                "today_ready_orders": today_ready_count,
                 "ready_orders": ready_count,
                 "unpaid_orders": unpaid_count,
             },

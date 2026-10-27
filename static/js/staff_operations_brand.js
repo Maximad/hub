@@ -7,7 +7,7 @@
   const openAnchor=function(){
     if(!more)return;
     const hash=decodeURIComponent(location.hash||'');
-    if(['#staff-more','#staff-today','#staff-help'].includes(hash)){more.open=true;}
+    if(['#staff-more','#staff-today','#ops-brand-more'].includes(hash)){more.open=true;}
   };
   window.addEventListener('hashchange',openAnchor);
   openAnchor();

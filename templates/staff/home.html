@@ -2,7 +2,8 @@
 {% block title %}العمليات{% endblock %}
 {% block body_class %}staff-workspace-page staff-ui-v2-page hub-ui-v3{% endblock %}
 {% block content %}
-<section class="staff-v2-page ops-v2" dir="rtl" data-operations-v2>
+<section class="staff-v2-page ops-v2 ops-designed" dir="rtl" data-operations-v2>
+  <div class="ops-dashboard-topbar">
   <header class="staff-v2-page-head ops-v2__hero">
     <div class="staff-v2-page-head__copy">
       <p class="staff-v2-eyebrow">تشغيل هَبّ</p>
@@ -11,57 +12,6 @@
     </div>
     
   </header>
-
-
-  {% if previous_open_business_day %}
-  <details class="ops-rollover-alert" aria-label="يوم تشغيلي سابق مفتوح">
-    <summary><strong>يوم {{ previous_open_business_day.business_date|date:'Y-m-d' }} ما زال {{ previous_open_business_day.get_status_display }}</strong><span>تفاصيل ومراجعة</span></summary>
-    <div class="ops-rollover-alert__body">
-      <p>تُعرض مهامه في سجل يومه السابق، وليس ضمن مهام اليوم. يلزم إغلاق اليوم السابق عبر المسار المعتمد؛ لم تُغلق الحسابات أو تُمسح المهام تلقائياً.</p>
-      <a href="{% url 'staff_close_day' %}">مراجعة الإغلاق</a>
-    </div>
-  </details>
-  {% endif %}
-
-
-
-
-  <nav class="ops-brand-shortcuts" aria-label="الإجراءات الأساسية">
-    {% if staff_caps.pos %}
-    <a class="ops-brand-shortcut ops-brand-shortcut--order" href="{% url 'staff_pos' %}"><span class="ops-brand-shortcut__icon">{% include "includes/staff_icon.html" with name="plus" %}</span><strong>طلب جديد</strong><small>نقطة البيع</small></a>
-    {% endif %}
-    {% if staff_caps.kitchen_board %}
-    <a class="ops-brand-shortcut ops-brand-shortcut--prep" href="{% url 'staff_kitchen' %}"><span class="ops-brand-shortcut__icon">{% include "includes/staff_icon.html" with name="chef" %}</span><strong>لوحة التحضير</strong><small>متابعة الطلبات</small></a>
-    {% endif %}
-    {% if workspace_caps.cashier %}
-    <a class="ops-brand-shortcut ops-brand-shortcut--cashier" href="{% url 'staff_cashier' %}"><span class="ops-brand-shortcut__icon">{% include "includes/staff_icon.html" with name="card" %}</span><strong>القبض</strong><small>المدفوعات</small></a>
-    {% endif %}
-    {% if staff_caps.internet_billing %}
-    <a class="ops-brand-shortcut ops-brand-shortcut--internet" href="{% url 'staff_internet' %}"><span class="ops-brand-shortcut__icon">{% include "includes/staff_icon.html" with name="wifi" %}</span><strong>الإنترنت</strong><small>الضيوف والجلسات</small></a>
-    {% endif %}
-    <a class="ops-brand-shortcut ops-brand-shortcut--day" href="{% url 'staff_close_day' %}"><span class="ops-brand-shortcut__icon">{% include "includes/staff_icon.html" with name="calendar" %}</span><strong>مراجعة الإغلاق</strong><small>نهاية اليوم</small></a>
-  </nav>
-
-  <section class="ops-brand-internet" aria-labelledby="ops-brand-internet-title">
-    <div class="ops-brand-internet__title"><span class="ops-brand-internet__icon">{% include "includes/staff_icon.html" with name="wifi" %}</span><div><h3 id="ops-brand-internet-title">إنترنت اليوم</h3><p>رمز اتصال الضيوف والإدارة السريعة</p></div></div>
-    <div class="ops-brand-internet__code">
-    {% if guest_wifi_pin %}
-    <details open class="ops-pin-compact">
-      <summary>رمز الإنترنت المجاني لليوم {% if guest_wifi_board_task and guest_wifi_board_task.status != 'done' %}<span class="hub-badge hub-badge-warning">يلزم تحديث اللوحة</span>{% endif %}</summary>
-      <div class="ops-pin-compact__body"><div class="ops-brand-pin__line"><strong dir="ltr" data-guest-wifi-pin>{{ guest_wifi_pin }}</strong><button type="button" class="ops-brand-pin__copy" data-copy-guest-wifi aria-label="نسخ رمز الإنترنت المجاني">نسخ الرمز</button></div><span class="ops-brand-pin__copy-status hub-visually-hidden" data-copy-guest-wifi-status role="status" aria-live="polite"></span>
-        <p>يُحدّث مع يوم العمل، ويُكتب على لوحة هَبّ.</p>
-        <a href="{% url 'staff_operational_tasks' %}">{% if guest_wifi_board_task and guest_wifi_board_task.status == 'done' %}تم تحديث اللوحة · المهام{% else %}مهمة تحديث اللوحة{% endif %}</a>
-      </div>
-    </details>
-    {% endif %}
-      {% if not guest_wifi_pin %}<p class="ops-brand-internet__disabled">رمز الإنترنت المجاني غير مفعّل حالياً.</p>{% endif %}
-    </div>
-    <div class="ops-brand-internet__actions">
-      {% if staff_caps.internet_billing %}<a class="ops-brand-internet__manage" href="{% url 'staff_internet' %}">إدارة الإنترنت</a>{% endif %}
-      {% if staff_attention.internet_count %}<a class="ops-brand-internet__pending" href="#staff-attention"><strong>{{ staff_attention.internet_count }}</strong> طلب موافقة إنترنت سريع</a>{% endif %}
-    </div>
-  </section>
-
   <details class="ops-brand-more" id="ops-brand-more">
     <summary>المزيد من الأدوات <span aria-hidden="true">⌄</span></summary>
     <div class="ops-brand-more__panel">
@@ -114,20 +64,69 @@
     </div>
   </details>
 
-  <div class="staff-v2-toolbar ops-v2__toolbar" aria-label="البحث والتصفية">
-    <div class="ops-v2__toolbar-main">
-      <label class="staff-v2-search"><span class="hub-visually-hidden">بحث في الحسابات</span>{% include "includes/staff_icon.html" with name="search" %}<input type="search" data-ops-search placeholder="ابحث عن حساب، طاولة، عضو أو رقم..." autocomplete="off"><kbd>Ctrl K</kbd></label>
-      <details class="ops-v2__filters"><summary class="staff-v2-button">{% include "includes/staff_icon.html" with name="filter" %}تصفية</summary><div class="ops-v2__filter-menu"><button class="staff-v2-button is-active" type="button" data-ops-filter="all" aria-pressed="true">كل الحسابات</button><button class="staff-v2-button" type="button" data-ops-filter="unpaid" aria-pressed="false">بحاجة إلى تسديد</button><button class="staff-v2-button" type="button" data-ops-filter="internet" aria-pressed="false">إنترنت فعّال</button></div></details>
-    </div>
-    <div class="ops-v2__toolbar-side"><a class="staff-v2-button staff-v2-button--ghost" href="{% url 'staff_close_day' %}">{% include "includes/staff_icon.html" with name="calendar" %}اليوم</a><div class="staff-v2-segmented" aria-label="طريقة العرض"><button class="is-active" type="button" data-ops-view="grid" aria-pressed="true" aria-label="عرض البطاقات">{% include "includes/staff_icon.html" with name="grid" %}</button><button type="button" data-ops-view="list" aria-pressed="false" aria-label="عرض القائمة">{% include "includes/staff_icon.html" with name="list" %}</button></div></div>
   </div>
 
-  <section class="ops-v2__stats" aria-label="ملخص الوردية">
-    {% if staff_caps.visit_manage %}<a class="ops-v2__stat" href="#open-accounts"><span class="ops-v2__stat-icon">{% include "includes/staff_icon.html" with name="card" class="staff-icon--lg" %}</span><strong>{{ workspace_stats.open_visits }}</strong><span>حسابات مفتوحة</span></a>{% endif %}
-    <a class="ops-v2__stat" href="#active-orders"><span class="ops-v2__stat-icon">{% include "includes/staff_icon.html" with name="wifi" class="staff-icon--lg" %}</span><strong>{{ workspace_stats.active_orders }}</strong><span>تحتاج إجراء</span></a>
-    <a class="ops-v2__stat" href="#active-orders"><span class="ops-v2__stat-icon">{% include "includes/staff_icon.html" with name="send" class="staff-icon--lg" %}</span><strong>{{ workspace_stats.ready_orders }}</strong><span>جاهز للتسليم</span></a>
-    {% if workspace_stats.stale_visits %}<a class="ops-v2__stat" href="#stale-accounts"><span class="ops-v2__stat-icon">{% include "includes/staff_icon.html" with name="clock" class="staff-icon--lg" %}</span><strong>{{ workspace_stats.stale_visits }}</strong><span>قديم بحاجة لمراجعة</span></a>{% elif workspace_caps.cashier %}<a class="ops-v2__stat" href="#open-accounts"><span class="ops-v2__stat-icon">{% include "includes/staff_icon.html" with name="users" class="staff-icon--lg" %}</span><strong>{{ workspace_stats.unpaid_orders }}</strong><span>بحاجة إلى تسديد</span></a>{% endif %}
+
+
+  {% if previous_open_business_day %}
+  <details class="ops-rollover-alert" aria-label="يوم تشغيلي سابق مفتوح">
+    <summary><strong>يوم {{ previous_open_business_day.business_date|date:'Y-m-d' }} ما زال {{ previous_open_business_day.get_status_display }}</strong><span>تفاصيل ومراجعة</span></summary>
+    <div class="ops-rollover-alert__body">
+      <p>تُعرض مهامه في سجل يومه السابق، وليس ضمن مهام اليوم. يلزم إغلاق اليوم السابق عبر المسار المعتمد؛ لم تُغلق الحسابات أو تُمسح المهام تلقائياً.</p>
+      <a href="{% url 'staff_close_day' %}">مراجعة الإغلاق</a>
+    </div>
+  </details>
+  {% endif %}
+
+
+
+
+
+  <section class="ops-brand-internet" aria-labelledby="ops-brand-internet-title">
+    <div class="ops-brand-internet__title"><span class="ops-brand-internet__icon">{% include "includes/staff_icon.html" with name="wifi" %}</span><div><h3 id="ops-brand-internet-title">إنترنت اليوم</h3><p>رمز اتصال الضيوف والإدارة السريعة</p></div></div>
+    <div class="ops-brand-internet__code">
+    {% if guest_wifi_pin %}
+    <details open class="ops-pin-compact">
+      <summary>رمز الإنترنت المجاني لليوم {% if guest_wifi_board_task and guest_wifi_board_task.status != 'done' %}<span class="hub-badge hub-badge-warning">يلزم تحديث اللوحة</span>{% endif %}</summary>
+      <div class="ops-pin-compact__body"><div class="ops-brand-pin__line"><strong dir="ltr" data-guest-wifi-pin>{{ guest_wifi_pin }}</strong><button type="button" class="ops-brand-pin__copy" data-copy-guest-wifi aria-label="نسخ رمز الإنترنت المجاني">نسخ الرمز</button></div><span class="ops-brand-pin__copy-status hub-visually-hidden" data-copy-guest-wifi-status role="status" aria-live="polite"></span>
+        <p>يُحدّث مع يوم العمل، ويُكتب على لوحة هَبّ.</p>
+        <a href="{% url 'staff_operational_tasks' %}">{% if guest_wifi_board_task and guest_wifi_board_task.status == 'done' %}تم تحديث اللوحة · المهام{% else %}مهمة تحديث اللوحة{% endif %}</a>
+      </div>
+    </details>
+    {% endif %}
+      {% if not guest_wifi_pin %}<p class="ops-brand-internet__disabled">رمز الإنترنت المجاني غير مفعّل حالياً.</p>{% endif %}
+    </div>
+    <div class="ops-brand-internet__actions">
+      {% if staff_caps.internet_billing %}<a class="ops-brand-internet__manage" href="{% url 'staff_internet' %}">إدارة الإنترنت</a>{% endif %}
+      {% if staff_attention.internet_count %}<a class="ops-brand-internet__pending" href="#staff-attention"><strong>{{ staff_attention.internet_count }}</strong> طلب موافقة إنترنت سريع</a>{% endif %}
+    </div>
   </section>
+
+
+  <nav class="ops-brand-shortcuts" aria-label="الإجراءات الأساسية">
+    {% if staff_caps.pos %}
+    <a class="ops-brand-shortcut ops-brand-shortcut--order" href="{% url 'staff_pos' %}"><span class="ops-brand-shortcut__icon">{% include "includes/staff_icon.html" with name="plus" %}</span><strong>طلب جديد</strong><small>نقطة البيع</small></a>
+    {% endif %}
+    {% if staff_caps.kitchen_board %}
+    <a class="ops-brand-shortcut ops-brand-shortcut--prep" href="{% url 'staff_kitchen' %}"><span class="ops-brand-shortcut__icon">{% include "includes/staff_icon.html" with name="chef" %}</span><strong>لوحة التحضير</strong><small>متابعة الطلبات</small></a>
+    {% endif %}
+    {% if workspace_caps.cashier %}
+    <a class="ops-brand-shortcut ops-brand-shortcut--cashier" href="{% url 'staff_cashier' %}"><span class="ops-brand-shortcut__icon">{% include "includes/staff_icon.html" with name="card" %}</span><strong>القبض</strong><small>المدفوعات</small></a>
+    {% endif %}
+    {% if staff_caps.internet_billing %}
+    <a class="ops-brand-shortcut ops-brand-shortcut--internet" href="{% url 'staff_internet' %}"><span class="ops-brand-shortcut__icon">{% include "includes/staff_icon.html" with name="wifi" %}</span><strong>الإنترنت</strong><small>الضيوف والجلسات</small></a>
+    {% endif %}
+    <a class="ops-brand-shortcut ops-brand-shortcut--day" href="{% url 'staff_close_day' %}"><span class="ops-brand-shortcut__icon">{% include "includes/staff_icon.html" with name="calendar" %}</span><strong>مراجعة الإغلاق</strong><small>نهاية اليوم</small></a>
+  </nav>
+
+
+  <section class="ops-v2__stats ops-dashboard-stats" aria-label="ملخص الوردية">
+    {% if staff_caps.visit_manage %}<a class="ops-v2__stat ops-stat--accounts" href="#open-accounts"><span class="ops-v2__stat-icon">{% include "includes/staff_icon.html" with name="card" class="staff-icon--lg" %}</span><strong>{{ workspace_stats.open_visits }}</strong><span>حسابات مفتوحة</span></a>{% endif %}
+    <a class="ops-v2__stat ops-stat--orders" href="#active-orders"><span class="ops-v2__stat-icon">{% include "includes/staff_icon.html" with name="list" class="staff-icon--lg" %}</span><strong>{{ workspace_stats.today_active_orders }}</strong><span>طلبات اليوم</span></a>
+    <a class="ops-v2__stat ops-stat--ready" href="#active-orders"><span class="ops-v2__stat-icon">{% include "includes/staff_icon.html" with name="send" class="staff-icon--lg" %}</span><strong>{{ workspace_stats.today_ready_orders }}</strong><span>جاهز للتسليم</span></a>
+    {% if workspace_stats.stale_visits %}<a class="ops-v2__stat ops-stat--old" href="#stale-accounts"><span class="ops-v2__stat-icon">{% include "includes/staff_icon.html" with name="clock" class="staff-icon--lg" %}</span><strong>{{ workspace_stats.stale_visits }}</strong><span>قديم بحاجة لمراجعة</span></a>{% elif workspace_caps.cashier %}<a class="ops-v2__stat ops-stat--old" href="#open-accounts"><span class="ops-v2__stat-icon">{% include "includes/staff_icon.html" with name="users" class="staff-icon--lg" %}</span><strong>{{ workspace_stats.unpaid_orders }}</strong><span>بحاجة إلى تسديد</span></a>{% endif %}
+  </section>
+
 
   {% if staff_attention.tasks_count or staff_attention.internet_count %}
   <section class="ops-inbox" id="staff-attention" aria-labelledby="ops-inbox-title">
@@ -189,33 +188,40 @@
   </section>
   {% endif %}
 
+
+  <details class="ops-dashboard-filter">
+    <summary>{% include "includes/staff_icon.html" with name="filter" %}<span>بحث وتصفية</span></summary>
+    <div class="ops-dashboard-filter__inside">
+  <div class="staff-v2-toolbar ops-v2__toolbar" aria-label="البحث والتصفية">
+    <div class="ops-v2__toolbar-main">
+      <label class="staff-v2-search"><span class="hub-visually-hidden">بحث في الحسابات</span>{% include "includes/staff_icon.html" with name="search" %}<input type="search" data-ops-search placeholder="ابحث عن حساب، طاولة، عضو أو رقم..." autocomplete="off"><kbd>Ctrl K</kbd></label>
+      <details class="ops-v2__filters"><summary class="staff-v2-button">{% include "includes/staff_icon.html" with name="filter" %}تصفية</summary><div class="ops-v2__filter-menu"><button class="staff-v2-button is-active" type="button" data-ops-filter="all" aria-pressed="true">كل الحسابات</button><button class="staff-v2-button" type="button" data-ops-filter="unpaid" aria-pressed="false">بحاجة إلى تسديد</button><button class="staff-v2-button" type="button" data-ops-filter="internet" aria-pressed="false">إنترنت فعّال</button></div></details>
+    </div>
+    <div class="ops-v2__toolbar-side"><a class="staff-v2-button staff-v2-button--ghost" href="{% url 'staff_close_day' %}">{% include "includes/staff_icon.html" with name="calendar" %}اليوم</a><div class="staff-v2-segmented" aria-label="طريقة العرض"><button class="is-active" type="button" data-ops-view="grid" aria-pressed="true" aria-label="عرض البطاقات">{% include "includes/staff_icon.html" with name="grid" %}</button><button type="button" data-ops-view="list" aria-pressed="false" aria-label="عرض القائمة">{% include "includes/staff_icon.html" with name="list" %}</button></div></div>
+  </div>
+
   <div class="ops-v2__tabs" role="group" aria-label="نوع البيانات"><button class="is-active" type="button" data-ops-tab="all" aria-pressed="true">الكل</button>{% if staff_caps.visit_manage %}<button type="button" data-ops-tab="accounts" aria-pressed="false">الحسابات <b>{{ workspace_stats.open_visits }}</b></button>{% endif %}<button type="button" data-ops-tab="orders" aria-pressed="false">الطلبات <b>{{ workspace_stats.active_orders }}</b></button></div>
 
-  <div class="ops-v2__layout">
-    <aside class="staff-v2-panel ops-v2__orders-panel" id="active-orders" data-ops-section="orders">
-      <div class="staff-v2-panel-head"><div><h3>طلبات تحتاج إجراء</h3><p>مطلوب تحضير أو تسليم، سواء كانت مدفوعة أم لا. المدفوع والمنفّذ لا يظهر هنا.{% if workspace_stats.carryover_orders %} <strong>{{ workspace_stats.carryover_orders }} طلباً مرحّلاً ما زال يحتاج خدمة.</strong>{% endif %}</p></div>{% if staff_caps.kitchen_board %}<a class="staff-v2-panel-link" href="{% url 'staff_kitchen' %}">لوحة التحضير</a>{% endif %}</div>
-      <div class="ops-v2__order-list">
-        {% for order in active_orders %}
-        <article class="ops-v2__order" data-attention-order="{{ order.status }}">
-          <div class="ops-v2__order-main"><strong class="hub-order-number">{{ order.display_number }}</strong><span class="staff-v2-badge {% if order.status == 'ready' %}staff-v2-badge--success{% else %}staff-v2-badge--brand{% endif %}">{{ order.workspace_next_step }}</span>{% if order.workspace_carryover %}<span class="staff-v2-badge staff-v2-badge--warning">من يوم عمل سابق</span>{% endif %}</div>
-          <div class="ops-v2__order-money"><strong>{{ order.total_syp|format_syp }}</strong>{% if order.remaining_syp > 0 %}<span>متبقي {{ order.remaining_syp|format_syp }}</span>{% elif order.paid_syp > 0 %}<span>مدفوع · يحتاج خدمة</span>{% else %}<span>لا مستحقات · يحتاج خدمة</span>{% endif %}</div>
-          <div class="ops-v2__order-place">{% if order.table %}{{ order.table }}{% else %}{{ order.get_fulfillment_label }}{% endif %} · <small>أدخله {% if order.entered_by %}{{ order.entered_by.get_full_name|default:order.entered_by.username }}{% elif order.entry_source == 'public_menu' %}الزبون{% else %}غير موثق{% endif %}</small>{% if order.recipient_kind != 'customer' %} · <small>{{ order.get_recipient_kind_display }}</small>{% endif %}</div>
-          <nav class="ops-v2__order-links" aria-label="إجراءات الطلب {{ order.display_number }}">
-            {% if staff_caps.order_edit %}
-              <a class="ops-attention-link ops-attention-link--main" href="{% url 'staff_order_edit' order.public_code %}" data-staff-context-url="{% url 'staff_order_edit' order.public_code %}?panel=context" data-context-title="{% if order.workspace_can_edit_items %}تعديل سريع للطلب{% else %}تفاصيل الطلب{% endif %}" aria-haspopup="dialog">{% if order.workspace_can_edit_items %}تعديل{% else %}التفاصيل{% endif %}</a>
-            {% endif %}
-            {% if workspace_caps.cashier and order.remaining_syp > 0 %}
-              {% if order.visit_id %}<a class="ops-attention-link ops-attention-link--pay" href="{% url 'staff_cashier_order' order.visit.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' order.visit.public_code %}?panel=payment" data-context-title="الدفع وإغلاق الحساب" aria-haspopup="dialog">قبض</a>
-              {% else %}<a class="ops-attention-link ops-attention-link--pay" href="{% url 'staff_cashier_order' order.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' order.public_code %}?panel=payment" data-context-title="قبض الطلب" aria-haspopup="dialog">قبض</a>{% endif %}
-            {% endif %}
-            {% if staff_caps.kitchen_board %}<a class="ops-attention-link" href="{% url 'staff_kitchen' %}">التحضير</a>{% endif %}
-            {% if order.visit_id and staff_caps.visit_manage %}<a class="ops-attention-link" href="{% url 'staff_visit_detail' order.visit.public_code %}" data-visit-context-url="{% url 'staff_visit_detail' order.visit.public_code %}?panel=1" data-context-title="حساب الزبون" aria-haspopup="dialog">الحساب</a>{% endif %}
-          </nav>
-        </article>
-        {% empty %}<div class="staff-v2-empty">لا توجد طلبات تحتاج تحضيراً أو تسليماً حالياً.</div>{% endfor %}
-        {% if workspace_stats.more_active_orders %}{% if staff_caps.order_edit %}<a class="ops-attention-more" href="{% url 'staff_orders' %}">عرض باقي الطلبات ({{ workspace_stats.active_orders }})</a>{% elif staff_caps.kitchen_board %}<a class="ops-attention-more" href="{% url 'staff_kitchen' %}">متابعة بقية التحضير</a>{% endif %}{% endif %}
+    </div>
+  </details>
+  <div class="ops-v2__layout ops-dashboard-workspace">
+    <section class="staff-v2-panel ops-v2__orders-panel ops-dashboard-orders" id="active-orders" data-ops-section="orders" aria-labelledby="ops-dashboard-orders-title">
+      <div class="ops-dashboard-orders__head"><div><p class="ops-dashboard-orders__eyebrow">متابعة العمل</p><h3 id="ops-dashboard-orders-title">طلبات اليوم <span class="ops-dashboard-orders__number">{{ workspace_stats.today_active_orders }}</span></h3><p>الطلبات التي ما زالت تحتاج خدمة أو متابعة</p></div>{% if staff_caps.kitchen_board %}<a class="ops-dashboard-orders__board" href="{% url 'staff_kitchen' %}">لوحة التحضير</a>{% endif %}</div>
+      <div class="ops-v2__order-list ops-dashboard-order-grid">
+        {% for order in active_orders %}{% if not order.workspace_carryover %}{% include "staff/_operations_order_card.html" %}{% endif %}{% endfor %}
+        {% if not workspace_stats.today_active_orders %}<div class="staff-v2-empty ops-dashboard-empty">لا توجد طلبات جديدة تحتاج إجراء في يوم العمل الحالي.</div>{% endif %}
       </div>
-      {% if workspace_caps.cashier and standalone_to_collect %}
+      {% if workspace_stats.carryover_orders %}
+      <details class="ops-dashboard-carryover" id="carryover-orders">
+        <summary><span class="ops-dashboard-carryover__symbol">{% include "includes/staff_icon.html" with name="clock" %}</span><strong>طلبات من أيام سابقة <span class="ops-dashboard-carryover__count">{{ workspace_stats.carryover_orders }}</span></strong><span class="ops-dashboard-carryover__more">عرض التفاصيل</span></summary>
+        <p>طلبات مرحّلة ما زالت تحتاج خدمة، محفوظة دون تغيير في حالتها أو مدفوعاتها.</p>
+        <div class="ops-v2__order-list ops-dashboard-order-grid">{% for order in active_orders %}{% if order.workspace_carryover %}{% include "staff/_operations_order_card.html" %}{% endif %}{% endfor %}</div>
+        {% if workspace_stats.more_active_orders %}{% if staff_caps.order_edit %}<a class="ops-attention-more" href="{% url 'staff_orders' %}">عرض باقي الطلبات ({{ workspace_stats.active_orders }})</a>{% elif staff_caps.kitchen_board %}<a class="ops-attention-more" href="{% url 'staff_kitchen' %}">متابعة بقية التحضير</a>{% endif %}{% endif %}
+      </details>
+      {% elif workspace_stats.more_active_orders %}
+      {% if staff_caps.order_edit %}<a class="ops-attention-more" href="{% url 'staff_orders' %}">عرض باقي الطلبات ({{ workspace_stats.active_orders }})</a>{% elif staff_caps.kitchen_board %}<a class="ops-attention-more" href="{% url 'staff_kitchen' %}">متابعة بقية التحضير</a>{% endif %}
+      {% endif %}
+      <details class="ops-dashboard-collections"><summary>التحصيل والحسابات المرتبطة بالطلبات</summary>      {% if workspace_caps.cashier and standalone_to_collect %}
       <div class="ops-attention-collections">
         <h4>طلبات منفردة تم تقديمها وتنتظر القبض</h4>
         {% for order in standalone_to_collect %}
@@ -246,7 +252,8 @@
       <div class="ops-attention-footer">
         {% if staff_caps.order_edit %}<a href="{% url 'staff_orders' %}">كل الطلبات</a>{% elif staff_caps.kitchen_board %}<a href="{% url 'staff_kitchen' %}">لوحة التحضير</a>{% endif %}
       </div>
-    </aside>
+</details>
+    </section>
     {% if staff_caps.visit_manage %}
     <section class="ops-v2__accounts" id="open-accounts" data-ops-section="accounts">
       <div class="staff-v2-panel-head"><div><h3>الحسابات التي تحتاج متابعة مالية</h3><p>مبالغ مستحقة أو إنترنت مدفوع ما زال قيد الاحتساب. الإنترنت المجاني لا يظهر هنا.</p></div></div>
@@ -270,7 +277,6 @@
 
 
   </div>
-
 
 </section>
 
