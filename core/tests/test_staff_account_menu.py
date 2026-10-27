@@ -45,7 +45,7 @@ class StaffAccountMenuTests(TestCase):
             self.assertContains(response, reverse(route))
         self.assertContains(response, 'aria-label="الإدارة والإعدادات"')
         html = response.content.decode()
-        directory = html.split('id="staff-more"', 1)[1].split('id="staff-help"', 1)[0]
+        directory = html.split('id="staff-more"', 1)[1].split('</section>', 1)[0]
         self.assertNotIn("المستخدمون والصلاحيات", directory)
         self.assertNotIn("إدارة القائمة", directory)
 
