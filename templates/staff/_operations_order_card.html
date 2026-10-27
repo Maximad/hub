@@ -7,6 +7,7 @@
     <span class="ops-dashboard-order__place">{% if order.table %}{{ order.table }}{% else %}{{ order.get_fulfillment_label }}{% endif %}</span>
     <strong class="ops-dashboard-order__price">{{ order.total_syp|format_syp }}</strong>
     <span class="ops-dashboard-order__meta">أدخله {% if order.entered_by %}{{ order.entered_by.get_full_name|default:order.entered_by.username }}{% elif order.entry_source == 'public_menu' %}الزبون{% else %}غير موثق{% endif %}{% if order.recipient_kind != 'customer' %} · {{ order.get_recipient_kind_display }}{% endif %}</span>
+    <div class="ops-dashboard-order__items">{% for item in order.items.all|slice:":3" %}<span>{{ item.product_name_ar_snapshot }}{% if item.quantity > 1 %} × {{ item.quantity }}{% endif %}</span>{% empty %}<span>تفاصيل الأصناف في الطلب</span>{% endfor %}</div>
     <span class="ops-dashboard-order__balance">{% if order.remaining_syp > 0 %}متبقي {{ order.remaining_syp|format_syp }}{% elif order.paid_syp > 0 %}مدفوع · يحتاج خدمة{% else %}لا مستحقات · يحتاج خدمة{% endif %}</span>
   </div>
   <nav class="ops-v2__order-links ops-dashboard-order__actions" aria-label="إجراءات الطلب {{ order.display_number }}">
