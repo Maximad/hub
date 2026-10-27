@@ -155,3 +155,31 @@ body.staff-workspace-page .ops-brand-internet :is(a,button,summary):focus-visibl
   body.staff-workspace-page .ops-brand-shortcuts,body.staff-workspace-page .ops-brand-more,
   body.staff-workspace-page .ops-brand-internet__actions,body.staff-workspace-page .ops-brand-pin__copy {display:none!important;}
 }
+
+/* Android follow-up: preserve history, recover vertical space and show all KPIs. */
+body.staff-workspace-page .ops-rollover-alert{display:block;padding:8px 12px;margin:0;border:1px solid #e9d3a8;border-radius:13px;background:#fff7e6}
+body.staff-workspace-page .ops-rollover-alert>summary{display:flex;align-items:center;justify-content:space-between;gap:7px;min-height:32px;cursor:pointer;list-style:none}
+body.staff-workspace-page .ops-rollover-alert>summary::-webkit-details-marker{display:none}
+body.staff-workspace-page .ops-rollover-alert>summary strong{font-size:.83rem;color:#705014}
+body.staff-workspace-page .ops-rollover-alert>summary span{font-size:.72rem;color:#705014}
+body.staff-workspace-page .ops-rollover-alert__body{border-top:1px solid #e9d3a8;margin-top:8px;padding-top:8px}
+body.staff-workspace-page .ops-rollover-alert__body p{margin:0 0 8px;font-size:.78rem;line-height:1.6}
+body.staff-workspace-page .ops-rollover-alert:not([open]) .ops-rollover-alert__body{display:none}
+@media(max-width:700px){
+body.staff-workspace-page .ops-v2{gap:10px}
+body.staff-workspace-page .ops-brand-shortcut--day{display:none}
+body.staff-workspace-page .ops-brand-shortcut{min-height:68px;padding:9px}
+body.staff-workspace-page .ops-brand-shortcut small{display:none}
+body.staff-workspace-page .ops-brand-internet{gap:7px;padding:10px 12px}
+body.staff-workspace-page .ops-brand-internet__icon{width:36px;height:36px}
+body.staff-workspace-page .ops-v2__stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;min-width:0;max-width:100%;overflow:visible;margin:0;padding:0;gap:7px;scroll-snap-type:none}
+body.staff-workspace-page .ops-v2__stat{box-sizing:border-box;min-width:0;width:100%;max-width:100%;min-height:65px;flex:none;padding:8px;grid-template-columns:30px minmax(0,1fr);gap:2px 6px}
+body.staff-workspace-page .ops-v2__stat-icon{width:28px;height:28px}
+body.staff-workspace-page .ops-v2__stat strong{font-size:1.3rem}
+body.staff-workspace-page .ops-v2__stat span:last-child{font-size:.67rem;overflow-wrap:anywhere}
+body.staff-workspace-page .ops-v2__toolbar{gap:5px;padding:6px}
+body.staff-workspace-page .ops-v2__order{padding:10px;gap:4px}
+body.staff-workspace-page .ops-v2__order-links{gap:5px}
+body.staff-workspace-page .ops-v2__order-links .ops-attention-link{min-height:36px;padding:7px 8px}
+body.staff-workspace-page .ops-brand-more>summary{min-height:32px;padding:5px 3px}
+}
