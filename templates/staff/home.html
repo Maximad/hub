@@ -3,6 +3,7 @@
 {% block body_class %}staff-workspace-page staff-ui-v2-page hub-ui-v3{% endblock %}
 {% block content %}
 <section class="staff-v2-page ops-v2 ops-designed" dir="rtl" data-operations-v2>
+  <div class="ops-dashboard-topbar">
   <header class="staff-v2-page-head ops-v2__hero">
     <div class="staff-v2-page-head__copy">
       <p class="staff-v2-eyebrow">تشغيل هَبّ</p>
@@ -11,6 +12,59 @@
     </div>
     
   </header>
+  <details class="ops-brand-more" id="ops-brand-more">
+    <summary>المزيد من الأدوات <span aria-hidden="true">⌄</span></summary>
+    <div class="ops-brand-more__panel">
+  <details class="ops-quick-actions" data-daily-start>
+    <summary aria-label="فتح الإجراءات السريعة">+ <span>إجراءات</span></summary>
+    <nav class="hub-daily-start__grid ops-quick-actions__links" aria-label="الإجراءات السريعة">
+      {% for action in workspace_primary_actions %}
+        <a href="{{ action.url }}" data-daily-action="{{ action.key }}">{{ action.title }}</a>
+      {% endfor %}
+      {% if staff_caps.orders and staff_caps.visit_manage %}
+        <button type="button" data-dialog-open="new-account-dialog">+ فتح حساب / جلسة جديدة</button>
+      {% endif %}
+    </nav>
+  </details>
+  <section id="staff-today" class="staff-v2-panel hub-ux5-directory" aria-labelledby="staff-today-title">
+    <div class="staff-v2-panel-head"><div><h3 id="staff-today-title">اليوم</h3><p>المتابعة الدورية خلال الوردية.</p></div></div>
+    <nav class="staff-workspace__secondary-links hub-ux5-directory__links" aria-label="متابعة اليوم">
+      {% if workspace_caps.cashier %}<a href="{% url 'staff_cashier' %}">القبض ومتابعة الحسابات المفتوحة</a>{% endif %}
+      <a href="{% url 'staff_operational_tasks' %}">مهام الفريق</a>
+      <a href="{% url 'staff_close_day' %}">ملخص اليوم</a>
+      {% if staff_caps.reservations %}<a href="{% url 'staff_reservations' %}">الحجوزات والوصول</a>{% endif %}
+      {% if staff_caps.events %}<a href="{% url 'staff_events' %}">الفعاليات</a>{% endif %}
+      {% if staff_caps.internet_billing %}<a href="{% url 'staff_internet' %}">الإنترنت والجلسات</a>{% endif %}
+      {% if staff_caps.visit_manage %}<a href="{% url 'staff_visits' %}">كل الجلسات</a>{% endif %}
+      {% if staff_caps.order_edit %}<a href="{% url 'staff_orders' %}">كل الطلبات</a>{% endif %}
+    </nav>
+
+  </section>
+
+  <section id="staff-more" class="staff-v2-panel hub-ux5-directory" aria-labelledby="staff-more-title">
+    <div class="staff-v2-panel-head"><div><h3 id="staff-more-title">أقسام العمل الأخرى</h3><p>أعمال تشغيلية لا تحتاجها مع كل طلب. تجد الإعدادات وإدارة حسابك في القائمة بجانب اسمك.</p></div></div>
+    <nav class="staff-workspace__secondary-links hub-ux5-directory__links" aria-label="أقسام العمل الأخرى">
+      {% if staff_caps.inventory %}<a href="{% url 'staff_inventory_home' %}">المخزون والمشتريات</a>{% endif %}
+      {% if staff_caps.finance %}<a href="{% url 'staff_finance_home' %}">المالية والحسابات</a>{% endif %}
+      {% if staff_caps.internet_billing %}<a href="{% url 'staff_members' %}">الأعضاء</a>{% endif %}
+      {% if staff_caps.settings %}<a href="{% url 'staff_food_lab' %}">سُفرة والمشاركات</a>{% endif %}
+      {% if workspace_more_actions %}
+      <details class="ops-extra-actions">
+        <summary>مهام أخرى حسب صلاحياتك</summary>
+        <nav class="staff-workspace__secondary-links">
+          {% for action in workspace_more_actions %}
+          <a href="{{ action.url }}" data-daily-action="{{ action.key }}">{{ action.title }}</a>
+          {% endfor %}
+        </nav>
+      </details>
+      {% endif %}
+    </nav>
+  </section>
+
+    </div>
+  </details>
+
+  </div>
 
 
 
@@ -223,58 +277,6 @@
 
 
   </div>
-  <details class="ops-brand-more" id="ops-brand-more">
-    <summary>المزيد من الأدوات <span aria-hidden="true">⌄</span></summary>
-    <div class="ops-brand-more__panel">
-  <details class="ops-quick-actions" data-daily-start>
-    <summary aria-label="فتح الإجراءات السريعة">+ <span>إجراءات</span></summary>
-    <nav class="hub-daily-start__grid ops-quick-actions__links" aria-label="الإجراءات السريعة">
-      {% for action in workspace_primary_actions %}
-        <a href="{{ action.url }}" data-daily-action="{{ action.key }}">{{ action.title }}</a>
-      {% endfor %}
-      {% if staff_caps.orders and staff_caps.visit_manage %}
-        <button type="button" data-dialog-open="new-account-dialog">+ فتح حساب / جلسة جديدة</button>
-      {% endif %}
-    </nav>
-  </details>
-  <section id="staff-today" class="staff-v2-panel hub-ux5-directory" aria-labelledby="staff-today-title">
-    <div class="staff-v2-panel-head"><div><h3 id="staff-today-title">اليوم</h3><p>المتابعة الدورية خلال الوردية.</p></div></div>
-    <nav class="staff-workspace__secondary-links hub-ux5-directory__links" aria-label="متابعة اليوم">
-      {% if workspace_caps.cashier %}<a href="{% url 'staff_cashier' %}">القبض ومتابعة الحسابات المفتوحة</a>{% endif %}
-      <a href="{% url 'staff_operational_tasks' %}">مهام الفريق</a>
-      <a href="{% url 'staff_close_day' %}">ملخص اليوم</a>
-      {% if staff_caps.reservations %}<a href="{% url 'staff_reservations' %}">الحجوزات والوصول</a>{% endif %}
-      {% if staff_caps.events %}<a href="{% url 'staff_events' %}">الفعاليات</a>{% endif %}
-      {% if staff_caps.internet_billing %}<a href="{% url 'staff_internet' %}">الإنترنت والجلسات</a>{% endif %}
-      {% if staff_caps.visit_manage %}<a href="{% url 'staff_visits' %}">كل الجلسات</a>{% endif %}
-      {% if staff_caps.order_edit %}<a href="{% url 'staff_orders' %}">كل الطلبات</a>{% endif %}
-    </nav>
-
-  </section>
-
-  <section id="staff-more" class="staff-v2-panel hub-ux5-directory" aria-labelledby="staff-more-title">
-    <div class="staff-v2-panel-head"><div><h3 id="staff-more-title">أقسام العمل الأخرى</h3><p>أعمال تشغيلية لا تحتاجها مع كل طلب. تجد الإعدادات وإدارة حسابك في القائمة بجانب اسمك.</p></div></div>
-    <nav class="staff-workspace__secondary-links hub-ux5-directory__links" aria-label="أقسام العمل الأخرى">
-      {% if staff_caps.inventory %}<a href="{% url 'staff_inventory_home' %}">المخزون والمشتريات</a>{% endif %}
-      {% if staff_caps.finance %}<a href="{% url 'staff_finance_home' %}">المالية والحسابات</a>{% endif %}
-      {% if staff_caps.internet_billing %}<a href="{% url 'staff_members' %}">الأعضاء</a>{% endif %}
-      {% if staff_caps.settings %}<a href="{% url 'staff_food_lab' %}">سُفرة والمشاركات</a>{% endif %}
-      {% if workspace_more_actions %}
-      <details class="ops-extra-actions">
-        <summary>مهام أخرى حسب صلاحياتك</summary>
-        <nav class="staff-workspace__secondary-links">
-          {% for action in workspace_more_actions %}
-          <a href="{{ action.url }}" data-daily-action="{{ action.key }}">{{ action.title }}</a>
-          {% endfor %}
-        </nav>
-      </details>
-      {% endif %}
-    </nav>
-  </section>
-
-    </div>
-  </details>
-
 
 </section>
 
