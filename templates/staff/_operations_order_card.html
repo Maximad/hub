@@ -1,3 +1,4 @@
+{% load hub_numbers hub_time %}
 <article class="ops-v2__order ops-dashboard-order" data-attention-order="{{ order.status }}">
   <div class="ops-dashboard-order__head">
     <div class="ops-dashboard-order__identity"><strong class="hub-order-number">{{ order.display_number }}</strong><span class="ops-dashboard-order__age">منذ {{ order.created_at|ar_since }}</span></div>
