@@ -56,6 +56,7 @@
   {% endif %}
   {% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %}<link rel="stylesheet" href="{% static 'css/staff_account_menu.css' %}">{% endif %}
   {% if request.user.is_authenticated and request.path == "/staff/" %}<link rel="stylesheet" href="{% static 'css/staff_operations_attention.css' %}">{% endif %}
+  {% if request.user.is_authenticated and request.path == "/staff/" %}<link rel="stylesheet" href="{% static 'css/staff_operations_brand.css' %}">{% endif %}
   {% include "includes/hub_theme.html" %}
   {% comment %}Legacy density choices map onto the semantic token layer.{% endcomment %}
   {% if system_settings %}<style>:root{
@@ -108,6 +109,7 @@
     {% if not view_as_active %}<script src="{% static 'js/staff_notifications.js' %}"></script>{% endif %}
     <script src="{% static 'js/staff_responsive_tables.js' %}"></script>
     <script src="{% static 'js/staff_ui_v2.js' %}"></script>
+    {% if request.path == "/staff/" %}<script src="{% static 'js/staff_operations_brand.js' %}" defer></script>{% endif %}
     <script src="{% static 'js/staff_account_menu.js' %}" defer></script>
     <script src="{% static 'js/staff_launch_ui.js' %}"></script>
     <script src="{% static 'js/staff_pos_polish.js' %}"></script>
