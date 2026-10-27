@@ -205,3 +205,26 @@ body.staff-workspace-page .ops-designed :is(.ops-dashboard-filter>summary,.ops-d
 @media(prefers-reduced-motion:reduce){
  body.staff-workspace-page .ops-designed *{scroll-behavior:auto!important;transition:none!important}
 }
+
+/* Keep the auxiliary tools within the main heading rather than at page bottom. */
+body.staff-workspace-page .ops-designed .ops-dashboard-topbar{
+ display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;flex-wrap:wrap;
+}
+body.staff-workspace-page .ops-designed .ops-dashboard-topbar .ops-v2__hero{flex:1 1 auto;min-width:0}
+body.staff-workspace-page .ops-designed .ops-dashboard-topbar .ops-brand-more{
+ flex:0 0 auto;max-width:100%;position:relative
+}
+body.staff-workspace-page .ops-designed .ops-dashboard-topbar .ops-brand-more>summary{
+ border:1px solid #cce8e2;background:#e8f8f3;color:#006e60;
+ padding:8px 12px;border-radius:12px;min-height:39px;font-size:.78rem
+}
+body.staff-workspace-page .ops-designed .ops-brand-more[open] .ops-brand-more__panel{
+ position:absolute;z-index:80;inset-inline-end:0;top:calc(100% + 6px);
+ width:min(440px,calc(100vw - 35px));max-height:70dvh;overflow:auto;
+ border:1px solid #d7e5df;border-radius:15px;background:#fff;padding:11px;box-shadow:0 12px 34px #102e2e26
+}
+@media(max-width:700px){
+ body.staff-workspace-page .ops-designed .ops-dashboard-topbar .ops-brand-more>summary{
+   min-height:36px;padding:7px 10px
+ }
+}
