@@ -228,3 +228,11 @@ body.staff-workspace-page .ops-designed .ops-brand-more[open] .ops-brand-more__p
    min-height:36px;padding:7px 10px
  }
 }
+
+body.staff-workspace-page .ops-designed .ops-dashboard-order__items{
+ grid-column:1/-1;display:flex;align-items:center;gap:4px 7px;flex-wrap:wrap;
+ padding-top:5px;font-size:.74rem;color:#53696c
+}
+body.staff-workspace-page .ops-designed .ops-dashboard-order__items span:not(:last-child)::after{
+ content:" + ";color:#aab2b2;margin-inline-start:6px
+}
