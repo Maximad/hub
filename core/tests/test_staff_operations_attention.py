@@ -102,6 +102,30 @@ class StaffOperationsAttentionTests(TestCase):
         self.assertEqual(response.context['active_orders'][0].pk, ready.pk)
         self.assertContains(response, 'عرض باقي الطلبات (22)')
 
+    def test_colorful_dashboard_focuses_current_day_without_losing_carryover(self):
+        previous = self.order(status=Order.Status.READY)
+        current = self.order(status=Order.Status.NEW)
+        first = self.client.get(reverse('staff_home'))
+        cutoff = first.context['workspace_business_day_start']
+        Order.objects.filter(pk=previous.pk).update(created_at=cutoff - timedelta(minutes=5))
+        response = self.client.get(reverse('staff_home'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['workspace_stats']['today_active_orders'], 1)
+        self.assertEqual(response.context['workspace_stats']['carryover_orders'], 1)
+        self.assertEqual(response.context['active_orders'][0].pk, current.pk)
+        self.assertContains(response, 'id="carryover-orders"')
+        self.assertContains(response, 'ops-dashboard-order-grid')
+        self.assertContains(response, 'data-guest-wifi-pin', count=0)
+        self.assertContains(response, 'staff_operations_designed.css')
+
+    def test_design_keeps_role_gated_existing_actions(self):
+        response = self.client.get(reverse('staff_home'))
+        self.assertContains(response, 'ops-dashboard-topbar')
+        self.assertContains(response, 'id="staff-more"')
+        self.assertContains(response, 'ops-dashboard-filter')
+        self.assertContains(response, 'href="{}"'.format(reverse('staff_kitchen')))
+        self.assertContains(response, 'href="{}"'.format(reverse('staff_cashier')))
+
     def test_operations_shortcuts_are_collapsed_and_wifi_pin_not_a_hero(self):
         response = self.client.get(reverse('staff_home'))
         self.assertContains(response, 'class="ops-quick-actions" data-daily-start')
