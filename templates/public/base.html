@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block document_language %}ar{% endblock %}
+{% block title %}هَبّ السويداء | مكان للثقافة واللقاء{% endblock %}
+{% block extra_head %}
+  <meta name="description" content="هَبّ السويداء، مكان للثقافة واللقاء. اكتشف الفعاليات المعلنة، وتعرّف على المكان، وتصفّح المنيو.">
+  <link rel="stylesheet" href="{% static 'css/public_homepage.css' %}">
+  <script src="{% static 'js/public_homepage.js' %}" defer></script>
+{% endblock %}
+{% block body_class %} public-home{% endblock %}
+{% block navigation %}
+<header class="ph-header">
+  <div class="ph-wrap ph-header__inner">
+    <a class="ph-brand" href="{% url 'dashboard' %}" aria-label="هَبّ السويداء — الصفحة الرئيسية"><span class="ph-brand__mark" aria-hidden="true">هَبّ</span><span>السويداء<br><small>مكان للثقافة واللقاء</small></span></a>
+    <nav class="ph-desktop-nav" aria-label="التنقل الرئيسي">
+      <a href="{% url 'public_event_list' %}">الفعاليات</a>
+      <a href="{% url 'dashboard' %}#place">المكان</a>
+      <a href="{% url 'dashboard' %}#hospitality">الأكل والشرب</a>
+      <a href="{% url 'dashboard' %}#participation">البرامج والمشاركة</a>
+    </nav>
+    <div class="ph-header__actions"><a class="ph-button ph-button--small" href="{% url 'menu_public' %}">المنيو <span aria-hidden="true">←</span></a><a class="ph-account" href="{% url 'member_account_home' %}">حسابي</a></div>
+    <details class="ph-mobile-nav"><summary>تصفّح <span aria-hidden="true">＋</span></summary><nav aria-label="التنقل على الهاتف"><a href="{% url 'public_event_list' %}">الفعاليات</a><a href="{% url 'dashboard' %}#place">المكان</a><a href="{% url 'dashboard' %}#hospitality">الأكل والشرب</a><a href="{% url 'dashboard' %}#participation">البرامج والمشاركة</a></nav></details>
+  </div>
+</header>
+{% endblock %}
+{% block footer %}
+<footer class="ph-footer"><div class="ph-wrap ph-footer__inner"><div><a class="ph-footer__brand" href="{% url 'dashboard' %}">هَبّ السويداء</a><p>ثقافة، أفكار، وناس بتلتقي.</p></div><nav aria-label="روابط ختامية"><a href="{% url 'public_event_list' %}">الفعاليات</a><a href="{% url 'menu_public' %}">المنيو</a><a href="{% url 'member_account_home' %}">حسابي</a></nav><p class="ph-footer__note">تفاصيل المواعيد المعلنة في صفحات الفعاليات.<br>كل الأوقات بتوقيت دمشق.</p></div></footer>
+{% endblock %}

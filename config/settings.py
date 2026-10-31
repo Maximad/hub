@@ -48,6 +48,9 @@ for _setting_name in (
     if _setting_value is not None:
         globals()[_setting_name] = _setting_value
 
+# Explicit release gate: keep the existing root until reviewed and enabled.
+PUBLIC_HOMEPAGE_ENABLED = bool_env('PUBLIC_HOMEPAGE_ENABLED', False)
+
 DEBUG = bool_env('DJANGO_DEBUG', False)
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', '').strip()
 _SECRET_KEY_PLACEHOLDERS = {

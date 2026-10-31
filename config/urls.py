@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path, re_path
+from core.views import public_homepage
 from core.views import menu
 from core.media_views import serve_media
 from core.views.staff_reports import staff_reports_home, staff_reports_day, staff_reports_day_csv, staff_product_margin_report, staff_product_margin_csv, staff_close_day, staff_close_day_print
@@ -90,7 +91,9 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/v1/management/', include('audit.integration_urls')),
     path('', include('member_accounts.urls')),
-    path('', menu.dashboard, name='dashboard'),
+    path('', public_homepage.homepage, name='dashboard'),
+    path('events/', public_homepage.event_list, name='public_event_list'),
+    path('events/<uuid:uuid>/', public_homepage.event_detail, name='public_event_detail'),
     path('wifi/', wifi_entry, name='wifi_entry'),
     path('wifi/staff-login/', wifi_staff_login, name='wifi_staff_login'),
     path('menu/', menu.menu_public, name='menu_public'),

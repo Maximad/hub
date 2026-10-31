@@ -1,0 +1,2 @@
+{% load tz %}
+{% timezone 'Asia/Damascus' %}<time datetime="{{ event.starts_at|date:'c' }}"><bdi dir="ltr">{{ event.starts_at|date:'j / n / Y' }} · {{ event.starts_at|date:'H:i' }}</bdi></time>{% endtimezone %}

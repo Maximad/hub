@@ -1,6 +1,6 @@
 {% load static message_accessibility %}
 <!DOCTYPE html>
-<html lang="{% if system_settings %}{{ system_settings.default_language }}{% else %}ar{% endif %}" dir="rtl">
+<html lang="{% block document_language %}{% if system_settings %}{{ system_settings.default_language }}{% else %}ar{% endif %}{% endblock %}" dir="rtl">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -66,6 +66,7 @@
     {% if system_settings.safe_input_size == 'compact' %}--hub-input-padding-y:.42rem;--hub-input-padding-x:.55rem;{% elif system_settings.safe_input_size == 'large' %}--hub-input-padding-y:.75rem;--hub-input-padding-x:.85rem;{% else %}--hub-input-padding-y:.55rem;--hub-input-padding-x:.65rem;{% endif %}
   }</style>{% endif %}
   <script src="{% static 'js/htmx.min.js' %}"></script>
+  {% block extra_head %}{% endblock %}
 </head>
 <body class="hub-page hub-ui-v3 {% if request.path|slice:":6" == "/menu/" or request.path == "/staff/" %}hub-visual-2026 {% endif %}{% block body_class %}{% endblock %}{% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %} hub-staff-ui{% endif %}{% if request.path|slice:":10" == "/provider/" %} hub-provider-ui{% endif %}{% if system_settings %} density-{{ system_settings.safe_ui_density }} button-scale-{{ system_settings.safe_button_padding_scale }} input-size-{{ system_settings.safe_input_size }} shadow-{{ system_settings.safe_card_shadow_level }}{% if system_settings.sticky_header_enabled %} hub-sticky-header{% endif %}{% endif %}">
   {% if view_as_active %}
@@ -77,6 +78,7 @@
     </div>
   </aside>
   {% endif %}
+  {% block navigation %}
   {% if request.user.is_authenticated and request.path|slice:":10" == "/provider/" and request.path != "/provider/login/" %}
     {% include "includes/provider_shell_nav.html" %}
   {% elif request.user.is_authenticated and request.path|slice:":7" == "/staff/" %}
@@ -94,6 +96,7 @@
       </div>
     </header>
   {% endif %}
+  {% endblock %}
   <a class="hub-skip-to-content" href="#hub-main-content">الانتقال إلى المحتوى</a>
   <main class="hub-container" id="hub-main-content">
     {% if messages %}
@@ -101,6 +104,7 @@
     {% endif %}
     {% block content %}{% endblock %}
   </main>
+  {% block footer %}{% endblock %}
   {% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %}
     {% include "staff/_context_drawer_shell.html" %}
   {% endif %}

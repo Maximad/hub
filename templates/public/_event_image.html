@@ -1,0 +1,4 @@
+<div class="ph-art{% if hero %} ph-art--hero{% endif %}">
+  <span class="ph-art__fallback" {% if event.image_url %}aria-hidden="true"{% endif %}><span>هَبّ / لقاءات</span><strong>مساحة<br>لفكرة جديدة.</strong><span>السويداء <span aria-hidden="true">←</span></span></span>
+  {% if event.image_url %}<img src="{{ event.image_url }}" alt="{{ event.image_alt }}" {% if hero %}fetchpriority="high"{% else %}loading="lazy"{% endif %} decoding="async" width="960" height="720">{% endif %}
+</div>

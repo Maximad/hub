@@ -1,0 +1,7 @@
+<article class="ph-event">
+  <a class="ph-event__link" href="{{ event.url }}">
+    {% include 'public/_event_image.html' %}
+    <div class="ph-event__meta">{% include 'public/_event_time.html' %}{% if event.is_ongoing %}<span>جارية الآن</span>{% endif %}</div>
+    <h3>{{ event.title }}</h3><span class="ph-text-link">تفاصيل الفعالية <span aria-hidden="true">←</span></span>
+  </a>
+</article>

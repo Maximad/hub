@@ -1,0 +1,5 @@
+{% extends 'public/base.html' %}
+{% block title %}الفعاليات | هَبّ السويداء{% endblock %}
+{% block content %}<div class="ph-wrap ph-section"><a class="ph-text-link" href="{% url 'dashboard' %}">هَبّ السويداء / الرئيسية</a><p class="ph-eyebrow">لقاءات وتجارب</p><h1>الفعاليات</h1><p class="ph-lead">المواعيد المعلنة، الجاية والجارية. كل الأوقات بتوقيت دمشق.</p>
+{% if events %}<div class="ph-events">{% for event in events %}{% include 'public/_event_card.html' %}{% endfor %}</div>{% else %}<div class="ph-empty"><h2>ما في فعاليات معلنة حالياً.</h2><p>بنشارك تفاصيل اللقاءات هون لما تُنشر. لحد وقتها، أهلاً فيك بالمنيو.</p><a class="ph-button" href="{% url 'menu_public' %}">تصفّح المنيو</a></div>{% endif %}
+{% if page.has_other_pages %}<nav class="ph-pagination" aria-label="صفحات الفعاليات">{% if page.has_previous %}<a class="ph-button ph-button--outline" href="?page={{ page.previous_page_number }}">السابق</a>{% endif %}<span>صفحة {{ page.number }} من {{ page.paginator.num_pages }}</span>{% if page.has_next %}<a class="ph-button ph-button--outline" href="?page={{ page.next_page_number }}">التالي</a>{% endif %}</nav>{% endif %}</div>{% endblock %}
