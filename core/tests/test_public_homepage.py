@@ -47,8 +47,8 @@ class PublicHomepageTests(TestCase):
         self.assertContains(response, '<h1 ', count=1)
         self.assertNotContains(response, '/staff/')
         self.assertNotContains(response, 'احجز الآن')
-        self.assertNotContains(response, '/programs/')
-        self.assertNotContains(response, '/popups/')
+        self.assertContains(response, 'href="/programs/"')
+        self.assertContains(response, 'href="/popups/"')
         self.assertContains(response, 'public_homepage.css')
         self.assertIn('no-store', response['Cache-Control'])
 
@@ -177,7 +177,7 @@ class PublicHomepageTests(TestCase):
             event = self.event(title_ar=f'لقاء {index}')
             asset = MediaAsset.objects.create(title_ar='poster', external_url='https://example.com/poster.jpg')
             EventMedia.objects.create(event=event, media_asset=asset, role=EventMedia.Role.POSTER)
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(5):
             context = public_homepage_context(now=NOW)
         self.assertEqual(len(context['events']), 3)
         first = self.client.get('/events/')

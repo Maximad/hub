@@ -1,0 +1,5 @@
+<section class="ph-section" id="{{ section_id }}" aria-labelledby="{{ section_id }}-title">
+  <div class="ph-section__heading"><h2 id="{{ section_id }}-title">{{ title }}</h2><a class="ph-text-link" href="{% url index_route %}">عرض الكل <span aria-hidden="true">←</span></a></div>
+  {% if items %}<div class="ph-events">{% for item in items %}{% include 'public/_discovery_card.html' %}{% endfor %}</div>
+  {% else %}<div class="ph-empty"><p>{{ empty_message }}</p></div>{% endif %}
+</section>

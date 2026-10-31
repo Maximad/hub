@@ -96,8 +96,8 @@ class CommercialAllocationAdmin(admin.ModelAdmin):
 
 @admin.register(Program)
 class ProgramAdmin(admin.ModelAdmin):
-    list_display = ('name_ar', 'code', 'status', 'starts_at', 'ends_at', 'capacity', 'is_active')
-    list_filter = ('status', 'is_active', 'starts_at')
+    list_display = ('name_ar', 'code', 'status', 'starts_at', 'ends_at', 'capacity', 'is_active', 'is_public')
+    list_filter = ('status', 'is_active', 'is_public', 'starts_at')
     search_fields = ('code', 'name_ar', 'name_en', 'description_ar', 'description_en')
     readonly_fields = ('created_at', 'updated_at')
     date_hierarchy = 'starts_at'

@@ -1,0 +1,13 @@
+{% extends 'public/base.html' %}
+{% block title %}{{ section_title }} | هَبّ السويداء{% endblock %}
+{% block content %}
+<div class="ph-wrap ph-section">
+  <a class="ph-text-link" href="{% url 'dashboard' %}">هَبّ السويداء / الرئيسية</a>
+  <p class="ph-eyebrow">اكتشف هَبّ</p>
+  <h1>{{ section_title }}</h1>
+  <p class="ph-lead">{{ intro }}</p>
+  {% if items %}<div class="ph-events">{% for item in items %}{% include 'public/_discovery_card.html' %}{% endfor %}</div>
+  {% else %}<div class="ph-empty"><h2>ما في محتوى معلن متاح بهالصفحة حالياً.</h2><p>بنشارك التفاصيل هون لما تكون جاهزة للنشر.</p><a class="ph-text-link" href="{% url 'public_event_list' %}">اكتشف الفعاليات المعلنة</a></div>{% endif %}
+  {% if page.has_other_pages %}<nav class="ph-pagination" aria-label="صفحات {{ section_title }}">{% if page.has_previous %}<a class="ph-button ph-button--outline" href="?page={{ page.previous_page_number }}">السابق</a>{% endif %}<span>صفحة {{ page.number }}</span>{% if page.has_next %}<a class="ph-button ph-button--outline" href="?page={{ page.next_page_number }}">التالي</a>{% endif %}</nav>{% endif %}
+</div>
+{% endblock %}

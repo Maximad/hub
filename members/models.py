@@ -371,6 +371,7 @@ class Program(models.Model):
     starts_at = models.DateTimeField(null=True, blank=True)
     ends_at = models.DateTimeField(null=True, blank=True)
     capacity = models.PositiveIntegerField(null=True, blank=True)
+    is_public = models.BooleanField(default=False, help_text="Explicit approval to publish this program on the public website.")
     is_active = models.BooleanField(default=True)
     metadata = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -82,3 +82,10 @@ body.public-home{--ph-paper:#f4f0e8;--ph-ink:#202722;--ph-green:#223a34;--ph-acc
 .public-home .hub-skip-to-content:focus{top:1rem}
 .public-home .ph-asterisk{font-family:Georgia,serif}
 .public-home .ph-brand small{color:var(--ph-green)}
+/* Sprint B discovery shares the public shell, never operational layouts. */
+.public-home .ph-discovery-card{padding:1.5rem;background:var(--ph-card);border-top:2px solid #c98d5b;min-width:0}
+.public-home .ph-discovery-card .ph-event__meta{display:block}
+.public-home .ph-discovery-card .ph-event__meta p{margin-bottom:.5rem}
+.public-home .ph-price{font-size:1.5rem;font-weight:600}
+.public-home .ph-notice{padding:1rem;border-inline-start:3px solid #c98d5b;background:var(--ph-card);margin-top:1.5rem}
+@media(min-width:1101px) and (max-width:1400px){.public-home .ph-desktop-nav{gap:.7rem;font-size:.8rem}.public-home .ph-header__inner{gap:1rem}}

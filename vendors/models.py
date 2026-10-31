@@ -23,6 +23,7 @@ class Vendor(models.Model):
     commission_fixed_syp = models.PositiveIntegerField(null=True, blank=True)
     settlement_notes = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
+    is_public = models.BooleanField(default=False, help_text="Explicit approval for public website display; internal fields remain private.")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -46,6 +47,7 @@ class VendorParticipation(models.Model):
     event = models.ForeignKey(Event, on_delete=models.SET_NULL, null=True, blank=True, related_name='vendor_participations')
     notes = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PLANNED)
+    is_public = models.BooleanField(default=False, help_text="Explicit approval for public website display; internal fields remain private.")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -67,6 +69,7 @@ class VendorMedia(models.Model):
     is_primary = models.BooleanField('صورة أساسية', default=False)
     is_active = models.BooleanField('نشط', default=True)
     sort_order = models.IntegerField('ترتيب العرض', default=0)
+    is_public = models.BooleanField(default=False, help_text="Explicit approval for public website display; internal fields remain private.")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

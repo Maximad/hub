@@ -70,4 +70,6 @@ def public_event(event, *, now):
 def public_homepage_context(*, now=None):
     now = now or timezone.now()
     events = tuple(public_event(event, now=now) for event in current_events(now)[:3])
-    return {'events': events, 'featured_event': events[0] if events else None}
+    from core.services.public_discovery import public_discovery_context
+    return {'events': events, 'featured_event': events[0] if events else None,
+            **public_discovery_context(now=now)}

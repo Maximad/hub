@@ -1,0 +1,17 @@
+{% extends 'public/base.html' %}
+{% block title %}{{ item.title }} | هَبّ السويداء{% endblock %}
+{% block content %}
+<article class="ph-wrap ph-detail ph-section">
+  <div>
+    <a class="ph-text-link" href="{% url index_route %}">{{ section_title }} / عرض الكل</a>
+    <p class="ph-eyebrow">هَبّ السويداء / {{ section_title }}</p>
+    <h1>{{ item.title }}</h1>
+    {% include 'public/_discovery_meta.html' %}
+    {% if item.ends_at %}{% load tz %}{% timezone 'Asia/Damascus' %}<p>حتى <time datetime="{{ item.ends_at|date:'c' }}"><bdi dir="ltr">{{ item.ends_at|date:'j / n / Y · H:i' }}</bdi></time> · دمشق</p>{% endtimezone %}{% endif %}
+    <div class="ph-detail__description">{% if item.description %}{{ item.description|linebreaks }}{% else %}<p>تُنشر التفاصيل الإضافية هنا عند توفرها.</p>{% endif %}</div>
+    {% if section == 'memberships' %}<p class="ph-notice">هذه صفحة تعريفية بالخطة، وليست عملية شراء أو تفعيل عضوية.</p>{% else %}<p class="ph-notice">هذه صفحة تعريفية. تفاصيل الحضور أو المشاركة تُعلن ضمن الوصف عند توفرها.</p>{% endif %}
+    <div class="ph-actions"><a class="ph-button ph-button--outline" href="{% url 'menu_public' %}">تصفّح المنيو</a>{% if section == 'memberships' %}<a class="ph-text-link" href="{% url 'member_account_home' %}">حسابي</a>{% endif %}</div>
+  </div>
+  {% if item.image_url %}<div>{% include 'public/_event_image.html' with event=item hero=True %}</div>{% endif %}
+</article>
+{% endblock %}

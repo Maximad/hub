@@ -16,10 +16,10 @@
       <a href="{% url 'public_event_list' %}">الفعاليات</a>
       <a href="{% url 'dashboard' %}#place">المكان</a>
       <a href="{% url 'dashboard' %}#hospitality">الأكل والشرب</a>
-      <a href="{% url 'dashboard' %}#participation">البرامج والمشاركة</a>
+      <a href="{% url 'public_program_list' %}">البرامج</a><a href="{% url 'public_popup_list' %}">الضيوف والتجارب</a><a href="{% url 'public_membership_list' %}">العضويات</a>
     </nav>
     <div class="ph-header__actions"><a class="ph-button ph-button--small" href="{% url 'menu_public' %}">المنيو <span aria-hidden="true">←</span></a><a class="ph-account" href="{% url 'member_account_home' %}">حسابي</a></div>
-    <details class="ph-mobile-nav"><summary>تصفّح <span aria-hidden="true">＋</span></summary><nav aria-label="التنقل على الهاتف"><a href="{% url 'public_event_list' %}">الفعاليات</a><a href="{% url 'dashboard' %}#place">المكان</a><a href="{% url 'dashboard' %}#hospitality">الأكل والشرب</a><a href="{% url 'dashboard' %}#participation">البرامج والمشاركة</a></nav></details>
+    <details class="ph-mobile-nav"><summary>تصفّح <span aria-hidden="true">＋</span></summary><nav aria-label="التنقل على الهاتف"><a href="{% url 'public_event_list' %}">الفعاليات</a><a href="{% url 'dashboard' %}#place">المكان</a><a href="{% url 'dashboard' %}#hospitality">الأكل والشرب</a><a href="{% url 'public_program_list' %}">البرامج</a><a href="{% url 'public_popup_list' %}">الضيوف والتجارب</a><a href="{% url 'public_membership_list' %}">العضويات</a></nav></details>
   </div>
 </header>
 {% endblock %}

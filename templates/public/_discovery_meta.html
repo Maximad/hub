@@ -1,0 +1,6 @@
+{% load tz %}
+{% if item.name %}<p class="ph-eyebrow">{{ item.name }}</p>{% endif %}
+{% if item.starts_at %}
+  {% timezone 'Asia/Damascus' %}<p><time datetime="{{ item.starts_at|date:'c' }}"><bdi dir="ltr">{{ item.starts_at|date:'j / n / Y · H:i' }}</bdi></time> · دمشق</p>{% endtimezone %}
+{% elif item.price_syp == None %}<p>تفاصيل الموعد تُعلن لاحقاً.</p>{% endif %}
+{% if item.price_syp != None %}<p class="ph-price">{{ item.price_syp }} ل.س</p><p>{{ item.term }}</p>{% endif %}
