@@ -67,9 +67,12 @@ def public_event(event, *, now):
     )
 
 
-def public_homepage_context(*, now=None):
+def public_homepage_context(*, now=None, preview_feature=None):
     now = now or timezone.now()
     events = tuple(public_event(event, now=now) for event in current_events(now)[:3])
     from core.services.public_discovery import public_discovery_context
-    return {'events': events, 'featured_event': events[0] if events else None,
-            **public_discovery_context(now=now)}
+    from core.services.homepage_feature import resolve_homepage_feature
+    hero, reason = resolve_homepage_feature(now=now, fallback_event=events[0] if events else None,
+                                          preview_feature=preview_feature)
+    return {'events': events, 'featured_event': events[0] if events else None, 'hero': hero,
+            'feature_resolution': reason, **public_discovery_context(now=now)}

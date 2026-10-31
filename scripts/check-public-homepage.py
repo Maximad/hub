@@ -5,6 +5,7 @@ CHROMIUM_EXECUTABLE selects a system browser (default /usr/bin/chromium).
 """
 import os
 from datetime import datetime
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlparse
@@ -21,6 +22,7 @@ from playwright.sync_api import sync_playwright
 
 from core.services.public_homepage import PublicEvent
 from core.services.public_discovery import PublicDiscoveryItem
+from core.services.homepage_feature import PublicHero, source_hero
 
 output = Path(os.environ.get('PUBLIC_HOMEPAGE_PREVIEW_DIR', '/tmp/hub-public-homepage-preview'))
 output.mkdir(parents=True, exist_ok=True)
@@ -35,13 +37,22 @@ request = SimpleNamespace(user=AnonymousUser(), path='/', LANGUAGE_CODE='ar')
 program = PublicDiscoveryItem(title='برنامج تجريبي للأفكار والحوار', description='وصف تجريبي للتصميم فقط.', url='/programs/sample/', starts_at=now)
 popup = PublicDiscoveryItem(title='تجربة ضيافة تجريبية', name='ضيف تجريبي', url='/popups/00000000-0000-0000-0000-000000000001/', starts_at=now)
 plan = PublicDiscoveryItem(title='خطة عضوية تجريبية', description='وصف تجريبي، وليس عرضاً تجارياً.', url='/memberships/sample/', price_syp=12000, term='شهر واحد من تاريخ البداية')
-context = dict(request=request, events=events, featured_event=events[0], event=events[0], programs=(program,), popups=(popup,), memberships=(plan,))
+context = dict(request=request, events=events, featured_event=events[0], hero=source_hero(events[0], 'event'), event=events[0], programs=(program,), popups=(popup,), memberships=(plan,))
 pages = {
     'home': render_to_string('public/homepage.html', context),
     'events': render_to_string('public/events.html', context),
     'detail': render_to_string('public/event_detail.html', context),
-    'empty': render_to_string('public/homepage.html', dict(request=request, events=(), featured_event=None)),
+    'empty': render_to_string('public/homepage.html', dict(request=request, events=(), featured_event=None, hero=None)),
 }
+for key, hero in [
+    ('featured-program', replace(source_hero(program, 'program'), summary='ملخص تحريري تجريبي للبرنامج، وليس إعلاناً.')),
+    ('featured-popup', source_hero(popup, 'participation')),
+    ('featured-evergreen', PublicHero(title='هَبّ السويداء', url='/events/', source_kind='evergreen', summary='تعريف تحريري تجريبي بالمكان.')),
+]:
+    pages[key] = render_to_string('public/homepage.html', dict(context, hero=hero))
+pages['editor-preview'] = render_to_string('public/homepage.html', dict(context, homepage_preview={
+    'mode': 'draft', 'at': '2026-11-01T18:00', 'reason': 'معاينة اختبارية؛ ليست محتوى منشوراً.',
+}))
 for section, item, title, route in [
     ('programs', program, 'البرامج', 'public_program_list'),
     ('popups', popup, 'الضيوف والتجارب', 'public_popup_list'),

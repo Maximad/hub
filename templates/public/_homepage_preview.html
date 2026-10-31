@@ -1,0 +1,10 @@
+<aside class="ph-wrap ph-preview" aria-label="معاينة خاصة">
+  <h2>معاينة خاصة — ليست الصفحة المنشورة</h2>
+  <p>{% if homepage_preview.mode == 'draft' %}وضع المسودة يتجاهل تفعيل الإعداد ونشره وجدوله، لكنه لا يتجاوز خصوصية المصدر.{% else %}وضع الجدول يحاكي قواعد النشر الفعلية في الوقت المحدد.{% endif %}</p>
+  <p role="status">{{ homepage_preview.reason }}</p>
+  <form method="get">
+    <label for="ph-preview-mode">الوضع</label><select id="ph-preview-mode" name="mode"><option value="draft" {% if homepage_preview.mode == 'draft' %}selected{% endif %}>مسودة محفوظة</option><option value="scheduled" {% if homepage_preview.mode == 'scheduled' %}selected{% endif %}>محاكاة النشر</option></select>
+    <label for="ph-preview-at">الوقت بتوقيت دمشق</label><input id="ph-preview-at" type="datetime-local" name="at" value="{{ homepage_preview.at }}">
+    <button class="ph-button" type="submit">عرض المعاينة</button><a class="ph-text-link" href="{% url 'admin:core_homepagefeature_changelist' %}">إعداد المحتوى البارز</a>
+  </form>
+</aside>

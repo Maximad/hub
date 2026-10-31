@@ -89,3 +89,8 @@ body.public-home{--ph-paper:#f4f0e8;--ph-ink:#202722;--ph-green:#223a34;--ph-acc
 .public-home .ph-price{font-size:1.5rem;font-weight:600}
 .public-home .ph-notice{padding:1rem;border-inline-start:3px solid #c98d5b;background:var(--ph-card);margin-top:1.5rem}
 @media(min-width:1101px) and (max-width:1400px){.public-home .ph-desktop-nav{gap:.7rem;font-size:.8rem}.public-home .ph-header__inner{gap:1rem}}
+.public-home .ph-preview{padding:1.5rem;margin-block:1.5rem;border:2px dashed #8b4b24;background:var(--ph-card)}
+.public-home .ph-preview h2{font-size:1.4rem}
+.public-home .ph-preview form{display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;margin-top:1rem}
+.public-home .ph-preview :is(select,input){max-width:100%;min-height:44px;color:var(--ph-ink);background:var(--ph-paper);border:1px solid var(--ph-green);padding:.5rem;font:inherit}
+.public-home .ph-preview :is(select,input,button):focus-visible{outline:3px solid #8b4b24;outline-offset:4px}

@@ -15,7 +15,7 @@ from .services.margins import product_unit_margin
 from .services.posting.context import PostingContext
 from .services.posting import expenses as expense_posting
 from .models import (
-    ActivityLog,
+    ActivityLog, HomepageFeature,
     CancellationReason,
     Category,
     HubVisit, HubVisitBrowserCredential,
@@ -913,3 +913,40 @@ class NotificationPreferenceAdmin(admin.ModelAdmin):
 
 from .admin_dashboard import install_hub_admin
 install_hub_admin()
+
+
+@admin.register(HomepageFeature)
+class HomepageFeatureAdmin(admin.ModelAdmin):
+    list_display = ('source_kind', 'enabled', 'is_published', 'starts_at', 'ends_at', 'updated_at')
+    readonly_fields = ('created_at', 'updated_at')
+    autocomplete_fields = ('event', 'program', 'participation', 'image')
+    change_form_template = 'admin/core/homepagefeature/change_form.html'
+    change_list_template = 'admin/core/homepagefeature/change_list.html'
+    fieldsets = (
+        ('المصدر', {'fields': ('source_kind', 'event', 'program', 'participation')}),
+        ('النشر والجدول', {'fields': ('enabled', 'is_published', 'starts_at', 'ends_at'),
+                          'description': 'المصدر يجب أن يبقى مؤهلاً للعرض العام. الوقت خارج الجدول يعرض البديل تلقائياً.'}),
+        ('المحتوى المعتمد', {'fields': ('summary_ar', 'image')}),
+        ('السجل', {'fields': ('created_at', 'updated_at')}),
+    )
+
+    def has_add_permission(self, request):
+        return super().has_add_permission(request) and not HomepageFeature.objects.exists()
+
+    def get_urls(self):
+        from django.urls import path
+        from .views.homepage_preview import homepage_preview
+        return [path('preview/', self.admin_site.admin_view(homepage_preview),
+                     name='core_homepagefeature_preview')] + super().get_urls()
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        ActivityLog.objects.create(
+            actor=request.user, action='homepage.feature.updated',
+            details={'source_kind': obj.source_kind, 'enabled': obj.enabled, 'is_published': obj.is_published,
+                     'starts_at': obj.starts_at.isoformat() if obj.starts_at else None,
+                     'ends_at': obj.ends_at.isoformat() if obj.ends_at else None,
+                     'event_id': obj.event_id, 'program_id': obj.program_id,
+                     'participation_id': obj.participation_id, 'image_id': obj.image_id,
+                     'changed_fields': list(form.changed_data)},
+        )

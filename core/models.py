@@ -3104,3 +3104,61 @@ class PageSetting(TimeStampedModel):
         if language == 'en':
             return self.subtitle_en or self.subtitle_ar or fallback
         return self.subtitle_ar or self.subtitle_en or fallback
+
+
+class HomepageFeature(TimeStampedModel):
+    """One optional editorial slot; publication never overrides source visibility."""
+    class SourceKind(models.TextChoices):
+        EVENT = 'event', 'فعالية'
+        PROGRAM = 'program', 'برنامج'
+        PARTICIPATION = 'participation', 'مشاركة ضيف'
+        EVERGREEN = 'evergreen', 'تعريف بالمكان'
+
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    source_kind = models.CharField(max_length=20, choices=SourceKind.choices, default=SourceKind.EVERGREEN)
+    event = models.ForeignKey('events.Event', null=True, blank=True, on_delete=models.SET_NULL)
+    program = models.ForeignKey('members.Program', null=True, blank=True, on_delete=models.SET_NULL)
+    participation = models.ForeignKey('vendors.VendorParticipation', null=True, blank=True, on_delete=models.SET_NULL)
+    enabled = models.BooleanField(default=False)
+    is_published = models.BooleanField(default=False)
+    starts_at = models.DateTimeField(null=True, blank=True, help_text='Inclusive; blank means no scheduled start.')
+    ends_at = models.DateTimeField(null=True, blank=True, help_text='Exclusive; blank means no scheduled end.')
+    summary_ar = models.CharField(max_length=300, blank=True)
+    image = models.ForeignKey('catalog.MediaAsset', null=True, blank=True, on_delete=models.SET_NULL,
+                              help_text='Publishing this feature explicitly approves this image for public display.')
+
+    class Meta:
+        verbose_name = 'المحتوى البارز للرئيسية'
+        verbose_name_plural = 'المحتوى البارز للرئيسية'
+        constraints = [
+            models.CheckConstraint(condition=Q(id=1), name='homepage_feature_single_slot'),
+            models.CheckConstraint(condition=Q(starts_at__isnull=True) | Q(ends_at__isnull=True)
+                                   | Q(ends_at__gt=models.F('starts_at')), name='homepage_feature_valid_window'),
+            # Missing references are allowed after SET_NULL, and fail closed on
+            # reads. Incompatible references can never silently change source.
+            models.CheckConstraint(condition=(
+                Q(source_kind='event', program__isnull=True, participation__isnull=True)
+                | Q(source_kind='program', event__isnull=True, participation__isnull=True)
+                | Q(source_kind='participation', event__isnull=True, program__isnull=True)
+                | Q(source_kind='evergreen', event__isnull=True, program__isnull=True, participation__isnull=True)
+            ), name='homepage_feature_source_shape'),
+        ]
+
+    def __str__(self):
+        return 'المحتوى البارز للرئيسية'
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        reference = {'event': 'event', 'program': 'program', 'participation': 'participation'}.get(self.source_kind)
+        if reference and not getattr(self, reference + '_id'):
+            errors[reference] = 'اختر المصدر المطلوب.'
+        for field in ('event', 'program', 'participation'):
+            if field != reference and getattr(self, field + '_id'):
+                errors[field] = 'اختر مرجعاً واحداً يطابق نوع المصدر.'
+        if self.starts_at and self.ends_at and self.ends_at <= self.starts_at:
+            errors['ends_at'] = 'يجب أن تكون النهاية بعد البداية.'
+        if self.image_id and self.image.media_type not in {'image', 'gif'}:
+            errors['image'] = 'اختر صورة أو صورة متحركة.'
+        if errors:
+            raise ValidationError(errors)
