@@ -8,6 +8,7 @@ from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.core.validators import MaxValueValidator
+from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.crypto import salted_hmac
@@ -22,6 +23,8 @@ from reservations.attendance import (
     RequestRateLimited, accepting_events, digest, normalize_phone, review_request, submit_request, withdraw_request,
 )
 from reservations.models import EventAttendanceRequest as AttendanceRequest
+from reservations.attendance_review import attendance_review_info
+from events.models import Event
 
 OWNER_SESSION_KEY = 'public_attendance_owner'
 
@@ -121,19 +124,61 @@ def attendance_receipt(request, uuid):
     return response
 
 
+class AttendanceQueueFilterForm(forms.Form):
+    status = forms.ChoiceField(label='الحالة', choices=[('all', 'الكل'), *AttendanceRequest.Status.choices])
+    event = forms.UUIDField(label='الفعالية', required=False, widget=forms.Select)
+    q = forms.CharField(label='الاسم أو رقم التواصل أو عنوان الفعالية', required=False, max_length=80,
+                        widget=forms.TextInput(attrs={'type': 'search', 'autocomplete': 'off'}))
+
+    def __init__(self, *args, event_choices=(), **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['event'].widget.choices = [('', 'كل الفعاليات'), *event_choices]
+
+
 @require_staff_capability('reservations')
 @never_cache
 @require_http_methods(['GET'])
 def staff_attendance_requests(request):
+    values = request.GET.copy()
+    values.setdefault('status', 'pending')
+    # Bound the chooser to recent source events; filtered URLs also support
+    # older/deleted event snapshots without exposing any public contact lookup.
+    recent = Event.objects.filter(attendance_requests__isnull=False).distinct().order_by('-starts_at', '-pk')[:100]
+    choices = [(str(event.uuid), f'{event.title_ar} · {timezone.localtime(event.starts_at):%d/%m/%Y}') for event in recent]
+    raw_event = values.get('event', '')
+    try:
+        selected = uuidlib.UUID(raw_event) if raw_event else None
+    except (ValueError, AttributeError):
+        selected = None
+    if selected:
+        values['event'] = str(selected)
+    if selected and str(selected) not in {key for key, _ in choices}:
+        snapshot = AttendanceRequest.objects.filter(event_uuid=selected).order_by('-created_at', '-pk').first()
+        choices.append((str(selected), snapshot.event_title if snapshot else 'الفعالية المحددة'))
+    form = AttendanceQueueFilterForm(values, event_choices=choices)
     rows = AttendanceRequest.objects.select_related('event', 'reservation').order_by('-created_at', '-pk')
-    state = request.GET.get('status', 'pending')
-    if state in AttendanceRequest.Status.values:
-        rows = rows.filter(status=state)
+    valid = form.is_valid()
+    if valid:
+        state, event_uuid, query = (form.cleaned_data[key] for key in ['status', 'event', 'q'])
+        if state != 'all':
+            rows = rows.filter(status=state)
+        if event_uuid:
+            rows = rows.filter(event_uuid=event_uuid)
+        if query:
+            condition = Q(name__icontains=query) | Q(event_title__icontains=query) | Q(event__title_ar__icontains=query)
+            phone = query.translate(str.maketrans('٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹', '01234567890123456789'))
+            phone = ''.join(char for char in phone if char not in ' ()-')
+            if phone:
+                condition |= Q(phone__icontains=phone)
+            rows = rows.filter(condition)
     else:
-        state = 'all'
+        rows = rows.none()
+    query_values = values.copy()
+    query_values.pop('page', None)
     return render(request, 'staff/attendance_requests.html', {
-        'page': Paginator(rows, 25).get_page(request.GET.get('page')), 'state': state, 'states': AttendanceRequest.Status.choices,
-    })
+        'page': Paginator(rows, 25).get_page(request.GET.get('page')), 'filter_form': form,
+        'filter_query': query_values.urlencode(),
+    }, status=200 if valid else 400)
 
 
 @require_staff_capability('reservations')
@@ -149,4 +194,4 @@ def staff_attendance_request(request, uuid):
         else:
             messages.success(request, 'تمت معالجة طلب الحضور.')
         return redirect('staff_attendance_request', uuid=row.uuid)
-    return render(request, 'staff/attendance_request.html', {'attendance': row})
+    return render(request, 'staff/attendance_request.html', {'attendance': row, 'review_info': attendance_review_info(row)})

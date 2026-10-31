@@ -63,11 +63,27 @@ Retry keys are serialized transactionally in addition to the existing browser/IP
 
 These cases were reproduced against the original implementation with real PostgreSQL concurrency and controlled deadline progression. Run the full baseline with the documented fresh-database command: transaction tests can flush data-migration seeds, so reusing their database with `--keepdb` can leave unrelated default policies/access profiles absent. The follow-up tests also exercise the public form redirect at the submission limit. No schema, payment, access-policy, or release-setting change is included.
 
+## Staff review tools
+
+The staff inbox supports combined status/event filters and partial search by name, phone, original event title, or the current source title. Arabic/Persian phone digits are normalized for search. Pagination retains the selected filters. The event chooser is bounded to the 100 most recent linked source events, plus a selected older/deleted snapshot; per-row event links also filter historical requests. Invalid statuses, UUIDs or overlong search terms return a validation response with no result rows. These are existing-capability staff views, not public contact lookup endpoints.
+
+The review page explains blocked approval for cancelled/private/closed/started/deleted events and insufficient capacity. For eligible events it displays configured capacity, party size in active reservations, and current remaining places. The display uses the **same shared reservation total** as the locked capacity validator, including legacy pending/confirmed reservations and excluding terminal reservations. Pending public requests remain outside that total.
+
+This read-only hint takes no locks, holds no seats, and writes no data. It hides the approval control when the current information indicates approval cannot succeed, while leaving pending rejection available. Posting an approval still invokes the original transactional service and rechecks publication, deadline and capacity, including races after page load. An approved request missing its linked reservation is labelled for staff review rather than offered a replacement approval.
+
+Run `PYTHONPATH=. python scripts/check-staff-attendance.py` for offline six-viewport checks of ready/full/closed states, filters, keyboard focus and long Arabic text. Screenshots below use synthetic records and dummy contact data:
+
+- Queue: [mobile](screenshots/staff-attendance-review/queue-390.png), [desktop](screenshots/staff-attendance-review/queue-1280.png).
+- Ready for review: [mobile](screenshots/staff-attendance-review/ready-390.png), [desktop](screenshots/staff-attendance-review/ready-1280.png).
+- Blocked states: [full](screenshots/staff-attendance-review/full-390.png), [closed](screenshots/staff-attendance-review/closed-390.png).
+
+These tools introduce no migration, permission grant, payment rule or public enablement.
+
 ## Validation
 
 ```bash
 python manage.py migrate --noinput
-scripts/test-full.sh reservations.test_public_attendance reservations.test_attendance_reliability --noinput
+scripts/test-full.sh reservations.test_attendance_review reservations.test_public_attendance reservations.test_attendance_reliability --noinput
 PUBLIC_HOMEPAGE_ENABLED=true scripts/test-full.sh --noinput
 python manage.py collectstatic --noinput
 PYTHONPATH=. PUBLIC_HOMEPAGE_PREVIEW_DIR=/tmp/hub-sprint-d-preview python scripts/check-public-homepage.py

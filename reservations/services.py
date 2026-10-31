@@ -54,16 +54,21 @@ def _check_regular_conflict(reservation):
         raise ValidationError({'__all__': 'يتعارض هذا الحجز مع حجز نشط في الوقت والمكان نفسيهما.'})
 
 
+def event_reserved_party_size(event_id, *, exclude_reservation_id=None):
+    """Current reservation total shared by capacity validation and staff hints."""
+    return Reservation.objects.filter(
+        event_id=event_id, reservation_type=Reservation.ReservationType.EVENT,
+        status__in=ACTIVE_STATUSES,
+    ).exclude(pk=exclude_reservation_id).aggregate(total=Sum('party_size'))['total'] or 0
+
+
 def _check_event_capacity(reservation):
     if not reservation.event_id:
         raise ValidationError({'event': 'يرجى اختيار الفعالية.'})
     event = Event.objects.select_for_update().get(pk=reservation.event_id)
     if event.capacity is None:
         return
-    used = Reservation.objects.filter(
-        event_id=event.pk, reservation_type=Reservation.ReservationType.EVENT,
-        status__in=ACTIVE_STATUSES,
-    ).exclude(pk=reservation.pk).aggregate(total=Sum('party_size'))['total'] or 0
+    used = event_reserved_party_size(event.pk, exclude_reservation_id=reservation.pk)
     if used + reservation.party_size > event.capacity:
         raise ValidationError({'party_size': 'عدد الحضور يتجاوز سعة الفعالية.'})
 

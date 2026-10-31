@@ -1,0 +1,13 @@
+/* Staff attendance review only; public menu and receipt layouts are unaffected. */
+.hub-staff-ui .attendance-review-filters{display:flex;gap:1rem;align-items:end;flex-wrap:wrap;margin-block:1.25rem}
+.hub-staff-ui .attendance-review-filters>div{display:grid;gap:.5rem;flex:1 1 220px;min-width:0}
+.hub-staff-ui .attendance-review-filters :is(input,select){width:100%;min-width:0;min-height:44px}
+.hub-staff-ui .attendance-capacity-hint{padding:1rem;border-inline-start:3px solid #176b5a;background:#f4f8f6;margin-block:1rem;overflow-wrap:anywhere}
+.hub-staff-ui .attendance-capacity-hint dl{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.5rem 1rem;margin-block:1rem}
+.hub-staff-ui .attendance-capacity-hint :is(dt,dd){margin:0}
+.hub-staff-ui .attendance-capacity-hint dd{font-weight:700}
+.hub-staff-ui .attendance-reject-form{display:grid;gap:.5rem;margin-block:1rem;max-width:36rem}
+.hub-staff-ui .attendance-reject-form input{width:100%;min-width:0;min-height:44px;border:1px solid #71847c;padding:.5rem}
+.hub-staff-ui .attendance-reject-form button{justify-self:start}
+.hub-staff-ui .attendance-review-page :is(h1,h2,p,a,dt,.errorlist){overflow-wrap:anywhere}
+.hub-staff-ui .attendance-review-filters select{max-width:100%}
