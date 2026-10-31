@@ -55,11 +55,19 @@ Current development defaults in `config/settings.py`:
 
 Database transaction-scoped advisory locks serialize the counters across concurrent submissions. Exact retries return before consuming a new submission; withdrawal/rejection does not clear recent history. Rate denials return 429. The IP counter stores only a keyed digest of `REMOTE_ADDR`, never the raw IP or untrusted forwarded headers. Shared proxies/NAT can share this bucket; review these configurable development defaults and trusted-client-IP infrastructure before a separate release. There is no claim of verified-person rate limiting or distributed-bot immunity.
 
+## Reliability follow-up
+
+The attendance flow now checks the event start deadline again **after acquiring the event lock** for both submission and approval. A query whose timestamp was captured before waiting cannot create a late request or reservation when the event has started during the wait.
+
+Retry keys are serialized transactionally in addition to the existing browser/IP counters. Concurrent use of the same key from unrelated browsers/events produces one request and clean ownership denials, rather than late uniqueness/database errors. Existing browser-owned pending/approved requests are resolved before rate counters, including when a newly opened form generates a fresh retry key. This lookup changes no contact/party data and creates neither an audit event nor a reservation. New requests for another event/browser still face the configured submission limits.
+
+These cases were reproduced against the original implementation with real PostgreSQL concurrency and controlled deadline progression. Run the full baseline with the documented fresh-database command: transaction tests can flush data-migration seeds, so reusing their database with `--keepdb` can leave unrelated default policies/access profiles absent. The follow-up tests also exercise the public form redirect at the submission limit. No schema, payment, access-policy, or release-setting change is included.
+
 ## Validation
 
 ```bash
 python manage.py migrate --noinput
-scripts/test-full.sh reservations.test_public_attendance --noinput
+scripts/test-full.sh reservations.test_public_attendance reservations.test_attendance_reliability --noinput
 PUBLIC_HOMEPAGE_ENABLED=true scripts/test-full.sh --noinput
 python manage.py collectstatic --noinput
 PYTHONPATH=. PUBLIC_HOMEPAGE_PREVIEW_DIR=/tmp/hub-sprint-d-preview python scripts/check-public-homepage.py

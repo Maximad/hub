@@ -42,19 +42,29 @@ def _audit(row, action, actor=None, reason=''):
                               channel='staff' if actor else 'public-attendance')
 
 
-def _submission_locks(owner_hash, ip_hash):
-    # Transaction-scoped locks serialize rate counters across browsers/events.
-    # Sort keys consistently when two hashes map to different lock buckets.
-    keys = sorted({int(h[:16], 16) - 2**63 for h in (owner_hash, ip_hash)})
+def _submission_locks(owner_hash, ip_hash, client_key):
+    # Preserve existing rate-counter locks and serialize the globally unique
+    # retry key even when callers share neither browser, IP nor event.
+    hashes = (owner_hash, ip_hash, digest('attendance-client:'+str(client_key)))
+    keys = sorted({int(h[:16], 16) - 2**63 for h in hashes})
     with connection.cursor() as cursor:
         for key in keys:
             cursor.execute('SELECT pg_advisory_xact_lock(%s)', [key])
 
 
+def _lock_accepting_event(**lookup):
+    event = accepting_events().select_for_update().filter(**lookup).first()
+    # The SQL predicate's timestamp was captured before a possible lock wait.
+    # Recheck the clock once the event is locked, before any write is allowed.
+    if event is None or event.starts_at <= timezone.now():
+        return None
+    return event
+
+
 @transaction.atomic
 def submit_request(*, event_uuid, owner_hash, ip_hash, client_key, name, phone, party_size):
     name, phone = name.strip(), normalize_phone(phone.strip())
-    _submission_locks(owner_hash, ip_hash)
+    _submission_locks(owner_hash, ip_hash, client_key)
     existing = Request.objects.filter(client_key=client_key).first()
     if existing:
         if existing.owner_hash != owner_hash:
@@ -62,21 +72,24 @@ def submit_request(*, event_uuid, owner_hash, ip_hash, client_key, name, phone, 
         if (existing.name, existing.phone, existing.party_size) != (name, phone, party_size) or existing.event_uuid != event_uuid:
             raise ValidationError('هذا الطلب أُرسل ببيانات مختلفة. افتح طلباً جديداً.')
         return existing
+    # A fresh form key may still refer to this browser's existing request.
+    # Resolving it is read-only and must not consume submission budget.
+    active = Request.objects.filter(event_uuid=event_uuid, owner_hash=owner_hash,
+                                    status__in=['pending', 'approved']).first()
+    if active:
+        return active
     now = timezone.now()
     since = now-timedelta(hours=1)
     if (Request.objects.filter(owner_hash=owner_hash, created_at__gte=since).count() >= settings.PUBLIC_ATTENDANCE_OWNER_HOURLY_LIMIT
             or Request.objects.filter(ip_hash=ip_hash, created_at__gte=since).count() >= settings.PUBLIC_ATTENDANCE_IP_HOURLY_LIMIT):
         raise RequestRateLimited
-    event = accepting_events(now).select_for_update().filter(uuid=event_uuid).first()
+    event = _lock_accepting_event(uuid=event_uuid)
     if event is None:
         raise ValidationError('طلبات الحضور غير متاحة لهذه الفعالية.')
     if not name.strip() or not phone.strip() or len(name) > 120 or len(phone) > 30:
         raise ValidationError('الاسم ورقم التواصل مطلوبان وبطول صالح.')
     if isinstance(party_size, bool) or not isinstance(party_size, int) or party_size < 1 or party_size > min(event.capacity, settings.PUBLIC_ATTENDANCE_MAX_PARTY_SIZE):
         raise ValidationError('عدد الأشخاص المطلوب غير متاح.')
-    active = Request.objects.filter(event=event, owner_hash=owner_hash, status__in=['pending', 'approved']).first()
-    if active:
-        return active
     row = Request(event=event, event_uuid=event.uuid, event_title=event.title_ar, client_key=client_key, owner_hash=owner_hash,
                   ip_hash=ip_hash, name=name, phone=phone, party_size=party_size)
     row.full_clean()
@@ -112,7 +125,7 @@ def review_request(request_uuid, *, actor, action, reason=''):
     if row.status != Request.Status.PENDING:
         raise ValidationError('تمت معالجة الطلب مسبقاً.')
     if action == 'approve':
-        event = accepting_events().select_for_update().filter(pk=row.event_id).first()
+        event = _lock_accepting_event(pk=row.event_id)
         if event is None:
             raise ValidationError('الفعالية لم تعد تقبل الطلبات. راجع الحالة قبل اعتماد الحضور.')
         row.reservation = create_reservation(Reservation(
