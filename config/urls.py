@@ -99,6 +99,7 @@ urlpatterns = [
     path('memberships/', public_discovery.membership_list, name='public_membership_list'),
     path('memberships/<slug:code>/', public_discovery.membership_detail, name='public_membership_detail'),
     path('events/<uuid:uuid>/request/', event_attendance.attendance_form, name='public_attendance_form'),
+    path('attendance/', event_attendance.attendance_history, name='public_attendance_history'),
     path('attendance/<uuid:uuid>/', event_attendance.attendance_receipt, name='public_attendance_receipt'),
     path('staff/event-requests/', event_attendance.staff_attendance_requests, name='staff_attendance_requests'),
     path('staff/event-requests/<uuid:uuid>/', event_attendance.staff_attendance_request, name='staff_attendance_request'),

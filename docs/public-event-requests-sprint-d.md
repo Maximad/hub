@@ -79,11 +79,27 @@ Run `PYTHONPATH=. python scripts/check-staff-attendance.py` for offline six-view
 
 These tools introduce no migration, permission grant, payment rule or public enablement.
 
+## Private browser request history
+
+`/attendance/` lists the submitting browser's requests, including processed states, with 12 per page ordered by submission timestamp and PK descending. It is GET/HEAD only. A browser without a valid ownership nonce gets an honest empty state; no session or request is created by viewing it. A known ownership nonce adds **طلبات حضوري** links in the public discovery navigation/footer. The existing ordering/menu shell remains unchanged.
+
+Individual status pages and the list share a frozen, allowlisted presentation record. It contains the original public event title, requested party size, safe recorded status, private receipt URL and timestamps; it excludes contact name/phone, owner/IP hashes, nonce, retry key, reviewer and internal reasons. A staff or member login alone does not confer browser ownership, and query parameters cannot select another browser's records. This is not cross-device account history or phone-based recovery.
+
+The request's existing `created_at` is labelled **أُرسل الطلب**. The event date is labelled **الموعد المنشور حالياً** and is read only from a source that is currently published and public; no historical schedule is invented or backfilled. Private/draft/cancelled/completed/deleted sources expose neither a current date/link nor later private titles/descriptions. The original public request title and recorded request/reservation status remain available to the owner. Hiding the event date does not itself cancel or change a reservation; existing staff workflows remain authoritative. Dates display in Asia/Damascus independently of the active display timezone.
+
+Receipts continue to use the canonical linked reservation for approved/cancelled/completed/no-show wording. Pending withdrawal remains on the existing CSRF-protected status page. GET/HEAD tracking responses are no-store, vary by Cookie through SessionMiddleware, and set `noindex, nofollow`. Expired/cleared sessions or another device cannot restore access using a locator URL or unverified contact number. No data migration or new authentication/approval/payment rule is introduced.
+
+Tracking tests exercise anonymous empty states, owner separation, staff-login isolation, secret/contact exclusion, source withdrawal/deletion/rescheduling, Damascus dates, stable owned pagination, bounded queries, mutation rejection and existing CSRF-protected withdrawal. These additional captures use synthetic records only:
+
+- Browser history: [mobile](screenshots/private-attendance-history/history-390.png), [desktop](screenshots/private-attendance-history/history-1280.png).
+- Empty history: [mobile](screenshots/private-attendance-history/empty-390.png).
+- Dated status page: [mobile](screenshots/private-attendance-history/receipt-390.png), [desktop](screenshots/private-attendance-history/receipt-1280.png).
+
 ## Validation
 
 ```bash
 python manage.py migrate --noinput
-scripts/test-full.sh reservations.test_attendance_review reservations.test_public_attendance reservations.test_attendance_reliability --noinput
+scripts/test-full.sh reservations.test_attendance_tracking reservations.test_attendance_review reservations.test_public_attendance reservations.test_attendance_reliability --noinput
 PUBLIC_HOMEPAGE_ENABLED=true scripts/test-full.sh --noinput
 python manage.py collectstatic --noinput
 PYTHONPATH=. PUBLIC_HOMEPAGE_PREVIEW_DIR=/tmp/hub-sprint-d-preview python scripts/check-public-homepage.py

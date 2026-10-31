@@ -19,3 +19,11 @@ def system_settings(request):
         'view_as_actor': getattr(request, 'view_as_actor', None),
         'view_as_target': getattr(request, 'view_as_target', None),
     }
+
+
+def public_attendance_navigation(request):
+    from django.conf import settings
+    from reservations.attendance_tracking import OWNER_SESSION_KEY
+    session = getattr(request, 'session', {})
+    token = session.get(OWNER_SESSION_KEY) if settings.PUBLIC_HOMEPAGE_ENABLED else None
+    return {'attendance_tracking_available': isinstance(token, str) and bool(token)}

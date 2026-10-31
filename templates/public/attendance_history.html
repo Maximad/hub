@@ -1,0 +1,23 @@
+{% extends 'public/base.html' %}
+{% block title %}طلبات حضوري | هَبّ السويداء{% endblock %}
+{% block content %}
+<div class="ph-wrap ph-section ph-attendance-history">
+  <h1>طلبات حضوري</h1>
+  <p class="ph-lead">طلبات أُرسلت من هذا المتصفح. إرسال الطلب لا يحجز مقعداً؛ تأكيد الحضور يتم من الفريق.</p>
+  <p>هذه ليست قائمة حساب العضوية. تغيير الجهاز أو مسح جلسة المتصفح قد يفقد الوصول؛ رقم الهاتف أو رابط الطلب وحده لا يسترجعه.</p>
+  <div class="ph-attendance-list">
+    {% for receipt in items %}
+      <article class="ph-empty">
+        <h2>{{ receipt.title }}</h2><p>عدد الأشخاص: {{ receipt.party_size }}</p>
+        {% include 'public/_attendance_dates.html' %}
+        <p class="ph-notice">{{ receipt.status_label }}</p>
+        <a class="ph-text-link" href="{{ receipt.url }}">تفاصيل الطلب{% if receipt.can_withdraw %} أو سحبه{% endif %}</a>
+      </article>
+    {% empty %}
+      <div class="ph-empty"><h2>لا توجد طلبات مرتبطة بهذا المتصفح حالياً.</h2><p>قد تكون أرسلت طلباً من جهاز أو جلسة أخرى. راجع الفريق إذا كنت تحتاج التحقق من طلب سابق.</p></div>
+    {% endfor %}
+  </div>
+  {% if page.has_other_pages %}<nav class="ph-pagination" aria-label="صفحات طلبات الحضور">{% if page.has_previous %}<a class="ph-button ph-button--outline" href="?page={{ page.previous_page_number }}">السابق</a>{% endif %}<span>صفحة {{ page.number }} من {{ page.paginator.num_pages }}</span>{% if page.has_next %}<a class="ph-button ph-button--outline" href="?page={{ page.next_page_number }}">التالي</a>{% endif %}</nav>{% endif %}
+  <a class="ph-text-link" href="{% url 'public_event_list' %}">كل الفعاليات</a>
+</div>
+{% endblock %}

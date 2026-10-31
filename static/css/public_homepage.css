@@ -103,3 +103,8 @@ body.public-home{--ph-paper:#f4f0e8;--ph-ink:#202722;--ph-green:#223a34;--ph-acc
 .public-home .ph-form-field input:focus-visible{outline:3px solid #8b4b24;outline-offset:3px}
 .public-home .ph-attendance .errorlist{color:#8a2424;padding-inline-start:1.25rem}
 .public-home .ph-attendance .errorlist{overflow-wrap:anywhere}
+.public-home .ph-attendance-history{max-width:900px}
+.public-home .ph-attendance-history h1{font-size:clamp(2.2rem,5vw,4rem)}
+.public-home .ph-attendance-list{display:grid;gap:1.5rem;margin-block:2rem}
+.public-home .ph-attendance-list h2{font-size:1.5rem;margin-bottom:.75rem}
+.public-home .ph-attendance-date{font-size:.9rem;line-height:2;margin-block:.5rem}

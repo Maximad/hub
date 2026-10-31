@@ -16,13 +16,13 @@
       <a href="{% url 'public_event_list' %}">الفعاليات</a>
       <a href="{% url 'dashboard' %}#place">المكان</a>
       <a href="{% url 'dashboard' %}#hospitality">الأكل والشرب</a>
-      <a href="{% url 'public_program_list' %}">البرامج</a><a href="{% url 'public_popup_list' %}">الضيوف والتجارب</a><a href="{% url 'public_membership_list' %}">العضويات</a>
+      <a href="{% url 'public_program_list' %}">البرامج</a><a href="{% url 'public_popup_list' %}">الضيوف والتجارب</a><a href="{% url 'public_membership_list' %}">العضويات</a>{% if attendance_tracking_available %}<a href="{% url 'public_attendance_history' %}">طلبات حضوري</a>{% endif %}
     </nav>
     <div class="ph-header__actions"><a class="ph-button ph-button--small" href="{% url 'menu_public' %}">المنيو <span aria-hidden="true">←</span></a><a class="ph-account" href="{% url 'member_account_home' %}">حسابي</a></div>
-    <details class="ph-mobile-nav"><summary>تصفّح <span aria-hidden="true">＋</span></summary><nav aria-label="التنقل على الهاتف"><a href="{% url 'public_event_list' %}">الفعاليات</a><a href="{% url 'dashboard' %}#place">المكان</a><a href="{% url 'dashboard' %}#hospitality">الأكل والشرب</a><a href="{% url 'public_program_list' %}">البرامج</a><a href="{% url 'public_popup_list' %}">الضيوف والتجارب</a><a href="{% url 'public_membership_list' %}">العضويات</a></nav></details>
+    <details class="ph-mobile-nav"><summary>تصفّح <span aria-hidden="true">＋</span></summary><nav aria-label="التنقل على الهاتف"><a href="{% url 'public_event_list' %}">الفعاليات</a><a href="{% url 'dashboard' %}#place">المكان</a><a href="{% url 'dashboard' %}#hospitality">الأكل والشرب</a><a href="{% url 'public_program_list' %}">البرامج</a><a href="{% url 'public_popup_list' %}">الضيوف والتجارب</a><a href="{% url 'public_membership_list' %}">العضويات</a>{% if attendance_tracking_available %}<a href="{% url 'public_attendance_history' %}">طلبات حضوري</a>{% endif %}</nav></details>
   </div>
 </header>
 {% endblock %}
 {% block footer %}
-<footer class="ph-footer"><div class="ph-wrap ph-footer__inner"><div><a class="ph-footer__brand" href="{% url 'dashboard' %}">هَبّ السويداء</a><p>ثقافة، أفكار، وناس بتلتقي.</p></div><nav aria-label="روابط ختامية"><a href="{% url 'public_event_list' %}">الفعاليات</a><a href="{% url 'menu_public' %}">المنيو</a><a href="{% url 'member_account_home' %}">حسابي</a></nav><p class="ph-footer__note">تفاصيل المواعيد المعلنة في صفحات الفعاليات.<br>كل الأوقات بتوقيت دمشق.</p></div></footer>
+<footer class="ph-footer"><div class="ph-wrap ph-footer__inner"><div><a class="ph-footer__brand" href="{% url 'dashboard' %}">هَبّ السويداء</a><p>ثقافة، أفكار، وناس بتلتقي.</p></div><nav aria-label="روابط ختامية"><a href="{% url 'public_event_list' %}">الفعاليات</a><a href="{% url 'menu_public' %}">المنيو</a><a href="{% url 'member_account_home' %}">حسابي</a>{% if attendance_tracking_available %}<a href="{% url 'public_attendance_history' %}">طلبات حضوري</a>{% endif %}</nav><p class="ph-footer__note">تفاصيل المواعيد المعلنة في صفحات الفعاليات.<br>كل الأوقات بتوقيت دمشق.</p></div></footer>
 {% endblock %}

@@ -24,6 +24,8 @@ from core.services.public_homepage import PublicEvent
 from core.services.public_discovery import PublicDiscoveryItem
 from core.services.homepage_feature import PublicHero, source_hero
 from core.views.event_attendance import AttendanceForm
+from reservations.attendance_tracking import PublicAttendanceItem
+from django.core.paginator import Paginator
 
 output = Path(os.environ.get('PUBLIC_HOMEPAGE_PREVIEW_DIR', '/tmp/hub-public-homepage-preview'))
 output.mkdir(parents=True, exist_ok=True)
@@ -71,7 +73,19 @@ for key, label, pending, approved in [
     ('attendance-rejected', 'لم يعتمد الفريق الطلب', False, False),
 ]:
     pages[key] = render_to_string('public/attendance_receipt.html', dict(context, csrf_token='synthetic-preview-token',
-        receipt={'title': events[0].title, 'party_size': 2, 'status_label': label, 'can_withdraw': pending, 'approved': approved}))
+        attendance_tracking_available=True, receipt={'title': events[0].title, 'party_size': 2, 'status_label': label, 'can_withdraw': pending, 'approved': approved, 'requested_at': now, 'event_starts_at': now, 'event_url': events[0].url}))
+tracking_items = (
+    PublicAttendanceItem(title='طلب حضور تجريبي', party_size=2, status_label='بانتظار مراجعة الفريق',
+                         url='/attendance/00000000-0000-0000-0000-000000000003/', can_withdraw=True, approved=False,
+                         requested_at=now, event_starts_at=now, event_url=events[0].url),
+    PublicAttendanceItem(title='طلب سابق تجريبي', party_size=1, status_label='سحب الزائر الطلب',
+                         url='/attendance/00000000-0000-0000-0000-000000000004/', can_withdraw=False, approved=False,
+                         requested_at=now),
+)
+pages['attendance-history'] = render_to_string('public/attendance_history.html', dict(context, items=tracking_items,
+    page=Paginator(tracking_items, 12).get_page(1), attendance_tracking_available=True))
+pages['attendance-history-empty'] = render_to_string('public/attendance_history.html', dict(context, items=(),
+    page=Paginator([], 12).get_page(1), attendance_tracking_available=False))
 with sync_playwright() as p:
     browser = p.chromium.launch(executable_path=os.environ.get('CHROMIUM_EXECUTABLE', '/usr/bin/chromium'))
     page = browser.new_page()

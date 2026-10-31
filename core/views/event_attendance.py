@@ -26,7 +26,9 @@ from reservations.models import EventAttendanceRequest as AttendanceRequest
 from reservations.attendance_review import attendance_review_info
 from events.models import Event
 
-OWNER_SESSION_KEY = 'public_attendance_owner'
+from reservations.attendance_tracking import (
+    OWNER_SESSION_KEY, owner_digest, owned_attendance_requests, public_attendance_item,
+)
 
 
 class AttendanceForm(forms.Form):
@@ -45,11 +47,6 @@ class AttendanceForm(forms.Form):
 
     def clean_phone(self):
         return normalize_phone(self.cleaned_data['phone'])
-
-
-def owner_digest(request):
-    token = request.session.get(OWNER_SESSION_KEY)
-    return digest(token) if token else None
 
 
 def _message(error):
@@ -92,13 +89,13 @@ def attendance_form(request, uuid):
 
 
 @never_cache
-@require_http_methods(['GET', 'POST'])
+@require_http_methods(['GET', 'HEAD', 'POST'])
 def attendance_receipt(request, uuid):
     require_public_release()
     owner = owner_digest(request)
     if not owner:
         raise Http404
-    row = get_object_or_404(AttendanceRequest.objects.select_related('reservation'), uuid=uuid, owner_hash=owner)
+    row = get_object_or_404(owned_attendance_requests(owner), uuid=uuid)
     error = ''
     if request.method == 'POST':
         if request.POST.get('action') != 'withdraw':
@@ -107,19 +104,24 @@ def attendance_receipt(request, uuid):
             withdraw_request(row.uuid, owner_hash=owner)
         except ValidationError as exc:
             error = _message(exc)
-            row.refresh_from_db()
+            row = get_object_or_404(owned_attendance_requests(owner), uuid=uuid)
         else:
             return redirect('public_attendance_receipt', uuid=row.uuid)
-    label = row.get_status_display()
-    if row.status == 'approved':
-        if row.reservation_id:
-            label = {'confirmed': 'الفريق أكّد حجز الحضور', 'cancelled': 'ألغى الفريق الحجز',
-                     'completed': 'انتهى الحضور', 'no_show': 'سُجّل عدم حضور', 'pending': 'الحجز بانتظار مراجعة الفريق'}.get(row.reservation.status, 'راجع الفريق')
-        else:
-            label = 'راجع الفريق للتحقق من حالة الحجز'
-    receipt = {'title': row.event_title, 'party_size': row.party_size, 'status_label': label,
-               'can_withdraw': row.status == 'pending', 'approved': row.status == 'approved'}
+    receipt = public_attendance_item(row)
     response = render(request, 'public/attendance_receipt.html', {'receipt': receipt, 'error': error}, status=409 if error else 200)
+    response['X-Robots-Tag'] = 'noindex, nofollow'
+    return response
+
+
+@never_cache
+@require_http_methods(['GET', 'HEAD'])
+def attendance_history(request):
+    require_public_release()
+    owner = owner_digest(request)
+    rows = owned_attendance_requests(owner) if owner else AttendanceRequest.objects.none()
+    page = Paginator(rows, 12).get_page(request.GET.get('page'))
+    items = tuple(public_attendance_item(row) for row in page.object_list)
+    response = render(request, 'public/attendance_history.html', {'items': items, 'page': page})
     response['X-Robots-Tag'] = 'noindex, nofollow'
     return response
 

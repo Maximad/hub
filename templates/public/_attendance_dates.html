@@ -1,0 +1,6 @@
+{% load tz %}
+{% timezone 'Asia/Damascus' %}
+<p class="ph-attendance-date">أُرسل الطلب: <time datetime="{{ receipt.requested_at|date:'c' }}"><bdi dir="ltr">{{ receipt.requested_at|date:'j / n / Y · H:i' }}</bdi></time> · دمشق</p>
+{% if receipt.event_starts_at %}<p class="ph-attendance-date">الموعد المنشور حالياً: <time datetime="{{ receipt.event_starts_at|date:'c' }}"><bdi dir="ltr">{{ receipt.event_starts_at|date:'j / n / Y · H:i' }}</bdi></time> · دمشق</p>
+{% else %}<p class="ph-attendance-date">موعد الفعالية المنشور غير متاح حالياً. راجع الفريق للتفاصيل.</p>{% endif %}
+{% endtimezone %}
