@@ -1,5 +1,6 @@
 import uuid
 from django.db import models
+from django.core.exceptions import ValidationError
 
 
 class Event(models.Model):
@@ -19,8 +20,19 @@ class Event(models.Model):
     capacity = models.PositiveIntegerField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     is_public = models.BooleanField(default=True)
+    accepts_attendance_requests = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.CheckConstraint(
+            condition=models.Q(accepts_attendance_requests=False) | models.Q(capacity__isnull=False, capacity__gt=0),
+            name='event_requests_require_capacity')]
+
+    def clean(self):
+        super().clean()
+        if self.accepts_attendance_requests and not self.capacity:
+            raise ValidationError({'capacity': 'حدّد سعة موجبة قبل فتح طلبات الحضور.'})
 
     def __str__(self):
         return self.title_ar or self.title_en or str(self.uuid)[:8]

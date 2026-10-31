@@ -302,3 +302,8 @@ CURRENCY_RISK_THRESHOLDS = {
     'transfer': {'warning': '5000', 'acknowledgment': '10000', 'manager': '50000'},
     'cash_closing': {'warning': '5000', 'acknowledgment': '10000', 'manager': '50000'},
 }
+
+# Public attendance requests are separately opt-in per event; limits are not seat holds.
+PUBLIC_ATTENDANCE_MAX_PARTY_SIZE = 10
+PUBLIC_ATTENDANCE_OWNER_HOURLY_LIMIT = 5
+PUBLIC_ATTENDANCE_IP_HOURLY_LIMIT = 60

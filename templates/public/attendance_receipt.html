@@ -1,0 +1,6 @@
+{% extends 'public/base.html' %}
+{% block title %}حالة طلب الحضور | هَبّ السويداء{% endblock %}
+{% block content %}<div class="ph-wrap ph-section ph-attendance"><h1>حالة طلب الحضور</h1><h2>{{ receipt.title }}</h2><p>عدد الأشخاص: {{ receipt.party_size }}</p><p role="status" class="ph-notice">{{ receipt.status_label }}</p>
+{% if error %}<p role="alert">{{ error }}</p>{% endif %}
+{% if receipt.can_withdraw %}<p>لم يتأكد الحضور بعد. الطلب لا يحجز مقعداً.</p><form method="post">{% csrf_token %}<input type="hidden" name="action" value="withdraw"><button class="ph-button ph-button--outline" type="submit">سحب الطلب</button></form>{% elif receipt.approved %}<p>تعديل الحجز بعد الاعتماد يتم عبر الفريق. هذه الصفحة ليست إيصال دفع أو تذكرة مدفوعة.</p>{% endif %}
+<a class="ph-text-link" href="{% url 'public_event_list' %}">كل الفعاليات</a></div>{% endblock %}

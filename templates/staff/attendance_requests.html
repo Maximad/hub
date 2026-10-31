@@ -1,0 +1,6 @@
+{% extends 'base.html' %}{% block title %}طلبات الحضور{% endblock %}
+{% block content %}<section class="hub-section"><h1>طلبات الحضور من الموقع</h1><p>طلبات غير مؤكدة، لا تحجز مقاعد ولا تسجل دفعات. تحقق من التواصل قبل الاعتماد.</p>
+<form method="get"><label for="attendance-filter">الحالة</label><select name="status" id="attendance-filter">{% for value,label in states %}<option value="{{ value }}" {% if state == value %}selected{% endif %}>{{ label }}</option>{% endfor %}<option value="all" {% if state == 'all' %}selected{% endif %}>الكل</option></select><button type="submit">عرض</button></form>
+<div class="hub-list">{% for row in page %}<article class="hub-card"><a href="{% url 'staff_attendance_request' row.uuid %}"><strong>{{ row.event_title }}</strong> · {{ row.name }}</a><p>{{ row.party_size }} أشخاص · {{ row.get_status_display }}</p></article>{% empty %}<p>لا توجد طلبات بهذه الحالة.</p>{% endfor %}</div>
+<nav aria-label="صفحات الطلبات">{% if page.has_previous %}<a href="?status={{ state }}&page={{ page.previous_page_number }}">السابق</a>{% endif %}{% if page.has_next %}<a href="?status={{ state }}&page={{ page.next_page_number }}">التالي</a>{% endif %}</nav>
+<a href="{% url 'staff_reservations' %}">الحجوزات</a></section>{% endblock %}

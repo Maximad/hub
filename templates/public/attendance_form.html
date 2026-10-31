@@ -1,0 +1,13 @@
+{% extends 'public/base.html' %}
+{% block title %}طلب حضور | هَبّ السويداء{% endblock %}
+{% block content %}<div class="ph-wrap ph-section ph-attendance">
+<a class="ph-text-link" href="{{ event.url }}">تفاصيل الفعالية</a>
+<h1>طلب حضور</h1><h2>{{ event.title }}</h2><p>{% include 'public/_event_time.html' %} · دمشق</p>
+<p class="ph-notice">إرسال الطلب لا يحجز مقعداً ولا يؤكد الحضور. الفريق يراجع الطلب ويتحقق من بيانات التواصل قبل اعتماده. هذا ليس شراء تذكرة ولا تُحصّل أي دفعة هنا.</p>
+<form method="post">{% csrf_token %}{{ form.non_field_errors }}
+  {{ form.client_key }}{{ form.website }}
+  {% for field in form.visible_fields %}<div class="ph-form-field">{{ field.label_tag }}{{ field }}{{ field.errors }}</div>{% endfor %}
+  {{ form.client_key.errors }}
+  <p>بيانات التواصل تظهر للفريق لمعالجة الطلب فقط. تابع حالته من نفس المتصفح؛ الرابط وحده لا يمنح الوصول من متصفح آخر.</p>
+  <button class="ph-button" type="submit">إرسال الطلب للمراجعة</button>
+</form></div>{% endblock %}

@@ -17,8 +17,8 @@ class EventMediaInline(admin.TabularInline):
 
 @admin.register(Event)
 class EventAdmin(admin.ModelAdmin):
-    list_display = ('title_ar', 'starts_at', 'ends_at', 'room', 'capacity', 'status', 'is_public')
-    list_filter = ('status', 'is_public', 'room')
+    list_display = ('title_ar', 'starts_at', 'ends_at', 'room', 'capacity', 'status', 'is_public', 'accepts_attendance_requests')
+    list_filter = ('status', 'is_public', 'accepts_attendance_requests', 'room')
     search_fields = ('title_ar', 'title_en', 'description_ar', 'uuid')
     autocomplete_fields = ('room',)
     inlines = (EventMediaInline,)

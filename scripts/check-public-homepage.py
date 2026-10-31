@@ -23,6 +23,7 @@ from playwright.sync_api import sync_playwright
 from core.services.public_homepage import PublicEvent
 from core.services.public_discovery import PublicDiscoveryItem
 from core.services.homepage_feature import PublicHero, source_hero
+from core.views.event_attendance import AttendanceForm
 
 output = Path(os.environ.get('PUBLIC_HOMEPAGE_PREVIEW_DIR', '/tmp/hub-public-homepage-preview'))
 output.mkdir(parents=True, exist_ok=True)
@@ -37,7 +38,7 @@ request = SimpleNamespace(user=AnonymousUser(), path='/', LANGUAGE_CODE='ar')
 program = PublicDiscoveryItem(title='برنامج تجريبي للأفكار والحوار', description='وصف تجريبي للتصميم فقط.', url='/programs/sample/', starts_at=now)
 popup = PublicDiscoveryItem(title='تجربة ضيافة تجريبية', name='ضيف تجريبي', url='/popups/00000000-0000-0000-0000-000000000001/', starts_at=now)
 plan = PublicDiscoveryItem(title='خطة عضوية تجريبية', description='وصف تجريبي، وليس عرضاً تجارياً.', url='/memberships/sample/', price_syp=12000, term='شهر واحد من تاريخ البداية')
-context = dict(request=request, events=events, featured_event=events[0], hero=source_hero(events[0], 'event'), event=events[0], programs=(program,), popups=(popup,), memberships=(plan,))
+context = dict(request=request, events=events, featured_event=events[0], hero=source_hero(events[0], 'event'), event=events[0], attendance_request_url='/events/00000000-0000-0000-0000-000000000001/request/', programs=(program,), popups=(popup,), memberships=(plan,))
 pages = {
     'home': render_to_string('public/homepage.html', context),
     'events': render_to_string('public/events.html', context),
@@ -61,6 +62,16 @@ for section, item, title, route in [
     data = dict(context, section=section, section_title=title, index_route=route, items=(item,), item=item, intro='بيانات تجريبية فقط')
     pages[section] = render_to_string('public/discovery_list.html', data)
     pages[section + '-detail'] = render_to_string('public/discovery_detail.html', data)
+pages['attendance-form'] = render_to_string('public/attendance_form.html', dict(context,
+    form=AttendanceForm(initial={'party_size': 1, 'client_key': '00000000-0000-0000-0000-000000000002'}),
+    csrf_token='synthetic-preview-token'))
+for key, label, pending, approved in [
+    ('attendance-pending', 'بانتظار مراجعة الفريق', True, False),
+    ('attendance-approved', 'الفريق أكّد حجز الحضور', False, True),
+    ('attendance-rejected', 'لم يعتمد الفريق الطلب', False, False),
+]:
+    pages[key] = render_to_string('public/attendance_receipt.html', dict(context, csrf_token='synthetic-preview-token',
+        receipt={'title': events[0].title, 'party_size': 2, 'status_label': label, 'can_withdraw': pending, 'approved': approved}))
 with sync_playwright() as p:
     browser = p.chromium.launch(executable_path=os.environ.get('CHROMIUM_EXECUTABLE', '/usr/bin/chromium'))
     page = browser.new_page()

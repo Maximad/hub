@@ -94,3 +94,12 @@ body.public-home{--ph-paper:#f4f0e8;--ph-ink:#202722;--ph-green:#223a34;--ph-acc
 .public-home .ph-preview form{display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;margin-top:1rem}
 .public-home .ph-preview :is(select,input){max-width:100%;min-height:44px;color:var(--ph-ink);background:var(--ph-paper);border:1px solid var(--ph-green);padding:.5rem;font:inherit}
 .public-home .ph-preview :is(select,input,button):focus-visible{outline:3px solid #8b4b24;outline-offset:4px}
+.public-home .ph-attendance{max-width:760px}
+.public-home .ph-attendance h1{font-size:clamp(2.2rem,5vw,4rem)}
+.public-home .ph-attendance h2{font-size:1.6rem;margin-block:1rem}
+.public-home .ph-attendance form{margin-block:1.5rem}
+.public-home .ph-form-field{display:grid;gap:.5rem;margin-block:1rem}
+.public-home .ph-form-field input{width:100%;min-width:0;min-height:48px;border:1px solid var(--ph-green);background:var(--ph-card);font:inherit;padding:.6rem;color:var(--ph-ink)}
+.public-home .ph-form-field input:focus-visible{outline:3px solid #8b4b24;outline-offset:3px}
+.public-home .ph-attendance .errorlist{color:#8a2424;padding-inline-start:1.25rem}
+.public-home .ph-attendance .errorlist{overflow-wrap:anywhere}

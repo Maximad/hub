@@ -182,3 +182,39 @@ class Reservation(models.Model):
                 errors['table_area'] = 'الطاولة المختارة لا تتبع للمساحة المحددة.'
         if errors:
             raise ValidationError(errors)
+
+
+class EventAttendanceRequest(models.Model):
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'بانتظار مراجعة الفريق'
+        APPROVED = 'approved', 'اعتمده الفريق'
+        REJECTED = 'rejected', 'لم يعتمد الفريق الطلب'
+        WITHDRAWN = 'withdrawn', 'سحب الزائر الطلب'
+
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    client_key = models.UUIDField(unique=True, editable=False)
+    owner_hash = models.CharField(max_length=64, editable=False)
+    ip_hash = models.CharField(max_length=64, editable=False)
+    event = models.ForeignKey('events.Event', null=True, on_delete=models.SET_NULL, related_name='attendance_requests')
+    event_uuid = models.UUIDField(editable=False)
+    event_title = models.CharField(max_length=200)
+    name = models.CharField(max_length=120)
+    phone = models.CharField(max_length=30)
+    party_size = models.PositiveSmallIntegerField(default=1)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    reservation = models.OneToOneField(Reservation, null=True, blank=True, on_delete=models.SET_NULL,
+                                      related_name='attendance_request')
+    reviewed_by = models.ForeignKey('accounts.User', null=True, blank=True, on_delete=models.SET_NULL)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_reason = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [models.Index(fields=['owner_hash', 'created_at']), models.Index(fields=['ip_hash', 'created_at']),
+                   models.Index(fields=['status', 'created_at'])]
+        constraints = [
+            models.CheckConstraint(condition=models.Q(party_size__gt=0), name='attendance_request_positive_party'),
+            models.UniqueConstraint(fields=['event', 'owner_hash'], condition=models.Q(status__in=['pending', 'approved']),
+                                    name='one_open_attendance_request_per_browser'),
+        ]

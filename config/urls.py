@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path, re_path
-from core.views import public_homepage, public_discovery
+from core.views import public_homepage, public_discovery, event_attendance
 from core.views import menu
 from core.media_views import serve_media
 from core.views.staff_reports import staff_reports_home, staff_reports_day, staff_reports_day_csv, staff_product_margin_report, staff_product_margin_csv, staff_close_day, staff_close_day_print
@@ -98,6 +98,10 @@ urlpatterns = [
     path('popups/<uuid:uuid>/', public_discovery.popup_detail, name='public_popup_detail'),
     path('memberships/', public_discovery.membership_list, name='public_membership_list'),
     path('memberships/<slug:code>/', public_discovery.membership_detail, name='public_membership_detail'),
+    path('events/<uuid:uuid>/request/', event_attendance.attendance_form, name='public_attendance_form'),
+    path('attendance/<uuid:uuid>/', event_attendance.attendance_receipt, name='public_attendance_receipt'),
+    path('staff/event-requests/', event_attendance.staff_attendance_requests, name='staff_attendance_requests'),
+    path('staff/event-requests/<uuid:uuid>/', event_attendance.staff_attendance_request, name='staff_attendance_request'),
     path('events/', public_homepage.event_list, name='public_event_list'),
     path('events/<uuid:uuid>/', public_homepage.event_detail, name='public_event_detail'),
     path('wifi/', wifi_entry, name='wifi_entry'),

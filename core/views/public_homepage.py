@@ -4,6 +4,7 @@ from django.core.paginator import Paginator
 from django.http import Http404
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
+from django.urls import reverse
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_safe
 
@@ -41,6 +42,8 @@ def event_list(request):
 def event_detail(request, uuid):
     require_public_release()
     event = get_object_or_404(published_events(), uuid=uuid)
+    from reservations.attendance import accepting_events
     return render(request, 'public/event_detail.html', {
+        'attendance_request_url': reverse('public_attendance_form', kwargs={'uuid': event.uuid}) if accepting_events().filter(pk=event.pk).exists() else '',
         'event': public_event(event, now=timezone.now()),
     })
