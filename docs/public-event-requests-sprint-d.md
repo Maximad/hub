@@ -97,6 +97,8 @@ Tracking tests exercise anonymous empty states, owner separation, staff-login is
 
 ## Validation
 
+Before a separate release review, run the aggregate, read-only [`public_site_readiness`](public-site-readiness.md) command. It checks the current command environment, publication gates, feature fallback, optional media, membership configuration and attendance queue/reviewer coverage. It changes no flags or requests and does not prove the deployed service's configuration.
+
 ```bash
 python manage.py migrate --noinput
 scripts/test-full.sh reservations.test_attendance_tracking reservations.test_attendance_review reservations.test_public_attendance reservations.test_attendance_reliability --noinput
