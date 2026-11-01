@@ -5,6 +5,7 @@ import uuid
 from django.contrib import messages
 from django.contrib.auth import authenticate
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Prefetch, Q
 from django.shortcuts import get_object_or_404, redirect, render
@@ -41,13 +42,25 @@ def _visit_queryset():
     )
     return (
         customer_visit_queryset(HubVisit.objects.select_related('table', 'table__room', 'member'))
-        .prefetch_related(Prefetch('orders', queryset=order_qs, to_attr='cashier_orders'))
+         .prefetch_related(
+            Prefetch('orders', queryset=order_qs, to_attr='cashier_orders'),
+            Prefetch('internet_sessions', queryset=InternetSession.objects.filter(
+                status=InternetSession.Status.ACTIVE,
+            ), to_attr='cashier_active_internet'),
+        )
     )
 
 
 def _visit_row(visit):
     financial = visit_financials(visit, orders=getattr(visit, 'cashier_orders', None))
-    return {'visit': visit, **financial}
+    # A live metered session may have no finalized receivable yet. It still
+    # belongs in today's cashier review, not among empty visits.
+    metered_review = any(
+        session.entitlement_id is None and
+        session.billing_mode == InternetSession.BillingMode.OPEN_METERED
+        for session in getattr(visit, 'cashier_active_internet', ())
+    )
+    return {'visit': visit, 'metered_review': metered_review, **financial}
 
 
 def _standalone_rows(query=''):
@@ -181,13 +194,29 @@ def staff_cashier(request):
             | Q(table__room__name_ar__icontains=query)
             | Q(member__name_ar__icontains=query)
         )
-    visit_rows = [_visit_row(visit) for visit in visits.order_by('-last_activity_at')[:100]]
+    # Preserve the existing bounded recent-record scope; numeric order/visit
+    # lookup above remains available for older records.
+    candidates = [_visit_row(visit) for visit in visits.order_by('-last_activity_at')[:100]]
+    independent = _standalone_rows(query)
+    actionable_visits = [row for row in candidates if row['remaining'] > 0 or row['metered_review']]
+    actionable_orders = [row for row in independent if row['remaining'] > 0]
+    review_visits = [row for row in candidates if row['remaining'] <= 0 and not row['metered_review']]
+    review_orders = [row for row in independent if row['remaining'] <= 0]
+    mode = 'review' if request.GET.get('view') == 'review' else 'collect'
+    selected_visits = review_visits if mode == 'review' else actionable_visits
+    selected_orders = review_orders if mode == 'review' else actionable_orders
+    visit_page = Paginator(selected_visits, 20).get_page(request.GET.get('visit_page'))
+    order_page = Paginator(selected_orders, 20).get_page(request.GET.get('order_page'))
     return render(
         request,
         'staff/cashier.html',
         {
-            'visit_rows': visit_rows,
-            'standalone_rows': _standalone_rows(query),
+            'visit_rows': list(visit_page.object_list),
+            'standalone_rows': list(order_page.object_list),
+            'visit_page': visit_page, 'order_page': order_page,
+            'collect_count': len(actionable_visits) + len(actionable_orders),
+            'review_count': len(review_visits) + len(review_orders),
+            'view_mode': mode,
             'query': query,
             'page_setting': get_page_setting('staff_cashier', 'الكاشير', 'Cashier'),
         },
