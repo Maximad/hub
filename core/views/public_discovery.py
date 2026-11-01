@@ -27,7 +27,7 @@ def discovery_page(request, queryset, mapper, section):
     return render(request, 'public/discovery_list.html', {
         'items': items, 'page': page, 'section': section, 'section_title': title,
         'intro': intro, 'index_route': index_route, 'public_homepage_live': True,
-        **public_discovery_navigation(now=timezone.now()),
+        **public_discovery_navigation(now=timezone.now(), membership_visible=bool(items) if section == 'memberships' else None),
     })
 
 
@@ -37,7 +37,7 @@ def detail_page(request, item, section):
     title, _, index_route = SECTIONS[section]
     return render(request, 'public/discovery_detail.html', {
         'item': item, 'section': section, 'section_title': title, 'index_route': index_route,
-        'public_homepage_live': True, **public_discovery_navigation(now=timezone.now()),
+        'public_homepage_live': True, **public_discovery_navigation(now=timezone.now(), membership_visible=True if section == 'memberships' else None),
     })
 
 
