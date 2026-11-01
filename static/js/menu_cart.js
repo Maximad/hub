@@ -27,6 +27,10 @@
   const ensureQuantity = common.ensureQuantity || ((value) => Math.max(parseQuantity(value), 1));
   const formatMoney = common.formatMoney || ((value) => `${(Number(value) || 0).toLocaleString('en-US')} ل.س`);
   const dispatchCartUpdated = common.dispatchCartUpdated || (() => {});
+  const calculateItemPrice = common.calculateItemPrice || ((base, deltas, qty) => {
+    const unitPrice = (Number(base) || 0) + deltas.reduce((sum, delta) => sum + (Number(delta) || 0), 0);
+    return { unitPrice, lineTotal: unitPrice * parseQuantity(qty) };
+  });
   const deliverySettings = window.HUB_DELIVERY_SETTINGS || { enabled: false, feeMode: 'none', fixedFee: 0, minimum: 0 };
 
   const modal = form.querySelector('[data-menu-modal]');
@@ -102,6 +106,7 @@
     if (qtyInput && activeModalInitialQuantity < 1) qtyInput.value = 1;
     source.hidden = false;
     modalBody.appendChild(source);
+    updateItemModalPrice();
     const title = source.querySelector('[id^="menu-item-modal-title-"]');
     if (title?.id) modal.setAttribute('aria-labelledby', title.id);
     modal.hidden = false;
@@ -155,6 +160,21 @@
       }));
   }
 
+  function updateItemModalPrice() {
+    if (!activeModalSource) return;
+    const id = activeModalSource.dataset.modalProductId;
+    const card = cards.find((item) => item.dataset.productId === id);
+    if (!card) return;
+    const quantity = ensureQuantity(form.querySelector('#qty_' + id)?.value);
+    const basePrice = parsePrice(card.dataset.price || card.querySelector('[data-role="price"]')?.textContent);
+    const deltas = selectedOptions(card).map((option) => option.delta);
+    const { unitPrice, lineTotal } = calculateItemPrice(basePrice, deltas, quantity);
+    const unitNode = activeModalSource.querySelector('[data-modal-unit-price]');
+    const totalNode = activeModalSource.querySelector('[data-modal-add-price]');
+    if (unitNode) unitNode.textContent = formatMoney(unitPrice);
+    if (totalNode) totalNode.textContent = formatMoney(lineTotal);
+  }
+
   function currentFulfillmentMode() {
     return form.querySelector('input[name="fulfillment_mode"]:checked')?.value || 'inside_space';
   }
@@ -174,10 +194,8 @@
       const name = card.querySelector('.menu-product-name')?.textContent?.trim() || '';
       const basePrice = parsePrice(card.dataset.price || card.querySelector('[data-role="price"]')?.textContent);
       const options = selectedOptions(card);
-      const optionDelta = options.reduce((sum, option) => sum + option.delta, 0);
-      const unitPrice = basePrice + optionDelta;
+      const { unitPrice, lineTotal } = calculateItemPrice(basePrice, options.map((option) => option.delta), qty);
       const note = form.querySelector('#note_' + id)?.value?.trim();
-      const lineTotal = qty * unitPrice;
       totalQty += qty;
       totalPrice += lineTotal;
       lines.push({ id, name, qty, unitPrice, lineTotal, note, options });
@@ -289,6 +307,7 @@
     if (draftNewItem && button.dataset.action === 'minus') next = Math.max(1, next);
     input.value = next;
     if (!draftNewItem) update();
+    updateItemModalPrice();
   });
 
   function filterProducts() {
@@ -330,10 +349,12 @@
     if (event.target === posSearch) filterProducts();
     if (event.target.matches('.menu-qty-input')) event.target.value = parseQuantity(event.target.value);
     if (event.target.matches('input, textarea') && !isUncommittedNewModalControl(event.target)) update();
+    if (activeModalSource?.contains(event.target)) updateItemModalPrice();
   });
   form.addEventListener('change', (event) => {
     if (event.target.matches('.menu-qty-input')) event.target.value = parseQuantity(event.target.value);
     if (event.target.matches('input, textarea, select') && !isUncommittedNewModalControl(event.target)) update();
+    if (activeModalSource?.contains(event.target)) updateItemModalPrice();
   });
 
   stabilizeCartLayout();

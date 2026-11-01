@@ -39,6 +39,14 @@
     return `${(Number(value) || 0).toLocaleString('en-US')} ل.س`;
   }
 
+  // Shared estimate for the public menu cart and its product preview.
+  // The server remains authoritative when a customer submits an order.
+  function calculateItemPrice(basePrice, priceDeltas, quantity) {
+    const modifierTotal = (priceDeltas || []).reduce((sum, delta) => sum + (Number(delta) || 0), 0);
+    const unitPrice = (Number(basePrice) || 0) + modifierTotal;
+    return { unitPrice, lineTotal: unitPrice * parseQuantity(quantity) };
+  }
+
   function dispatchCartUpdated(target, detail) {
     (target || document).dispatchEvent(new CustomEvent('hub:cart-updated', { bubbles: true, detail: detail || {} }));
   }
@@ -56,5 +64,5 @@
     }
   }
 
-  window.HubCartCommon = { MAX_QTY, normalizeDigits, parseQuantity, clampQuantity, stepQuantity, ensureQuantity, formatMoney, dispatchCartUpdated, setLoading };
+  window.HubCartCommon = { MAX_QTY, normalizeDigits, parseQuantity, clampQuantity, stepQuantity, ensureQuantity, formatMoney, calculateItemPrice, dispatchCartUpdated, setLoading };
 })(window);

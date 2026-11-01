@@ -99,6 +99,9 @@ jobs:
       - name: Hub v1 launch readiness smoke check
         run: python manage.py hub_v1_readiness --json
 
+      - name: Verify public menu modifier estimate calculation
+        run: node --test static/js/tests/menu_cart_pricing.test.js
+
       - name: Run full Django test suite on PostgreSQL
         run: python manage.py test --noinput
 
