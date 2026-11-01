@@ -9,8 +9,13 @@
   <button class="hub-button hub-button-primary" type="submit">بحث</button>
 </form>
 
+<nav class="hub-toolbar" aria-label="تصفية حسابات الكاشير">
+  <a class="hub-button {% if view_mode == 'collect' %}hub-button-primary{% endif %}" href="?view=collect&q={{ query|urlencode }}" {% if view_mode == 'collect' %}aria-current="page"{% endif %}>بحاجة لمتابعة أو تحصيل ({{ collect_count }})</a>
+  <a class="hub-button {% if view_mode == 'review' %}hub-button-primary{% endif %}" href="?view=review&q={{ query|urlencode }}" {% if view_mode == 'review' %}aria-current="page"{% endif %}>محصّلة أو بلا رصيد ({{ review_count }})</a>
+</nav>
+<p class="hub-help-text">يعرض هذا الدليل أحدث 100 حساب مفتوح و100 طلب منفصل ضمن البحث. للسجلات الأقدم، ابحث برقم الطلب أو الجلسة. لا يغيّر هذا العرض أي رصيد.</p>
 <section class="hub-section">
-  <div class="hub-page-header"><div><p class="staff-workspace__eyebrow">تُجمع الطلبات المرتبطة بحساب مفتوح في فاتورة واحدة.</p><h3>الطاولات والجلسات المفتوحة</h3></div></div>
+  <div class="hub-page-header"><div><p class="staff-workspace__eyebrow">تُجمع الطلبات المرتبطة بحساب مفتوح في فاتورة واحدة.</p><h3>{% if view_mode == 'review' %}حسابات للعرض والمراجعة{% else %}الحسابات بحاجة لمتابعة{% endif %}</h3></div></div>
   <div class="hub-grid hub-grid-2 cashier-layout-{{ system_settings.cashier_layout|default:'single_column' }}">
     {% for row in visit_rows %}
       {% with visit=row.visit %}
@@ -22,15 +27,16 @@
           </div>
           <span class="hub-badge {% if row.remaining == 0 %}hub-badge-success{% else %}hub-badge-info{% endif %}">{{ row.payment_label }}</span>
         </div>
-        <p><strong>{{ row.orders|length }}</strong> طلبات مرتبطة بهذه الجلسة</p>
+        <p><strong>{{ row.orders|length }}</strong> طلبات مرتبطة بهذه الجلسة{% if row.metered_review %} · <strong>جلسة إنترنت فعالة تحتاج مراجعة قبل التسوية</strong>{% endif %}</p>
         <div>الإجمالي <span class="hub-money">{{ row.total|format_syp }}</span> | المدفوع <span class="hub-money">{{ row.paid|format_syp }}</span> | <strong>المتبقي <span class="hub-money">{{ row.remaining|format_syp }}</span></strong></div>
-        <div class="hub-toolbar" style="margin-top:.75rem"><a class="hub-button hub-button-primary" href="{% url 'staff_cashier_order' visit.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' visit.public_code %}?panel=payment" data-context-title="قبض حساب الجلسة" aria-haspopup="dialog">قبض الحساب</a>{% if staff_caps.visit_manage %}<a class="hub-button" href="{% url 'staff_visit_detail' visit.public_code %}" data-visit-context-url="{% url 'staff_visit_detail' visit.public_code %}?panel=1" data-context-title="تفاصيل الجلسة" aria-haspopup="dialog">تفاصيل الجلسة</a>{% endif %}</div>
+        <div class="hub-toolbar" style="margin-top:.75rem"><a class="hub-button hub-button-primary" href="{% url 'staff_cashier_order' visit.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' visit.public_code %}?panel=payment" data-context-title="قبض حساب الجلسة" aria-haspopup="dialog">{% if view_mode == 'review' %}عرض الحساب{% elif row.remaining > 0 %}قبض الحساب{% else %}مراجعة الحساب{% endif %}</a>{% if staff_caps.visit_manage %}<a class="hub-button" href="{% url 'staff_visit_detail' visit.public_code %}" data-visit-context-url="{% url 'staff_visit_detail' visit.public_code %}?panel=1" data-context-title="تفاصيل الجلسة" aria-haspopup="dialog">تفاصيل الجلسة</a>{% endif %}</div>
       </article>
       {% endwith %}
     {% empty %}
-      <p class="hub-empty-state">لا توجد جلسات مفتوحة مطابقة.</p>
+      <p class="hub-empty-state">{% if view_mode == 'review' %}لا توجد حسابات بلا رصيد ضمن نطاق البحث.{% else %}لا توجد حسابات تستدعي التحصيل أو مراجعة الإنترنت ضمن نطاق البحث.{% endif %}</p>
     {% endfor %}
   </div>
+  {% if visit_page.has_other_pages %}<nav class="hub-toolbar" aria-label="صفحات حسابات الجلسات">{% if visit_page.has_previous %}<a href="?view={{ view_mode }}&q={{ query|urlencode }}&visit_page={{ visit_page.previous_page_number }}">السابق</a>{% endif %}<span>صفحة {{ visit_page.number }} من {{ visit_page.paginator.num_pages }}</span>{% if visit_page.has_next %}<a href="?view={{ view_mode }}&q={{ query|urlencode }}&visit_page={{ visit_page.next_page_number }}">التالي</a>{% endif %}</nav>{% endif %}
 </section>
 
 {% if standalone_rows %}
@@ -43,10 +49,11 @@
         <div><strong class="hub-order-number">{{ order.display_number }}</strong></div>
         <div><span class="hub-badge hub-badge-info">{{ order.get_fulfillment_label }}</span>{% if order.location_detail %}<div class="hub-location-detail">{{ order.location_detail }}</div>{% endif %}</div>
         <div>المجموع <span class="hub-money">{{ row.total|format_syp }}</span> | المدفوع <span class="hub-money">{{ row.paid|format_syp }}</span> | المتبقي <span class="hub-money">{{ row.remaining|format_syp }}</span></div>
-        <a class="hub-button hub-button-primary" href="{% url 'staff_cashier_order' order.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' order.public_code %}?panel=payment" data-context-title="قبض الطلب المستقل" aria-haspopup="dialog">قبض الطلب</a>
+        <a class="hub-button hub-button-primary" href="{% url 'staff_cashier_order' order.public_code %}" data-staff-context-url="{% url 'staff_cashier_order' order.public_code %}?panel=payment" data-context-title="قبض الطلب المستقل" aria-haspopup="dialog">{% if view_mode == 'review' %}عرض الطلب{% else %}قبض الطلب{% endif %}</a>
       </article>
     {% endwith %}{% endfor %}
   </div>
+  {% if order_page.has_other_pages %}<nav class="hub-toolbar" aria-label="صفحات الطلبات المستقلة">{% if order_page.has_previous %}<a href="?view={{ view_mode }}&q={{ query|urlencode }}&order_page={{ order_page.previous_page_number }}">السابق</a>{% endif %}<span>صفحة {{ order_page.number }} من {{ order_page.paginator.num_pages }}</span>{% if order_page.has_next %}<a href="?view={{ view_mode }}&q={{ query|urlencode }}&order_page={{ order_page.next_page_number }}">التالي</a>{% endif %}</nav>{% endif %}
 </section>
 {% endif %}
 {% endblock %}
