@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% block content %}<h2 class="hub-page-header__title">فعالية جديدة</h2>{% if error %}<p>{{ error }}</p>{% endif %}
 <form class="hub-form-section" method="post">{% csrf_token %}
-<input name="title_ar" placeholder="الاسم" required>
-<input name="title_en" placeholder="الاسم EN">
-<input type="datetime-local" name="starts_at" required>
-<input type="datetime-local" name="ends_at">
-<textarea name="description_ar" placeholder="الوصف"></textarea>
+<label for="event-title-ar">اسم الفعالية بالعربية <span aria-hidden="true">*</span></label><input id="event-title-ar" name="title_ar" placeholder="الاسم" required>
+<label for="event-title-en">اسم الفعالية بالإنجليزية (اختياري)</label><input id="event-title-en" name="title_en" placeholder="الاسم EN">
+<label for="event-start">تاريخ ووقت البداية <span aria-hidden="true">*</span></label><input type="datetime-local" id="event-start" name="starts_at" required>
+<label for="event-end">تاريخ ووقت النهاية (اختياري)</label><input type="datetime-local" id="event-end" name="ends_at">
+<label for="event-description">وصف الفعالية (اختياري)</label><textarea id="event-description" name="description_ar" placeholder="الوصف"></textarea>
 <label>المساحة / الغرفة<select name="room" data-hub-searchable-select="true" data-search-placeholder="ابحث عن مساحة"><option value="">بدون</option>{% for room in rooms %}<option value="{{ room.id }}" {% if form_values.room == room.id|stringformat:'s' %}selected{% endif %}>{{ room }}</option>{% endfor %}</select></label>
-<input type="number" name="capacity" placeholder="السعة">
-<select name="status">{% for v,l in statuses %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select>
+<label for="event-capacity">السعة (اختياري)</label><input type="number" min="0" id="event-capacity" name="capacity" placeholder="السعة">
+<label for="event-status">حالة الفعالية</label><select id="event-status" name="status">{% for v,l in statuses %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select>
 <button>حفظ</button></form>{% endblock %}
