@@ -107,3 +107,13 @@ def public_discovery_context(*, now):
         'popups': tuple(popup_item(p) for p in public_popups(now)[:3]),
         'memberships': memberships,
     }
+
+
+def public_discovery_navigation(*, now):
+    """Advertise only public discovery destinations with displayable content."""
+    return {
+        'nav_programs': public_programs(now).exists(),
+        'nav_popups': public_popups(now).exists(),
+        'nav_memberships': any(membership_item(plan) is not None
+                               for plan in public_membership_candidates()[:3]),
+    }
