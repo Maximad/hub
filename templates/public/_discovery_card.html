@@ -1,9 +1,9 @@
 <article class="ph-event ph-discovery-card">
-  <a class="ph-event__link" href="{{ item.url }}">
+  {% if homepage_preview and not public_homepage_live %}<div class="ph-event__link">{% else %}<a class="ph-event__link" href="{{ item.url }}">{% endif %}
     {% if item.image_url %}{% include 'public/_event_image.html' with event=item %}{% endif %}
     <div class="ph-event__meta">{% include 'public/_discovery_meta.html' %}</div>
     <h3>{{ item.title }}</h3>
     {% if item.description %}<p>{{ item.description|truncatechars:180 }}</p>{% endif %}
     <span class="ph-text-link">التفاصيل <span aria-hidden="true">←</span></span>
-  </a>
+  {% if homepage_preview and not public_homepage_live %}</div>{% else %}</a>{% endif %}
 </article>
