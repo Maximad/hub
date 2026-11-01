@@ -5,7 +5,7 @@ source for both the customer menu and Staff POS. Specialized workflows such as
 Internet remain outside the ordinary product-card catalog.
 """
 
-from django.db.models import Q
+from django.db.models import Q, Prefetch
 from django.shortcuts import redirect, render
 from django.utils import timezone
 
@@ -24,6 +24,7 @@ from core.views_legacy import (
     _validate_phone_input,
 )
 from members.services import get_active_member_context
+from core.services.visit_settlement import visit_financials
 
 
 def _pos_catalog():
@@ -92,14 +93,30 @@ def staff_pos(request):
         }
         if requested_visit else {}
     )
+    open_visits = list(
+        customer_visit_queryset(HubVisit.objects.filter(status=HubVisit.Status.OPEN))
+        .select_related('table')
+        .prefetch_related(Prefetch(
+            'orders', queryset=Order.objects.exclude(status=Order.Status.CANCELLED)
+            .prefetch_related('items', 'payments', 'discounts'),
+            to_attr='pos_orders',
+        )).order_by('-last_activity_at')[:100]
+    )
+    if requested_visit and all(row.pk != requested_visit.pk for row in open_visits):
+        requested_visit.pos_orders = list(requested_visit.orders.exclude(
+            status=Order.Status.CANCELLED,
+        ).prefetch_related('items', 'payments', 'discounts'))
+        open_visits.append(requested_visit)
+    for row in open_visits:
+        row.pos_remaining_syp = visit_financials(row, orders=row.pos_orders)['remaining']
+
     context = {
         'section_products': section_products,
         'tables': tables,
         'member_query': member_query,
         'member_rows': member_rows,
         'settings': settings,
-        'open_visits': customer_visit_queryset(HubVisit.objects.filter(status=HubVisit.Status.OPEN))
-        .select_related('table').order_by('-last_activity_at'),
+        'open_visits': open_visits,
         'selected_visit_id': str(requested_visit.pk) if requested_visit else '',
         'selected_table_id': requested_table_id,
         'form_values': initial_form_values,
@@ -131,8 +148,15 @@ def staff_pos(request):
             ).first()
             if visit_id.isdigit() else None
         )
-        if visit_id and visit is None:
+        if visit_id and visit_id != 'separate' and visit is None:
             validation_errors.append('الجلسة المحددة غير صالحة أو مغلقة.')
+        if table and not visit and visit_id != 'separate':
+            if customer_visit_queryset(HubVisit.objects.filter(
+                table=table, status=HubVisit.Status.OPEN,
+            )).exists():
+                validation_errors.append(
+                    'لهذه الطاولة حساب مفتوح. اختر فاتورته أو أكّد إنشاء حساب منفصل.'
+                )
 
         if visit:
             # The selected account is the authority for service location. A
