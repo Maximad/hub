@@ -43,6 +43,7 @@
 
 <section class="hub-section">
   <h3 class="hub-section-title">د. جلسات الاستخدام الفعالة / الحالية</h3>
+  <p class="hub-help-text">الجلسات المفتوحة حسب الوقت لمدة 24 ساعة أو أكثر تحتاج مراجعة بشرية للاتصال والفوترة. مدة السجل لا تثبت بقاء الجهاز متصلاً. لا يتم إنهاء أو تحصيل أي جلسة تلقائياً.</p>
   <div class="hub-table-wrap"><table class="hub-table">
     <tr><th>#</th><th>العضو/الزائر</th><th>الهاتف</th><th>البدء</th><th>الوقت الفعلي</th><th>النوع</th><th>الفوترة</th><th>المبلغ التقديري</th><th>الحالة</th><th>إجراءات</th></tr>
     {% for row in active_rows %}{% with s=row.session %}<tr>
@@ -54,8 +55,8 @@
       <td>{{ s.get_session_type_display }}</td>
       <td>{{ s.get_billing_mode_display }}</td>
       <td><span class="js-estimate" data-start="{{ s.effective_started_at|date:'c' }}" data-rate="{{ s.rate_per_hour_syp }}" data-minimum="{{ s.minimum_minutes }}" data-rounding="{{ s.rounding_increment_minutes }}" data-min-charge="{{ s.minimum_charge_syp }}" data-grace="{{ s.free_grace_minutes }}" data-cap="{{ s.daily_cap_syp|default:'' }}" data-free="{% if s.billing_mode == 'free' or s.billing_mode == 'prepaid' %}1{% else %}0{% endif %}">{{ row.estimated_total }}</span> ل.س</td>
-      <td>{{ s.get_status_display }}</td>
-      <td class="hub-toolbar"><a class="hub-button hub-button-primary" href="{% url 'staff_internet_end' s.id %}">إنهاء</a>{% if can_cancel_sessions %}<form class="hub-form-section" method="post" action="{% url 'staff_internet_cancel' s.id %}" onsubmit="var reason=prompt('سبب الإلغاء؟'); if(!reason) return false; this.querySelector('[name=cancellation_reason]').value=reason; return true;">{% csrf_token %}<input type="hidden" name="cancellation_reason"><button class="hub-button" type="submit">إلغاء</button></form>{% endif %}</td>
+      <td>{{ s.get_status_display }}{% if row.review_long %}<p class="hub-badge hub-badge-warning" role="status">مراجعة بشرية · مدة غير اعتيادية</p>{% endif %}</td>
+      <td class="hub-toolbar">{% if row.review_long %}<a class="hub-button" href="{% url 'staff_internet_session' s.id %}">راجع سجل الشبكة والفوترة</a>{% endif %}<a class="hub-button hub-button-primary" href="{% url 'staff_internet_end' s.id %}">إنهاء</a>{% if can_cancel_sessions %}<form class="hub-form-section" method="post" action="{% url 'staff_internet_cancel' s.id %}" onsubmit="var reason=prompt('سبب الإلغاء؟'); if(!reason) return false; this.querySelector('[name=cancellation_reason]').value=reason; return true;">{% csrf_token %}<input type="hidden" name="cancellation_reason"><button class="hub-button" type="submit">إلغاء</button></form>{% endif %}</td>
     </tr>{% endwith %}{% empty %}<tr><td colspan="10">لا توجد جلسات فعالة.</td></tr>{% endfor %}
   </table></div>
 </section>

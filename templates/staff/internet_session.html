@@ -41,6 +41,7 @@
     <p><strong>الطلب المرتبط:</strong> {% if session.linked_order %}<a href="{% url 'staff_cashier_order' session.linked_order.public_code %}">{{ session.linked_order.display_number }}</a>{% else %}-{% endif %}</p>
     <p><strong>الدفع المرتبط:</strong> {{ session.linked_payment|default:'-' }}</p>
   </div>
+  {% if preview and preview.duration >= 1440 and session.billing_mode == 'open_metered' %}<aside class="hub-card" role="status"><strong>مراجعة بشرية مطلوبة: جلسة حسب الوقت مستمرة في السجل لمدة 24 ساعة أو أكثر.</strong><p>راجع آخر حالة شبكة موثقة أدناه، ومدة السجل والتقدير غير النهائي قبل أي قرار. هذا التنبيه لا يوقف الاتصال ولا يحصّل مبلغاً.</p></aside>{% endif %}
   {% if session.is_overdue %}<p class="hub-badge hub-badge-danger">تجاوزت الجلسة الوقت المصرّح به وتحتاج إلى إيقاف يدوي.</p>{% endif %}
   <p><strong>سبب الإلغاء:</strong> {{ session.cancellation_reason|default:"-" }}</p>
   <p><strong>ملاحظات:</strong> {{ session.notes|default:'-' }}</p>
