@@ -126,6 +126,14 @@ def recipe_completeness(product):
     }
 
 
+def recipe_cost_display_ready(recipe_status, recipe):
+    """Only show provisional recipe cost/margin when active ingredients are
+    operationally complete and every active ingredient has a reference cost.
+    This is not an assertion of financial cost verification.
+    """
+    return recipe_status["state"] == "operational_ready" and not recipe["missing_cost_items"]
+
+
 def product_completeness(product, recipe=None):
     recipe = recipe if recipe is not None else recipe_completeness(product)
     has_price = product.price_syp > 0
