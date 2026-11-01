@@ -8,7 +8,7 @@
   {% if session.status == 'active' %}
     {% if preview and not preview.network_waiting %}
       <aside class="hub-card" role="status" aria-label="تقدير تكلفة الجلسة الجاري احتسابها">
-        <strong>تكلفة متراكمة تقديرية — غير نهائية: {{ preview.calculated_total }} ل.س</strong>
+        <strong>معاينة الإنهاء الآن — تكلفة متراكمة تقديرية غير نهائية: {{ preview.calculated_total }} ل.س</strong>
         <p>حتى {{ preview.ended_at|date:"Y-m-d H:i" }} · {{ preview.duration }} دقيقة فعلية، {{ preview.billable_minutes }} دقيقة قابلة للفوترة.</p>
         <p>هذه معاينة لحظة عرض الصفحة فقط، وليست مبلغاً مستحقاً نهائياً أو دفعة محصلة. يُحدد المبلغ النهائي بعد إنهاء الجلسة والتحقق من التسوية.</p>
       </aside>
