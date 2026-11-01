@@ -21,8 +21,10 @@
 </form>
 {% elif purchase.status == "cancelled" %}
 <p class="hub-help-text">هذا الشراء ملغى ولا يمكن استلامه.</p>
+{% elif not receipt_rows %}
+<p class="hub-help-text" role="status">لا توجد بنود مواد في مسودة الشراء بعد. أضف المواد والكميات أولاً؛ لم يُسجّل أي استلام.</p>
 {% else %}
-<p class="hub-help-text">اكتمل استلام جميع المواد. لا توجد كميات متبقية للاستلام.</p>
+<p class="hub-help-text">اكتمل استلام جميع المواد المسجلة. لا توجد كميات متبقية للاستلام.</p>
 {% endif %}
 
 <h4>دفعة / تسوية مورد</h4>
