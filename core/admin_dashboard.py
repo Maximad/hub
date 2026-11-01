@@ -76,13 +76,55 @@ MODEL_LABELS_AR = {
 }
 
 DASHBOARD_SECTIONS = [
-    ('المنتجات والمنيو', [('core','product'), ('catalog','menusection'), ('catalog','mediaasset'), ('catalog','productoption'), ('catalog','productoptiongroup'), ('catalog','prepstation')]),
-    ('التشغيل والمبيعات', [('core','order'), ('core','payment'), ('core','shift'), ('core','room'), ('core','tablearea'), ('core','dailyclose')]),
-    ('المالية والمخزون', [('core','expense'), ('core','expensecategory'), ('core','cashmovement'), ('core','purchase'), ('core','inventoryitem'), ('core','productrecipeitem'), ('core','productionbatch')]),
-    ('الأعضاء والإنترنت', [('core','member'), ('members','membershipplan'), ('members','membershipsubscription'), ('members','membershipbenefitrule'), ('core','internetpackage'), ('core','internetsession'), ('internet','wifinetwork')]),
-    ('الفعاليات والحجوزات', [('events','event'), ('events','eventtickettype'), ('reservations','reservation'), ('vendors','vendor'), ('vendors','vendorparticipation')]),
-    ('الإعدادات', [('core','systemsetting'), ('core','pagesetting'), ('accounts','user'), ('auth','group'), ('core','notificationpreference')]),
+    ('الطلبات والخدمة', [('core','order'), ('core','payment'), ('core','hubvisit'), ('core','shift'), ('core','room'), ('core','tablearea')]),
+    ('المنتجات والمنيو والوسائط', [('core','product'), ('catalog','menusection'), ('catalog','mediaasset'), ('catalog','productoption'), ('catalog','productoptiongroup'), ('catalog','prepstation'), ('core','category')]),
+    ('المخزون والمشتريات', [('core','inventoryitem'), ('core','purchase'), ('core','productrecipeitem'), ('core','productionbatch')]),
+    ('المالية والتسويات', [('core','expense'), ('core','expensecategory'), ('core','cashmovement'), ('core','dailyclose'), ('core','exchangerate')]),
+    ('العملاء والعضويات والإنترنت', [('core','member'), ('members','membershipplan'), ('members','membershipsubscription'), ('members','membershipbenefitrule'), ('core','internetpackage'), ('core','internetsession'), ('core','internetentitlement'), ('internet','wifinetwork')]),
+    ('الفعاليات والحجوزات والشركاء', [('events','event'), ('reservations','reservation'), ('members','program'), ('vendors','vendor'), ('vendors','vendorparticipation'), ('events','eventtickettype')]),
+    ('المستخدمون والإعدادات والتشخيص', [('accounts','user'), ('auth','group'), ('core','systemsetting'), ('core','pagesetting'), ('core','homepagefeature'), ('core','notificationpreference')]),
 ]
+
+SECTION_DESCRIPTIONS = {
+    'الطلبات والخدمة': 'ابحث عن الطلب أو الحساب أو الدفعة؛ استخدم شاشة التشغيل للبيع والقبض.',
+    'المنتجات والمنيو والوسائط': 'الأسعار، الظهور في المنيو، الصور، التصنيفات وخيارات المنتجات.',
+    'المخزون والمشتريات': 'المواد والوصفات وطلبات الشراء والتحضير؛ الاستلام يتم عبر شاشته المعتمدة.',
+    'المالية والتسويات': 'المصروفات والصندوق والإغلاق وأسعار الصرف؛ احتفظ بمسارات القيد الآمنة.',
+    'العملاء والعضويات والإنترنت': 'العملاء والاشتراكات والباقات والجلسات المرتبطة بهم.',
+    'الفعاليات والحجوزات والشركاء': 'الفعاليات والحضور والحجوزات والشراكات الثقافية.',
+    'المستخدمون والإعدادات والتشخيص': 'الصلاحيات وإعدادات النظام والمحتوى المنشور والأدوات المتقدمة.',
+}
+MODEL_SEARCH_TERMS = {
+    ('core','order'): 'orders sales bill invoice table طلب فاتورة مبيعات',
+    ('core','payment'): 'payment receipt collection cashier قبض إيصال تسوية',
+    ('core','hubvisit'): 'visit account bill tab جلسة حساب طاولة',
+    ('core','purchase'): 'purchase supplier receipt procurement مشتريات توريد استلام مورد فاتورة',
+    ('core','inventoryitem'): 'inventory stock material مخزون مادة جرد',
+    ('core','productrecipeitem'): 'recipe ingredient cost وصفة مكونات تكلفة',
+    ('core','product'): 'product menu price item صنف منيو سعر',
+    ('catalog','mediaasset'): 'media image photo upload صور وسائط رفع',
+    ('core','expense'): 'expense spending payment cost مصروف نفقة',
+    ('core','dailyclose'): 'closing reconciliation close day إغلاق تسوية يوم',
+    ('core','exchangerate'): 'exchange rate currency dollar usd سعر صرف دولار',
+    ('core','member'): 'customer membership client عضو زبون عميل',
+    ('members','membershipplan'): 'membership subscription plan عضوية اشتراك خطة',
+    ('core','internetsession'): 'internet wifi hotspot session شبكة انترنت واي فاي',
+    ('events','event'): 'events calendar concert حفلة حفل فعالية موعد',
+    ('reservations','reservation'): 'reservation booking table حجز حضور طاولة',
+    ('vendors','vendor'): 'partner supplier vendor شريك بائع مورد',
+    ('accounts','user'): 'staff people permissions login employee مستخدم موظف صلاحيات',
+    ('core','systemsetting'): 'settings preferences configuration setup إعدادات ضبط',
+    ('core','homepagefeature'): 'home homepage featured publication editorial واجهة رئيسية نشر',
+}
+SECTION_WORKFLOWS = {
+    'الطلبات والخدمة': [('نقطة البيع', '/staff/pos/', 'بيع وطلب جديد · POS'), ('الكاشير', '/staff/cashier/', 'تحصيل ومتابعة الحسابات'), ('التحضير', '/staff/kitchen/', 'الطلبات المرسلة للمطبخ والبار')],
+    'المنتجات والمنيو والوسائط': [('إدارة المنيو', '/staff/menu-tools/', 'تجهيز القائمة والظهور'), ('المنيو العام', '/menu/', 'معاينة ما يراه الزائر')],
+    'المخزون والمشتريات': [('المخزون', '/staff/inventory/', 'الجرد والمشتريات والوصفات')],
+    'المالية والتسويات': [('المالية', '/staff/finance/', 'التسويات والمصروفات'), ('إغلاق اليوم', '/staff/close-day/', 'تسوية يوم التشغيل')],
+    'العملاء والعضويات والإنترنت': [('الإنترنت', '/staff/internet/', 'الجلسات والعمل'), ('الأعضاء', '/staff/members/', 'الملفات والعضويات')],
+    'الفعاليات والحجوزات والشركاء': [('الفعاليات', '/staff/events/', 'البرنامج التشغيلي'), ('الحجوزات', '/staff/reservations/', 'استقبال ومتابعة الحضور')],
+    'المستخدمون والإعدادات والتشخيص': [('المستخدمون', '/staff/users/', 'حسابات الموظفين'), ('التقارير', '/staff/reports/', 'المتابعة والتشخيص')],
+}
 
 STAFF_LINKS = [
     ('لوحة التشغيل', '/staff/'), ('نقطة البيع', '/staff/pos/'), ('الطلبات', '/staff/orders/'), ('الكاشير', '/staff/cashier/'),
@@ -118,19 +160,32 @@ def build_dashboard(site, request):
             if not any(perms.values()):
                 continue
             app_label, model_name = key
-            info = (app_label, model_name)
+            list_url = admin_url('admin:%s_%s_changelist' % key)
+            if list_url == '#':
+                continue
+            label = label_for(app_label, model_name, model._meta.verbose_name_plural)
+            search_text = ' '.join((
+                label, str(model._meta.verbose_name_plural), model.__name__,
+                app_label, model_name, MODEL_SEARCH_TERMS.get(key, ''), title,
+            ))
+            add_url = admin_url('admin:%s_%s_add' % key) if perms.get('add') else None
             items.append({
-                'label': label_for(app_label, model_name, model._meta.verbose_name_plural),
-                'url': admin_url('admin:%s_%s_changelist' % info),
-                'add_url': admin_url('admin:%s_%s_add' % info) if perms.get('add') else None,
+                'label': label, 'url': list_url, 'add_url': add_url if add_url != '#' else None,
+                'search_text': search_text,
             })
-        sections.append({'title': title, 'items': items})
+        workflows = [{'label': label, 'url': url, 'description': hint,
+                      'search_text': ' '.join((label, hint, title))}
+                     for label, url, hint in SECTION_WORKFLOWS.get(title, ())]
+        if items or workflows:
+            sections.append({'title': title, 'description': SECTION_DESCRIPTIONS[title],
+                             'items': items, 'workflows': workflows})
     return sections
+
 
 def install_hub_admin(site=admin.site):
     site.site_header = 'إدارة Hub / Masharib'
     site.site_title = 'إدارة Hub'
-    site.index_title = 'لوحة إدارة مشاريب'
+    site.index_title = 'دليل إدارة هَبّ السويداء'
     site.index_template = 'admin/index.html'
     site.app_index_template = 'admin/app_index.html'
     site.enable_nav_sidebar = True
