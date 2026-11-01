@@ -12,6 +12,7 @@ from core.services.public_homepage import (
     current_events, public_event, public_homepage_context, published_events,
 )
 from core.views import menu
+from core.services.public_discovery import public_discovery_navigation
 
 
 def require_public_release():
@@ -34,7 +35,7 @@ def event_list(request):
     now = timezone.now()
     page = Paginator(current_events(now), 12).get_page(request.GET.get('page'))
     events = tuple(public_event(event, now=now) for event in page.object_list)
-    return render(request, 'public/events.html', {'events': events, 'page': page})
+    return render(request, 'public/events.html', {'events': events, 'page': page, 'public_homepage_live': True, **public_discovery_navigation(now=now)})
 
 
 @never_cache
@@ -43,7 +44,9 @@ def event_detail(request, uuid):
     require_public_release()
     event = get_object_or_404(published_events(), uuid=uuid)
     from reservations.attendance import accepting_events
+    now = timezone.now()
     return render(request, 'public/event_detail.html', {
+        'public_homepage_live': True, **public_discovery_navigation(now=now),
         'attendance_request_url': reverse('public_attendance_form', kwargs={'uuid': event.uuid}) if accepting_events().filter(pk=event.pk).exists() else '',
-        'event': public_event(event, now=timezone.now()),
+        'event': public_event(event, now=now),
     })
