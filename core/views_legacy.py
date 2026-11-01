@@ -773,7 +773,9 @@ def _selected_snapshot_option_ids(selected_options_snapshot):
 def _order_edit_context(order, error=''):
     items = list(order.items.select_related('product').all())
     products = _attach_valid_option_assignments(
-        list(Product.objects.filter(is_available=True).prefetch_related(_option_assignment_prefetch()).order_by('sort_order', 'name_ar'))
+        list(Product.objects.filter(
+            is_available=True, visible_on_pos=True, orderable_on_pos=True
+        ).prefetch_related(_option_assignment_prefetch()).order_by('sort_order', 'name_ar'))
     )
     product_map = {product.id: product for product in products}
     item_rows = []
