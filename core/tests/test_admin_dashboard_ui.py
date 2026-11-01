@@ -1,3 +1,5 @@
+from pathlib import Path
+from django.conf import settings
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
@@ -6,10 +8,11 @@ from django.urls import reverse
 from django.utils import timezone
 
 from catalog.models import MediaAsset, MenuSection, ProductMedia
-from core.models import Category, InventoryItem, Order, Payment, Product, SystemSetting
+from core.models import Category, InventoryItem, Order, Payment, Product, Purchase, SystemSetting
 from events.models import Event
 from members.models import MembershipPlan
 from vendors.models import Vendor
+from core.admin_dashboard import build_dashboard
 
 
 @override_settings(DEBUG_PROPAGATE_EXCEPTIONS=True, ALLOWED_HOSTS=['testserver'])
@@ -31,8 +34,49 @@ class HubAdminDashboardTests(TestCase):
         response = self.client.get('/admin/')
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
-        for text in ['المنتجات والمنيو', 'التشغيل والمبيعات', 'المالية والمخزون', 'الأعضاء والإنترنت', 'التشغيل اليومي', 'فتح نقطة البيع', '/staff/cashier/', 'إعدادات النظام']:
+        for text in ['المنتجات والمنيو', 'الطلبات والخدمة', 'المخزون والمشتريات', 'المالية والتسويات', 'العملاء والعضويات والإنترنت', 'فتح نقطة البيع', '/staff/cashier/', 'إعدادات النظام', 'دليل الإدارة حسب المهمة', 'hub_admin_finder.js']:
             self.assertIn(text, content)
+
+    def test_task_finder_uses_searchable_arabic_english_descriptions_and_safe_urls(self):
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse('admin:index'))
+        for label in ['الفعاليات والحجوزات والشركاء', 'المستخدمون والإعدادات والتشخيص',
+                      'المنتجات والمنيو والوسائط', 'href="/staff/pos/"',
+                      'id="hub-admin-find-input"', 'data-hub-admin-item', 'role="status"']:
+            self.assertContains(response, label)
+        from django.test import RequestFactory
+        request = RequestFactory().get('/admin/')
+        request.user = self.superuser
+        sections = build_dashboard(admin.site, request)
+        self.assertEqual(len(sections), 7)
+        items = [entry for section in sections for entry in section['items']]
+        order = next(item for item in items if item['label'] == 'الطلبات')
+        self.assertIn('invoice', order['search_text'])
+        self.assertIn('فاتورة', order['search_text'])
+        self.assertEqual(order['url'], reverse('admin:core_order_changelist'))
+        self.assertTrue(all(item['url'] != '#' for item in items))
+        javascript = Path(settings.BASE_DIR, 'static/admin/js/hub_admin_finder.js').read_text()
+        self.assertIn("item.hidden = !match", javascript)
+        self.assertIn("event.key === '/'", javascript)
+
+    def test_management_context_links_keep_records_and_roles_read_only(self):
+        self.client.force_login(self.superuser)
+        order_page = self.client.get(reverse('admin:core_order_change', args=[self.order.pk]))
+        self.assertEqual(order_page.status_code, 200)
+        self.assertContains(order_page, 'دفعات الطلب')
+        self.assertContains(order_page, reverse('staff_order_edit', args=[self.order.public_code]))
+        purchase = Purchase.objects.create(business_date=timezone.localdate())
+        purchase_page = self.client.get(reverse('admin:core_purchase_change', args=[purchase.pk]))
+        self.assertEqual(purchase_page.status_code, 200)
+        self.assertContains(purchase_page, 'محاضر استلام')
+        self.assertContains(purchase_page, reverse('staff_inventory_purchase_detail', args=[purchase.pk]))
+        self.assertEqual(purchase.receipts.count(), 0)
+        self.assertEqual(purchase.stock_movements.count(), 0)
+
+        self.client.force_login(self.manager)
+        self.assertNotEqual(self.client.get(reverse('admin:index')).status_code, 200)
+        self.assertNotEqual(self.client.get(reverse('admin:core_order_changelist')).status_code, 200)
+        self.assertNotEqual(self.client.get(reverse('admin:core_purchase_change', args=[purchase.pk])).status_code, 200)
 
     def test_hidden_technical_models_do_not_appear_but_direct_url_remains_accessible(self):
         self.client.force_login(self.superuser)
