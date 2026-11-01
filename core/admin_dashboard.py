@@ -165,7 +165,7 @@ def build_dashboard(site, request):
                 continue
             label = label_for(app_label, model_name, model._meta.verbose_name_plural)
             search_text = ' '.join((
-                label, str(model._meta.verbose_name_plural), model.__name__,
+                str(label), str(model._meta.verbose_name_plural), model.__name__,
                 app_label, model_name, MODEL_SEARCH_TERMS.get(key, ''), title,
             ))
             add_url = admin_url('admin:%s_%s_add' % key) if perms.get('add') else None

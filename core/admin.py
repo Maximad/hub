@@ -292,7 +292,10 @@ class PurchaseItemInline(admin.TabularInline):
 @admin.register(Purchase)
 class PurchaseAdmin(ReadOnlyWorkflowAdmin):
     list_per_page = 35
-    readonly_fields = ('related_purchase_records',)
+    def get_readonly_fields(self, request, obj=None):
+        fields = super().get_readonly_fields(request, obj)
+        return (*fields, 'related_purchase_records') if obj is not None else fields
+
     list_display = ('business_date', 'supplier_label', 'status', 'total_syp', 'amount_paid_syp', 'remaining_display', 'paid_from', 'created_by')
     list_filter = ('business_date', 'status', 'payment_method', 'paid_from')
     search_fields = ('supplier_name', 'vendor__name_ar', 'invoice_number', 'notes', 'id')
