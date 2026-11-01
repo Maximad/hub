@@ -5,6 +5,17 @@
   <h2 class="hub-page-header__title">جلسة #{{ session.id }}</h2>
   {% for message in messages %}<p class="hub-badge hub-badge-info">{{ message }}</p>{% endfor %}
   {% include "staff/_internet_session_recovery.html" %}
+  {% if session.status == 'active' %}
+    {% if preview and not preview.network_waiting %}
+      <aside class="hub-card" role="status" aria-label="تقدير تكلفة الجلسة الجاري احتسابها">
+        <strong>معاينة الإنهاء الآن — تكلفة متراكمة تقديرية غير نهائية: {{ preview.calculated_total }} ل.س</strong>
+        <p>حتى {{ preview.ended_at|date:"Y-m-d H:i" }} · {{ preview.duration }} دقيقة فعلية، {{ preview.billable_minutes }} دقيقة قابلة للفوترة.</p>
+        <p>هذه معاينة لحظة عرض الصفحة فقط، وليست مبلغاً مستحقاً نهائياً أو دفعة محصلة. يُحدد المبلغ النهائي بعد إنهاء الجلسة والتحقق من التسوية.</p>
+      </aside>
+    {% else %}
+      <aside class="hub-card" role="status">الجلسة نشطة، لكن احتساب الفوترة لم يبدأ أو ينتظر تأكيد تشغيل الشبكة؛ الصفر المسجل حالياً لا يثبت أن الاستخدام مجاني.</aside>
+    {% endif %}
+  {% endif %}
   <div class="hub-grid hub-grid-2">
     <p><strong>الحالة:</strong> {{ session.get_status_display }}</p>
     <p><strong>نوع الجلسة:</strong> {{ session.get_session_type_display }}</p>
@@ -22,9 +33,9 @@
     <p><strong>المتبقي الإجمالي:</strong> {% if session.entitlement %}{{ session.entitlement.minutes_remaining|default_if_none:'غير محدود' }}{% else %}-{% endif %}</p>
     <p><strong>التجاوز التشغيلي:</strong> {{ session.overrun_minutes }} دقيقة</p>
     <p><strong>الوقت المحسوب:</strong> {{ session.billable_minutes|default:"-" }} دقيقة</p>
-    <p><strong>المبلغ المستحق:</strong> {{ session.calculated_total_syp }} ل.س</p>
+    <p><strong>التكلفة المحسوبة بعد الإنهاء:</strong> {% if session.status == 'active' %}لم تُعتمد بعد — راجع التقدير أعلاه{% else %}{{ session.calculated_total_syp }} ل.س{% endif %}</p>
     <p><strong>المبلغ اليدوي:</strong> {{ session.manual_total_syp|default:'-' }}</p>
-    <p><strong>المبلغ المعتمد:</strong> {{ session.payable_total_syp }} ل.س</p>
+    <p><strong>المبلغ المعتمد:</strong> {% if session.status == 'active' %}لم يُحدد بعد{% else %}{{ session.payable_total_syp }} ل.س{% endif %}</p>
     <p><strong>بدأها:</strong> {{ session.started_by|default:'-' }}</p>
     <p><strong>أنهاها:</strong> {{ session.ended_by|default:'-' }}</p>
     <p><strong>الطلب المرتبط:</strong> {% if session.linked_order %}<a href="{% url 'staff_cashier_order' session.linked_order.public_code %}">{{ session.linked_order.display_number }}</a>{% else %}-{% endif %}</p>
@@ -34,7 +45,6 @@
   <p><strong>سبب الإلغاء:</strong> {{ session.cancellation_reason|default:"-" }}</p>
   <p><strong>ملاحظات:</strong> {{ session.notes|default:'-' }}</p>
   <details><summary>تفاصيل سجل الشبكة</summary><p>المزوّد: {{ session.get_network_provider_display }} — كود الوصول: {{ session.access_code|default:'-' }} — جلسة الشبكة: {{ session.network_session_id|default:'-' }} — MAC: {{ session.device_mac|default:'-' }} — IP: {{ session.ip_address|default:'-' }} — البروفايل: {{ session.bandwidth_profile|default:'-' }}</p></details>
-  {% if preview and not preview.network_waiting %}<div class="hub-card"><strong>معاينة الإنهاء الآن:</strong> {{ preview.duration }} دقيقة، {{ preview.billable_minutes }} دقيقة قابلة للفوترة، {{ preview.calculated_total }} ل.س.</div>{% endif %}
   <div class="hub-toolbar">
     {% if session.status == 'active' and recovery.billing_ready %}<a class="hub-button hub-button-primary" href="{% url 'staff_internet_end' session.id %}">إنهاء الجلسة</a>{% endif %}
     {% if session.linked_order %}<a class="hub-button" href="{% url 'staff_cashier_order' session.linked_order.public_code %}">فتح طلب الكاشير</a>{% endif %}
