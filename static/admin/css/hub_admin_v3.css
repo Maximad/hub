@@ -94,3 +94,29 @@ html body.hub-admin-v3 .submit-row {background:#fff;border-top:1px solid #dce4e7
   html body.hub-admin-v3 {background:#fff;color:#000}
   html body.hub-admin-v3 :is(.hub-card,.hub-hero,.module,.inline-group) {background:#fff;box-shadow:none}
 }
+
+/* Task finder and restrained change-list layout; retain Django's native controls. */
+html body.hub-admin-v3 .hub-admin-kicker{font-size:.82rem;font-weight:700;color:#0b685d;margin:0 0 .4rem}
+html body.hub-admin-v3 .hub-admin-find{background:var(--hub-admin-card);border:1px solid var(--hub-admin-border);border-radius:12px;padding:1rem;margin:1rem 0 1.3rem;max-width:980px}
+html body.hub-admin-v3 .hub-admin-find label{display:block;font-weight:800;margin-bottom:.5rem}
+html body.hub-admin-v3 .hub-admin-find input[type=search]{width:100%;min-height:48px;max-width:none;box-sizing:border-box;padding:.55rem .8rem;font-size:1rem}
+html body.hub-admin-v3 .hub-admin-find p{margin:.35rem 0 0;color:var(--body-quiet-color)}
+html body.hub-admin-v3 .hub-admin-block-title{font-size:1.15rem;margin:.8rem 0}
+html body.hub-admin-v3 .hub-admin-task-description{color:var(--body-quiet-color);margin:0 0 .9rem;line-height:1.5}
+html body.hub-admin-v3 .hub-admin-task-group h3{font-size:.87rem;margin:1rem 0 .25rem;color:var(--body-quiet-color)}
+html body.hub-admin-v3 .hub-admin-workflows{padding-bottom:.2rem}
+html body.hub-admin-v3 .hub-admin-workflows small{display:block;color:var(--body-quiet-color);font-weight:400;margin-top:.25rem}
+html body.hub-admin-v3 .hub-admin-task-group li{min-width:0}
+html body.hub-admin-v3 .hub-admin-task-group li > a:first-child{overflow-wrap:anywhere}
+html body.hub-admin-v3 .hub-admin-extra{margin-top:1rem;padding:.8rem;border:1px solid var(--hub-admin-border);border-radius:12px}
+html body.hub-admin-v3 .hub-admin-extra summary{font-weight:700;cursor:pointer}
+html body.hub-admin-v3 .hub-admin-finder [hidden]{display:none!important}
+html body.hub-admin-v3 .hub-admin-finder .hub-empty-state{padding:1rem;border:1px dashed var(--hub-admin-border);border-radius:10px}
+html body.hub-admin-v3 #changelist-form .results{max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-gutter:stable}
+html body.hub-admin-v3 #changelist-form .results table{width:max-content;min-width:100%}
+html body.hub-admin-v3 #changelist-form .results :is(th,td){padding:.48rem .65rem;white-space:nowrap}
+html body.hub-admin-v3 #changelist-form .results tbody tr:focus-within{outline:2px solid var(--hub-admin-primary);outline-offset:-2px}
+html body.hub-admin-v3 .hub-related-records{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+html body.hub-admin-v3 .hub-related-records a{display:inline-block;padding:.35rem .6rem;border:1px solid var(--hub-admin-border);border-radius:7px}
+@media(max-width:760px){html body.hub-admin-v3 .hub-admin-find{margin:.7rem 0}html body.hub-admin-v3 .hub-admin-task-group li{align-items:flex-start;flex-wrap:wrap}html body.hub-admin-v3 #changelist-form .results{max-width:calc(100vw - 2.5rem)}}
+@media(prefers-color-scheme:dark){html body.hub-admin-v3 .hub-admin-find,html body.hub-admin-v3 .hub-admin-extra{background:#243440;border-color:#3c5261}html body.hub-admin-v3 .hub-admin-kicker{color:#b7e9db}}
