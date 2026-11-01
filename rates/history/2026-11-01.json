@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "provider": "lirascope",
+  "reference_market": "marketRates",
+  "city": "unspecified",
+  "currency": "USD",
+  "denomination": "SYP_NEW",
+  "denomination_verification": "numeric_safety_bounds_and_manual_approval",
+  "buy_syp_per_usd": "143.0",
+  "sell_syp_per_usd": "143.75",
+  "source_timestamp_utc": "2026-11-01T08:24:59.932382Z",
+  "business_date_damascus": "2026-11-01",
+  "collected_at_utc": "2026-11-01T13:13:29.588192Z",
+  "source_url": "https://lirascope.syria-cloud.sy/api/v1/rates/latest?currencies=USD&lang=en",
+  "raw_sha256": "b9852099c331382fb60ef7f1e481a03087f6aaae024f2724fad29c14439b296c",
+  "status": "unapproved"
+}
