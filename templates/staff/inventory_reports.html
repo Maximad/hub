@@ -15,10 +15,16 @@
 
 <section class="hub-section">
   <h3 class="hub-section-title">تقرير المخزون</h3>
+  <p class="hub-page-header__meta">الأرصدة القديمة ليست جرداً معتمداً. القيمة المعروضة تقدير حسابي فقط عند تطابق الرصيد مع جرد موثق وتوفر كلفة مرجعية، وليست تقييماً مدققاً.</p>
   <div class="hub-table-wrap">
     <table class="hub-table">
-      <tr><th>المادة</th><th>الكمية الحالية</th><th>قيمة تقديرية</th></tr>
-      {% for i in stock_items %}<tr><td>{{ i.name_ar }}</td><td>{{ i.current_quantity }}</td><td>{% widthratio i.current_quantity 1 i.estimated_unit_cost_syp|default:0 %}</td></tr>{% endfor %}
+      <tr><th>المادة</th><th>الكمية المسجلة</th><th>دليل الكمية</th><th>مرجع الكلفة</th><th>قيمة تقديرية (ل.س)</th></tr>
+      {% for row in stock_rows %}
+      <tr><td>{{ row.item.name_ar }}</td><td>{{ row.item.current_quantity }} {{ row.item.get_unit_display }}</td>
+      <td>{{ row.quantity_evidence.label }}</td>
+      <td>{% if row.has_reference_cost %}{{ row.item.estimated_unit_cost_syp|floatformat:2 }} — تقديري{% else %}غير متوفر{% endif %}</td>
+      <td>{% if row.can_estimate_value %}{{ row.estimated_value_syp|floatformat:2 }} (تقديري){% else %}— غير معروف{% endif %}</td></tr>
+      {% empty %}<tr><td colspan="5">لا توجد مواد مخزون نشطة.</td></tr>{% endfor %}
     </table>
   </div>
 </section>

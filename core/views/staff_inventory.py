@@ -19,6 +19,7 @@ from core.services.posting import purchases as purchase_posting
 from core.services.purchase_receipt_ui import purchase_receipt_ui, receipt_posting_context, receipt_failure_messages
 from core.services.inventory_unit_entry import allowed_entry_units, to_base_quantity, to_base_unit_cost, receipt_quantities_from_post
 from core.services.inventory_provenance import physical_count_audits, quantity_provenance
+from core.services.operational_completeness import recipe_completeness, recipe_cost_display_ready
 
 
 def _dec(value, default='0'):
@@ -319,7 +320,25 @@ def staff_inventory_low_stock(request):
 @inventory_required
 def staff_inventory_reports(request):
     purchases=Purchase.objects.exclude(status=Purchase.Status.CANCELLED)
-    return render(request,'staff/inventory_reports.html',{'purchase_total':purchases.aggregate(v=Sum('total_syp'))['v'] or 0,'paid_total':sum(p.amount_paid_syp for p in purchases),'unpaid_total':sum(p.remaining_syp for p in purchases),'by_method':purchases.values('payment_method').annotate(total=Sum('total_syp')),'by_type':PurchaseItem.objects.values('inventory_item__item_type').annotate(total=Sum('line_total_syp')),'stock_items':InventoryItem.objects.filter(is_active=True),'waste':StockMovement.objects.filter(movement_type=StockMovement.MovementType.WASTE)[:100]})
+    items = list(InventoryItem.objects.filter(is_active=True).order_by('name_ar', 'pk'))
+    provenance = quantity_provenance(items)
+    stock_rows = []
+    for item in items:
+        evidence = provenance[item.pk]
+        has_cost = item.estimated_unit_cost_syp is not None
+        # A legacy balance (even zero) is not a verified current quantity.
+        # The displayed value remains an estimate, not an audited valuation.
+        can_estimate = evidence['state'] == 'matches_count' and has_cost
+        stock_rows.append({
+            'item': item,
+            'quantity_evidence': evidence,
+            'has_reference_cost': has_cost,
+            'can_estimate_value': can_estimate,
+            'estimated_value_syp': (
+                item.current_quantity * item.estimated_unit_cost_syp if can_estimate else None
+            ),
+        })
+    return render(request,'staff/inventory_reports.html',{'purchase_total':purchases.aggregate(v=Sum('total_syp'))['v'] or 0,'paid_total':sum(p.amount_paid_syp for p in purchases),'unpaid_total':sum(p.remaining_syp for p in purchases),'by_method':purchases.values('payment_method').annotate(total=Sum('total_syp')),'by_type':PurchaseItem.objects.values('inventory_item__item_type').annotate(total=Sum('line_total_syp')),'stock_rows':stock_rows,'waste':StockMovement.objects.filter(movement_type=StockMovement.MovementType.WASTE)[:100]})
 
 def _csv_response(name, headers, rows):
     r=HttpResponse(content_type='text/csv; charset=utf-8'); r['Content-Disposition']=f'attachment; filename="{name}"'; w=csv.writer(r); w.writerow(headers); [w.writerow(row) for row in rows]; return r
@@ -337,7 +356,8 @@ def staff_recipe_report(request):
     for product in Product.objects.prefetch_related('recipe_items__inventory_item').order_by('name_ar'):
         from core.stock_recipes import calculate_recipe_cost
         result=calculate_recipe_cost(product)
-        rows.append({'product':product,'recipe':result})
+        status=recipe_completeness(product)
+        rows.append({'product':product,'recipe':result,'recipe_status':status,'cost_display_ready':recipe_cost_display_ready(status, result)})
     return render(request,'staff/recipe_report.html',{'rows':rows})
 
 @inventory_required

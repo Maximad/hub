@@ -9,7 +9,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from accounts.permissions import require_staff_capability
 from core.models import InventoryItem, Product, ProductRecipeItem
 from core.stock_recipes import calculate_recipe_cost, update_product_cost_from_recipe
-from core.services.operational_completeness import recipe_completeness, product_completeness
+from core.services.operational_completeness import recipe_completeness, product_completeness, recipe_cost_display_ready
 
 
 inventory_required = require_staff_capability('inventory')
@@ -54,9 +54,7 @@ def _product_rows(query=''):
             'product': product, 'recipe': recipe,
             'recipe_status': recipe_status,
             'product_status': product_completeness(product, recipe_status),
-            'cost_display_ready': (
-                product.active_recipe_count > 0 and not recipe['missing_cost_items']
-            ),
+            'cost_display_ready': recipe_cost_display_ready(recipe_status, recipe),
         })
     return rows
 
@@ -218,6 +216,7 @@ def staff_recipe_edit(request, product_id):
                 messages.error(request, message)
 
     recipe = calculate_recipe_cost(product)
+    recipe_status = recipe_completeness(product)
     lines = list(product.recipe_items.select_related('inventory_item').order_by('id'))
     current_item_ids = {line.inventory_item_id for line in lines}
     inventory_items = InventoryItem.objects.filter(
@@ -230,6 +229,8 @@ def staff_recipe_edit(request, product_id):
         {
             'product': product,
             'recipe': recipe,
+            'recipe_status': recipe_status,
+            'cost_display_ready': recipe_cost_display_ready(recipe_status, recipe),
             'lines': lines,
             'inventory_items': inventory_items,
             'units': InventoryItem.Unit.choices,

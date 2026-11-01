@@ -1,1 +1,21 @@
-{% extends "staff/inventory_base.html" %}{% block inventory_content %}<h3 class="hub-page-header__title">تقرير الوصفات</h3><div class="hub-table-wrap"><table class="hub-table"><tr><th>المنتج</th><th>السعر</th><th>الكلفة الحالية</th><th>كلفة الوصفة</th><th>الهامش حسب الوصفة</th><th>مكوّنات بدون كلفة</th></tr>{% for r in rows %}<tr><td>{{ r.product.name_ar }}</td><td>{{ r.product.price_syp }}</td><td>{{ r.product.estimated_unit_cost_syp|default:"—" }}</td><td>{{ r.recipe.recipe_estimated_unit_cost_syp|floatformat:0 }}</td><td>{{ r.recipe.recipe_margin_syp|floatformat:0 }}</td><td>{{ r.recipe.missing_cost_items|join:"، "|default:"—" }}</td></tr>{% endfor %}</table></div>{% endblock %}
+{% extends "staff/inventory_base.html" %}
+{% block inventory_content %}
+<header class="hub-page-header"><div class="hub-page-header__main">
+  <h3 class="hub-page-header__title">تقرير الوصفات</h3>
+  <p class="hub-page-header__meta">التكاليف والهوامش الأولية تُعرض فقط لوصفات مفعّلة مكتملة المواد والكلفة المرجعية، وليست تدقيقاً مالياً.</p>
+</div></header>
+<div class="hub-table-wrap"><table class="hub-table">
+  <thead><tr><th>المنتج</th><th>السعر</th><th>الكلفة المسجلة</th><th>حالة الوصفة</th><th>كلفة الوصفة الأولية</th><th>الهامش الأولي</th><th>نواقص التوثيق</th></tr></thead>
+  <tbody>{% for r in rows %}
+    <tr>
+      <td>{{ r.product.name_ar }}</td>
+      <td>{{ r.product.price_syp }}</td>
+      <td>{% if r.product.estimated_unit_cost_syp is not None %}{{ r.product.estimated_unit_cost_syp|floatformat:0 }} <small>مسجلة، غير مدققة</small>{% else %}—{% endif %}</td>
+      <td>{{ r.recipe_status.label }}</td>
+      <td>{% if r.cost_display_ready %}{{ r.recipe.recipe_estimated_unit_cost_syp|floatformat:0 }}{% else %}— غير مكتملة{% endif %}</td>
+      <td>{% if r.cost_display_ready %}{{ r.recipe.recipe_margin_syp|floatformat:0 }}{% else %}— غير متاح{% endif %}</td>
+      <td>{% if r.recipe_status.state != 'operational_ready' %}{{ r.recipe_status.needs|join:"، " }}{% endif %}{% if r.recipe.missing_cost_items %}{% if r.recipe_status.state != 'operational_ready' %}؛ {% endif %}بلا كلفة مرجعية: {{ r.recipe.missing_cost_items|join:"، " }}{% endif %}{% if r.cost_display_ready %}—{% endif %}</td>
+    </tr>
+  {% endfor %}</tbody>
+</table></div>
+{% endblock %}

@@ -15,11 +15,11 @@
   <div class="recipe-summary">
     <div class="recipe-summary__card"><span>سعر البيع</span><strong>{{ product.price_syp }}</strong></div>
     <div class="recipe-summary__card"><span>الكلفة المسجلة</span><strong>{{ product.estimated_unit_cost_syp|default:"—" }}</strong></div>
-    <div class="recipe-summary__card"><span>كلفة الوصفة الآن</span><strong>{{ recipe.recipe_estimated_unit_cost_syp|floatformat:0 }}</strong></div>
-    <div class="recipe-summary__card"><span>الهامش حسب الوصفة</span><strong>{{ recipe.recipe_margin_syp|floatformat:0 }}</strong></div>
+    <div class="recipe-summary__card"><span>كلفة الوصفة الأولية</span><strong>{% if cost_display_ready %}{{ recipe.recipe_estimated_unit_cost_syp|floatformat:0 }}{% else %}— غير مكتملة{% endif %}</strong></div>
+    <div class="recipe-summary__card"><span>الهامش الأولي</span><strong>{% if cost_display_ready %}{{ recipe.recipe_margin_syp|floatformat:0 }}{% else %}— غير متاح{% endif %}</strong></div>
   </div>
 
-  {% if recipe.missing_cost_items %}<div class="recipe-note">هناك مواد بدون كلفة تقديرية، لذلك الكلفة الظاهرة ناقصة: {{ recipe.missing_cost_items|join:"، " }}</div>{% endif %}
+  {% if not cost_display_ready %}<div class="recipe-note">لا يوجد تقدير مكتمل لكلفة الوصفة أو هامشها: {{ recipe_status.label }}{% if recipe_status.needs %} — {{ recipe_status.needs|join:"، " }}{% endif %}{% if recipe.missing_cost_items %}؛ مواد بلا كلفة: {{ recipe.missing_cost_items|join:"، " }}{% endif %}.</div>{% else %}<div class="recipe-note">تقديرات أولية من كلفة مرجعية، وليست تدقيقاً مالياً.</div>{% endif %}
   <div class="recipe-note">حفظ الوصفة يحدّث كلفة المنتج التقديرية مباشرة. وحدة الوصفة تُضبط تلقائياً على وحدة مادة المخزون عند اختيار مادة جديدة، ويمكن تعديلها عند الحاجة.</div>
 
   <form class="recipe-form" method="post" id="recipe-form">
