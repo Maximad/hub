@@ -1,23 +1,35 @@
 {% extends "admin/base_site.html" %}
-{% load i18n log %}
+{% load i18n log static %}
 {% block content %}
-<div class="hub-admin-dashboard" dir="rtl">
-  <section class="hub-hero">
-    <div><h1>لوحة إدارة Hub / Masharib</h1><p>استخدم صفحات التشغيل اليومية للطلبات والكاشير والتحضير. لوحة الإدارة مخصصة للإعدادات والمراجعة والتصحيح.</p></div>
+<div class="hub-admin-dashboard hub-admin-finder" dir="rtl">
+  <header class="hub-hero">
+    <div><p class="hub-admin-kicker">هَبّ السويداء / الإدارة</p><h1>دليل الإدارة حسب المهمة</h1><p>ابحث عن المهمة بالعربية أو الإنجليزية؛ استخدم صفحات التشغيل للبيع، التحضير، القبض واستلام المواد. إدارة Django للمراجعة والإعدادات وسجلات المصدر.</p></div>
+  </header>
+  <section class="hub-admin-find" role="search" aria-labelledby="hub-admin-find-label">
+    <label for="hub-admin-find-input" id="hub-admin-find-label">وين بدك تروح؟ ابحث عن صفحة أو وظيفة</label>
+    <input id="hub-admin-find-input" type="search" autocomplete="off" spellcheck="false" placeholder="مثلاً: طلب، فاتورة، جرد، عضو، POS, receipt, stock" aria-controls="hub-admin-sections" aria-describedby="hub-admin-find-help">
+    <p id="hub-admin-find-help">يمكن البحث بكلمات مألوفة أو باسم النموذج. اضغط / للانتقال للبحث.</p>
+    <p id="hub-admin-find-status" role="status" aria-live="polite" aria-atomic="true"></p>
   </section>
-  <section class="hub-quick-actions" aria-label="إجراءات سريعة">
-    {% for action in hub_quick_actions %}<a class="hub-action" href="{{ action.url }}">{{ action.label }}</a>{% endfor %}
+  <section aria-label="إجراءات متكررة">
+    <h2 class="hub-admin-block-title">ابدأ من هون</h2>
+    <div class="hub-quick-actions">{% for action in hub_quick_actions %}{% if action.url != '#' %}<a class="hub-action" href="{{ action.url }}">{{ action.label }}</a>{% endif %}{% endfor %}</div>
   </section>
-  <h2>التشغيل اليومي</h2>
-  <section class="hub-staff-links">
-    {% for link in hub_staff_links %}<a href="{{ link.url }}">{{ link.label }}</a>{% endfor %}
-  </section>
-  <section class="hub-section-grid">
+  <section id="hub-admin-sections" class="hub-section-grid" aria-label="وظائف الإدارة">
     {% for section in hub_dashboard_sections %}
-      <article class="hub-card"><h2>{{ section.title }}</h2><ul>{% for item in section.items %}<li><a href="{{ item.url }}">{{ item.label }}</a>{% if item.add_url %}<a class="hub-mini-add" href="{{ item.add_url }}">إضافة</a>{% endif %}</li>{% endfor %}</ul></article>
+      <article class="hub-card hub-admin-task-group" data-hub-admin-section>
+        <h2>{{ section.title }}</h2><p class="hub-admin-task-description">{{ section.description }}</p>
+        {% if section.workflows %}<h3>مسار التشغيل المناسب</h3>
+        <ul class="hub-admin-workflows">{% for link in section.workflows %}<li data-hub-admin-item data-search="{{ link.search_text }}"><span><a href="{{ link.url }}">{{ link.label }}</a><small>{{ link.description }}</small></span></li>{% endfor %}</ul>{% endif %}
+        {% if section.items %}<h3>سجلات الإدارة</h3>
+        <ul class="hub-admin-models">{% for item in section.items %}<li data-hub-admin-item data-search="{{ item.search_text }}"><a href="{{ item.url }}">{{ item.label }}</a>{% if item.add_url %}<a class="hub-mini-add" href="{{ item.add_url }}" aria-label="إضافة: {{ item.label }}">إضافة</a>{% endif %}</li>{% endfor %}</ul>{% endif %}
+      </article>
     {% endfor %}
   </section>
+  <p id="hub-admin-find-empty" class="hub-empty-state" hidden>ما في وظيفة مطابقة. جرّب كلمة أخرى مثل «قبض» أو «فواتير» أو «برنامج».</p>
+  <details class="hub-admin-extra"><summary>كل روابط التشغيل اليومية</summary><div class="hub-staff-links">{% for link in hub_staff_links %}<a href="{{ link.url }}">{{ link.label }}</a>{% endfor %}</div></details>
   <details class="hub-recent-actions"><summary>آخر الإجراءات</summary>{% get_admin_log 8 as admin_log for_user user %}{% if admin_log %}<ul>{% for entry in admin_log %}<li>{{ entry.action_time|date:"Y-m-d H:i" }} — {{ entry.object_repr }} <span>{{ entry.content_type.name }}</span></li>{% endfor %}</ul>{% else %}<p>لا توجد إجراءات حديثة.</p>{% endif %}</details>
 </div>
+<script src="{% static 'admin/js/hub_admin_finder.js' %}" defer></script>
 {% endblock %}
 {% block sidebar %}{% endblock %}
