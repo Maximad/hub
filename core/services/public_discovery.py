@@ -109,11 +109,13 @@ def public_discovery_context(*, now):
     }
 
 
-def public_discovery_navigation(*, now):
-    """Advertise only public discovery destinations with displayable content."""
+def public_discovery_navigation(*, now, membership_visible=None):
+    """Reuse already-checked page membership eligibility to avoid extra preflights."""
+    if membership_visible is None:
+        membership_visible = any(membership_item(plan) is not None
+                                 for plan in public_membership_candidates()[:3])
     return {
         'nav_programs': public_programs(now).exists(),
         'nav_popups': public_popups(now).exists(),
-        'nav_memberships': any(membership_item(plan) is not None
-                               for plan in public_membership_candidates()[:3]),
+        'nav_memberships': membership_visible,
     }
