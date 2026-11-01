@@ -46,6 +46,18 @@
   let activeModalCommitted = false;
   let isSubmitting = false;
   let previousTotalQty = 0;
+  let inertModalBackground = [];
+
+  function setItemModalBackgroundInert(shouldInert) {
+    if (shouldInert) {
+      // Preserve any already-inert regions rather than changing their state.
+      inertModalBackground = Array.from(form.children).filter((child) => child !== modal && !child.inert);
+      inertModalBackground.forEach((child) => { child.inert = true; });
+    } else {
+      inertModalBackground.forEach((child) => { child.inert = false; });
+      inertModalBackground = [];
+    }
+  }
 
   function stabilizeCartLayout() {
     if (!cartSheet || !submitWrap) return;
@@ -111,7 +123,10 @@
     if (title?.id) modal.setAttribute('aria-labelledby', title.id);
     modal.hidden = false;
     document.body.classList.add('menu-modal-open');
-    modal.querySelector('[data-menu-modal-close]')?.focus();
+    setItemModalBackgroundInert(true);
+    // Focus must enter the dialog after the background becomes inert.
+    const closeButton = modal.querySelector('[data-menu-modal-close]');
+    (closeButton || modal).focus();
   }
 
   function closeItemModal(restoreFocus = true) {
@@ -127,6 +142,7 @@
     }
     modal.hidden = true;
     modal.removeAttribute('aria-labelledby');
+    setItemModalBackgroundInert(false);
     document.body.classList.remove('menu-modal-open');
     activeModalSource = null;
     activeModalInitialQuantity = null;
@@ -326,7 +342,8 @@
       if (focusable.length) {
         const first = focusable[0];
         const last = focusable[focusable.length - 1];
-        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        if (!modal.contains(document.activeElement)) { event.preventDefault(); first.focus(); }
+        else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
       }
     }
