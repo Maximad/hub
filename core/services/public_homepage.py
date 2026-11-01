@@ -1,5 +1,6 @@
 """Read-only, allowlisted public presentation data. No operational models escape."""
 from dataclasses import dataclass
+from django.conf import settings
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -74,5 +75,8 @@ def public_homepage_context(*, now=None, preview_feature=None):
     from core.services.homepage_feature import resolve_homepage_feature
     hero, reason = resolve_homepage_feature(now=now, fallback_event=events[0] if events else None,
                                           preview_feature=preview_feature)
+    discovery = public_discovery_context(now=now)
     return {'events': events, 'featured_event': events[0] if events else None, 'hero': hero,
-            'feature_resolution': reason, **public_discovery_context(now=now)}
+            'feature_resolution': reason, 'public_homepage_live': settings.PUBLIC_HOMEPAGE_ENABLED,
+            'nav_programs': bool(discovery['programs']), 'nav_popups': bool(discovery['popups']),
+            'nav_memberships': bool(discovery['memberships']), **discovery}
