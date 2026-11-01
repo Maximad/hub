@@ -3,7 +3,9 @@ from django.contrib import admin
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.utils import timezone
-from django.utils.html import format_html
+from django.utils.html import format_html, format_html_join
+from django.urls import reverse
+from urllib.parse import urlencode
 from django.template.response import TemplateResponse
 import uuid
 from catalog.admin_media import safe_media_preview
@@ -265,6 +267,7 @@ class ProductRecipeItemInline(admin.TabularInline):
 
 @admin.register(InventoryItem)
 class InventoryItemAdmin(admin.ModelAdmin):
+    list_per_page = 35
     list_display = ('name_ar', 'item_type', 'unit', 'current_quantity', 'low_stock_threshold', 'estimated_unit_cost_syp', 'used_in_recipes_count', 'is_active')
     list_filter = ('item_type', 'unit', 'is_active')
     search_fields = ('name_ar', 'name_en', 'code')
@@ -288,15 +291,30 @@ class PurchaseItemInline(admin.TabularInline):
 
 @admin.register(Purchase)
 class PurchaseAdmin(ReadOnlyWorkflowAdmin):
+    list_per_page = 35
+    readonly_fields = ('related_purchase_records',)
     list_display = ('business_date', 'supplier_label', 'status', 'total_syp', 'amount_paid_syp', 'remaining_display', 'paid_from', 'created_by')
     list_filter = ('business_date', 'status', 'payment_method', 'paid_from')
-    search_fields = ('supplier_name', 'invoice_number', 'notes')
+    search_fields = ('supplier_name', 'vendor__name_ar', 'invoice_number', 'notes', 'id')
     inlines = (PurchaseItemInline,)
     autocomplete_fields = ('vendor', 'receipt_media', 'created_by')
 
     @admin.display(description='المتبقي')
     def remaining_display(self, obj):
         return obj.remaining_syp
+
+    @admin.display(description='متابعة الشراء والمورد')
+    def related_purchase_records(self, obj):
+        if not obj or not obj.pk:
+            return 'يظهر الربط بعد الحفظ.'
+        links = [
+            (reverse('staff_inventory_purchase_detail', args=[obj.pk]), 'الاستلام والمخزون'),
+            (reverse('staff_purchase_detail', args=[obj.pk]), 'التسويات المالية'),
+        ]
+        if obj.vendor_id:
+            links.append((reverse('admin:vendors_vendor_change', args=[obj.vendor_id]), 'ملف المورد'))
+        buttons = format_html_join(' ', '<a href="{}">{}</a>', links)
+        return format_html('<div class="hub-related-records">{}</div><p>محاضر استلام: {} · حركات مخزون: {} (سجلات مصدر، لا تُعدّل من هنا)</p>', buttons, obj.receipts.count(), obj.stock_movements.count())
 
 
 @admin.register(PurchaseItem)
@@ -536,9 +554,10 @@ class ProductCurrencyAdminForm(forms.ModelForm):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
+    list_per_page = 35
     form = ProductCurrencyAdminForm
     actions = ('update_estimated_cost_from_recipe',)
-    list_display = ('image_thumbnail', 'name_ar', 'price_syp', 'section_list', 'product_type', 'estimated_unit_cost_syp', 'estimated_margin_display', 'estimated_margin_percent_display', 'cost_warning', 'track_margin', 'requires_preparation', 'prep_station_ref', 'visible_on_pos', 'visible_on_qr', 'orderable_on_qr', 'orderable_on_pos', 'requires_staff_confirmation', 'vendor', 'is_available')
+    list_display = ('image_thumbnail', 'name_ar', 'price_syp', 'section_list', 'product_type', 'estimated_unit_cost_syp', 'estimated_margin_display', 'cost_warning', 'requires_preparation', 'visible_on_pos', 'visible_on_qr', 'orderable_on_qr', 'orderable_on_pos', 'is_available')
     list_display_links = ('name_ar',)
     list_filter = ('menu_sections', 'product_type', 'is_available', 'visible_on_qr', 'orderable_on_qr', 'orderable_on_pos', 'prep_station_ref')
     list_editable = ('is_available', 'visible_on_qr', 'orderable_on_qr', 'orderable_on_pos')
@@ -653,13 +672,14 @@ class OrderItemInline(admin.TabularInline):
 
 @admin.register(Order)
 class OrderAdmin(SuperuserEditOnlyAdmin):
+    list_per_page = 35
     workflow_help_url = '/staff/orders/'
-    list_display = ('display_number', 'staff_order_link', 'fulfillment_mode', 'delivery_status', 'customer_summary', 'total_amount', 'discount_amount', 'paid_amount', 'remaining_amount', 'status', 'created_at', 'public_code')
+    list_display = ('display_number', 'staff_order_link', 'fulfillment_mode', 'delivery_status', 'customer_summary', 'total_amount', 'paid_amount', 'remaining_amount', 'status', 'created_at')
     list_filter = ('fulfillment_mode', 'delivery_status', 'status', 'created_at')
-    search_fields = ('public_code', 'notes', 'table__name_ar', 'delivery_phone', 'delivery_address', 'delivery_area', 'assigned_driver_name', 'assigned_driver_phone')
-    readonly_fields = ('public_code', 'display_number', 'item_summary', 'workflow_link', 'created_at', 'updated_at')
+    search_fields = ('public_code', 'notes', 'table__name_ar', 'delivery_phone', 'delivery_address', 'delivery_area', 'assigned_driver_name', 'assigned_driver_phone', 'visit__public_code', 'id')
+    readonly_fields = ('public_code', 'display_number', 'item_summary', 'workflow_link', 'related_order_records', 'created_at', 'updated_at')
     fieldsets = (
-        ('بيانات الطلب', {'fields': ('public_code', 'display_number', 'workflow_link', 'item_summary', 'status', 'table', 'service_mode', 'fulfillment_mode', 'notes'), 'description': 'التعامل اليومي مع الطلبات يتم من /staff/orders/. لوحة الإدارة للمراجعة والتصحيح المحدود.'}),
+        ('بيانات الطلب', {'fields': ('public_code', 'display_number', 'workflow_link', 'related_order_records', 'item_summary', 'status', 'table', 'service_mode', 'fulfillment_mode', 'notes'), 'description': 'التعامل اليومي مع الطلبات يتم من /staff/orders/. لوحة الإدارة للمراجعة والتصحيح المحدود.'}),
         ('بيانات التوصيل', {'fields': ('delivery_status', 'delivery_customer_name', 'delivery_phone', 'delivery_area', 'delivery_address', 'delivery_landmark', 'delivery_notes', 'delivery_fee_syp', 'delivery_eta_minutes', 'assigned_to', 'assigned_driver_name', 'assigned_driver_phone', 'delivery_created_at', 'delivery_confirmed_at', 'delivery_out_at', 'delivery_delivered_at', 'delivery_cancelled_at')}),
         ('التواريخ', {'fields': ('created_at', 'updated_at')}),
     )
@@ -686,6 +706,19 @@ class OrderAdmin(SuperuserEditOnlyAdmin):
     @admin.display(description='المدفوع')
     def paid_amount(self, obj):
         return obj.paid_syp
+
+    @admin.display(description='الطلب وحسابه')
+    def related_order_records(self, obj):
+        if not obj or not obj.pk:
+            return 'تظهر الروابط بعد حفظ الطلب.'
+        links = [
+            (reverse('staff_order_edit', args=[obj.public_code]), 'تفاصيل الطلب'),
+            (reverse('staff_cashier_order', args=[obj.public_code]), 'الحساب والتحصيل'),
+            (reverse('admin:core_payment_changelist') + '?' + urlencode({'q': str(obj.public_code)}), 'دفعات الطلب'),
+        ]
+        if obj.visit_id:
+            links.append((reverse('admin:core_hubvisit_change', args=[obj.visit_id]), 'الجلسة المرتبطة'))
+        return format_html('<div class="hub-related-records">{}</div>', format_html_join(' ', '<a href="{}">{}</a>', links))
 
     @admin.display(description='رابط الطلب')
     def staff_order_link(self, obj):
@@ -784,6 +817,8 @@ class DailyCloseAdmin(ReadOnlyWorkflowAdmin):
 
 @admin.register(Payment)
 class PaymentAdmin(ReadOnlyWorkflowAdmin):
+    list_per_page = 35
+    list_select_related = ('order',)
     workflow_help_url = '/staff/cashier/'
     list_display = ('order_number', 'order_link', 'amount_syp', 'method', 'created_by', 'is_active', 'is_reversed', 'created_at')
     list_filter = ('method', 'is_active', 'is_reversed', 'created_at')
@@ -801,6 +836,7 @@ class PaymentAdmin(ReadOnlyWorkflowAdmin):
 
 @admin.register(Member)
 class MemberAdmin(admin.ModelAdmin):
+    list_per_page = 35
     list_display = ('name_ar', 'phone', 'balance_syp', 'default_plan', 'created_at')
     list_filter = ('default_plan',)
     search_fields = ('name_ar', 'name_en', 'phone')
