@@ -18,6 +18,13 @@ class OrderEditorCatalogParityTests(TestCase):
             category=category, name_ar='صنف نظام داخلي',
             price_syp=0, visible_on_pos=False, orderable_on_pos=False,
         )
+        # Ordinary products synchronize channel flags with QR on save.
+        # Model a product already hidden by the dedicated/internal catalog
+        # workflow without triggering that ordinary-product synchronization.
+        Product.objects.filter(pk=self.hidden.pk).update(
+            visible_on_pos=False, orderable_on_pos=False,
+        )
+        self.hidden.refresh_from_db()
         self.order = Order.objects.create(status=Order.Status.NEW)
         OrderItem.objects.create(
             order=self.order, product=self.hidden,
