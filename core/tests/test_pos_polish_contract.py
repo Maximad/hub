@@ -27,7 +27,7 @@ class PosPolishContractTests(SimpleTestCase):
         self.assertIn("selectMode('table', false)", self.js)
 
     def test_visit_bound_pos_hides_redundant_context_controls(self):
-        self.assertIn("contextBoundAtLoad = Boolean(visitSelect?.value && /^\\\\d+$/.test(visitSelect.value))", self.js)
+        self.assertIn(r"contextBoundAtLoad = Boolean(visitSelect?.value && /^\d+$/.test(visitSelect.value))", self.js)
         self.assertIn(
             "const boundMode = tableSelect?.value ? 'table' : 'inside_space_general';",
             self.js,

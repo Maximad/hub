@@ -13,7 +13,7 @@
   const visitSelect = form.querySelector('#visit_id');
   const tableSelect = form.querySelector('#table_id');
   const setup = form.querySelector('.staff-pos__setup');
-  const contextBoundAtLoad = Boolean(visitSelect?.value && /^\\d+$/.test(visitSelect.value));
+  const contextBoundAtLoad = Boolean(visitSelect?.value && /^\d+$/.test(visitSelect.value));
 
   const select = document.createElement('select');
   select.className = 'hub-input staff-pos__fulfillment-select';
@@ -37,7 +37,7 @@
   };
 
   const accountOptions = Array.from(visitSelect?.options || []).filter((option) =>
-    /^\\d+$/.test(option.value)
+    /^\d+$/.test(option.value)
   );
   const accountStatus = document.getElementById('pos-account-status');
   const syncAccounts = () => {
