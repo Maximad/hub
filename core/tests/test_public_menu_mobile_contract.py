@@ -56,6 +56,19 @@ class PublicMenuMobileContractTests(SimpleTestCase):
         self.assertIn("const cartTrigger = document.querySelector('[data-cart-sheet-open]')", javascript)
         self.assertIn("cartButton?.addEventListener('click', () => cartTrigger?.click())", javascript)
 
+    def test_product_modal_containment_and_recipe_action_contrast_contract(self):
+        javascript = self._read('static/js/menu_cart.js')
+        recipe_html = self._read('templates/staff/recipe_manager.html')
+
+        self.assertIn('function setItemModalBackgroundInert(shouldInert)', javascript)
+        self.assertIn('setItemModalBackgroundInert(true);', javascript)
+        self.assertIn('setItemModalBackgroundInert(false);', javascript)
+        self.assertIn("if (!modal.contains(document.activeElement))", javascript)
+        self.assertIn("(closeButton || modal).focus();", javascript)
+        self.assertIn('a.recipe-action:visited', recipe_html)
+        self.assertIn('color:#fff!important;background:var(--hub-primary-strong)', recipe_html)
+        self.assertIn('a.recipe-action:focus-visible{outline:3px', recipe_html)
+
     def test_new_product_modal_uses_quantity_one_as_uncommitted_draft(self):
         javascript = self._read('static/js/menu_cart.js')
 
