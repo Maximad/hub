@@ -40,17 +40,52 @@ class PublicHomepageTests(TestCase):
         response = self.client.get(reverse('dashboard'))
         self.assertEqual(response.status_code, 200)
         for text in ['هَبّ السويداء', 'مشاريب', 'سُفرة', 'أوضة', 'الجنينة',
-                     'ما في فعاليات معلنة', 'dir="rtl"', 'lang="ar"',
+                     'قبل ما تزورنا', 'dir="rtl"', 'lang="ar"',
                      'href="/menu/"', 'href="/me/"', 'href="/events/"']:
             self.assertContains(response, text)
         self.assertContains(response, '<main ', count=1)
         self.assertContains(response, '<h1 ', count=1)
         self.assertNotContains(response, '/staff/')
         self.assertNotContains(response, 'احجز الآن')
-        self.assertContains(response, 'href="/programs/"')
-        self.assertContains(response, 'href="/popups/"')
+        self.assertNotContains(response, 'href="/programs/"')
+        self.assertNotContains(response, 'href="/popups/"')
+        self.assertNotContains(response, 'href="/memberships/"')
+        self.assertNotContains(response, 'id="programs"')
+        self.assertNotContains(response, 'id="popups"')
+        self.assertNotContains(response, 'id="memberships"')
+        self.assertNotContains(response, 'id="events-title"')
+        self.assertContains(response, 'href="/#visit"')
         self.assertContains(response, 'public_homepage.css')
         self.assertIn('no-store', response['Cache-Control'])
+
+    def test_only_published_discovery_surfaces_are_navigable(self):
+        from members.models import Program
+        unpublished = Program.objects.create(code='draft-only', name_ar='داخلي',
+                                             status=Program.Status.OPEN, is_active=True)
+        response = self.client.get('/')
+        self.assertNotContains(response, 'href="/programs/"')
+        unpublished.is_public = True
+        unpublished.save(update_fields=['is_public'])
+        response = self.client.get('/')
+        self.assertContains(response, 'href="/programs/"')
+        self.assertContains(response, 'id="programs"')
+        self.assertContains(response, 'href="/programs/draft-only/"')
+        self.assertEqual(self.client.get('/programs/draft-only/').status_code, 200)
+
+    def test_preview_without_release_flag_has_no_gated_detail_links(self):
+        from core.models import HomepageFeature
+        admin_user = get_user_model().objects.create_superuser(
+            username='preview-owner', password='test', phone='+963997700122',
+        )
+        self.client.force_login(admin_user)
+        public_event = self.event(title_ar='لقاء ضمن المعاينة')
+        with override_settings(PUBLIC_HOMEPAGE_ENABLED=False):
+            response = self.client.get(reverse('admin:core_homepagefeature_preview'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'روابط تفاصيل الفعاليات')
+        self.assertNotContains(response, f'href="{self.detail_url(public_event)}"')
+        self.assertNotContains(response, 'href="/events/"')
+        self.assertContains(response, 'href="/menu/"')
 
     def test_public_arabic_language_independent_of_staff_language_preference(self):
         SystemSetting.objects.create(default_language='en')
