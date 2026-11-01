@@ -7,7 +7,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_safe
 
 from core.services.public_discovery import (
-    membership_item, popup_item, program_item, public_membership_candidates,
+    public_discovery_navigation, membership_item, popup_item, program_item, public_membership_candidates,
     public_popups, public_programs,
 )
 from core.views.public_homepage import require_public_release
@@ -26,7 +26,8 @@ def discovery_page(request, queryset, mapper, section):
     items = tuple(item for record in page.object_list if (item := mapper(record)) is not None)
     return render(request, 'public/discovery_list.html', {
         'items': items, 'page': page, 'section': section, 'section_title': title,
-        'intro': intro, 'index_route': index_route,
+        'intro': intro, 'index_route': index_route, 'public_homepage_live': True,
+        **public_discovery_navigation(now=timezone.now(), membership_visible=bool(items) if section == 'memberships' else None),
     })
 
 
@@ -36,6 +37,7 @@ def detail_page(request, item, section):
     title, _, index_route = SECTIONS[section]
     return render(request, 'public/discovery_detail.html', {
         'item': item, 'section': section, 'section_title': title, 'index_route': index_route,
+        'public_homepage_live': True, **public_discovery_navigation(now=timezone.now(), membership_visible=True if section == 'memberships' else None),
     })
 
 

@@ -107,3 +107,15 @@ def public_discovery_context(*, now):
         'popups': tuple(popup_item(p) for p in public_popups(now)[:3]),
         'memberships': memberships,
     }
+
+
+def public_discovery_navigation(*, now, membership_visible=None):
+    """Reuse already-checked page membership eligibility to avoid extra preflights."""
+    if membership_visible is None:
+        membership_visible = any(membership_item(plan) is not None
+                                 for plan in public_membership_candidates()[:3])
+    return {
+        'nav_programs': public_programs(now).exists(),
+        'nav_popups': public_popups(now).exists(),
+        'nav_memberships': membership_visible,
+    }
