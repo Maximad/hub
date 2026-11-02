@@ -1856,7 +1856,13 @@ def staff_internet(request):
         estimated_total = 0 if session.billing_mode in {InternetSession.BillingMode.FREE, InternetSession.BillingMode.PREPAID} else calculate_metered_session_total(
             duration, session.rate_per_hour_syp, session.minimum_minutes, session.free_grace_minutes, session.daily_cap_syp, session.rounding_increment_minutes, session.minimum_charge_syp
         )
-        active_rows.append({'session': session, 'elapsed_minutes': duration, 'estimated_total': estimated_total})
+        # Display-only review state. No automatic disconnection, billing or write-offs.
+        review_long = (
+            session.billing_mode == InternetSession.BillingMode.OPEN_METERED
+            and duration >= 24 * 60
+        )
+        active_rows.append({'session': session, 'elapsed_minutes': duration,
+                            'estimated_total': estimated_total, 'review_long': review_long})
     return render(request, 'staff/internet.html', {
         'can_manage_internal_internet': (
             is_owner_or_admin(request.user)
