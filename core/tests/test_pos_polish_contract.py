@@ -43,6 +43,7 @@ class PosPolishContractTests(SimpleTestCase):
         self.assertIn("selectMode('table', false)", self.js)
         self.assertIn("tableSelect.disabled = !tableMode", self.js)
         self.assertIn("if (!tableMode) tableSelect.value = ''", self.js)
+        self.assertIn("if (!contextBoundAtLoad && visitSelect) visitSelect.value = ''", self.js)
 
     def test_pos_radio_fallback_and_filters_are_compact(self):
         self.assertIn('.hub-staff-ui .staff-pos input[type="radio"]', self.css)

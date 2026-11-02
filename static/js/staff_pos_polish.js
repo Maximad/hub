@@ -68,7 +68,12 @@
     if (!tableMode) tableSelect.value = '';
     syncAccounts();
   };
-  tableSelect?.addEventListener('change', syncAccounts);
+  tableSelect?.addEventListener('change', () => {
+    // A different table is a different financial destination. A previously
+    // implicit or explicitly selected bill must be chosen again.
+    if (!contextBoundAtLoad && visitSelect) visitSelect.value = '';
+    syncAccounts();
+  });
   visitSelect?.addEventListener('change', syncAccounts);
 
   const selectMode = (value, notify = true) => {
