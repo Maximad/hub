@@ -325,7 +325,7 @@ class StaffWorkspaceTests(TestCase):
         self.assertEqual(response.context['selected_visit_id'], str(self.visit.pk))
         self.assertRegex(
             response.content.decode(),
-            rf'<option value="{self.visit.pk}"[^>]*\\bselected\\b',
+            rf'<option value="{self.visit.pk}"[^>]*\bselected\b',
         )
 
     def test_staff_primary_navigation_is_reduced_to_operations_and_specialists(self):
