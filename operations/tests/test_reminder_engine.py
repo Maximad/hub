@@ -1,6 +1,7 @@
 """Opt-in independent reminder engine contracts and existing task compatibility."""
 
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -118,7 +119,10 @@ class ReminderEngineTests(TestCase):
         self.assertGreater(reminder.next_due_at, now)
         self.assertEqual(tick_reminders(now=now)['sent'], 0)
         later = reminder.next_due_at + timedelta(seconds=1)
-        self.assertEqual(tick_reminders(now=later)['sent'], 1)
+        # Test interval recurrence independently of the operating-day cutoff:
+        # a later simulated tick may fall on a different, unopened business day.
+        with patch('operations.reminders._current_day', return_value=self.day):
+            self.assertEqual(tick_reminders(now=later)['sent'], 1)
         self.assertEqual(ReminderOccurrence.objects.filter(reminder=reminder).count(), 2)
 
     def test_daily_weekly_recurrence_keeps_local_time(self):
