@@ -1,5 +1,5 @@
 {% extends "base.html" %}{% load hub_icons %}
-{% load static menu_form product_media %}
+{% load static menu_form product_media hub_numbers %}
 {% block title %}طلب جديد{% endblock %}
 {% block content %}
 <div class="staff-pos pos-layout-{{ system_settings.pos_layout_preset|default:'fast_touch' }} pos-cart-{{ system_settings.pos_cart_position|default:'side' }} {{ system_settings.pos_mobile_layout_class|default:'layout-grid-2' }} {{ system_settings.pos_tablet_layout_class|default:'layout-tablet-3' }} {{ system_settings.pos_desktop_layout_class|default:'layout-grid-4' }}" dir="rtl">
@@ -38,7 +38,9 @@
           {% endfor %}
         </select>
       </div>
-      <div><label for="visit_id"><strong>الحساب المفتوح (اختياري)</strong></label><select class="hub-input" name="visit_id" id="visit_id" aria-describedby="pos-account-help"><option value="">حساب منفصل لهذا الطلب</option>{% for visit in open_visits %}<option value="{{ visit.pk }}" {% if selected_visit_id == visit.pk|stringformat:'s' %}selected{% endif %}>جلسة {{ visit.display_number }} — {{ visit.table|default:'بدون طاولة' }}</option>{% endfor %}</select><p class="hub-help-text" id="pos-account-help">لإضافة الطلب إلى فاتورة مفتوحة، اختر الحساب هنا. اختيار الطاولة وحده لا يضيف الطلب إلى الحساب.</p></div>
+      <div class="staff-pos__account-field"><label for="visit_id"><strong>الفاتورة / الحساب</strong></label><select class="hub-input" name="visit_id" id="visit_id" aria-describedby="pos-account-help pos-account-status" required><option value="">اختر الحساب أو فاتورة منفصلة</option><option value="separate" {% if form_values.visit_id == 'separate' %}selected{% endif %}>فاتورة منفصلة جديدة — اختيار صريح</option>{% for visit in open_visits %}<option value="{{ visit.pk }}" data-table-id="{{ visit.table_id|default:'' }}" data-balance="{{ visit.pos_remaining_syp }}" {% if selected_visit_id == visit.pk|stringformat:'s' or form_values.visit_id == visit.pk|stringformat:'s' %}selected{% endif %}>جلسة {{ visit.display_number }} — {{ visit.table|default:'داخل المكان' }} — متبقي {{ visit.pos_remaining_syp|format_syp }}</option>{% endfor %}</select><p class="hub-help-text" id="pos-account-help">الحساب مرتبط بالطاولة المحددة فقط. اختر فاتورة مفتوحة أو أكّد فاتورة منفصلة؛ لن نربط الطلب تلقائياً بحساب آخر. يمكن فتح حساب قديم من صفحة الجلسات.</p><p class="hub-help-text" id="pos-account-status" role="status" aria-live="polite"></p></div>
+      <details class="staff-pos__optional-details" {% if form_values.customer_name or form_values.customer_phone or form_values.recipient_note or form_values.recipient_kind == 'staff' or form_values.recipient_kind == 'neighbor' %}open{% endif %}>
+        <summary>بيانات إضافية (اختياري)</summary><div class="staff-pos__optional-grid">
       <div>
         <label for="customer_name"><strong>اسم اختياري</strong></label>
         <input class="hub-input" type="text" name="customer_name" id="customer_name" value="{{ form_values.customer_name|default:'' }}" autocomplete="off">
@@ -58,6 +60,7 @@
         <input class="hub-input" id="recipient_note" name="recipient_note" type="text" maxlength="120" value="{{ form_values.recipient_note|default:'' }}">
         <p class="hub-help-text">هذا توصيف للتوثيق فقط. اختيار جار أو موظف لا يضيف خصماً أو ضيافة، ولا يغيّر التسعير أو القبض.</p>
       </div>
+      </div></details>
       <div class="hub-card" data-delivery-fields hidden>
         <h3 class="hub-page-header__title">بيانات التوصيل</h3>
         <label>منطقة التوصيل<input class="hub-input" type="text" name="delivery_area" value="{{ form_values.delivery_area|default:'' }}"></label>
@@ -67,7 +70,8 @@
       </div>
     </section>
 
-    <section class="hub-card staff-pos__member-search" aria-label="بحث عضو اختياري">
+    <details class="hub-card staff-pos__member-search" {% if member_query or form_values.member_id %}open{% endif %}>
+      <summary>ربط عضو (اختياري)</summary><div class="staff-pos__member-fields">
       <div class="staff-pos__member-head">
         <h3>بحث عضو اختياري</h3>
         <a class="hub-button hub-button-secondary" href="{% url 'staff_pos' %}">مسح البحث</a>
@@ -86,7 +90,8 @@
       {% else %}
         <p class="menu-cart-helper">استخدم البحث فقط إذا احتجت ربط اسم/هاتف عضو في ملاحظات الطلب.</p>
       {% endif %}
-    </section>
+      </div>
+    </details>
 
     <section class="staff-pos__catalog" aria-label="كتالوج المنتجات">
       <div class="hub-card staff-pos__catalog-tools">

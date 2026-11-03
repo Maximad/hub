@@ -89,9 +89,9 @@ class Phase5StaffNavigationTests(TestCase):
         self.client.force_login(self.waiter)
         response = self.client.get(reverse("staff_pos"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'aria-describedby="pos-account-help"')
-        self.assertContains(response, "حساب منفصل لهذا الطلب")
-        self.assertContains(response, "اختيار الطاولة وحده لا يضيف الطلب إلى الحساب.")
+        self.assertContains(response, 'aria-describedby="pos-account-help pos-account-status"')
+        self.assertContains(response, "فاتورة منفصلة جديدة — اختيار صريح")
+        self.assertContains(response, "لن نربط الطلب تلقائياً بحساب آخر.")
         self.assertContains(response, "تسجيل الطلبات")
 
     def test_cashier_explains_shared_bill_without_technical_session_model(self):

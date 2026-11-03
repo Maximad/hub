@@ -27,7 +27,7 @@ class PosPolishContractTests(SimpleTestCase):
         self.assertIn("selectMode('table', false)", self.js)
 
     def test_visit_bound_pos_hides_redundant_context_controls(self):
-        self.assertIn("contextBoundAtLoad = Boolean(visitSelect?.value)", self.js)
+        self.assertIn(r"contextBoundAtLoad = Boolean(visitSelect?.value && /^\d+$/.test(visitSelect.value))", self.js)
         self.assertIn(
             "const boundMode = tableSelect?.value ? 'table' : 'inside_space_general';",
             self.js,
@@ -43,6 +43,7 @@ class PosPolishContractTests(SimpleTestCase):
         self.assertIn("selectMode('table', false)", self.js)
         self.assertIn("tableSelect.disabled = !tableMode", self.js)
         self.assertIn("if (!tableMode) tableSelect.value = ''", self.js)
+        self.assertIn("if (!contextBoundAtLoad && visitSelect) visitSelect.value = ''", self.js)
 
     def test_pos_radio_fallback_and_filters_are_compact(self):
         self.assertIn('.hub-staff-ui .staff-pos input[type="radio"]', self.css)

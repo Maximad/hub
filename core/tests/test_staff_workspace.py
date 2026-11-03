@@ -323,7 +323,10 @@ class StaffWorkspaceTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['selected_visit_id'], str(self.visit.pk))
-        self.assertContains(response, 'value="{}" selected'.format(self.visit.pk))
+        self.assertRegex(
+            response.content.decode(),
+            rf'<option value="{self.visit.pk}"[^>]*\bselected\b',
+        )
 
     def test_staff_primary_navigation_is_reduced_to_operations_and_specialists(self):
         self.client.force_login(self.waiter)

@@ -13,7 +13,7 @@
   const visitSelect = form.querySelector('#visit_id');
   const tableSelect = form.querySelector('#table_id');
   const setup = form.querySelector('.staff-pos__setup');
-  const contextBoundAtLoad = Boolean(visitSelect?.value);
+  const contextBoundAtLoad = Boolean(visitSelect?.value && /^\d+$/.test(visitSelect.value));
 
   const select = document.createElement('select');
   select.className = 'hub-input staff-pos__fulfillment-select';
@@ -36,12 +36,45 @@
     if (checked) select.value = checked.value;
   };
 
+  const accountOptions = Array.from(visitSelect?.options || []).filter((option) =>
+    /^\d+$/.test(option.value)
+  );
+  const accountStatus = document.getElementById('pos-account-status');
+  const syncAccounts = () => {
+    if (!visitSelect || contextBoundAtLoad) return;
+    const tableKey = tableSelect && !tableSelect.disabled ? tableSelect.value : '';
+    let available = 0;
+    accountOptions.forEach((option) => {
+      const match = (option.dataset.tableId || '') === tableKey;
+      option.hidden = !match;
+      option.disabled = !match;
+      if (match) available += 1;
+    });
+    if (visitSelect.selectedOptions[0]?.disabled) visitSelect.value = '';
+    if (!available && !visitSelect.value) visitSelect.value = 'separate';
+    const selected = visitSelect.selectedOptions[0];
+    if (accountStatus) {
+      accountStatus.textContent = selected?.value && selected.value !== 'separate'
+        ? 'الحساب المحدد: ' + selected.textContent.trim()
+        : selected?.value === 'separate'
+          ? 'فاتورة منفصلة، لن تُضاف إلى حساب مفتوح.'
+          : available + ' حساب مفتوح للطاولة؛ اختر واحداً أو فاتورة منفصلة.';
+    }
+  };
   const syncTableControl = () => {
     if (!tableSelect || contextBoundAtLoad) return;
     const tableMode = select.value === 'table';
     tableSelect.disabled = !tableMode;
     if (!tableMode) tableSelect.value = '';
+    syncAccounts();
   };
+  tableSelect?.addEventListener('change', () => {
+    // A different table is a different financial destination. A previously
+    // implicit or explicitly selected bill must be chosen again.
+    if (!contextBoundAtLoad && visitSelect) visitSelect.value = '';
+    syncAccounts();
+  });
+  visitSelect?.addEventListener('change', syncAccounts);
 
   const selectMode = (value, notify = true) => {
     const target = radioFor(value);

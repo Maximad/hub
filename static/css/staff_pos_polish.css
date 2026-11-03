@@ -78,3 +78,18 @@
     gap:2px;
   }
 }
+
+/* Compact optional POS context: products remain in the first viewport on desktop. */
+.hub-staff-ui .staff-pos__setup .staff-pos__optional-details{min-width:0;align-self:start;padding:.45rem .6rem;border:1px solid var(--hub-border);border-radius:9px}
+.hub-staff-ui .staff-pos__setup .staff-pos__optional-details>summary{cursor:pointer;min-height:36px;display:flex;align-items:center;font-weight:700}
+.hub-staff-ui .staff-pos__setup .staff-pos__optional-details[open]{grid-column:1/-1}
+.hub-staff-ui .staff-pos__optional-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.65rem;align-items:start;padding:.6rem 0}
+.hub-staff-ui .staff-pos__optional-grid>div{min-width:0}
+.hub-staff-ui .staff-pos__member-search{display:block!important;padding:.5rem .7rem}
+.hub-staff-ui .staff-pos__member-search>summary{cursor:pointer;font-weight:700;min-height:30px}
+.hub-staff-ui .staff-pos__member-fields{display:grid;grid-template-columns:1fr minmax(240px,2fr);gap:.6rem;padding-top:.7rem}
+.hub-staff-ui .staff-pos__account-field #pos-account-help{font-size:.7rem;margin:.2rem 0}
+.hub-staff-ui .staff-pos__account-field #pos-account-status{font-weight:700;font-size:.72rem;margin:0}
+@media(min-width:901px){.hub-staff-ui .staff-pos__setup{grid-template-columns:minmax(150px,190px) minmax(150px,1fr) minmax(230px,1.5fr) minmax(145px,.8fr)}}
+@media(max-width:900px){.hub-staff-ui .staff-pos__optional-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:620px){.hub-staff-ui .staff-pos__optional-grid,.hub-staff-ui .staff-pos__member-fields{grid-template-columns:1fr}}
