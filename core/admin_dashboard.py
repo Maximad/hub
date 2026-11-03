@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.urls import NoReverseMatch, reverse
+from accounts.permissions import user_has_capability
 
 HIDDEN_ADMIN_MODELS = {
     ('core', 'activitylog'),
@@ -147,6 +148,52 @@ def admin_url(name):
     except NoReverseMatch:
         return '#'
 
+# Navigation is advisory; existing route decorators remain the authority.
+STAFF_WORKFLOW_CAPABILITIES = {
+    '/staff/pos/': 'pos', '/staff/orders/': 'orders',
+    '/staff/cashier/': 'cashier', '/staff/kitchen/': 'kitchen_board',
+    '/staff/prep/': 'kitchen_board', '/staff/menu-tools/': 'settings',
+    '/staff/inventory/': 'inventory', '/staff/finance/': 'finance',
+    '/staff/close-day/': 'reports', '/staff/internet/': 'members/internet',
+    '/staff/members/': 'members/internet', '/staff/events/': 'events',
+    '/staff/reservations/': 'reservations', '/staff/users/': 'users',
+    '/staff/reports/': 'reports', '/staff/qr/': 'settings',
+}
+PUBLIC_ADMIN_SHORTCUTS = {'/menu/'}
+
+
+def can_show_workflow(request, url):
+    if url in PUBLIC_ADMIN_SHORTCUTS:
+        return True
+    capability = STAFF_WORKFLOW_CAPABILITIES.get(url)
+    return bool(capability and user_has_capability(request.user, capability))
+
+
+def quick_actions_for(site, request):
+    visible = []
+    for label, admin_name, url in QUICK_ACTIONS:
+        if admin_name:
+            try:
+                model_info = admin_name.removeprefix('admin:').rsplit('_', 1)[0].split('_', 1)
+                app_label, model_name = model_info
+                model_admin = next((a for model, a in site._registry.items()
+                                    if model._meta.app_label == app_label and model._meta.model_name == model_name), None)
+                if model_admin is None:
+                    continue
+                perms = model_admin.get_model_perms(request)
+                needed = 'add' if admin_name.endswith('_add') else 'view'
+                if not (perms.get(needed) or (needed == 'view' and perms.get('change'))):
+                    continue
+            except ValueError:
+                continue
+            target = admin_url(admin_name)
+            if target != '#':
+                visible.append({'label': label, 'url': target})
+        elif url and can_show_workflow(request, url):
+            visible.append({'label': label, 'url': url})
+    return visible
+
+
 def build_dashboard(site, request):
     registry = {(m._meta.app_label, m._meta.model_name): (m, a) for m, a in site._registry.items()}
     sections = []
@@ -175,7 +222,7 @@ def build_dashboard(site, request):
             })
         workflows = [{'label': label, 'url': url, 'description': hint,
                       'search_text': ' '.join((label, hint, title))}
-                     for label, url, hint in SECTION_WORKFLOWS.get(title, ())]
+                     for label, url, hint in SECTION_WORKFLOWS.get(title, ()) if can_show_workflow(request, url)]
         if items or workflows:
             sections.append({'title': title, 'description': SECTION_DESCRIPTIONS[title],
                              'items': items, 'workflows': workflows})
@@ -207,8 +254,8 @@ def install_hub_admin(site=admin.site):
         context = original_each_context(request)
         context.update({
             'hub_dashboard_sections': build_dashboard(site, request),
-            'hub_staff_links': [{'label': l, 'url': u} for l, u in STAFF_LINKS],
-            'hub_quick_actions': [{'label': l, 'url': admin_url(n) if n else u} for l, n, u in QUICK_ACTIONS],
+            'hub_staff_links': [{'label': l, 'url': u} for l, u in STAFF_LINKS if can_show_workflow(request, u)],
+            'hub_quick_actions': quick_actions_for(site, request),
             'hub_hidden_models': sorted(MODEL_LABELS_AR.get(k, k[1]) for k in HIDDEN_ADMIN_MODELS),
         })
         return context

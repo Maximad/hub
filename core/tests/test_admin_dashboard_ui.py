@@ -59,6 +59,28 @@ class HubAdminDashboardTests(TestCase):
         self.assertIn("item.hidden = !match", javascript)
         self.assertIn("event.key === '/'", javascript)
 
+    def test_navigation_shortcuts_follow_effective_role_permissions(self):
+        from core.admin_dashboard import can_show_workflow, quick_actions_for
+        request = RequestFactory().get('/admin/')
+        request.user = self.manager
+        # The manager holds only selected model permissions; no direct link to
+        # an unrelated Admin model should appear in quick actions.
+        quick = quick_actions_for(admin.site, request)
+        self.assertFalse(any(row['label'] == 'إضافة منتج' for row in quick))
+        self.assertFalse(any(row['label'] == 'رفع وسائط' for row in quick))
+        self.assertFalse(any(row['label'] == 'إدارة توفر المنتجات' for row in quick))
+        # Capabilities, rather than Django model permissions, gate staff routes.
+        from accounts.models import UserCapabilityOverride
+        UserCapabilityOverride.objects.update_or_create(
+            user=self.manager, capability='cashier', defaults={'allowed': False},
+        )
+        self.assertFalse(can_show_workflow(request, '/staff/cashier/'))
+        self.assertTrue(can_show_workflow(request, '/menu/'))
+        sections = build_dashboard(admin.site, request)
+        self.assertFalse(any(link['url'] == '/staff/cashier/'
+                             for section in sections for link in section['workflows']))
+        self.assertFalse(can_show_workflow(request, '/staff/unknown/'))
+
     def test_management_context_links_keep_records_and_roles_read_only(self):
         self.client.force_login(self.superuser)
         order_page = self.client.get(reverse('admin:core_order_change', args=[self.order.pk]))
