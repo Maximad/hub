@@ -9,7 +9,7 @@ BRANCH="main"
 COMPOSE_FILE="docker-compose.prod.yml"
 MIKROTIK_COMPOSE_FILE="docker-compose.mikrotik.yml"
 ENV_FILE=".env"
-BASE_URL="https://hubsweida.jwtalenthouse.com"
+BASE_URL=""  # Resolved from HUB_PUBLIC_HOST in .env after preflight checks.
 LOCK_FILE="/tmp/hub-production-operation.lock"
 COMPOSE_ARGS=(-f "$COMPOSE_FILE")
 ALLOW_PRELAUNCH_OPERATIONAL_DATA="${ALLOW_PRELAUNCH_OPERATIONAL_DATA:-false}"
@@ -123,6 +123,13 @@ cd "$PROJECT_DIR"
 
 [[ -f "$ENV_FILE" ]] ||
     die "Missing $PROJECT_DIR/$ENV_FILE."
+
+# Use the same public hostname as Docker Compose without evaluating secrets in .env.
+PUBLIC_HOST="$(awk -F= '$1 == "HUB_PUBLIC_HOST" {sub(/^[^=]*=/, ""); print}' "$ENV_FILE" | tail -n 1)"
+PUBLIC_HOST="${PUBLIC_HOST:-hubsweida.jwtalenthouse.com}"
+[[ "$PUBLIC_HOST" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]] ||
+    die "HUB_PUBLIC_HOST must be a hostname without scheme or path."
+BASE_URL="https://${PUBLIC_HOST}"
 
 [[ -f "$COMPOSE_FILE" ]] ||
     die "Missing $PROJECT_DIR/$COMPOSE_FILE."
