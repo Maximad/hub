@@ -30,10 +30,10 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=proxy"
-      - "traefik.http.routers.hub.rule=Host(`hubsweida.jwtalenthouse.com`)"
+      - "traefik.http.routers.hub.rule=Host(`${HUB_PUBLIC_HOST:-hubsweida.jwtalenthouse.com}`)"
       - "traefik.http.routers.hub.entrypoints=web"
       - "traefik.http.services.hub.loadbalancer.server.port=8000"
-      - "traefik.http.routers.hub-secure.rule=Host(`hubsweida.jwtalenthouse.com`)"
+      - "traefik.http.routers.hub-secure.rule=Host(`${HUB_PUBLIC_HOST:-hubsweida.jwtalenthouse.com}`)"
       - "traefik.http.routers.hub-secure.entrypoints=websecure"
       - "traefik.http.routers.hub-secure.tls=true"
       - "traefik.http.routers.hub-secure.tls.certresolver=letsencrypt"
