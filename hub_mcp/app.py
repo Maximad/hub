@@ -180,7 +180,7 @@ class HubMCPAuthMiddleware:
                 )
 
 
-public_host = os.getenv('HUB_MCP_PUBLIC_HOST', 'hubsweida.jwtalenthouse.com').strip()
+public_host = os.getenv('HUB_MCP_PUBLIC_HOST', os.getenv('HUB_PUBLIC_HOST', 'hubsweida.jwtalenthouse.com')).strip()
 origins = _allowed_origins()
 transport_security = TransportSecuritySettings(
     enable_dns_rebinding_protection=True,
