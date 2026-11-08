@@ -362,3 +362,27 @@ class ReservationTicketPaymentLink(models.Model):
         super().clean()
         if self.reservation_id and self.reservation.reservation_type != Reservation.ReservationType.EVENT:
             raise ValidationError({'reservation': 'ربط قبض التذاكر متاح لحجوزات الفعاليات فقط.'})
+
+
+class ReservationImportRecord(models.Model):
+    """Non-PII idempotency record for a previously received booking."""
+    event = models.ForeignKey(
+        'events.Event', on_delete=models.PROTECT, related_name='reservation_import_records',
+    )
+    source = models.CharField(max_length=40)
+    external_key = models.CharField(max_length=80)
+    reservation = models.OneToOneField(
+        Reservation, on_delete=models.PROTECT, related_name='import_provenance',
+    )
+    imported_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=('event', 'source', 'external_key'),
+                name='unique_event_reservation_source_reference',
+            ),
+        ]
