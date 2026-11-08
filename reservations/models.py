@@ -95,6 +95,10 @@ class Reservation(models.Model):
                 .get(pk=reservation_id)
             )
             old_status = reservation.status
+            if (reservation.reservation_type == cls.ReservationType.EVENT
+                    and new_status in {cls.Status.NO_SHOW, cls.Status.CANCELLED}
+                    and EventAdmission.objects.filter(reservation_id=reservation.pk).exists()):
+                raise ValidationError({'status': 'تم تسجيل وصول ضيوف لهذا الحجز؛ لا يمكن اعتباره غياباً أو إلغاءه.'})
             if reservation.visit_id and reservation.visit.status == 'open':
                 raise ValidationError({'status': 'لا يمكن تغيير حالة الحجز أثناء جلسة مفتوحة. أغلق الجلسة المرتبطة أولاً.'})
             allowed = cls.CORRECTIONS.get(old_status, ()) if correction else cls.TRANSITIONS.get(old_status, ())
