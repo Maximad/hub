@@ -32,6 +32,7 @@
       <div class="events-ui__actions hub-toolbar">
         {% if staff_caps.reservations %}<a class="hub-button hub-button-primary" href="{% url 'staff_reservation_new' %}?event={{ event.id }}">إضافة حجز</a>{% endif %}
         {% if staff_caps.reservations %}<a class="hub-button" href="{% url 'staff_event_checkin' event.id %}">تسجيل وصول الجمهور</a>{% endif %}
+        {% if staff_caps.reservations %}<a class="hub-button" href="{% url 'staff_event_booking_import' event.id %}">استيراد حجوزات CSV</a>{% endif %}
         {% if event.status == 'published' and event.is_public and public_homepage_enabled %}<a class="hub-button" href="{% url 'public_event_detail' event.uuid %}" target="_blank" rel="noopener">عرض صفحة الجمهور</a>{% endif %}
         {% if request.user.is_superuser %}<a class="hub-button" href="{% url 'admin:events_event_change' event.id %}">إدارة الصور والنشر</a>{% endif %}
       </div>
