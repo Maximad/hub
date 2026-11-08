@@ -9,7 +9,7 @@ from django.db import transaction
 from accounts.permissions import user_has_capability
 from core.models import ActivityLog, Category, Order, OrderItem, Product
 from events.models import Event, EventTicketType
-from .models import Reservation, ReservationTicketSale
+from .models import EventAdmission, Reservation, ReservationTicketSale
 
 
 def _ticket_charge_product(tier):
@@ -55,7 +55,7 @@ def ensure_reservation_ticket_order(reservation_id, *, actor):
         return existing, False
     if booking.status != Reservation.Status.CONFIRMED or booking.visit_id:
         raise ValidationError({'status': 'أكّد الحجز قبل إنشاء فاتورة التذاكر، ولا تنشئها بعد بدء جلسة.'})
-    if booking.event_admission if hasattr(booking, 'event_admission') else False:
+    if EventAdmission.objects.filter(reservation=booking).exists():
         raise ValidationError({'status': 'لا يمكن إنشاء فاتورة تذاكر جديدة بعد تسجيل الحضور.'})
     event = Event.objects.select_for_update().get(pk=booking.event_id)
     if event.status in (Event.Status.CANCELLED, Event.Status.COMPLETED):
