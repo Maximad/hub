@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError
 
 from core.models import InternetNetworkOperation, InternetSession
 from core.services.network_backends import MikroTikNetworkBackend
+from core.services.staff_device_wifi import SESSION_MARKER
 from core.services.network_operations import process_network_operation
 from internet.models import InternetSessionNetworkOperation, InternetSessionNetworkState
 from internet.session_network_backends import PROVISIONED, MikroTikSessionNetworkBackend
@@ -42,10 +43,21 @@ def one_tap_connect_configured(entitlement):
                 and _hotspot_login_configured())
 
 
+def _is_staff_device_session(session):
+    return bool(
+        session
+        and session.entitlement_id is not None
+        and session.notes == SESSION_MARKER
+        and session.billing_mode == InternetSession.BillingMode.PREPAID
+        and session.entitlement.origin_type in ('internal_owner_grant', 'internal_team_grant')
+        and session.entitlement.effective_status() == session.entitlement.Status.ACTIVE
+    )
+
+
 def one_tap_session_connect_configured(session):
-    """Whether a package-less session can present the RouterOS relay action."""
+    """Whether an independently provisioned session can use the HTTPS relay."""
     return bool(session is not None
-                and session.entitlement_id is None
+                and (session.entitlement_id is None or _is_staff_device_session(session))
                 and session.network_provider == InternetSession.NetworkProvider.MIKROTIK
                 and session.status == InternetSession.Status.ACTIVE
                 and _hotspot_login_configured())
@@ -134,7 +146,7 @@ def build_session_hotspot_login_payload(session, *, destination_url):
     state = InternetSessionNetworkState.objects.filter(session=session).first()
     if (session.network_status != PROVISIONED
             or state is None
-            or state.network_activated_at is None):
+            or (not _is_staff_device_session(session) and state.network_activated_at is None)):
         raise ValidationError('لم يكتمل تجهيز الشبكة بعد. جرّب مرة أخرى بعد قليل.')
     if not state.network_credential_encrypted:
         raise ValidationError('بيانات دخول الشبكة لم تُجهّز بعد.')

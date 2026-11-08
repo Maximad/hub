@@ -14,10 +14,15 @@ from django.utils import timezone
 
 from catalog.models import MediaAsset
 from core.models import ActivityLog, HubVisit, InternetEntitlement, InternetSession
-from core.services.hotspot_connect import one_tap_connect_configured, one_tap_session_connect_configured
+from core.services.hotspot_connect import (build_session_hotspot_login_payload,
+    one_tap_connect_configured, one_tap_session_connect_configured)
 from core.services.fast_internet_identity import selected_fast_identity, ensure_fast_visit_identity
 from core.services.fast_internet_approval import approval_context, request_approval
 from core.services.internet_internal_access import INTERNAL_ORIGINS, usable_internal_grant_for_user
+from core.services.staff_device_wifi import (
+    ensure_staff_device_session, set_staff_device_cookie,
+    supports_independent_staff_login,
+)
 from core.services.table_visit_access import resolve_table_number
 from core.services.visit_internet import (customer_packages, metered_customer_error,
     prepare_visit_metered_session_network, self_service_enabled,
@@ -32,7 +37,7 @@ from core.services.visits import (
 )
 from core.settings_helpers import get_system_settings
 from core.views.visits import (_absolute_destination, _entitlement_hotspot_relay_response,
-    _hotspot_relay_response)
+    _hotspot_relay_response, _render_hotspot_relay_response)
 from internet.guest_wifi import (
     get_guest_wifi_policy,
     guest_wifi_code_required,
@@ -98,7 +103,7 @@ def wifi_staff_login(request):
             )
             if next_path:
                 return redirect(next_path)
-            if usable_internal_grant_for_user(user) is not None and self_service_enabled(get_system_settings()):
+            if usable_internal_grant_for_user(user) is not None:
                 return _start_staff_wifi(request)
             return redirect(_wifi_internet_path())
 
@@ -446,24 +451,38 @@ def _retire_legacy_staff_wifi_visit(request, *, actor):
 
 
 def _start_staff_wifi(request):
-    """Connect internal staff Internet without creating a customer visit/session."""
-    # Internal grants are independent of customer visits and internet sales.
+    """Connect staff using an independent browser login when the grant permits it."""
     staff_user = request.user if request.user.is_authenticated else None
     entitlement = usable_internal_grant_for_user(staff_user)
     if entitlement is None:
         messages.error(request, 'لا توجد منحة إنترنت داخلية فعالة لهذا الحساب.')
         return redirect(_wifi_internet_path())
 
+    cookie_token = ''
     try:
         _retire_legacy_staff_wifi_visit(request, actor=staff_user)
         if not one_tap_connect_configured(entitlement):
             raise ValidationError('الاتصال التلقائي بإنترنت الفريق غير متاح حالياً.')
-        messages.success(request, 'تم تفعيل إنترنت الفريق على هذا الجهاز.')
+        destination = _absolute_destination(request, reverse('staff_home'))
+        if supports_independent_staff_login(entitlement):
+            session, cookie_token = ensure_staff_device_session(
+                request=request, entitlement=entitlement,
+            )
+            payload = build_session_hotspot_login_payload(
+                session, destination_url=destination,
+            )
+            ActivityLog.objects.create(
+                actor=staff_user,
+                action='internet.staff_device_hotspot_relay_issued',
+                details={'entitlement_id': entitlement.pk, 'session_id': session.pk},
+            )
+            response = _render_hotspot_relay_response(request, payload)
+            return set_staff_device_cookie(
+                response, cookie_token, secure=request.is_secure(),
+            )
+        # Preserve existing behavior for single-device or minute-limited grants.
         return _entitlement_hotspot_relay_response(
-            request,
-            entitlement,
-            destination_url=_absolute_destination(request, reverse('staff_home')),
-            actor=staff_user,
+            request, entitlement, destination_url=destination, actor=staff_user,
         )
     except ValidationError as exc:
         messages.error(request, _validation_message(exc))
@@ -474,7 +493,12 @@ def _start_staff_wifi(request):
             entitlement.pk,
         )
         messages.error(request, 'تعذر الاتصال بإنترنت الفريق حالياً.')
-    return redirect(_wifi_internet_path())
+    response = redirect(_wifi_internet_path())
+    if cookie_token:
+        return set_staff_device_cookie(
+            response, cookie_token, secure=request.is_secure(),
+        )
+    return response
 
 
 def _start_guest_wifi(request):

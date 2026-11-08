@@ -138,6 +138,26 @@ class BusinessDayTests(TestCase):
         self.assertFalse(result['failures'])
         self.assertNotEqual(session.status, InternetSession.Status.ACTIVE)
 
+    def test_staff_device_hotspot_survives_business_day_close(self):
+        day = self._open()
+        now = timezone.now()
+        session = InternetSession.objects.create(
+            started_at=now,
+            start_time=now,
+            billing_mode=InternetSession.BillingMode.PREPAID,
+            status=InternetSession.Status.ACTIVE,
+            notes='staff_wifi_device_v1',
+        )
+        report = build_reconciliation(day)
+        self.assertNotIn(
+            f'internet:{session.pk}:active',
+            {item['fingerprint'] for item in report['exceptions']},
+        )
+        result = close_open_internet_sessions(day, actor=self.admin)
+        session.refresh_from_db()
+        self.assertEqual(result['closed'], 0)
+        self.assertEqual(session.status, InternetSession.Status.ACTIVE)
+
     def test_close_safe_visits_only_closes_visits_without_live_or_unsettled_work(self):
         day = self._open()
         safe = HubVisit.objects.create()
