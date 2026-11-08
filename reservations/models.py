@@ -338,3 +338,27 @@ class EventAdmission(models.Model):
                 raise ValidationError({'reservation': 'لا يمكن تسجيل دخول تذاكر لحجز عادي.'})
             if self.arrived_count > self.reservation.party_size:
                 raise ValidationError({'arrived_count': 'عدد الواصلين يتجاوز عدد الضيوف في الحجز.'})
+
+
+class ReservationTicketPaymentLink(models.Model):
+    """Attribution of a verified cashier payment, never a new collection.
+
+    Exactly one event reservation can claim an existing payment receipt.
+    Reversals remain owned by the finance posting engine.
+    """
+    reservation = models.ForeignKey(
+        Reservation, on_delete=models.PROTECT, related_name='ticket_payment_links',
+    )
+    payment = models.OneToOneField(
+        'core.Payment', on_delete=models.PROTECT, related_name='event_ticket_booking_link',
+    )
+    linked_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='linked_ticket_payments',
+    )
+    linked_at = models.DateTimeField(auto_now_add=True)
+
+    def clean(self):
+        super().clean()
+        if self.reservation_id and self.reservation.reservation_type != Reservation.ReservationType.EVENT:
+            raise ValidationError({'reservation': 'ربط قبض التذاكر متاح لحجوزات الفعاليات فقط.'})
