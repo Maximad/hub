@@ -9,7 +9,7 @@ from core.views.staff_internet import staff_internet, staff_internet_sale, staff
 from core.views.internet_settings import internet_settings, internet_partner_save, internet_profile_save
 from core.views.staff_members import (staff_members, staff_member_new, staff_member_detail,
                                       staff_member_subscribe, staff_member_retry_activation)
-from core.views.staff_events import staff_events, staff_event_new, staff_event_detail, staff_event_checkin
+from core.views.staff_events import staff_events, staff_event_new, staff_event_detail, staff_event_checkin, staff_event_operations_report
 from core.views.staff_reservations import staff_reservations, staff_reservation_new, staff_reservation_detail, staff_reservation_status, staff_reservation_tables, staff_reservation_tickets, staff_reservation_payment_arrangement, staff_reservation_ticket_payment_link
 from core.views.staff_vendors import staff_vendors, staff_vendor_new, staff_vendor_detail, staff_vendor_participation_new
 from core.views.staff_import import (
@@ -268,6 +268,7 @@ urlpatterns = [
     path('staff/events/new/', staff_event_new, name='staff_event_new'),
     path('staff/events/<int:event_id>/', staff_event_detail, name='staff_event_detail'),
     path('staff/events/<int:event_id>/check-in/', staff_event_checkin, name='staff_event_checkin'),
+    path('staff/events/<int:event_id>/report/', staff_event_operations_report, name='staff_event_operations_report'),
     path('staff/reservations/', staff_reservations, name='staff_reservations'),
     path('staff/reservations/new/', staff_reservation_new, name='staff_reservation_new'),
     path('staff/reservations/tables/', staff_reservation_tables, name='staff_reservation_tables'),
