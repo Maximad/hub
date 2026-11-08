@@ -362,3 +362,25 @@ class ReservationTicketPaymentLink(models.Model):
         super().clean()
         if self.reservation_id and self.reservation.reservation_type != Reservation.ReservationType.EVENT:
             raise ValidationError({'reservation': 'ربط قبض التذاكر متاح لحجوزات الفعاليات فقط.'})
+
+
+class ReservationImportBatch(models.Model):
+    """Idempotency receipt for staff-confirmed event booking imports.
+
+    Only import metadata is stored; customer details remain in Reservation.
+    """
+    event = models.ForeignKey('events.Event', on_delete=models.PROTECT, related_name='reservation_import_batches')
+    fingerprint = models.CharField(max_length=64)
+    imported_count = models.PositiveIntegerField()
+    created_by = models.ForeignKey(
+        'accounts.User', null=True, on_delete=models.SET_NULL, related_name='event_booking_imports',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=('event', 'fingerprint'),
+                name='unique_event_booking_import_batch',
+            ),
+        ]

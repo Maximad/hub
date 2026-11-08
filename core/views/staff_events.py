@@ -7,6 +7,9 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404, render
+from django.http import HttpResponse
+from django.views.decorators.http import require_http_methods
+import csv
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
@@ -15,6 +18,8 @@ from django.shortcuts import redirect
 
 from accounts.permissions import require_staff_capability
 from reservations.admissions import set_event_admission_total
+from reservations.importing import preview_uploaded_csv, import_event_bookings
+from events.models import EventTicketType
 from reservations.models import EventAdmission
 from reservations.reporting import event_booking_report
 
@@ -137,4 +142,54 @@ def staff_event_checkin(request, event_id):
         'query': query,
         'confirmed_guests': summary['guests'] or 0,
         'arrived_guests': arrived,
+    })
+
+
+@require_staff_capability('reservations')
+@require_http_methods(['GET', 'POST'])
+def staff_event_booking_import(request, event_id):
+    """Two-step upload preview/confirm. No customer PII stored in browser sessions."""
+    event = get_object_or_404(Event, pk=event_id)
+    tiers = list(EventTicketType.objects.filter(event=event, is_active=True).order_by('pk'))
+    if request.method == 'GET' and request.GET.get('template') == '1':
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        response['Content-Disposition'] = f'attachment; filename="event-{event.pk}-bookings.csv"'
+        response.write('\ufeff')
+        writer = csv.writer(response)
+        writer.writerow(['name', 'phone', 'party_size', 'status', *[
+            f'ticket_{tier.pk}' for tier in tiers
+        ]])
+        return response
+
+    preview = []
+    fingerprint = ''
+    error = ''
+    if request.method == 'POST':
+        action = request.POST.get('action', '')
+        try:
+            preview, fingerprint = preview_uploaded_csv(
+                event.pk, request.FILES.get('bookings_csv'),
+            )
+            if action == 'confirm':
+                confirmed_fingerprint = (request.POST.get('fingerprint') or '').strip()
+                if not confirmed_fingerprint or fingerprint != confirmed_fingerprint:
+                    raise ValidationError('الملف تغيّر بعد المعاينة؛ أعد مراجعة الملف.')
+                batch, created = import_event_bookings(
+                    event.pk, preview, fingerprint, actor=request.user,
+                )
+                messages.success(
+                    request,
+                    f'تم استيراد {batch.imported_count} حجزاً.' if created
+                    else 'هذا الملف مستورد مسبقاً؛ لم يُنشأ أي حجز مكرر.',
+                )
+                return redirect('staff_event_detail', event_id=event.pk)
+            if action != 'preview':
+                raise ValidationError('إجراء غير صالح.')
+        except ValidationError as problem:
+            error = ' '.join(problem.messages)
+            preview = []
+            fingerprint = ''
+    return render(request, 'staff/event_booking_import.html', {
+        'event': event, 'tiers': tiers, 'preview': preview,
+        'fingerprint': fingerprint, 'error': error,
     })
