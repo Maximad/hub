@@ -56,6 +56,16 @@ class EventArtworkUploadTests(TestCase):
         self.assertEqual(EventMedia.objects.filter(event=self.event).count(), 2)
         self.assertEqual(EventMedia.objects.filter(event=self.event, is_primary=True).count(), 1)
 
+    def test_rejects_unsupported_image_role_without_creating_media(self):
+        self.client.force_login(self.manager)
+        response = self.client.post(self.url, {
+            'role': 'gallery', 'image': self.upload(),
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'اختر نوع الصورة')
+        self.assertFalse(EventMedia.objects.exists())
+        self.assertFalse(MediaAsset.objects.exists())
+
     def test_nonimage_extension_rejected(self):
         self.client.force_login(self.manager)
         response = self.client.post(self.url, {
