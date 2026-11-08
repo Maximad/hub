@@ -386,3 +386,23 @@ class ReservationImportRecord(models.Model):
                 name='unique_event_reservation_source_reference',
             ),
         ]
+
+
+class ReservationTicketSale(models.Model):
+    """One canonical ticket-only POS order for a reservation; no payment created."""
+    reservation = models.OneToOneField(
+        Reservation, on_delete=models.PROTECT, related_name='ticket_sale',
+    )
+    order = models.OneToOneField(
+        'core.Order', on_delete=models.PROTECT, related_name='event_ticket_sale',
+    )
+    created_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='created_reservation_ticket_sales',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def clean(self):
+        super().clean()
+        if self.reservation_id and self.reservation.reservation_type != Reservation.ReservationType.EVENT:
+            raise ValidationError({'reservation': 'بيع التذاكر مخصص لحجوزات الفعاليات.'})
