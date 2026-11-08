@@ -15,6 +15,9 @@ from core.models import (ActivityLog, InternetEntitlement, InternetNetworkOperat
 from core.services.internet_access import (end_usage_session,
                                             record_payment_reversal_adjustment)
 from core.services.network_operations import enqueue_network_operation
+from core.services.staff_device_wifi import SESSION_MARKER
+from internet.models import InternetSessionNetworkOperation
+from internet.session_network_operations import enqueue_session_network_operation
 
 
 def _audit(actor, action, **details):
@@ -42,6 +45,15 @@ def terminate_active_sessions(entitlement, *, reason, at=None, actor=None):
         session = end_usage_session(session, actor=actor, at=boundary)
         session.lifecycle_end_reason = reason[:200]
         session.save(update_fields=('lifecycle_end_reason', 'updated_at'))
+        if session.notes == SESSION_MARKER:
+            # The grant's legacy HotSpot user is separate from this browser's
+            # session-owned RouterOS identity. Revoke BOTH without broad logout.
+            enqueue_session_network_operation(
+                session,
+                InternetSessionNetworkOperation.Operation.DISCONNECT,
+                reason='staff grant lifecycle termination',
+                idempotency_key=f'staff-device-session:{session.pk}:terminal-disconnect',
+            )
         _audit(actor, 'internet.session_lifecycle_ended', session_id=session.pk,
                entitlement_id=entitlement.pk, reason=reason, boundary=boundary.isoformat())
         ended += 1
