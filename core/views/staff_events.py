@@ -22,6 +22,7 @@ from core.views_legacy import _assert_staff_capability, staff_event_new
 from events.models import Event, EventMedia
 from catalog.models import MediaAsset
 from django.db import transaction
+from django.views.decorators.http import require_http_methods
 from reservations.models import Reservation
 from vendors.models import VendorParticipation
 
