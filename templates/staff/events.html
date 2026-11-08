@@ -1,28 +1,60 @@
 {% extends "base.html" %}
-{% block title %}الفعاليات{% endblock %}
+{% load static %}
+{% block title %}الفعاليات | هَبّ السويداء{% endblock %}
+{% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/staff_events_workspace.css' %}">{% endblock %}
 {% block content %}
-<section class="hub-section hub-ux5-module" dir="rtl">
-  <header class="hub-page-header">
+<section class="events-ui hub-section staff-v2-page" dir="rtl" aria-labelledby="events-title">
+  <header class="hub-page-header staff-v2-page-head events-ui__header">
     <div>
-      <p class="staff-workspace__eyebrow">برنامج هَبّ</p>
-      <h1 class="hub-page-header__title">الفعاليات</h1>
-      <p class="hub-page-header__meta">استعراض الفعاليات وتحديثها من ملف كل فعالية.</p>
+      <p class="staff-workspace__eyebrow">هَبّ السويداء / البرنامج</p>
+      <h1 id="events-title" class="hub-page-header__title">الفعاليات</h1>
+      <p class="hub-page-header__meta">إدارة البرنامج والحجوزات من صفحة كل فعالية.</p>
     </div>
-    <a class="hub-button hub-button-primary" href="{% url 'staff_event_new' %}">+ فعالية جديدة</a>
+    <div class="hub-toolbar events-ui__actions">
+      <a class="hub-button hub-button-primary" href="{% url 'staff_event_new' %}">إضافة فعالية</a>
+      {% if staff_caps.reservations %}<a class="hub-button" href="{% url 'staff_reservations' %}">الحجوزات</a>{% endif %}
+    </div>
   </header>
-  <div class="hub-list">
+
+  <div class="events-ui__grid">
     {% for e in events %}
-      <article class="hub-list-card">
-        <div class="hub-list-card__main">
-          <strong>{{ e.title_ar }}</strong>
-          <span class="hub-badge">{{ e.get_status_display }}</span>
-          <p class="hub-page-header__meta">موعد البدء: {{ e.starts_at|date:"Y-m-d H:i" }} · {{ e.room|default:"الموقع غير محدد" }}</p>
-          <p class="hub-page-header__meta">السعة: {{ e.capacity|default:"غير محددة" }}</p>
+      <article class="events-ui__card">
+        <a class="events-ui__media-link" href="{% url 'staff_event_detail' e.id %}" aria-label="تفاصيل فعالية {{ e.title_ar }}">
+          {% with cover=e.staff_media.0 %}
+            {% with image_url=cover.media_asset.safe_url %}
+              {% if image_url %}
+                <img class="events-ui__cover" src="{{ image_url }}" alt="صورة فعالية {{ e.title_ar }}" loading="lazy" decoding="async">
+              {% else %}
+                <span class="events-ui__fallback" aria-hidden="true"><span>هَبّ</span><small>مساحة للقاء والثقافة</small></span>
+              {% endif %}
+            {% endwith %}
+          {% endwith %}
+        </a>
+        <div class="events-ui__content">
+          <div class="events-ui__badges">
+            <span class="events-ui__badge {% if e.status == 'published' %}events-ui__badge--good{% elif e.status == 'cancelled' %}events-ui__badge--bad{% endif %}">
+              {% if e.status == 'published' %}منشورة{% elif e.status == 'draft' %}مسودة{% elif e.status == 'cancelled' %}ملغاة{% elif e.status == 'completed' %}منتهية{% else %}{{ e.get_status_display }}{% endif %}
+            </span>
+            {% if e.status == 'published' %}
+              <span class="events-ui__badge">{% if e.is_public and public_homepage_enabled %}على الموقع{% else %}غير ظاهرة على الموقع{% endif %}</span>
+            {% endif %}
+          </div>
+          <h2 class="events-ui__title"><a href="{% url 'staff_event_detail' e.id %}">{{ e.title_ar }}</a></h2>
+          <p class="events-ui__meta"><strong>الموعد</strong> <time datetime="{{ e.starts_at|date:'c' }}">{{ e.starts_at|date:"d/m/Y · H:i" }}</time></p>
+          <p class="events-ui__meta"><strong>المكان</strong> {{ e.room|default:"غير محدد" }}</p>
+          <p class="events-ui__meta"><strong>السعة المسجلة</strong> {{ e.capacity|default:"غير محددة" }}</p>
+          <div class="events-ui__card-actions">
+            <a class="hub-button hub-button-primary" href="{% url 'staff_event_detail' e.id %}">إدارة الفعالية</a>
+            {% if staff_caps.reservations %}<a class="hub-button" href="{% url 'staff_reservation_new' %}?event={{ e.id }}">حجز جديد</a>{% endif %}
+          </div>
         </div>
-        <a class="hub-button" href="{% url 'staff_event_detail' e.id %}">تفاصيل الفعالية</a>
       </article>
     {% empty %}
-      <p class="hub-message">لا توجد فعاليات مسجلة. يمكنك إضافة فعالية جديدة.</p>
+      <div class="events-ui__empty">
+        <h2>لا توجد فعاليات مسجلة</h2>
+        <p>أضف فعالية لتبدأ بإدارة برنامج هَبّ وحجوزاته.</p>
+        <a class="hub-button hub-button-primary" href="{% url 'staff_event_new' %}">إضافة أول فعالية</a>
+      </div>
     {% endfor %}
   </div>
 </section>
