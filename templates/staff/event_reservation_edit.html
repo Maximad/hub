@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}تعديل حجز فعالية{% endblock %}
+{% block content %}
+<section class="hub-section" dir="rtl">
+  <header class="hub-page-header">
+    <div>
+      <p class="hub-page-header__meta"><a href="{% url 'staff_events' %}">الفعاليات</a> / <a href="{% url 'staff_event_detail' reservation.event_id %}">{{ reservation.event.title_ar }}</a></p>
+      <h1 class="hub-page-header__title">تعديل الحجز</h1>
+      <p class="hub-page-header__meta">تعديل البيانات والمقاعد مع التحقق من السعة ومن سندات القبض والحضور.</p>
+    </div>
+    <a class="hub-button" href="{% url 'staff_reservation_detail' reservation.pk %}">تفاصيل الحجز</a>
+  </header>
+  <div class="hub-card" style="max-width:820px">
+    {% if has_admission %}<p class="hub-message">تم تسجيل حضور لهذا الحجز؛ لا يمكن تعديله من هذا النموذج.</p>{% endif %}
+    {% if has_payment_links %}<p class="hub-message">يوجد سند قبض مالي مرتبط؛ لا يُسمح بتغيير عدد الضيوف أو فئات التذاكر، ويمكن تصحيح بيانات التواصل فقط.</p>{% endif %}
+    <form class="hub-form hub-form-section" method="post">
+      {% csrf_token %}
+      <label for="edit-booking-name">اسم صاحب الحجز</label>
+      <input id="edit-booking-name" name="name" required maxlength="120" value="{% if form_values %}{{ form_values.name }}{% else %}{{ reservation.name }}{% endif %}" {% if has_admission %}disabled{% endif %}>
+      <label for="edit-booking-phone">رقم الهاتف</label>
+      <input id="edit-booking-phone" name="phone" type="tel" required maxlength="30" value="{% if form_values %}{{ form_values.phone }}{% else %}{{ reservation.phone }}{% endif %}" {% if has_admission %}disabled{% endif %}>
+      <label for="edit-booking-size">عدد الضيوف</label>
+      <input id="edit-booking-size" name="party_size" type="number" min="1" max="100" required value="{% if form_values %}{{ form_values.party_size }}{% else %}{{ reservation.party_size }}{% endif %}" {% if has_admission or has_payment_links %}readonly{% endif %}>
+      {% if tiers %}
+        <h2 class="hub-section-title">فئات التذاكر</h2>
+        <p class="hub-help-text">مجموع الفئات يجب أن يساوي عدد الضيوف. السعر الاسمي ليس إثبات دفع.</p>
+        <div class="hub-grid hub-grid-2">
+        {% for row in tiers %}
+          <label for="edit-tier-{{ row.tier.pk }}">{{ row.tier.name_ar }} · {{ row.tier.price_syp }} ل.س
+            <input id="edit-tier-{{ row.tier.pk }}" name="tier_{{ row.tier.pk }}" type="number" min="0" max="100" required value="{{ row.quantity }}" {% if has_admission or has_payment_links %}readonly{% endif %}>
+          </label>
+        {% endfor %}
+        </div>
+      {% endif %}
+      <label for="edit-booking-notes">ملاحظات خاصة بالفريق</label>
+      <textarea id="edit-booking-notes" name="notes" maxlength="2000" {% if has_admission %}disabled{% endif %}>{% if form_values %}{{ form_values.notes }}{% else %}{{ reservation.notes }}{% endif %}</textarea>
+      {% if not has_admission %}
+        <button class="hub-button hub-button-primary" type="submit">حفظ التعديلات</button>
+      {% endif %}
+    </form>
+  </div>
+</section>
+{% endblock %}
