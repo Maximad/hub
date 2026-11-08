@@ -92,10 +92,12 @@ class ReservationPaymentArrangementTests(TestCase):
             )
 
     def test_failed_confirmation_does_not_store_guarantee(self):
-        create_reservation(Reservation(
+        # Simulate a previously imported/legacy confirmed reservation that
+        # makes the current pending request impossible to confirm.
+        Reservation.objects.create(
             reservation_type='event', event=self.event, name='حجز سابق',
             phone='+9635002000', party_size=3, status='confirmed',
-        ))
+        )
         with self.assertRaises(ValidationError):
             set_payment_arrangement(
                 self.booking.pk, actor=self.manager,
