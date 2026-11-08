@@ -362,3 +362,32 @@ class ReservationTicketPaymentLink(models.Model):
         super().clean()
         if self.reservation_id and self.reservation.reservation_type != Reservation.ReservationType.EVENT:
             raise ValidationError({'reservation': 'ربط قبض التذاكر متاح لحجوزات الفعاليات فقط.'})
+
+
+class ReservationTicketSale(models.Model):
+    """Link an event booking's immutable ticket-charge order to its reservation.
+
+    Payment evidence remains exclusively on Order/Payment/PostingBatch. No
+    drink product is selected or automatically consumed by this link.
+    """
+    reservation = models.OneToOneField(
+        Reservation, on_delete=models.PROTECT, related_name='ticket_sale',
+    )
+    order = models.OneToOneField(
+        'core.Order', on_delete=models.PROTECT, related_name='event_ticket_sale',
+    )
+    booked_total_syp = models.PositiveIntegerField()
+    created_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='event_ticket_orders_created',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def clean(self):
+        super().clean()
+        if self.reservation_id and (
+            self.reservation.reservation_type != Reservation.ReservationType.EVENT
+            or not self.reservation.event_id
+        ):
+            raise ValidationError({'reservation': 'طلب التذاكر يتطلب حجز فعالية.'})
+
