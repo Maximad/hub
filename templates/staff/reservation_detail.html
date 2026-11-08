@@ -39,6 +39,43 @@
     </section>
   {% endif %}
 
+  {% if reservation.reservation_type == 'event' and reservation.event_id %}
+  <section class="hub-card hub-section">
+    <h3>تحصيل تذاكر الفعالية</h3>
+    {% if ticket_financial_summary.classified %}
+      <div class="hub-grid hub-grid-2">
+        <div><strong>القيمة الاسمية</strong><p>{{ ticket_financial_summary.expected }} ل.س</p></div>
+        <div><strong>مقبوض بوثائق مالية مرتبطة</strong><p>{{ ticket_financial_summary.posted }} ل.س</p></div>
+        <div><strong>المتبقي</strong><p>{{ ticket_financial_summary.outstanding }} ل.س</p></div>
+        <div><strong>حالة التحصيل</strong><p>{{ ticket_financial_summary.label }}</p></div>
+      </div>
+      <p class="hub-help-text">الأرقام مبنية حصراً على سندات قبض فعلية مسجّلة ومُرحّلة في الكاشير، مرتبطة بهذا الحجز. العربون والملاحظات والضمان لا تُحتسب كقبض.</p>
+    {% else %}
+      <p class="hub-help-text">لم تُوزّع فئات التذاكر؛ لا يمكن احتساب قيمة الحجز أو اعتباره مدفوعاً.</p>
+    {% endif %}
+    {% if request.user.is_superuser or request.user.role == 'admin' %}
+      {% if ticket_financial_summary.classified and ticket_financial_summary.outstanding > 0 %}
+        {% if recent_ticket_payments %}
+        <form method="post" class="hub-form hub-form-section" action="{% url 'staff_reservation_ticket_payment_link' reservation.id %}">
+          {% csrf_token %}
+          <label for="ticket-payment-id">ربط سند قبض تذاكر مُرحّل من الكاشير
+            <select class="hub-input" id="ticket-payment-id" name="payment_id" required>
+              <option value="">اختر سند القبض الموجود</option>
+              {% for payment in recent_ticket_payments %}
+                <option value="{{ payment.pk }}">#{{ payment.pk }} · الطلب {{ payment.order.display_number }} · {{ payment.amount_syp }} ل.س</option>
+              {% endfor %}
+            </select>
+          </label>
+          <button type="submit" class="hub-button">ربط سند القبض (من دون قبض جديد)</button>
+        </form>
+        {% else %}
+          <p class="hub-help-text">لا توجد سندات قبض تذاكر غير مرتبطة ضمن القائمة الأخيرة. أنشئ بيع تذاكر حقيقياً من الكاشير أولاً.</p>
+        {% endif %}
+      {% endif %}
+    {% endif %}
+  </section>
+  {% endif %}
+
   <section class="hub-card hub-section">
     <h3>اتفاق السداد</h3>
     {% if payment_arrangement %}
