@@ -7,6 +7,15 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404, render
+from django.contrib import messages
+from django.core.exceptions import ValidationError
+from django.core.paginator import Paginator
+from django.db.models import Q, Sum
+from django.shortcuts import redirect
+
+from accounts.permissions import require_staff_capability
+from reservations.admissions import set_event_admission_total
+from reservations.models import EventAdmission
 
 from core.views_legacy import _assert_staff_capability, staff_event_new
 from events.models import Event, EventMedia
@@ -74,4 +83,56 @@ def staff_event_detail(request, event_id):
         'participations': participations,
         'legacy_participations': legacy_participations,
         'public_homepage_enabled': settings.PUBLIC_HOMEPAGE_ENABLED,
+    })
+
+
+@require_staff_capability('reservations')
+def staff_event_checkin(request, event_id):
+    """Ticket-only admission desk. No HubVisit or restaurant account is created."""
+    event = get_object_or_404(Event, pk=event_id)
+    if request.method == 'POST':
+        raw_id = request.POST.get('reservation_id', '')
+        booking = get_object_or_404(
+            Reservation, pk=raw_id if raw_id.isdecimal() and len(raw_id) <= 15 else None,
+            event=event, reservation_type=Reservation.ReservationType.EVENT,
+        )
+        try:
+            _row, changed = set_event_admission_total(
+                booking.pk,
+                request.POST.get('arrived_count', ''),
+                actor=request.user,
+            )
+        except ValidationError as error:
+            messages.error(request, ' '.join(error.messages))
+        else:
+            messages.success(
+                request,
+                'تم تسجيل الوصول.' if changed else 'الحضور مسجّل مسبقاً؛ لم تُضف أعداد مكررة.',
+            )
+        return redirect('staff_event_checkin', event_id=event.pk)
+
+    query = (request.GET.get('q') or '').strip()[:80]
+    bookings = (
+        Reservation.objects.filter(
+            event=event, reservation_type=Reservation.ReservationType.EVENT,
+        )
+        .select_related('event_admission', 'visit')
+        .order_by('name', 'pk')
+    )
+    if query:
+        bookings = bookings.filter(Q(name__icontains=query) | Q(phone__icontains=query))
+    page = Paginator(bookings, 30).get_page(request.GET.get('page'))
+    summary = Reservation.objects.filter(
+        event=event, reservation_type=Reservation.ReservationType.EVENT,
+        status=Reservation.Status.CONFIRMED,
+    ).aggregate(guests=Sum('party_size'))
+    arrived = EventAdmission.objects.filter(
+        reservation__event=event,
+    ).aggregate(guests=Sum('arrived_count'))['guests'] or 0
+    return render(request, 'staff/event_checkin.html', {
+        'event': event,
+        'page': page,
+        'query': query,
+        'confirmed_guests': summary['guests'] or 0,
+        'arrived_guests': arrived,
     })
