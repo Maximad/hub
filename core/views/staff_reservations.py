@@ -17,6 +17,8 @@ from reservations.models import Reservation
 from reservations.ticketing import set_event_ticket_allocations
 from reservations.arrangements import set_payment_arrangement
 from reservations.finance_links import link_posted_ticket_payment, ticket_payment_summary
+from reservations.ticket_sale import create_event_ticket_order
+from reservations.models import ReservationTicketSale
 from reservations.models import ReservationPaymentArrangement
 from events.models import EventTicketType
 from reservations.services import change_reservation_status, check_in_reservation
@@ -137,6 +139,11 @@ def staff_reservation_detail(request, reservation_id):
                 event_ticket_booking_link__isnull=True,
             ).select_related('order').distinct().order_by('-created_at', '-pk')[:30]
         )
+    ticket_sale = None
+    if reservation.reservation_type == Reservation.ReservationType.EVENT:
+        ticket_sale = ReservationTicketSale.objects.filter(
+            reservation=reservation,
+        ).select_related('order').first()
     return render(
         request,
         'staff/reservation_detail.html',
@@ -148,6 +155,7 @@ def staff_reservation_detail(request, reservation_id):
             'checkin_allowed': checkin_allowed,
             'payment_arrangement': arrangement,
             'ticket_financial_summary': financial_summary,
+            'ticket_sale': ticket_sale,
             'recent_ticket_payments': recent_ticket_payments,
         },
     )
@@ -272,3 +280,21 @@ def staff_reservation_ticket_payment_link(request, reservation_id):
     else:
         messages.success(request, 'تم ربط سند القبض المرحّل بالحجز. لا توجد دفعة جديدة.')
     return redirect('staff_reservation_detail', reservation_id=reservation_id)
+
+
+@require_staff_capability('reservations')
+@require_http_methods(['POST'])
+def staff_reservation_create_ticket_order(request, reservation_id):
+    try:
+        sale, created = create_event_ticket_order(
+            reservation_id, actor=request.user,
+        )
+    except (ValidationError, Reservation.DoesNotExist) as error:
+        messages.error(request, _validation_message(error) if isinstance(error, ValidationError)
+                       else 'الحجز غير موجود.')
+        return redirect('staff_reservation_detail', reservation_id=reservation_id)
+    if created:
+        messages.success(request, 'تم إنشاء طلب التذاكر. لم يُسجّل أي قبض بعد.')
+    else:
+        messages.info(request, 'طلب التذاكر موجود مسبقاً؛ لا تكرار للبيع.')
+    return redirect('staff_cashier_order', public_code=sale.order.public_code)
