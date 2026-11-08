@@ -44,7 +44,7 @@
     {% if payment_arrangement %}
       <p><strong>الترتيب الحالي:</strong> {{ payment_arrangement.get_mode_display }}</p>
       {% if payment_arrangement.guaranteed_by %}<p><strong>الضامن:</strong> {{ payment_arrangement.guaranteed_by }}</p>{% endif %}
-      {% if payment_arrangement.due_at %}<p><strong>موعد التسديد:</strong> {{ payment_arrangement.due_at|date:"Y-m-d H:i" }}{% if payment_arrangement.due_at < now %} (يحتاج إلى مراجعة){% endif %}</p>{% endif %}
+      {% if payment_arrangement.due_at %}<p><strong>موعد التسديد:</strong> {{ payment_arrangement.due_at|date:"Y-m-d H:i" }}</p>{% endif %}
       {% if payment_arrangement.reason %}<p><strong>سبب الضمان:</strong> {{ payment_arrangement.reason }}</p>{% endif %}
     {% else %}
       <p class="hub-help-text">لم تُحدّد طريقة سداد لهذا الحجز.</p>
