@@ -311,7 +311,7 @@ def staff_event_reservation_edit(request, reservation_id):
     return render(request, 'staff/event_reservation_edit.html', {
         'reservation': booking,
         'tiers': [
-            {'tier': tier, 'quantity': assigned.get(tier.pk, 0)}
+            {'tier': tier, 'quantity': request.POST.get(f'tier_{tier.pk}', assigned.get(tier.pk, 0)) if request.method == 'POST' else assigned.get(tier.pk, 0)}
             for tier in tiers if tier.is_active or tier.pk in assigned
         ],
         'form_values': request.POST if request.method == 'POST' else None,
