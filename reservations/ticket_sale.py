@@ -61,6 +61,8 @@ def create_event_ticket_order(reservation_id, *, actor):
         raise ValidationError({'status': 'يجب تأكيد الحجز قبل إصدار طلب التذاكر.'})
 
     event = Event.objects.select_for_update().get(pk=booking.event_id)
+    from .ticketing import validate_saved_ticket_allocations
+    validate_saved_ticket_allocations(booking, event=event)
     existing = ReservationTicketSale.objects.select_related('order').filter(
         reservation=booking,
     ).first()
