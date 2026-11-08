@@ -9,7 +9,7 @@ from django.db import transaction
 
 from accounts.permissions import is_owner_or_admin
 from core.models import ActivityLog, Order, Payment, PostingBatch, Product
-from .models import Reservation, ReservationTicketPaymentLink
+from .models import Reservation, ReservationTicketPaymentLink, ReservationTicketSale
 
 
 def _verified_payment(payment):
@@ -83,7 +83,7 @@ def link_posted_ticket_payment(reservation_id, payment_id, *, actor):
         raise ValidationError({'payment': 'سند القبض مرتبط بالفعل بحجز آخر.'})
     if payment.order.status == Order.Status.CANCELLED:
         raise ValidationError({'payment': 'طلب البيع ملغى.'})
-    if payment.order.event_ticket_sale if hasattr(payment.order, 'event_ticket_sale') else False:
+    if ReservationTicketSale.objects.filter(order_id=payment.order_id).exists():
         raise ValidationError({'payment': 'سند طلب التذاكر المرتبط بالحجز يحتسب تلقائياً؛ لا تربطه يدوياً.'})
     if not _verified_payment(payment):
         raise ValidationError({'payment': 'لا يوجد سند قبض مالي نشط ومُرحّل يمكن ربطه.'})
