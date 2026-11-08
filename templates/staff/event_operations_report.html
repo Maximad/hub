@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}تقرير الفعالية | {{ event.title_ar }}{% endblock %}
+{% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/staff_events_workspace.css' %}">{% endblock %}
+{% block content %}
+<section class="events-ui hub-section" dir="rtl">
+  <nav class="events-ui__crumb"><a href="{% url 'staff_events' %}">الفعاليات</a> /
+    <a href="{% url 'staff_event_detail' event.id %}">{{ event.title_ar }}</a> / التقرير</nav>
+  <header class="hub-page-header">
+    <div>
+      <p class="staff-workspace__eyebrow">تقرير تشغيلي / للمدير</p>
+      <h1 class="hub-page-header__title">تقرير {{ event.title_ar }}</h1>
+      <p class="hub-page-header__meta">بيانات حجوزات وتذاكر ووصول فعلية؛ الإيرادات تعتمد على سندات قبض محاسبية مرتبطة فقط.</p>
+    </div>
+    <a class="hub-button" href="{% url 'staff_event_detail' event.id %}">إدارة الفعالية</a>
+  </header>
+
+  <div class="events-ui__stats">
+    <div class="events-ui__stat"><span>الحضور الفعلي المسجّل</span><strong>{{ report.arrived }}</strong></div>
+    <div class="events-ui__stat"><span>المقاعد المؤكدة</span><strong>{{ report.statuses.confirmed }}</strong></div>
+    <div class="events-ui__stat"><span>بانتظار التأكيد</span><strong>{{ report.statuses.pending }}</strong></div>
+    <div class="events-ui__stat"><span>مقاعد لم تُصنّف فئاتها</span><strong>{{ report.unclassified }}</strong></div>
+  </div>
+  <div class="events-ui__columns">
+    <div class="events-ui__panel">
+      <h2>توزيع فئات التذاكر</h2>
+      <div class="events-ui__ticket-list">
+        {% for tier in report.tier_rows %}
+          <div class="events-ui__ticket"><div><strong>{{ tier.name }}</strong><span class="events-ui__muted">{{ tier.tickets }} تذكرة</span></div><strong>{{ tier.nominal }} ل.س</strong></div>
+        {% empty %}<p class="events-ui__muted">لا توجد تذاكر مصنّفة بعد.</p>{% endfor %}
+      </div>
+      <p class="events-ui__notice">إجمالي القيمة الاسمية للفئات: {{ report.nominal_total }} ل.س؛ لا يُعد هذا إيراداً أو سند قبض.</p>
+    </div>
+    <aside class="events-ui__side">
+      <div class="events-ui__panel">
+        <h2>التحصيل والمراجعة</h2>
+        <p>المقبوض بسندات POS مُرحّلة ومرتبطة: <strong>{{ report.posted_total }} ل.س</strong></p>
+        <p>ضمانات تجاوز موعد سدادها: <strong>{{ report.overdue_guarantees }}</strong></p>
+        {% if report.unverified_payment_links %}
+          <p class="hub-message hub-message-error">سندات مرتبطة معكوسة أو لا يمكن التحقق منها: {{ report.unverified_payment_links }}. تحتاج مطابقة.</p>
+        {% endif %}
+        <p class="events-ui__notice">لا يشمل هذا الإجمالي أي تحصيل غير مرتبط بالحجوزات، ولا يعني أن كل المصروفات أو المرتجعات قد سُوِّيت.</p>
+      </div>
+      <div class="events-ui__panel">
+        <h2>الإلغاء والغياب</h2>
+        <p>مقاعد محجوزة ملغاة: <strong>{{ report.statuses.cancelled }}</strong></p>
+        <p>لم يحضر: <strong>{{ report.statuses.no_show }}</strong></p>
+        <p>الحجوزات المنتهية: <strong>{{ report.statuses.completed }}</strong></p>
+      </div>
+      <div class="events-ui__panel">
+        <h2>الربحية</h2>
+        <p class="events-ui__muted">{{ report.profit_note }}</p>
+      </div>
+    </aside>
+  </div>
+</section>
+{% endblock %}
