@@ -66,6 +66,10 @@ def _check_event_capacity(reservation):
     if not reservation.event_id:
         raise ValidationError({'event': 'يرجى اختيار الفعالية.'})
     event = Event.objects.select_for_update().get(pk=reservation.event_id)
+    # Ticket allocations are optional for legacy bookings, but whenever they
+    # exist they must satisfy current tier limits during confirmation/restore.
+    from .ticketing import validate_saved_ticket_allocations
+    validate_saved_ticket_allocations(reservation, event=event)
     if event.capacity is None:
         return
     used = event_reserved_party_size(event.pk, exclude_reservation_id=reservation.pk)

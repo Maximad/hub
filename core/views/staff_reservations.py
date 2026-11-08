@@ -12,6 +12,8 @@ from django.views.decorators.http import require_http_methods
 from accounts.permissions import require_staff_capability
 from core.models import Member, TableArea
 from reservations.models import Reservation
+from reservations.ticketing import set_event_ticket_allocations
+from events.models import EventTicketType
 from reservations.services import change_reservation_status, check_in_reservation
 from core.views_legacy import (
     staff_reservation_new,
@@ -124,6 +126,57 @@ def staff_reservation_detail(request, reservation_id):
             'checkin_allowed': checkin_allowed,
         },
     )
+
+
+@require_staff_capability('reservations')
+@require_http_methods(['GET', 'POST'])
+def staff_reservation_tickets(request, reservation_id):
+    """Assign quantities of event ticket tiers; no receipt or payment is posted."""
+    reservation = get_object_or_404(
+        Reservation.objects.select_related('event'), pk=reservation_id,
+    )
+    if reservation.reservation_type != Reservation.ReservationType.EVENT or not reservation.event_id:
+        raise Http404()
+    tiers = list(
+        EventTicketType.objects.filter(event_id=reservation.event_id)
+        .order_by('price_syp', 'pk')
+    )
+    assigned = {
+        row.ticket_type_id: row.quantity
+        for row in reservation.ticket_allocations.all()
+    }
+    errors = ''
+    submitted = None
+    if request.method == 'POST':
+        submitted = {
+            tier.pk: (request.POST.get(f'tier_{tier.pk}', '0') or '0').strip()
+            for tier in tiers
+        }
+        try:
+            set_event_ticket_allocations(reservation.pk, submitted, actor=request.user)
+        except ValidationError as error:
+            errors = _validation_message(error)
+        else:
+            messages.success(request, 'تم حفظ توزيع فئات التذاكر دون تسجيل أي دفعة.')
+            return redirect('staff_reservation_detail', reservation_id=reservation.pk)
+    entries = [
+        {
+            'tier': tier,
+            'quantity': submitted[tier.pk] if submitted is not None else assigned.get(tier.pk, 0),
+            'assigned': assigned.get(tier.pk, 0),
+        }
+        for tier in tiers if tier.is_active or tier.pk in assigned
+    ]
+    editable = (
+        reservation.status in {Reservation.Status.PENDING, Reservation.Status.CONFIRMED}
+        and reservation.visit_id is None
+    )
+    return render(request, 'staff/reservation_tickets.html', {
+        'reservation': reservation,
+        'entries': entries,
+        'editable': editable,
+        'error': errors,
+    })
 
 
 @require_staff_capability('reservations')

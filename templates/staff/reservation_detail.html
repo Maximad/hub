@@ -24,6 +24,21 @@
     {% if reservation.notes %}<p><strong>ملاحظة:</strong> {{ reservation.notes }}</p>{% endif %}
   </section>
 
+  {% if reservation.reservation_type == 'event' and reservation.event_id %}
+    <section class="hub-card hub-section">
+      <h3>فئات التذاكر</h3>
+      <div class="hub-list">
+        {% for allocation in reservation.ticket_allocations.all %}
+          <p>{{ allocation.ticket_type.name_ar }} · {{ allocation.quantity }} تذاكر · السعر المسجل عند التخصيص: {{ allocation.unit_price_syp }} ل.س للتذكرة</p>
+        {% empty %}
+          <p class="hub-help-text">لم تُحدّد فئات التذاكر لهذا الحجز بعد. هذا شائع في الحجوزات القديمة والطلبات الموافق عليها من الموقع.</p>
+        {% endfor %}
+      </div>
+      <p class="hub-help-text">توزيع التذاكر لا يثبت الدفع. حالة التحصيل تحتاج إلى سند دفع مسجّل في النظام المالي.</p>
+      <a class="hub-button" href="{% url 'staff_reservation_tickets' reservation.id %}">تحديد أو مراجعة فئات التذاكر</a>
+    </section>
+  {% endif %}
+
   {% if reservation.visit_id %}
     <section class="hub-card hub-section">
       <h3>{% if reservation.visit.status == 'open' %}الضيف داخل هَبّ الآن{% else %}الجلسة المرتبطة بالحجز{% endif %}</h3>

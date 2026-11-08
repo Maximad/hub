@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}فئات تذاكر الحجز{% endblock %}
+{% block content %}
+<section class="hub-section" dir="rtl" style="max-width:850px;margin-inline:auto">
+  <nav class="hub-page-header__meta"><a href="{% url 'staff_events' %}">الفعاليات</a> / <a href="{% url 'staff_event_detail' reservation.event_id %}">{{ reservation.event.title_ar }}</a> / <a href="{% url 'staff_reservation_detail' reservation.id %}">تفاصيل الحجز</a></nav>
+  <header class="hub-page-header">
+    <div>
+      <h1 class="hub-page-header__title">توزيع فئات التذاكر</h1>
+      <p class="hub-page-header__meta">الحجز: {{ reservation.name }} · عدد الضيوف: {{ reservation.party_size }}</p>
+    </div>
+    <a class="hub-button" href="{% url 'staff_reservation_detail' reservation.id %}">العودة للحجز</a>
+  </header>
+
+  {% if error %}<p class="hub-message hub-message-error" role="alert">{{ error }}</p>{% endif %}
+  <div class="hub-card">
+    {% if entries %}
+      <form class="hub-form hub-form-section" method="post">
+        {% csrf_token %}
+        <p class="hub-help-text">أدخل عدد التذاكر لكل فئة. يجب أن يساوي المجموع {{ reservation.party_size }} ضيفاً. الأسعار المعروضة هي قيمة اسمية للحجز وليست إيصال دفع.</p>
+        <div class="hub-grid hub-grid-2">
+          {% for entry in entries %}
+            <div class="hub-card" style="padding:1rem">
+              <label for="tier-{{ entry.tier.pk }}"><strong>{{ entry.tier.name_ar }}</strong></label>
+              <p class="hub-page-header__meta">سعر التذكرة: {{ entry.tier.price_syp }} ل.س · العدد المخصص للفئة: {{ entry.tier.capacity|default:"غير محدد" }}</p>
+              <input id="tier-{{ entry.tier.pk }}" class="hub-input" type="number" name="tier_{{ entry.tier.pk }}" min="0" max="{{ reservation.party_size }}" step="1" value="{{ entry.quantity }}" {% if not editable %}disabled{% endif %} required>
+            </div>
+          {% endfor %}
+        </div>
+        {% if editable %}<button class="hub-button hub-button-primary" type="submit">حفظ توزيع التذاكر</button>{% else %}<p class="hub-message">لا يمكن تعديل التذاكر بعد إنهاء أو إلغاء الحجز أو تسجيل وصول الضيوف.</p>{% endif %}
+      </form>
+    {% else %}
+      <p class="hub-empty-state">لا توجد فئات تذاكر مفعلة. أضف الفئات من إدارة الفعالية أولاً.</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

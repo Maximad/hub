@@ -11,11 +11,11 @@ class Reservation(models.Model):
         EVENT = 'event', 'حجز فعالية'
 
     class Status(models.TextChoices):
-        PENDING = 'pending', 'Pending'
-        CONFIRMED = 'confirmed', 'Confirmed'
-        CANCELLED = 'cancelled', 'Cancelled'
-        COMPLETED = 'completed', 'Completed'
-        NO_SHOW = 'no_show', 'No Show'
+        PENDING = 'pending', 'بانتظار التأكيد'
+        CONFIRMED = 'confirmed', 'مؤكد'
+        CANCELLED = 'cancelled', 'ملغى'
+        COMPLETED = 'completed', 'منتهٍ'
+        NO_SHOW = 'no_show', 'لم يحضر'
 
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     reservation_type = models.CharField(max_length=30, choices=ReservationType.choices, default=ReservationType.REGULAR)
@@ -218,3 +218,40 @@ class EventAttendanceRequest(models.Model):
             models.UniqueConstraint(fields=['event', 'owner_hash'], condition=models.Q(status__in=['pending', 'approved']),
                                     name='one_open_attendance_request_per_browser'),
         ]
+
+
+class ReservationTicketAllocation(models.Model):
+    """Quantity and immutable booking-price snapshot for one event ticket tier.
+
+    This is an allocation, not a paid sale. Real receipts belong to the finance
+    posting engine. Historical bookings may have no allocations until reviewed.
+    """
+    reservation = models.ForeignKey(
+        Reservation, on_delete=models.CASCADE, related_name='ticket_allocations',
+    )
+    ticket_type = models.ForeignKey(
+        'events.EventTicketType', on_delete=models.PROTECT, related_name='reservation_allocations',
+    )
+    quantity = models.PositiveIntegerField()
+    unit_price_syp = models.PositiveIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=('reservation', 'ticket_type'),
+                name='unique_reservation_ticket_tier',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(quantity__gt=0),
+                name='reservation_ticket_quantity_positive',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.reservation_id and self.ticket_type_id:
+            if (self.reservation.reservation_type != Reservation.ReservationType.EVENT
+                    or self.reservation.event_id != self.ticket_type.event_id):
+                raise ValidationError({'ticket_type': 'فئة التذكرة لا تتبع فعالية هذا الحجز.'})
