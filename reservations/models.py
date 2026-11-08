@@ -255,3 +255,52 @@ class ReservationTicketAllocation(models.Model):
             if (self.reservation.reservation_type != Reservation.ReservationType.EVENT
                     or self.reservation.event_id != self.ticket_type.event_id):
                 raise ValidationError({'ticket_type': 'فئة التذكرة لا تتبع فعالية هذا الحجز.'})
+
+
+class ReservationPaymentArrangement(models.Model):
+    """Booking collection arrangement, deliberately separate from posted payments.
+
+    This record never means a ticket was paid; a future reconciliation must link
+    actual POS/finance postings before displaying financial settlement status.
+    """
+    class Mode(models.TextChoices):
+        PAY_AT_DOOR = 'pay_at_door', 'الدفع عند الدخول'
+        STAFF_GUARANTEE = 'staff_guarantee', 'مؤكد بضمان الإدارة'
+
+    reservation = models.OneToOneField(
+        Reservation, on_delete=models.CASCADE, related_name='payment_arrangement',
+    )
+    mode = models.CharField(max_length=24, choices=Mode.choices)
+    guaranteed_by = models.ForeignKey(
+        'accounts.User', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='guaranteed_reservations',
+    )
+    approved_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='approved_reservation_arrangements',
+    )
+    due_at = models.DateTimeField(null=True, blank=True)
+    reason = models.CharField(max_length=250, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(mode='pay_at_door', guaranteed_by__isnull=True)
+                    | models.Q(mode='staff_guarantee', guaranteed_by__isnull=False)
+                ),
+                name='reservation_arrangement_guarantee_consistent',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.mode == self.Mode.STAFF_GUARANTEE:
+            if not self.guaranteed_by_id:
+                raise ValidationError({'guaranteed_by': 'اسم الضامن مطلوب.'})
+            if len((self.reason or '').strip()) < 3:
+                raise ValidationError({'reason': 'اكتب سبباً مختصراً لاعتماد الحجز بالضمان.'})
+        elif self.mode == self.Mode.PAY_AT_DOOR and self.guaranteed_by_id:
+            raise ValidationError({'guaranteed_by': 'الدفع عند الدخول لا يحتاج إلى ضامن.'})
