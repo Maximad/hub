@@ -11,6 +11,10 @@
     <span class="hub-badge {% if reservation.visit_id and reservation.visit.status == 'open' %}hub-badge-success{% elif reservation.status == 'confirmed' %}hub-badge-info{% endif %}">{{ reservation.operational_status_label }}</span>
   </header>
 
+  {% if reservation.reservation_type == 'event' and reservation.status == 'confirmed' or reservation.reservation_type == 'event' and reservation.status == 'pending' %}
+    <p><a class="hub-button" href="{% url 'staff_event_reservation_edit' reservation.pk %}">تعديل بيانات الحجز والمقاعد</a></p>
+  {% endif %}
+
   <section class="hub-card hub-section">
     <h3>الحجز</h3>
     <div class="hub-grid hub-grid-2">
