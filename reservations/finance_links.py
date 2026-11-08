@@ -38,10 +38,17 @@ def ticket_payment_summary(reservation):
     links = ReservationTicketPaymentLink.objects.filter(
         reservation=reservation,
     ).select_related('payment')
+    # Canonical ticket-only orders are linked directly to reservations. Their
+    # real cashier payments count automatically once a posting exists.
+    linked_payments = {row.payment_id: row.payment for row in links}
+    for payment in Payment.objects.filter(
+        order__event_ticket_sale__reservation=reservation,
+    ):
+        linked_payments[payment.pk] = payment
     posted = sum(
-        row.payment.amount_syp
-        for row in links
-        if _verified_payment(row.payment)
+        payment.amount_syp
+        for payment in linked_payments.values()
+        if _verified_payment(payment)
     )
     outstanding = max(expected - posted, 0)
     if expected <= 0:
@@ -76,6 +83,8 @@ def link_posted_ticket_payment(reservation_id, payment_id, *, actor):
         raise ValidationError({'payment': 'سند القبض مرتبط بالفعل بحجز آخر.'})
     if payment.order.status == Order.Status.CANCELLED:
         raise ValidationError({'payment': 'طلب البيع ملغى.'})
+    if payment.order.event_ticket_sale if hasattr(payment.order, 'event_ticket_sale') else False:
+        raise ValidationError({'payment': 'سند طلب التذاكر المرتبط بالحجز يحتسب تلقائياً؛ لا تربطه يدوياً.'})
     if not _verified_payment(payment):
         raise ValidationError({'payment': 'لا يوجد سند قبض مالي نشط ومُرحّل يمكن ربطه.'})
     items = payment.order.items.all()
