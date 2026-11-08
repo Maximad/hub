@@ -94,6 +94,8 @@ def set_event_ticket_allocations(reservation_id, quantities, *, actor):
         raise ValidationError({'tickets': 'لا يمكن تعديل فئات حجز منتهٍ أو ملغى أو بعد تسجيل الوصول.'})
     if reservation.ticket_payment_links.exists():
         raise ValidationError({'tickets': 'هذا الحجز مرتبط بسند قبض. يلزم تسوية مالية قبل تعديل فئات التذاكر.'})
+    if hasattr(reservation, 'ticket_sale'):
+        raise ValidationError({'tickets': 'تم إصدار طلب كاشير لهذا الحجز؛ لا يمكن تغيير التذاكر قبل تسوية الطلب.'})
 
     # Lock-order matches existing reservation confirmation: booking row, then event.
     event = Event.objects.select_for_update().get(pk=reservation.event_id)
