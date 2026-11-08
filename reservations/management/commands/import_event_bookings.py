@@ -4,7 +4,7 @@ from pathlib import Path
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 
-from reservations.importer import BookingImportError, import_booking_csv
+from reservations.importer import BookingImportError, import_booking_csv, _read_rows
 
 
 class Command(BaseCommand):
@@ -33,6 +33,13 @@ class Command(BaseCommand):
             raise CommandError('Active manager account not found.')
         if opts['apply'] and (opts['expected_rows'] is None or opts['expected_rows'] < 0):
             raise CommandError('--apply requires --expected-rows matching the validated CSV.')
+        if opts['apply']:
+            try:
+                validated_rows = _read_rows(text)
+            except BookingImportError as error:
+                raise CommandError(f'Import rejected at CSV row {error.row}: {error.code}')
+            if len(validated_rows) != opts['expected_rows']:
+                raise CommandError('Import row count does not match --expected-rows; nothing written.')
         try:
             result = import_booking_csv(
                 text, source=opts['source'], actor=user, apply=opts['apply'],
@@ -44,10 +51,6 @@ class Command(BaseCommand):
             if isinstance(error, ValidationError):
                 raise CommandError('Import rejected: insufficient authority or invalid configuration.')
             raise
-        if opts['apply'] and result['rows'] != opts['expected_rows']:
-            # Important: expected-rows must be validated BEFORE apply. Caller
-            # must never reach this condition with already-committed records.
-            raise CommandError('Import row count does not match --expected-rows.')
         self.stdout.write(
             f"{'APPLIED' if result['applied'] else 'PREVIEW / ROLLED BACK'} "
             f"rows={result['rows']} created={result['created']} "
