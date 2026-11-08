@@ -46,6 +46,27 @@
   </div>
   <p class="events-ui__notice">هذه أعداد الحجوزات، وليست بيانات تذاكر مدفوعة أو سعة جلوس معتمدة. لا تُسجّل إيرادات دون عملية قبض فعلية.</p>
 
+  {% if booking_report %}
+    <section class="events-ui__panel" aria-labelledby="event-operations-report-title">
+      <div class="events-ui__panel-head"><h2 id="event-operations-report-title">متابعة الحضور والحجوزات</h2></div>
+      <div class="events-ui__stats">
+        <div class="events-ui__stat"><span>وصلوا للفعالية</span><strong>{{ booking_report.admitted_people }}</strong></div>
+        <div class="events-ui__stat"><span>مؤكدون بضمان الإدارة</span><strong>{{ booking_report.guaranteed_people }}</strong></div>
+        <div class="events-ui__stat"><span>الدفع عند الدخول</span><strong>{{ booking_report.door_people }}</strong></div>
+        <div class="events-ui__stat"><span>حجوزات نشطة بلا فئة تذكرة</span><strong>{{ booking_report.unclassified_people }}</strong></div>
+      </div>
+      <div class="events-ui__ticket-list" aria-label="توزيع فئات التذاكر">
+        {% for tier in booking_report.tier_rows %}
+          <div class="events-ui__ticket">
+            <div><strong>{{ tier.ticket_type__name_ar }}</strong><span class="events-ui__muted">عدد محجوز في الفئة: {{ tier.assigned }}{% if tier.ticket_type__capacity %} / {{ tier.ticket_type__capacity }}{% endif %}</span></div>
+            <span class="events-ui__muted">القيمة الاسمية: {{ tier.face_value }} ل.س</span>
+          </div>
+        {% empty %}<p class="events-ui__muted">لا توجد تذاكر موزعة على الحجوزات النشطة حتى الآن.</p>{% endfor %}
+      </div>
+      <p class="events-ui__notice"><strong>القيمة الاسمية للتذاكر الموزعة: {{ booking_report.booking_face_value_syp }} ل.س.</strong> هذا المبلغ ليس إيراداً محصّلاً، ولا توجد هنا بيانات تثبت الدفع أو الاسترداد. عدد الضيوف غير المصنفين يحتاج مراجعة يدوية. حالة الضمان أو الدفع عند الدخول لا تعني تحصيل المبلغ.</p>
+    </section>
+  {% endif %}
+
   <div class="events-ui__columns">
     <section class="events-ui__panel" aria-labelledby="event-reservations-title">
       <div class="events-ui__panel-head">

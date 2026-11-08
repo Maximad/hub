@@ -16,6 +16,7 @@ from django.shortcuts import redirect
 from accounts.permissions import require_staff_capability
 from reservations.admissions import set_event_admission_total
 from reservations.models import EventAdmission
+from reservations.reporting import event_booking_report
 
 from core.views_legacy import _assert_staff_capability, staff_event_new
 from events.models import Event, EventMedia
@@ -83,6 +84,7 @@ def staff_event_detail(request, event_id):
         'participations': participations,
         'legacy_participations': legacy_participations,
         'public_homepage_enabled': settings.PUBLIC_HOMEPAGE_ENABLED,
+        'booking_report': event_booking_report(event.pk),
     })
 
 
