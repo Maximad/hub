@@ -304,3 +304,33 @@ class ReservationPaymentArrangement(models.Model):
                 raise ValidationError({'reason': 'اكتب سبباً مختصراً لاعتماد الحجز بالضمان.'})
         elif self.mode == self.Mode.PAY_AT_DOOR and self.guaranteed_by_id:
             raise ValidationError({'guaranteed_by': 'الدفع عند الدخول لا يحتاج إلى ضامن.'})
+
+
+class EventAdmission(models.Model):
+    """Ticket admission for an event booking; never creates a hospitality visit."""
+    reservation = models.OneToOneField(
+        Reservation, on_delete=models.CASCADE, related_name='event_admission',
+    )
+    arrived_count = models.PositiveIntegerField()
+    recorded_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='event_admissions_recorded',
+    )
+    first_recorded_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(arrived_count__gt=0),
+                name='event_admission_positive_attendees',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.reservation_id:
+            if self.reservation.reservation_type != Reservation.ReservationType.EVENT:
+                raise ValidationError({'reservation': 'لا يمكن تسجيل دخول تذاكر لحجز عادي.'})
+            if self.arrived_count > self.reservation.party_size:
+                raise ValidationError({'arrived_count': 'عدد الواصلين يتجاوز عدد الضيوف في الحجز.'})
