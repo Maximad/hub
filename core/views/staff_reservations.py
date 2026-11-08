@@ -11,10 +11,12 @@ from django.utils.dateparse import parse_datetime
 from zoneinfo import ZoneInfo
 from django.views.decorators.http import require_http_methods
 
-from accounts.permissions import require_staff_capability, is_owner_or_admin
+from accounts.permissions import require_staff_capability, user_has_capability, is_owner_or_admin
 from core.models import Member, TableArea, Payment, Product
 from reservations.models import Reservation
 from reservations.ticketing import set_event_ticket_allocations
+from reservations.ticket_sales import ensure_reservation_ticket_order
+from reservations.models import ReservationTicketSale
 from reservations.arrangements import set_payment_arrangement
 from reservations.finance_links import link_posted_ticket_payment, ticket_payment_summary
 from reservations.models import ReservationPaymentArrangement
@@ -272,3 +274,47 @@ def staff_reservation_ticket_payment_link(request, reservation_id):
     else:
         messages.success(request, 'تم ربط سند القبض المرحّل بالحجز. لا توجد دفعة جديدة.')
     return redirect('staff_reservation_detail', reservation_id=reservation_id)
+
+
+@require_staff_capability('reservations')
+@require_http_methods(['GET', 'POST'])
+def staff_reservation_ticket_order(request, reservation_id):
+    """Issue one ticket-charge order, then collect through the existing cashier."""
+    booking = get_object_or_404(
+        Reservation.objects.select_related('event'), pk=reservation_id,
+        reservation_type=Reservation.ReservationType.EVENT,
+    )
+    if request.method == 'POST':
+        try:
+            _sale, created = ensure_reservation_ticket_order(booking.pk, actor=request.user)
+        except ValidationError as error:
+            messages.error(request, _validation_message(error))
+        else:
+            messages.success(
+                request,
+                'تم إصدار فاتورة التذاكر دون تسجيل أي دفعة.' if created
+                else 'فاتورة التذاكر موجودة مسبقاً؛ لم يتم إنشاء فاتورة مكررة.',
+            )
+        return redirect('staff_reservation_ticket_order', reservation_id=booking.pk)
+
+    sale = ReservationTicketSale.objects.filter(
+        reservation=booking,
+    ).select_related('order').first()
+    rows = list(
+        booking.ticket_allocations.select_related('ticket_type').order_by('ticket_type__price_syp')
+    )
+    amount = sum(row.quantity * row.unit_price_syp for row in rows)
+    fully_allocated = bool(rows) and sum(row.quantity for row in rows) == booking.party_size
+    can_issue = (
+        not sale and fully_allocated and booking.status == Reservation.Status.CONFIRMED
+        and not booking.visit_id and not hasattr(booking, 'event_admission')
+        and booking.event.status not in {Event.Status.CANCELLED, Event.Status.COMPLETED}
+    )
+    return render(request, 'staff/reservation_ticket_order.html', {
+        'reservation': booking,
+        'sale': sale,
+        'allocations': rows,
+        'expected_total': amount,
+        'can_issue': can_issue,
+        'can_cashier': user_has_capability(request.user, 'cashier'),
+    })
