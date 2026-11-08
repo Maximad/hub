@@ -75,7 +75,7 @@ class Command(BaseCommand):
                 ended = end_usage_session(session, at=session.authorized_until)
                 ended.lifecycle_end_reason = 'authorization_expired'
                 ended.save(update_fields=('lifecycle_end_reason', 'updated_at'))
-                if session.entitlement_id:
+                if session.entitlement_id and session.notes != 'staff_wifi_device_v1':
                     enqueue_network_operation(
                         session.entitlement, InternetNetworkOperation.Operation.DEAUTHENTICATE,
                         reason='authorization_expired',
