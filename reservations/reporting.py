@@ -56,7 +56,13 @@ def event_operations_report(event):
     links = list(ReservationTicketPaymentLink.objects.filter(
         reservation__event=event,
     ).select_related('payment'))
-    payment_ids = [str(row.payment_id) for row in links]
+    # Include already-posted cashier receipts of canonical ticket-only orders.
+    payments = {row.payment_id: row.payment for row in links}
+    for payment in Payment.objects.filter(
+        order__event_ticket_sale__reservation__event=event,
+    ):
+        payments[payment.pk] = payment
+    payment_ids = [str(pid) for pid in payments]
     journals = defaultdict(list)
     if payment_ids:
         content_type = ContentType.objects.get_for_model(Payment)
@@ -70,8 +76,7 @@ def event_operations_report(event):
             journals[batch.source_object_id].append(batch)
     posted = 0
     refunded_or_unverified = 0
-    for link in links:
-        payment = link.payment
+    for payment in payments.values():
         batches = journals.get(str(payment.pk), [])
         if (payment.is_active and not payment.is_reversed
                 and payment.method in (Payment.Method.CASH, Payment.Method.MANUAL_TRANSFER)
