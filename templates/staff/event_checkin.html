@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}وصول ضيوف {{ event.title_ar }}{% endblock %}
+{% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/staff_events_workspace.css' %}">{% endblock %}
+{% block content %}
+<section class="events-ui hub-section" dir="rtl" aria-labelledby="admission-title">
+  <nav class="events-ui__crumb"><a href="{% url 'staff_events' %}">الفعاليات</a> /
+    <a href="{% url 'staff_event_detail' event.id %}">{{ event.title_ar }}</a> / وصول الجمهور
+  </nav>
+  <header class="hub-page-header">
+    <div>
+      <p class="staff-workspace__eyebrow">بوابة الدخول / التذاكر</p>
+      <h1 id="admission-title" class="hub-page-header__title">تسجيل وصول الجمهور</h1>
+      <p class="hub-page-header__meta">{{ event.title_ar }} · {{ event.starts_at|date:"d/m/Y · H:i" }} بتوقيت دمشق</p>
+    </div>
+    <a class="hub-button" href="{% url 'staff_event_detail' event.id %}">تفاصيل الفعالية</a>
+  </header>
+
+  <div class="events-ui__stats" aria-label="ملخص الوصول">
+    <div class="events-ui__stat"><span>الحضور المسجّل فعلياً</span><strong>{{ arrived_guests }}</strong></div>
+    <div class="events-ui__stat"><span>أشخاص ضمن حجوزات مؤكدة</span><strong>{{ confirmed_guests }}</strong></div>
+    <div class="events-ui__stat"><span>السعة المسجلة للفعالية</span><strong>{{ event.capacity|default:"—" }}</strong></div>
+  </div>
+  <p class="events-ui__notice">هذه شاشة حضور التذاكر فقط؛ لا تفتح جلسة مطعم، ولا تسجّل قبضاً أو إيصال دفع. تغيير العدد إلى القيمة نفسها لا يكرر تسجيل الوصول.</p>
+  <div class="events-ui__panel">
+    <form method="get" class="hub-toolbar">
+      <label for="admission-search">ابحث عن اسم أو هاتف الحجز</label>
+      <input id="admission-search" type="search" name="q" value="{{ query }}" maxlength="80" placeholder="اسم الضيف أو رقم الهاتف" class="hub-input">
+      <button class="hub-button hub-button-primary" type="submit">بحث</button>
+      {% if query %}<a class="hub-button" href="{% url 'staff_event_checkin' event.id %}">مسح البحث</a>{% endif %}
+    </form>
+    <div class="events-ui__reservation-list">
+      {% for r in page %}
+      <article class="events-ui__reservation">
+        <div class="events-ui__reservation-main">
+          <div>
+            <a href="{% url 'staff_reservation_detail' r.id %}"><strong>{{ r.name }}</strong></a>
+            <p class="events-ui__muted">{{ r.phone }} · {{ r.party_size }} ضيف · {{ r.operational_status_label }}</p>
+            <p class="events-ui__muted">الواصلون المسجّلون: <strong>{{ r.event_admission.arrived_count|default:"0" }}</strong> من {{ r.party_size }}</p>
+          </div>
+        </div>
+        {% if r.status == 'confirmed' and not r.visit_id %}
+          <form method="post" class="hub-toolbar">
+            {% csrf_token %}
+            <input type="hidden" name="reservation_id" value="{{ r.pk }}">
+            <label for="admit-{{ r.pk }}">العدد الإجمالي الذي وصل</label>
+            <input id="admit-{{ r.pk }}" class="hub-input" type="number" name="arrived_count"
+              min="{{ r.event_admission.arrived_count|default:'1' }}" max="{{ r.party_size }}"
+              value="{{ r.event_admission.arrived_count|default:'1' }}" step="1" required>
+            <button class="hub-button hub-button-primary" type="submit">تسجيل الوصول</button>
+          </form>
+        {% elif r.visit_id %}
+          <span class="events-ui__badge">سجّل وصولاً بجلسة تشغيل</span>
+        {% else %}
+          <span class="events-ui__badge">غير مؤكد أو مغلق</span>
+        {% endif %}
+      </article>
+      {% empty %}
+        <p class="hub-empty-state">لا توجد حجوزات تطابق البحث.</p>
+      {% endfor %}
+    </div>
+    {% if page.has_other_pages %}
+    <nav class="hub-toolbar" aria-label="صفحات قائمة الحضور">
+      {% if page.has_previous %}<a class="hub-button" href="?q={{ query|urlencode }}&page={{ page.previous_page_number }}">السابق</a>{% endif %}
+      <span>الصفحة {{ page.number }} من {{ page.paginator.num_pages }}</span>
+      {% if page.has_next %}<a class="hub-button" href="?q={{ query|urlencode }}&page={{ page.next_page_number }}">التالي</a>{% endif %}
+    </nav>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
