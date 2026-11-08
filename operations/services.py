@@ -258,6 +258,7 @@ def build_reconciliation(day):
 
     active_sessions = list(
         InternetSession.objects.filter(status=InternetSession.Status.ACTIVE, started_at__lt=end)
+        .exclude(notes='staff_wifi_device_v1')
         .select_related('entitlement', 'visit')
         .order_by('started_at')
     )
@@ -399,6 +400,7 @@ def close_open_internet_sessions(day, *, actor):
     _, end = business_day_bounds(day)
     sessions = list(
         InternetSession.objects.filter(status=InternetSession.Status.ACTIVE, started_at__lt=end)
+        .exclude(notes='staff_wifi_device_v1')
         .select_related('entitlement')
         .order_by('started_at')
     )
