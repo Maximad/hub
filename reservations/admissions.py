@@ -31,7 +31,7 @@ def set_event_admission_total(reservation_id, arrived_count, *, actor):
     if str(arrived_count).strip() != str(quantity) or quantity <= 0:
         raise ValidationError({'arrived_count': 'عدد الواصلين غير صالح.'})
 
-    booking = Reservation.objects.select_for_update().select_related('event').get(pk=reservation_id)
+    booking = Reservation.objects.select_for_update(of=('self',)).select_related('event').get(pk=reservation_id)
     if booking.reservation_type != Reservation.ReservationType.EVENT or not booking.event_id:
         raise ValidationError({'reservation': 'الحجز غير مرتبط بفعالية.'})
     if booking.status != Reservation.Status.CONFIRMED or booking.visit_id:
