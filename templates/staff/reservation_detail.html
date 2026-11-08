@@ -39,6 +39,46 @@
     </section>
   {% endif %}
 
+  <section class="hub-card hub-section">
+    <h3>اتفاق السداد</h3>
+    {% if payment_arrangement %}
+      <p><strong>الترتيب الحالي:</strong> {{ payment_arrangement.get_mode_display }}</p>
+      {% if payment_arrangement.guaranteed_by %}<p><strong>الضامن:</strong> {{ payment_arrangement.guaranteed_by }}</p>{% endif %}
+      {% if payment_arrangement.due_at %}<p><strong>موعد التسديد:</strong> {{ payment_arrangement.due_at|date:"Y-m-d H:i" }}</p>{% endif %}
+      {% if payment_arrangement.reason %}<p><strong>سبب الضمان:</strong> {{ payment_arrangement.reason }}</p>{% endif %}
+    {% else %}
+      <p class="hub-help-text">لم تُحدّد طريقة سداد لهذا الحجز.</p>
+    {% endif %}
+    <p class="hub-help-text"><strong>حالة التحصيل:</strong> غير موثّقة من هذا السجل. الضمان أو التأكيد لا يعني استلام المال. لا يُعرض الحجز كمدفوع حتى يُربط بسند قبض فعلي.</p>
+    {% if not reservation.visit_id and reservation.status == 'pending' or not reservation.visit_id and reservation.status == 'confirmed' %}
+      {% if request.user.is_superuser or request.user.role == 'admin' or not payment_arrangement or payment_arrangement.mode != 'staff_guarantee' %}
+      <form class="hub-form hub-form-section" method="post" action="{% url 'staff_reservation_payment_arrangement' reservation.id %}">
+        {% csrf_token %}
+        <label>طريقة السداد
+          <select class="hub-input" name="mode">
+            <option value="pay_at_door" {% if payment_arrangement.mode == 'pay_at_door' %}selected{% endif %}>الدفع عند الدخول</option>
+            {% if request.user.is_superuser or request.user.role == 'admin' %}
+              <option value="staff_guarantee" {% if payment_arrangement.mode == 'staff_guarantee' %}selected{% endif %}>تأكيد بضمان الإدارة</option>
+            {% endif %}
+          </select>
+        </label>
+        <label>موعد متوقع للسداد (اختياري)
+          <input class="hub-input" type="datetime-local" name="due_at" value="{{ payment_arrangement.due_at|date:'Y-m-d\\TH:i' }}">
+        </label>
+        {% if request.user.is_superuser or request.user.role == 'admin' %}
+        <label>سبب ضمان الإدارة (عند اختيار الضمان)
+          <input class="hub-input" name="reason" maxlength="250" value="{{ payment_arrangement.reason|default:'' }}" placeholder="سبب الموافقة على الحجز غير المدفوع">
+        </label>
+        {% endif %}
+        {% if reservation.status == 'pending' %}
+          <label><input type="checkbox" name="confirm" value="1"> تأكيد الحجز الآن بعد مراجعة السعة</label>
+        {% endif %}
+        <button class="hub-button" type="submit">حفظ اتفاق السداد</button>
+      </form>
+      {% endif %}
+    {% endif %}
+  </section>
+
   {% if reservation.visit_id %}
     <section class="hub-card hub-section">
       <h3>{% if reservation.visit.status == 'open' %}الضيف داخل هَبّ الآن{% else %}الجلسة المرتبطة بالحجز{% endif %}</h3>
