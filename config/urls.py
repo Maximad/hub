@@ -10,7 +10,7 @@ from core.views.internet_settings import internet_settings, internet_partner_sav
 from core.views.staff_members import (staff_members, staff_member_new, staff_member_detail,
                                       staff_member_subscribe, staff_member_retry_activation)
 from core.views.staff_events import staff_events, staff_event_new, staff_event_detail, staff_event_checkin, staff_event_operations_report
-from core.views.staff_reservations import staff_reservations, staff_reservation_new, staff_reservation_detail, staff_reservation_status, staff_reservation_tables, staff_reservation_tickets, staff_reservation_payment_arrangement, staff_reservation_ticket_payment_link
+from core.views.staff_reservations import staff_reservations, staff_reservation_new, staff_reservation_detail, staff_reservation_status, staff_reservation_tables, staff_reservation_tickets, staff_reservation_payment_arrangement, staff_reservation_ticket_payment_link, staff_reservation_create_ticket_order
 from core.views.staff_vendors import staff_vendors, staff_vendor_new, staff_vendor_detail, staff_vendor_participation_new
 from core.views.staff_import import (
     staff_import_home, staff_import_upload, staff_import_template, staff_import_preview, staff_import_confirm,
@@ -277,6 +277,7 @@ urlpatterns = [
     path('staff/reservations/<int:reservation_id>/tickets/', staff_reservation_tickets, name='staff_reservation_tickets'),
     path('staff/reservations/<int:reservation_id>/payment-arrangement/', staff_reservation_payment_arrangement, name='staff_reservation_payment_arrangement'),
     path('staff/reservations/<int:reservation_id>/ticket-payment-link/', staff_reservation_ticket_payment_link, name='staff_reservation_ticket_payment_link'),
+    path('staff/reservations/<int:reservation_id>/ticket-order/', staff_reservation_create_ticket_order, name='staff_reservation_create_ticket_order'),
     path('staff/vendors/', staff_vendors, name='staff_vendors'),
     path('staff/vendors/new/', staff_vendor_new, name='staff_vendor_new'),
     path('staff/vendors/<int:vendor_id>/', staff_vendor_detail, name='staff_vendor_detail'),
