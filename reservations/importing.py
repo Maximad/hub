@@ -144,16 +144,23 @@ def import_event_bookings(event_id, rows, fingerprint, *, actor):
     if not hmac.compare_digest(str(fingerprint), actual):
         raise ValidationError('بيانات الاستيراد تغيرت؛ أعد المعاينة.')
     event = Event.objects.select_for_update().get(pk=event_id)
-    if event.status in {Event.Status.CANCELLED, Event.Status.COMPLETED}:
-        raise ValidationError('الفعالية مغلقة ولا تسمح باستيراد حجوزات.')
+    if event.status in {Event.Status.CANCELLED, Event.Status.COMPLETED} or event.starts_at <= timezone.now():
+        raise ValidationError('الفعالية بدأت أو انتهت ولا تسمح باستيراد حجوزات جديدة.')
     previous = ReservationImportBatch.objects.filter(
         event=event, fingerprint=actual,
     ).first()
     if previous:
         return previous, False
-    duplicates = set(
-        Reservation.objects.filter(event=event, status__in=ACTIVE).values_list('phone', flat=True)
-    )
+    duplicates = set()
+    for phone in Reservation.objects.filter(
+        event=event, status__in=ACTIVE,
+    ).values_list('phone', flat=True):
+        try:
+            duplicates.add(normalize_phone(phone))
+        except ValidationError:
+            # Legacy malformed contacts remain protected from blind updates,
+            # but cannot be used as canonical duplicate keys.
+            pass
     if duplicates.intersection(row['phone'] for row in canonical):
         raise ValidationError('توجد أرقام هواتف محجوزة بالفعل في هذه الفعالية؛ راجع التكرار يدوياً.')
     needed = sum(row['party_size'] for row in canonical)
