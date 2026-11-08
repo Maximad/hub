@@ -15,6 +15,7 @@ from accounts.permissions import require_staff_capability, is_owner_or_admin
 from core.models import Member, TableArea, Payment, Product
 from reservations.models import Reservation
 from reservations.ticketing import set_event_ticket_allocations
+from reservations.editing import edit_event_reservation
 from reservations.arrangements import set_payment_arrangement
 from reservations.finance_links import link_posted_ticket_payment, ticket_payment_summary
 from reservations.models import ReservationPaymentArrangement
@@ -272,3 +273,48 @@ def staff_reservation_ticket_payment_link(request, reservation_id):
     else:
         messages.success(request, 'تم ربط سند القبض المرحّل بالحجز. لا توجد دفعة جديدة.')
     return redirect('staff_reservation_detail', reservation_id=reservation_id)
+
+
+@require_staff_capability('reservations')
+@require_http_methods(['GET', 'POST'])
+def staff_event_reservation_edit(request, reservation_id):
+    booking = get_object_or_404(
+        Reservation.objects.select_related('event'), pk=reservation_id,
+        reservation_type=Reservation.ReservationType.EVENT,
+    )
+    tiers = list(EventTicketType.objects.filter(
+        event=booking.event,
+    ).order_by('price_syp', 'pk'))
+    assigned = {
+        row.ticket_type_id: row.quantity
+        for row in booking.ticket_allocations.all()
+    }
+    if request.method == 'POST':
+        quantities = {
+            tier.pk: request.POST.get(f'tier_{tier.pk}', '0')
+            for tier in tiers if tier.is_active or tier.pk in assigned
+        }
+        try:
+            edit_event_reservation(
+                booking.pk, actor=request.user,
+                name=request.POST.get('name'),
+                phone=request.POST.get('phone'),
+                party_size=request.POST.get('party_size'),
+                notes=request.POST.get('notes'),
+                tier_quantities=quantities if assigned or tiers else None,
+            )
+        except ValidationError as error:
+            messages.error(request, _validation_message(error))
+        else:
+            messages.success(request, 'تم تحديث الحجز وتحقق النظام من السعة وفئات التذاكر.')
+            return redirect('staff_reservation_detail', reservation_id=booking.pk)
+    return render(request, 'staff/event_reservation_edit.html', {
+        'reservation': booking,
+        'tiers': [
+            {'tier': tier, 'quantity': assigned.get(tier.pk, 0)}
+            for tier in tiers if tier.is_active or tier.pk in assigned
+        ],
+        'form_values': request.POST if request.method == 'POST' else None,
+        'has_payment_links': booking.ticket_payment_links.exists(),
+        'has_admission': hasattr(booking, 'event_admission'),
+    })
