@@ -1,14 +1,101 @@
-{% extends 'base.html' %}
-{% block content %}<h2 class="hub-page-header__title">{{ event.title_ar }}</h2><p>{{ event.description_ar }}</p>
-<p>البداية: {{ event.starts_at }} | النهاية: {{ event.ends_at|default:'-' }}</p>
-<p>المساحة: {{ event.room|default:'-' }}</p>
-<p><a href="{% url 'staff_reservation_new' %}?event={{ event.id }}">حجز مرتبط</a></p>
-<h3>الحجوزات</h3><ul>{% for r in reservations %}<li><a href="{% url 'staff_reservation_detail' r.id %}">{{ r.name }} - {{ r.effective_date }}</a></li>{% empty %}<li>لا يوجد</li>{% endfor %}</ul>
+{% extends "base.html" %}
+{% load static %}
+{% block title %}{{ event.title_ar }} | الفعاليات{% endblock %}
+{% block extra_head %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/staff_events_workspace.css' %}">{% endblock %}
+{% block content %}
+<section class="events-ui events-ui--detail hub-section staff-v2-page" dir="rtl" aria-labelledby="event-title">
+  <nav class="events-ui__crumb" aria-label="مسار التنقل"><a href="{% url 'staff_events' %}">الفعاليات</a><span aria-hidden="true">/</span><span>تفاصيل الفعالية</span></nav>
 
-<h3>مشاركات مرتبطة بالفعالية</h3><ul>{% for p in participations %}<li>{{ p.vendor.name_ar }} - {{ p.title_ar }} - {{ p.starts_at }}</li>{% empty %}<li>لا يوجد</li>{% endfor %}</ul>
+  <header class="events-ui__hero">
+    <div class="events-ui__hero-media">
+      {% with cover=event.staff_media.0 %}
+        {% with image_url=cover.media_asset.safe_url %}
+          {% if image_url %}
+            <img class="events-ui__cover" src="{{ image_url }}" alt="صورة فعالية {{ event.title_ar }}">
+          {% else %}
+            <div class="events-ui__fallback" aria-hidden="true"><span>هَبّ</span><small>مساحة للقاء والثقافة</small></div>
+          {% endif %}
+        {% endwith %}
+      {% endwith %}
+    </div>
+    <div class="events-ui__hero-content">
+      <div class="events-ui__badges">
+        <span class="events-ui__badge {% if event.status == 'published' %}events-ui__badge--good{% elif event.status == 'cancelled' %}events-ui__badge--bad{% endif %}">
+          {% if event.status == 'published' %}منشورة{% elif event.status == 'draft' %}مسودة{% elif event.status == 'cancelled' %}ملغاة{% elif event.status == 'completed' %}منتهية{% else %}{{ event.get_status_display }}{% endif %}
+        </span>
+        {% if event.status == 'published' %}<span class="events-ui__badge">{% if event.is_public and public_homepage_enabled %}على الموقع{% else %}غير ظاهرة على الموقع{% endif %}</span>{% endif %}
+      </div>
+      <h1 id="event-title">{{ event.title_ar }}</h1>
+      <p class="events-ui__hero-date"><time datetime="{{ event.starts_at|date:'c' }}">{{ event.starts_at|date:"d/m/Y · H:i" }}</time>{% if event.ends_at %} – <time datetime="{{ event.ends_at|date:'c' }}">{{ event.ends_at|date:"d/m/Y · H:i" }}</time>{% endif %}</p>
+      <p class="events-ui__meta">المكان: {{ event.room|default:"غير محدد" }}</p>
+      {% if event.description_ar %}<p class="events-ui__description">{{ event.description_ar|linebreaksbr }}</p>{% endif %}
+      <div class="events-ui__actions hub-toolbar">
+        {% if staff_caps.reservations %}<a class="hub-button hub-button-primary" href="{% url 'staff_reservation_new' %}?event={{ event.id }}">إضافة حجز</a>{% endif %}
+        {% if event.status == 'published' and event.is_public and public_homepage_enabled %}<a class="hub-button" href="{% url 'public_event_detail' event.uuid %}" target="_blank" rel="noopener">عرض صفحة الجمهور</a>{% endif %}
+        {% if request.user.is_superuser %}<a class="hub-button" href="{% url 'admin:events_event_change' event.id %}">إدارة الصور والنشر</a>{% endif %}
+      </div>
+    </div>
+  </header>
 
-{% if legacy_participations %}
-<h3>مشاركات قديمة غير مربوطة (مطابقة عبر الملاحظات)</h3>
-<ul>{% for p in legacy_participations %}<li>{{ p.vendor.name_ar }} - {{ p.title_ar }} - {{ p.starts_at }}</li>{% endfor %}</ul>
-{% endif %}
+  <div class="events-ui__stats" aria-label="ملخص الحجوزات">
+    <div class="events-ui__stat"><span>مقاعد الحجوزات المؤكدة</span><strong>{{ confirmed_guests }}</strong></div>
+    <div class="events-ui__stat"><span>أشخاص بانتظار التأكيد</span><strong>{{ pending_guests }}</strong></div>
+    <div class="events-ui__stat"><span>عدد سجلات الحجوزات</span><strong>{{ reservation_count }}</strong></div>
+    <div class="events-ui__stat"><span>السعة المسجلة</span><strong>{{ event.capacity|default:"—" }}</strong></div>
+  </div>
+  <p class="events-ui__notice">هذه أعداد الحجوزات، وليست بيانات تذاكر مدفوعة أو سعة جلوس معتمدة. لا تُسجّل إيرادات دون عملية قبض فعلية.</p>
+
+  <div class="events-ui__columns">
+    <section class="events-ui__panel" aria-labelledby="event-reservations-title">
+      <div class="events-ui__panel-head">
+        <h2 id="event-reservations-title">حجوزات الفعالية</h2>
+        {% if staff_caps.reservations %}<a class="hub-button" href="{% url 'staff_reservation_new' %}?event={{ event.id }}">حجز جديد</a>{% endif %}
+      </div>
+      {% if staff_caps.reservations %}
+        <div class="events-ui__reservation-list">
+          {% for r in reservations %}
+            <div class="events-ui__reservation">
+              <div class="events-ui__reservation-main">
+                <a href="{% url 'staff_reservation_detail' r.id %}"><strong>{{ r.name }}</strong></a>
+                <span class="events-ui__badge {% if r.status == 'confirmed' %}events-ui__badge--good{% elif r.status == 'cancelled' %}events-ui__badge--bad{% endif %}">{{ r.operational_status_label }}</span>
+              </div>
+              <span>{{ r.party_size }} شخص</span>
+            </div>
+          {% empty %}<p class="events-ui__muted">لا توجد حجوزات لهذه الفعالية بعد.</p>{% endfor %}
+        </div>
+      {% else %}
+        <p class="events-ui__muted">عرض أسماء الحجوزات يتطلب صلاحية إدارة الحجوزات.</p>
+      {% endif %}
+    </section>
+
+    <aside class="events-ui__side">
+      <section class="events-ui__panel" aria-labelledby="event-tickets-title">
+        <div class="events-ui__panel-head">
+          <h2 id="event-tickets-title">فئات التذاكر</h2>
+          {% if request.user.is_superuser %}<a class="events-ui__text-link" href="{% url 'admin:events_eventtickettype_changelist' %}">إدارة الفئات</a>{% endif %}
+        </div>
+        <div class="events-ui__ticket-list">
+          {% for ticket in event.ticket_types.all %}
+            <div class="events-ui__ticket">
+              <div><strong>{{ ticket.name_ar }}</strong><span class="events-ui__muted">{% if ticket.capacity %}المخصص: {{ ticket.capacity }}{% else %}السعة غير محددة{% endif %}{% if not ticket.is_active %} · غير نشطة{% endif %}</span></div>
+              <strong>{{ ticket.price_syp }} ل.س</strong>
+            </div>
+          {% empty %}<p class="events-ui__muted">لم تُضف فئات تذاكر بعد.</p>{% endfor %}
+        </div>
+        <p class="events-ui__muted">الفئات والأسعار مُعدّة للعرض فقط؛ لا تتضمن هذه الصفحة حالياً ربط الدفع أو توزيع التذاكر على الحجز.</p>
+      </section>
+      <section class="events-ui__panel" aria-labelledby="event-partners-title">
+        <h2 id="event-partners-title">مشاركات مرتبطة</h2>
+        <ul class="events-ui__plain-list">
+          {% for p in participations %}<li>{{ p.vendor.name_ar }} — {{ p.title_ar }}</li>{% empty %}<li class="events-ui__muted">لا توجد مشاركات مرتبطة.</li>{% endfor %}
+        </ul>
+        {% if legacy_participations %}
+          <h3>مشاركات قديمة للمراجعة</h3>
+          <p class="events-ui__muted">هذه نتائج مطابقة نصّية في الملاحظات وليست روابط رسمية بالفعالية.</p>
+          <ul class="events-ui__plain-list">{% for p in legacy_participations %}<li>{{ p.vendor.name_ar }} — {{ p.title_ar }}</li>{% endfor %}</ul>
+        {% endif %}
+      </section>
+    </aside>
+  </div>
+</section>
 {% endblock %}
