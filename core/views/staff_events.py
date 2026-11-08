@@ -13,8 +13,9 @@ from django.core.paginator import Paginator
 from django.db.models import Q, Sum
 from django.shortcuts import redirect
 
-from accounts.permissions import require_staff_capability
+from accounts.permissions import require_staff_capability, is_owner_or_admin
 from reservations.admissions import set_event_admission_total
+from reservations.reporting import event_operations_report
 from reservations.models import EventAdmission
 
 from core.views_legacy import _assert_staff_capability, staff_event_new
@@ -135,4 +136,17 @@ def staff_event_checkin(request, event_id):
         'query': query,
         'confirmed_guests': summary['guests'] or 0,
         'arrived_guests': arrived,
+    })
+
+
+@require_staff_capability('events')
+def staff_event_operations_report(request, event_id):
+    """Private aggregate-only report; finance visible to management only."""
+    if not is_owner_or_admin(request.user):
+        from django.core.exceptions import PermissionDenied
+        raise PermissionDenied
+    event = get_object_or_404(Event, pk=event_id)
+    return render(request, 'staff/event_operations_report.html', {
+        'event': event,
+        'report': event_operations_report(event),
     })
