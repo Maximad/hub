@@ -174,6 +174,8 @@ def staff_event_artwork(request, event_id):
                     error = ' '.join(problem.messages)
                 else:
                     with transaction.atomic():
+                        # Serialize concurrent uploads for the same event.
+                        Event.objects.select_for_update().get(pk=event.pk)
                         asset.save()
                         EventMedia.objects.filter(
                             event=event, role__in=(EventMedia.Role.COVER, EventMedia.Role.POSTER),
