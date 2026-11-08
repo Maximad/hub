@@ -88,6 +88,8 @@ def set_event_ticket_allocations(reservation_id, quantities, *, actor):
     if not getattr(actor, 'is_active', False) or not user_has_capability(actor, 'reservations'):
         raise ValidationError({'tickets': 'لا تملك صلاحية تعديل فئات الحجوزات.'})
     reservation = Reservation.objects.select_for_update().get(pk=reservation_id)
+    if hasattr(reservation, 'ticket_sale'):
+        raise ValidationError({'tickets': 'صدرت فاتورة لهذا الحجز. لا يمكن تعديل فئات التذاكر بعد إصدارها.'})
     if reservation.reservation_type != Reservation.ReservationType.EVENT or not reservation.event_id:
         raise ValidationError({'tickets': 'هذا الحجز غير مرتبط بفعالية.'})
     if reservation.status not in _ACTIVE or reservation.visit_id:
