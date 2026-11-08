@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from cryptography.fernet import Fernet
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -14,6 +15,7 @@ from core.models import (
 from core.services.internet_internal_access import grant_internal_access, revoke_internal_access
 from core.services.staff_device_wifi import COOKIE_NAME, SESSION_MARKER
 from internet.models import InternetSessionNetworkOperation
+from internet.session_network_backends import MikroTikSessionNetworkBackend
 
 
 class FakeHotspot:
@@ -117,6 +119,7 @@ class IndependentStaffWifiTests(TestCase):
         self.assertEqual(Payment.objects.count(), 0)
         self.assertNotIn('mac-address', self.router.created[0])
         self.assertNotIn('shared-users', self.router.created[0])
+        self.assertIn('limit-uptime', self.router.created[0])
 
     def test_same_browser_reuses_its_username_without_creating_third_login(self):
         client = self._client()
@@ -158,3 +161,12 @@ class IndependentStaffWifiTests(TestCase):
         self.entitlement.save(update_fields=['valid_until', 'updated_at'])
         self.assertEqual(self._connect(client).status_code, 302)
         self.assertEqual(len(self.router.users), 1)
+
+    def test_expired_staff_session_cannot_be_reprovisioned(self):
+        client = self._client()
+        self.assertEqual(self._connect(client).status_code, 200)
+        session = InternetSession.objects.get(notes=SESSION_MARKER)
+        self.entitlement.valid_until = timezone.now() - timezone.timedelta(seconds=1)
+        self.entitlement.save(update_fields=['valid_until', 'updated_at'])
+        with self.assertRaises(ValidationError):
+            MikroTikSessionNetworkBackend(client=self.router).plan(session)
