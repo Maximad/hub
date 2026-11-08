@@ -27,7 +27,7 @@
         <div class="hub-grid hub-grid-2">
         {% for row in tiers %}
           <label for="edit-tier-{{ row.tier.pk }}">{{ row.tier.name_ar }} · {{ row.tier.price_syp }} ل.س
-            <input id="edit-tier-{{ row.tier.pk }}" name="tier_{{ row.tier.pk }}" type="number" min="0" max="100" required value="{% if form_values %}{{ form_values|default:'' }}{% else %}{{ row.quantity }}{% endif %}" {% if has_admission or has_payment_links %}readonly{% endif %}>
+            <input id="edit-tier-{{ row.tier.pk }}" name="tier_{{ row.tier.pk }}" type="number" min="0" max="100" required value="{{ row.quantity }}" {% if has_admission or has_payment_links %}readonly{% endif %}>
           </label>
         {% endfor %}
         </div>
