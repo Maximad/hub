@@ -14,6 +14,18 @@ from .ledger import post_balanced_batch
 
 def collect(order, context, amount, method, notes=''):
     def handle(source):
+        # A dedicated ticket-only order must not collect against a cancelled
+        # performance or an order already cancelled by staff.
+        from reservations.models import ReservationTicketSale
+        ticket_sale = ReservationTicketSale.objects.select_related(
+            'reservation__event',
+        ).filter(order_id=source.pk).first()
+        if ticket_sale and (
+            source.status == source.Status.CANCELLED
+            or ticket_sale.reservation.event_id is None
+            or ticket_sale.reservation.event.status == 'cancelled'
+        ):
+            raise InvalidTransition('لا يمكن قبض تذاكر فعالية ملغاة أو طلب تذاكر ملغى.')
         # ``dispatch`` holds an order row lock, so concurrent collectors cannot both
         # validate against the same remaining balance.
         paid = source.payments.filter(is_active=True, is_reversed=False).exclude(method=Payment.Method.UNPAID).aggregate(total=Sum('amount_syp'))['total'] or 0
