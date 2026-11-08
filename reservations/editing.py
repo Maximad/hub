@@ -51,9 +51,23 @@ def edit_event_reservation(reservation_id, *, actor, name, phone, party_size,
     old_allocations = {
         row.ticket_type_id: row.quantity for row in booking.ticket_allocations.all()
     }
-    new_allocations = old_allocations if tier_quantities is None else {
-        int(k): int(v) for k, v in tier_quantities.items() if int(v) > 0
-    }
+    new_allocations = old_allocations
+    if tier_quantities is not None:
+        if not isinstance(tier_quantities, dict):
+            raise ValidationError({'tickets': 'فئات التذاكر غير صالحة.'})
+        new_allocations = {}
+        for raw_key, raw_value in tier_quantities.items():
+            if isinstance(raw_key, bool) or isinstance(raw_value, bool):
+                raise ValidationError({'tickets': 'فئات التذاكر غير صالحة.'})
+            try:
+                tier_id, amount = int(raw_key), int(raw_value)
+            except (ValueError, TypeError, OverflowError):
+                raise ValidationError({'tickets': 'فئات التذاكر غير صالحة.'})
+            if (str(raw_key).strip() != str(tier_id)
+                    or str(raw_value).strip() != str(amount) or amount < 0):
+                raise ValidationError({'tickets': 'عدد فئة التذاكر غير صالح.'})
+            if amount:
+                new_allocations[tier_id] = amount
     changed_tickets = new_allocations != old_allocations
     changed_size = size != booking.party_size
     if (changed_size or changed_tickets) and ReservationTicketPaymentLink.objects.filter(
@@ -69,7 +83,8 @@ def edit_event_reservation(reservation_id, *, actor, name, phone, party_size,
     ) + size > event.capacity:
         raise ValidationError({'party_size': 'عدد الضيوف يتجاوز السعة المتبقية.'})
 
-    before = {'party_size': booking.party_size, 'ticket_quantities': old_allocations}
+    old_size = booking.party_size
+    changed_contact = booking.name != name or booking.phone != phone
     booking.name, booking.phone, booking.party_size, booking.notes = name, phone, size, notes
     booking.full_clean()
     booking.save(update_fields=['name', 'phone', 'party_size', 'notes', 'updated_at'])
@@ -81,10 +96,10 @@ def edit_event_reservation(reservation_id, *, actor, name, phone, party_size,
         details={
             'reservation_id': booking.pk,
             'event_id': event.pk,
-            'old_party_size': before['party_size'],
+            'old_party_size': old_size,
             'new_party_size': size,
             'ticket_quantities_changed': changed_tickets,
-            'contact_changed': True,
+            'contact_changed': changed_contact,
         },
     )
     return booking
