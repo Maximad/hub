@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from core.models import InternetBandwidthProfile, InternetSession
+from core.services.network_backends import _routeros_time_from_minutes
 from core.services.mikrotik import (
     MikroTikConfigurationError,
     MikroTikError,
@@ -137,6 +138,20 @@ class MikroTikSessionNetworkBackend:
             'comment': self.ownership(session),
             'disabled': 'false',
         }
+        if session.notes == 'staff_wifi_device_v1':
+            # A standalone device username must never outlive its parent grant
+            # merely because the lifecycle worker temporarily cannot disconnect.
+            if (not session.entitlement_id
+                    or session.status != InternetSession.Status.ACTIVE
+                    or session.entitlement.effective_status() != session.entitlement.Status.ACTIVE):
+                raise ValidationError('انتهت صلاحية منحة إنترنت الموظف.')
+            if session.authorized_until is None:
+                raise ValidationError('تاريخ انتهاء إنترنت الجهاز غير مضبوط.')
+            seconds = (session.authorized_until - timezone.now()).total_seconds()
+            remaining_minutes = int(seconds // 60)
+            if remaining_minutes <= 0:
+                raise ValidationError('انتهت صلاحية إنترنت الجهاز.')
+            values['limit-uptime'] = _routeros_time_from_minutes(remaining_minutes)
         if session.device_mac:
             values['mac-address'] = session.device_mac
         return values
