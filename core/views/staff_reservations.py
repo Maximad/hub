@@ -7,12 +7,16 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
+from zoneinfo import ZoneInfo
 from django.views.decorators.http import require_http_methods
 
 from accounts.permissions import require_staff_capability
 from core.models import Member, TableArea
 from reservations.models import Reservation
 from reservations.ticketing import set_event_ticket_allocations
+from reservations.arrangements import set_payment_arrangement
+from reservations.models import ReservationPaymentArrangement
 from events.models import EventTicketType
 from reservations.services import change_reservation_status, check_in_reservation
 from core.views_legacy import (
@@ -115,6 +119,9 @@ def staff_reservation_detail(request, reservation_id):
         and reservation.visit_id is None
         and reservation.effective_date == timezone.localdate()
     )
+    arrangement = ReservationPaymentArrangement.objects.filter(
+        reservation=reservation,
+    ).select_related('guaranteed_by', 'approved_by').first()
     return render(
         request,
         'staff/reservation_detail.html',
@@ -124,6 +131,7 @@ def staff_reservation_detail(request, reservation_id):
             'checkin_tables': checkin_tables,
             'matching_member': matching_member,
             'checkin_allowed': checkin_allowed,
+            'payment_arrangement': arrangement,
         },
     )
 
@@ -201,3 +209,31 @@ def staff_reservation_status(request, reservation_id):
         return redirect('staff_reservation_detail', reservation_id=reservation.pk)
     messages.success(request, 'تم تحديث حالة الحجز.')
     return redirect('staff_reservation_detail', reservation_id=reservation.pk)
+
+
+@require_staff_capability('reservations')
+@require_http_methods(['POST'])
+def staff_reservation_payment_arrangement(request, reservation_id):
+    raw_due = request.POST.get('due_at', '').strip()
+    due_at = None
+    if raw_due:
+        due_at = parse_datetime(raw_due)
+        if due_at is None:
+            messages.error(request, 'موعد الدفع غير صالح.')
+            return redirect('staff_reservation_detail', reservation_id=reservation_id)
+        if timezone.is_naive(due_at):
+            due_at = timezone.make_aware(due_at, ZoneInfo('Asia/Damascus'))
+    try:
+        set_payment_arrangement(
+            reservation_id, actor=request.user,
+            mode=request.POST.get('mode', '').strip(),
+            reason=request.POST.get('reason', '').strip(),
+            due_at=due_at,
+            confirm=request.POST.get('confirm') == '1',
+        )
+    except (ValidationError, Reservation.DoesNotExist) as error:
+        messages.error(request, _validation_message(error) if isinstance(error, ValidationError)
+                       else 'الحجز غير موجود.')
+    else:
+        messages.success(request, 'تم حفظ اتفاق السداد. لا يُعد هذا إثباتاً للدفع.')
+    return redirect('staff_reservation_detail', reservation_id=reservation_id)
