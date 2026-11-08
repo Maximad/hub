@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}استيراد حجوزات الفعالية{% endblock %}
+{% block content %}
+<section class="hub-section" dir="rtl" style="max-width:1050px;margin-inline:auto">
+  <nav class="hub-page-header__meta">
+    <a href="{% url 'staff_events' %}">الفعاليات</a> /
+    <a href="{% url 'staff_event_detail' event.id %}">{{ event.title_ar }}</a> / استيراد الحجوزات
+  </nav>
+  <header class="hub-page-header">
+    <div>
+      <h1 class="hub-page-header__title">استيراد حجوزات {{ event.title_ar }}</h1>
+      <p class="hub-page-header__meta">معاينة أولاً ثم تأكيد الاستيراد. لا يتم تسجيل أي دفع أو إيصال أو جلسة زبون.</p>
+    </div>
+    <a class="hub-button" href="{% url 'staff_event_booking_import' event.id %}?template=1">تنزيل قالب CSV</a>
+  </header>
+  <section class="hub-card">
+    <p><strong>تعليمات الملف:</strong> UTF-8، حتى 250 حجزاً. الأعمدة الإلزامية: name, phone, party_size, status، بالإضافة إلى فئات التذاكر المبيّنة في القالب. الحالة pending أو confirmed فقط. أدخل عدداً لكل فئة، ومجموعها يجب أن يساوي عدد الأشخاص.</p>
+    <p class="hub-help-text">يُرفض تكرار رقم الهاتف داخل الملف أو مطابقته لحجز نشط موجود؛ راجع الحجوزات المتعددة بنفس الهاتف يدوياً. لا يتضمن الاستيراد حالة دفع أو ضماناً.</p>
+    <div class="hub-toolbar">
+      {% for tier in tiers %}
+        <span class="hub-badge">{{ tier.name_ar }}: ticket_{{ tier.pk }} ({{ tier.price_syp }} ل.س)</span>
+      {% endfor %}
+    </div>
+    {% if error %}<p class="hub-message hub-message-error" role="alert">{{ error }}</p>{% endif %}
+    <form method="post" enctype="multipart/form-data" class="hub-form hub-form-section">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="preview">
+      <label for="bookings-csv">ملف حجوزات CSV</label>
+      <input id="bookings-csv" name="bookings_csv" type="file" accept=".csv,text/csv" required>
+      <button type="submit" class="hub-button hub-button-primary">معاينة الحجوزات بدون حفظ</button>
+    </form>
+  </section>
+
+  {% if preview %}
+    <section class="hub-card hub-section">
+      <h2>معاينة {{ preview|length }} حجزاً</h2>
+      <p class="hub-help-text">راجع بيانات الضيوف والفئات قبل التأكيد. التأكيد يتطلب اختيار الملف نفسه مرة ثانية، ولا نحفظ بيانات هذه المعاينة في جلسة المتصفح.</p>
+      <div class="hub-table-wrap">
+        <table class="hub-table">
+          <thead><tr><th>الاسم</th><th>الهاتف</th><th>الأشخاص</th><th>الحالة</th><th>فئات التذاكر</th></tr></thead>
+          <tbody>
+            {% for row in preview %}
+              <tr>
+                <td>{{ row.name }}</td>
+                <td><bdi>{{ row.phone }}</bdi></td>
+                <td>{{ row.party_size }}</td>
+                <td>{% if row.status == 'confirmed' %}مؤكد{% else %}بانتظار التأكيد{% endif %}</td>
+                <td>{% for tier_id,qty in row.tiers.items %}{{ tier_id }}: {{ qty }}{% if not forloop.last %}، {% endif %}{% endfor %}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <form method="post" enctype="multipart/form-data" class="hub-form hub-form-section">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="confirm">
+        <input type="hidden" name="fingerprint" value="{{ fingerprint }}">
+        <label for="confirm-bookings-csv">اختر الملف ذاته مرة ثانية لتأكيد الاستيراد</label>
+        <input id="confirm-bookings-csv" name="bookings_csv" type="file" accept=".csv,text/csv" required>
+        <button class="hub-button hub-button-primary" type="submit">تأكيد واستيراد الحجوزات</button>
+      </form>
+    </section>
+  {% endif %}
+</section>
+{% endblock %}
