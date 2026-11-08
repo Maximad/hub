@@ -93,7 +93,7 @@ def staff_event_checkin(request, event_id):
     if request.method == 'POST':
         raw_id = request.POST.get('reservation_id', '')
         booking = get_object_or_404(
-            Reservation, pk=raw_id if raw_id.isdecimal() else None,
+            Reservation, pk=raw_id if raw_id.isdecimal() and len(raw_id) <= 15 else None,
             event=event, reservation_type=Reservation.ReservationType.EVENT,
         )
         try:
@@ -116,7 +116,7 @@ def staff_event_checkin(request, event_id):
         Reservation.objects.filter(
             event=event, reservation_type=Reservation.ReservationType.EVENT,
         )
-        .select_related('event_admission')
+        .select_related('event_admission', 'visit')
         .order_by('name', 'pk')
     )
     if query:
