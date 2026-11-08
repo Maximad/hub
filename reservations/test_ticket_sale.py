@@ -131,6 +131,20 @@ class EventTicketSaleTests(TestCase):
         with self.assertRaises(ValidationError):
             change_reservation_status(self.booking.pk, 'cancelled', actor=self.manager)
 
+    def test_cancelled_show_blocks_new_cashier_collection(self):
+        from core.services.posting.exceptions import InvalidTransition
+        sale, _ = create_event_ticket_order(self.booking.pk, actor=self.manager)
+        self.event.status = Event.Status.CANCELLED
+        self.event.save(update_fields=['status'])
+        before = Payment.objects.count()
+        with self.assertRaises(InvalidTransition):
+            collect(
+                sale.order,
+                PostingContext(actor=self.manager, idempotency_key='ticket-after-cancel', channel='cashier'),
+                1000, Payment.Method.CASH,
+            )
+        self.assertEqual(Payment.objects.count(), before)
+
     def test_non_cashier_cannot_issue_and_food_is_not_treated_as_ticket(self):
         with self.assertRaises(ValidationError):
             create_event_ticket_order(self.booking.pk, actor=self.waiter)
