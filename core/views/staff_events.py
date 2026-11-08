@@ -20,6 +20,8 @@ from reservations.reporting import event_booking_report
 
 from core.views_legacy import _assert_staff_capability, staff_event_new
 from events.models import Event, EventMedia
+from catalog.models import MediaAsset
+from django.db import transaction
 from reservations.models import Reservation
 from vendors.models import VendorParticipation
 
@@ -137,4 +139,53 @@ def staff_event_checkin(request, event_id):
         'query': query,
         'confirmed_guests': summary['guests'] or 0,
         'arrived_guests': arrived,
+    })
+
+
+@require_staff_capability('events')
+@require_http_methods(['GET', 'POST'])
+def staff_event_artwork(request, event_id):
+    """Upload cover/poster through the existing safe MediaAsset validator."""
+    event = get_object_or_404(Event, pk=event_id)
+    error = ''
+    if request.method == 'POST':
+        role = request.POST.get('role')
+        upload = request.FILES.get('image')
+        if role not in {EventMedia.Role.COVER, EventMedia.Role.POSTER}:
+            error = 'اختر نوع الصورة (غلاف أو ملصق).'
+        elif not upload:
+            error = 'اختر ملف صورة لرفعه.'
+        else:
+            ext = upload.name.rsplit('.', 1)[-1].lower() if '.' in upload.name else ''
+            if ext not in {'jpg', 'jpeg', 'png', 'webp', 'gif'}:
+                error = 'يمكن رفع ملفات صور JPG وPNG وWebP وGIF فقط.'
+            else:
+                asset = MediaAsset(
+                    title_ar=f'{event.title_ar} — صورة الفعالية'[:180],
+                    alt_text_ar=(request.POST.get('alt_text_ar') or event.title_ar).strip()[:180],
+                    file=upload,
+                    media_type=MediaAsset.MediaType.GIF if ext == 'gif' else MediaAsset.MediaType.IMAGE,
+                    uploaded_by=request.user,
+                )
+                try:
+                    asset.full_clean()
+                except ValidationError as problem:
+                    error = ' '.join(problem.messages)
+                else:
+                    with transaction.atomic():
+                        asset.save()
+                        EventMedia.objects.filter(
+                            event=event, role__in=(EventMedia.Role.COVER, EventMedia.Role.POSTER),
+                            is_primary=True,
+                        ).update(is_primary=False)
+                        EventMedia.objects.create(
+                            event=event, media_asset=asset, role=role,
+                            is_active=True, is_primary=True,
+                        )
+                    messages.success(request, 'تم رفع الصورة وربطها بالفعالية.')
+                    return redirect('staff_event_detail', event_id=event.pk)
+    media = EventMedia.objects.filter(event=event).select_related('media_asset').order_by('-is_primary', 'sort_order')
+    return render(request, 'staff/event_artwork.html', {
+        'event': event, 'event_media': media,
+        'error': error,
     })
