@@ -96,6 +96,22 @@ class Reservation(models.Model):
             )
             old_status = reservation.status
             if (reservation.reservation_type == cls.ReservationType.EVENT
+                    and new_status == cls.Status.CANCELLED):
+                from core.models import Order, Payment
+                ticket_sale = ReservationTicketSale.objects.select_related('order').filter(
+                    reservation_id=reservation.pk,
+                ).first()
+                if ticket_sale:
+                    active_collections = Payment.objects.filter(
+                        order_id=ticket_sale.order_id,
+                        method__in=[Payment.Method.CASH, Payment.Method.MANUAL_TRANSFER],
+                        is_active=True, is_reversed=False,
+                    ).exists()
+                    if active_collections:
+                        raise ValidationError({'status': 'يوجد قبض فعلي للتذاكر. يلزم رد المبلغ وعكسه محاسبياً قبل الإلغاء.'})
+                    if ticket_sale.order.status != Order.Status.CANCELLED:
+                        raise ValidationError({'status': 'ألغِ طلب التذاكر في الكاشير أولاً قبل إلغاء الحجز.'})
+            if (reservation.reservation_type == cls.ReservationType.EVENT
                     and new_status in {cls.Status.NO_SHOW, cls.Status.CANCELLED}
                     and EventAdmission.objects.filter(reservation_id=reservation.pk).exists()):
                 raise ValidationError({'status': 'تم تسجيل وصول ضيوف لهذا الحجز؛ لا يمكن اعتباره غياباً أو إلغاءه.'})
