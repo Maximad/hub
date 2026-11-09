@@ -12,6 +12,7 @@
     </div>
     <div class="hub-toolbar events-ui__actions">
       <a class="hub-button hub-button-primary" href="{% url 'staff_event_new' %}">إضافة فعالية</a>
+      <a class="hub-button" href="{% url 'staff_layouts' %}">مخططات القاعة</a>
       {% if staff_caps.reservations %}<a class="hub-button" href="{% url 'staff_reservations' %}">الحجوزات</a>{% endif %}
     </div>
   </header>
