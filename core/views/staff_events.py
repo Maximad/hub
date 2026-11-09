@@ -227,7 +227,7 @@ def staff_event_finance(request, event_id):
         return redirect('staff_event_finance', event_id=event.pk)
     expenses = Expense.objects.filter(
         status__in=(Expense.Status.APPROVED, Expense.Status.PAID),
-    ).select_related('category').order_by('-business_date', '-pk')[:100]
+    ).exclude(paid_from=Expense.PaidFrom.EXTERNAL).select_related('category').order_by('-business_date', '-pk')[:100]
     return render(request, 'staff/event_finance.html', {
         'event': event,
         'report': event_known_finance_report(event.pk),
