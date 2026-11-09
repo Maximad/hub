@@ -78,3 +78,35 @@ class EventMedia(models.Model):
 
     def __str__(self):
         return f'{self.event} — {self.get_role_display()}'
+
+
+class EventExpenseAllocation(models.Model):
+    """Event-specific assignment of an existing Hub expense, not a new expense.
+
+    Financial posting, approval and payment remain in core. These allocations
+    are partial evidence of direct event costs, never a full profitability claim.
+    """
+    event = models.ForeignKey(
+        Event, on_delete=models.PROTECT, related_name='expense_allocations',
+    )
+    expense = models.ForeignKey(
+        'core.Expense', on_delete=models.PROTECT, related_name='event_allocations',
+    )
+    amount_syp = models.PositiveIntegerField()
+    rationale = models.CharField(max_length=200)
+    allocated_by = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True,
+        related_name='event_expense_allocations_made',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=('event', 'expense'), name='uniq_event_expense_assignment'),
+            models.CheckConstraint(condition=models.Q(amount_syp__gt=0), name='event_expense_amount_positive'),
+        ]
+
+    def clean(self):
+        super().clean()
+        if not (self.rationale or '').strip():
+            raise ValidationError({'rationale': 'توضيح ارتباط المصروف بالفعالية مطلوب.'})
