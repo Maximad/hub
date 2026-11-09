@@ -45,9 +45,11 @@ def _check_tier_usage(event, reservation, quantities):
     if len(available) != len(quantities):
         raise ValidationError({'tickets': 'تحتوي البيانات على فئة تذكرة لا تتبع الفعالية.'})
     from .services import event_reserved_party_size
-    if reservation.status in _ACTIVE and event.capacity is not None:
-        used = event_reserved_party_size(event.pk, exclude_reservation_id=reservation.pk)
-        if used + reservation.party_size > event.capacity:
+    capacity = reservation.performance.effective_capacity if reservation.performance_id else event.capacity
+    if reservation.status in _ACTIVE and capacity is not None:
+        used = event_reserved_party_size(event.pk, performance_id=reservation.performance_id,
+                                         exclude_reservation_id=reservation.pk)
+        if used + reservation.party_size > capacity:
             raise ValidationError({'party_size': 'عدد الضيوف يتجاوز سعة الفعالية.'})
     if reservation.status in _ACTIVE:
         for ticket_id, quantity in quantities.items():
@@ -58,6 +60,7 @@ def _check_tier_usage(event, reservation, quantities):
                 ReservationTicketAllocation.objects.filter(
                     ticket_type_id=ticket_id,
                     reservation__event_id=event.pk,
+                    reservation__performance_id=reservation.performance_id,
                     reservation__status__in=_ACTIVE,
                     reservation__reservation_type=Reservation.ReservationType.EVENT,
                 ).exclude(reservation_id=reservation.pk)
