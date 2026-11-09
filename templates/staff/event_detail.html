@@ -114,7 +114,7 @@
       <div class="events-ui__ticket-list" aria-label="توزيع فئات التذاكر">
         {% for tier in booking_report.tier_rows %}
           <div class="events-ui__ticket">
-            <div><strong>{{ tier.ticket_type__name_ar }}</strong><span class="events-ui__muted">عدد محجوز في الفئة: {{ tier.assigned }}{% if tier.ticket_type__capacity %} / {{ tier.ticket_type__capacity }}{% endif %}</span></div>
+            <div><strong>{{ tier.ticket_type__name_ar }}{% if tier.show_label %} · {{ tier.show_label }}{% endif %}</strong><span class="events-ui__muted">عدد محجوز في الفئة: {{ tier.assigned }}{% if tier.ticket_type__capacity %} / {{ tier.ticket_type__capacity }}{% endif %}</span></div>
             <span class="events-ui__muted">القيمة الاسمية: {{ tier.face_value }} ل.س</span>
           </div>
         {% empty %}<p class="events-ui__muted">لا توجد تذاكر موزعة على الحجوزات النشطة حتى الآن.</p>{% endfor %}

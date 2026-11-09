@@ -44,11 +44,16 @@ def event_booking_report(event_id):
             reservation__in=active,
         ).values(
             'ticket_type_id', 'ticket_type__name_ar', 'ticket_type__capacity',
+            'reservation__performance_id', 'reservation__performance__starts_at',
         ).annotate(
             assigned=Sum('quantity'),
             face_value=Sum(F('quantity') * F('unit_price_syp')),
         ).order_by('ticket_type_id')
     )
+    for row in tier_rows:
+        from django.utils import timezone
+        start = row['reservation__performance__starts_at']
+        row['show_label'] = timezone.localtime(start).strftime('%d/%m/%Y · %H:%M') if start else ''
     classified = sum(row['assigned'] or 0 for row in tier_rows)
     active_people = sum(statuses.get(k, {}).get('people', 0) for k in ACTIVE)
     return {

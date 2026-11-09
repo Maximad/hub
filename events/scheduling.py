@@ -96,8 +96,11 @@ def cancel_performance(performance_id, *, actor):
         return show
     if Reservation.objects.filter(performance=show, status__in=ACTIVE_BOOKINGS).exists():
         raise ValidationError('هناك حجوزات نشطة لهذا العرض. عالج الحجوزات والمدفوعات أولاً.')
-    if EventAttendanceRequest.objects.filter(performance=show, status='pending').exists():
-        raise ValidationError('هناك طلبات حضور بانتظار المعالجة لهذا العرض.')
+    if EventAttendanceRequest.objects.filter(performance=show, status__in=('pending', 'approved')).exists():
+        raise ValidationError('هناك طلبات حضور مرتبطة بهذا العرض. عالجها أولاً.')
+    if Reservation.objects.filter(performance=show).filter(
+            ticket_order__isnull=False).exists():
+        raise ValidationError('توجد فواتير تذاكر لهذا العرض؛ يجب تسويتها قبل الإلغاء.')
     show.status = EventPerformance.Status.CANCELLED
     show.save(update_fields=['status'])
     return show

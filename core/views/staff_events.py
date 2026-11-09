@@ -80,7 +80,7 @@ def staff_event_detail(request, event_id):
     reservations = list(
         Reservation.objects.filter(event=event)
         .select_related('table_area')
-        .order_by('reservation_date', 'start_time', 'pk')
+        .order_by('performance__starts_at', 'pk')
     )
     participations = VendorParticipation.objects.filter(
         event=event,

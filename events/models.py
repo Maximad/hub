@@ -76,6 +76,12 @@ class EventPerformance(models.Model):
         super().clean()
         if self.ends_at and self.starts_at and self.ends_at <= self.starts_at:
             raise ValidationError({'ends_at': 'يجب أن يكون وقت النهاية بعد بداية العرض.'})
+        if self.pk:
+            previous = type(self).objects.filter(pk=self.pk).first()
+            if previous and any(getattr(previous, field) != getattr(self, field)
+                    for field in ('starts_at', 'ends_at', 'room_id', 'capacity', 'status')):
+                if self.reservations.exists() or self.attendance_requests.exists():
+                    raise ValidationError('لا يمكن تعديل موعد له حجوزات أو طلبات حضور دون إجراء نقل/إلغاء مراجع.')
 
     def __str__(self):
         return f'{self.event} — {self.starts_at:%Y-%m-%d %H:%M}'
