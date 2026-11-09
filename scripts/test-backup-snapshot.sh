@@ -12,7 +12,7 @@ cleanup() {
 trap cleanup EXIT
 "$real_docker" run -d --name "$container" -e POSTGRES_USER=hub -e POSTGRES_DB=hub -e POSTGRES_HOST_AUTH_METHOD=trust postgres:16-alpine >/dev/null
 for attempt in {1..60}; do
-    if "$real_docker" exec "$container" pg_isready -U hub >/dev/null 2>&1; then break; fi
+    if "$real_docker" exec "$container" psql -h 127.0.0.1 -U hub -d hub -Atc 'SELECT 1' >/dev/null 2>&1; then break; fi
     sleep 1
 done
 "$real_docker" exec "$container" psql -U hub -d hub -v ON_ERROR_STOP=1 -c 'CREATE TABLE snapshot_probe (id integer); INSERT INTO snapshot_probe VALUES (1);' >/dev/null
