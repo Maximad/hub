@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}مخططات القاعة | هَبّ السويداء{% endblock %}
+{% block content %}
+<section class="hub-section staff-v2-page" dir="rtl" style="max-width:1300px;margin-inline:auto">
+  <header class="hub-page-header">
+    <div>
+      <p class="staff-workspace__eyebrow">هَبّ السويداء / الفعاليات</p>
+      <h1 class="hub-page-header__title">مكتبة مخططات القاعة</h1>
+      <p class="hub-page-header__meta">مخططات قابلة للتعديل وإعادة الاستخدام، لكل من الأرضي والميزانين.</p>
+    </div>
+    <div class="hub-toolbar">
+      <a class="hub-button hub-button-primary" href="{% url 'staff_layout_new' %}">تصميم قالب جديد</a>
+      <a class="hub-button" href="{% url 'staff_events' %}">الفعاليات</a>
+    </div>
+  </header>
+  <div class="hub-message" role="note">
+    <strong>تجريبي / غير معتمد للسعة.</strong>
+    لا يتيح هذا الإصدار حجز المقاعد للجمهور، ولا يغير سعة الفعالية أو الحجوزات القائمة.
+    تحقق من قياسات الدرج والمخارج والميزانين والمقاعد قبل نشر أي مخطط.
+  </div>
+
+  <section class="hub-section">
+    <h2 class="hub-section-title">القوالب القابلة لإعادة الاستخدام ({{ templates|length }})</h2>
+    <div class="hub-grid hub-grid-3">
+      {% for layout in templates %}
+      <article class="hub-card">
+        <div class="hub-badge">{{ layout.get_kind_display }}</div>
+        <h3>{{ layout.name }}</h3>
+        {% if layout.description %}<p>{{ layout.description }}</p>{% endif %}
+        <p class="hub-help-text">نسخة {{ layout.version }} · {{ layout.updated_at|date:"Y-m-d H:i" }}</p>
+        <a class="hub-button hub-button-primary" href="{% url 'staff_layout_edit' layout.pk %}">فتح وتعديل القالب</a>
+      </article>
+      {% empty %}
+      <div class="hub-card">
+        <h3>لا توجد قوالب محفوظة بعد</h3>
+        <p>ابدأ بتصميم «كوميديا وطاولات» أو «سينما» أو «موسيقى» أو «ورشات» أو «حفلة ووقوف».</p>
+        <a class="hub-button hub-button-primary" href="{% url 'staff_layout_new' %}">إنشاء أول قالب</a>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  {% if templates and events_without %}
+  <section class="hub-section">
+    <h2 class="hub-section-title">نسخ قالب إلى فعالية</h2>
+    <div class="hub-card" style="max-width:850px">
+      <p class="hub-help-text">تُنشأ نسخة مستقلة من المخطط للفعالية. تعديل القالب لاحقاً لا يحرك مقاعد فعاليات أخرى.</p>
+      <form method="post" action="{% url 'staff_layout_assign' %}" class="hub-form hub-form-section">
+        {% csrf_token %}
+        <label for="layout-template">قالب المقاعد</label>
+        <select id="layout-template" name="template_id" required>
+          <option value="">اختر قالباً</option>
+          {% for layout in templates %}<option value="{{ layout.pk }}">{{ layout.name }} — {{ layout.get_kind_display }}</option>{% endfor %}
+        </select>
+        <label for="layout-event">الفعالية</label>
+        <select id="layout-event" name="event_id" required>
+          <option value="">اختر فعالية بلا مخطط</option>
+          {% for event in events_without %}<option value="{{ event.pk }}">{{ event.title_ar }} — {{ event.starts_at|date:"Y-m-d H:i" }}</option>{% endfor %}
+        </select>
+        <button class="hub-button hub-button-primary" type="submit">نسخ المخطط إلى الفعالية</button>
+      </form>
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="hub-section">
+    <h2 class="hub-section-title">الفعاليات ذات المخططات الخاصة بها</h2>
+    <div class="hub-card">
+      <div class="hub-table-wrap">
+        <table class="hub-table">
+          <thead><tr><th>الفعالية</th><th>القالب الأصلي</th><th>النسخة</th><th>الإدارة</th></tr></thead>
+          <tbody>
+          {% for snapshot in event_layouts %}
+            <tr>
+              <td><a href="{% url 'staff_event_detail' snapshot.event_id %}">{{ snapshot.event.title_ar }}</a></td>
+              <td>{{ snapshot.template.name|default:"قالب غير متاح" }}</td>
+              <td>{{ snapshot.version }} · تجريبي</td>
+              <td><a class="hub-button" href="{% url 'staff_event_layout_edit' snapshot.event_id %}">تعديل نسخة الفعالية</a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4">لم تُسند مخططات للفعاليات بعد.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</section>
+{% endblock %}
