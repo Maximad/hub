@@ -167,7 +167,7 @@ class PublicHomepageTests(TestCase):
         for private in ['INTERNAL ROOM', '7421', 'private marker']:
             self.assertNotContains(response, private)
         self.assertEqual({f.name for f in fields(PublicEvent)}, {
-            'title', 'description', 'url', 'starts_at', 'ends_at', 'image_url', 'image_alt', 'is_ongoing', 'is_past',
+            'title', 'description', 'url', 'starts_at', 'ends_at', 'image_url', 'image_alt', 'is_ongoing', 'is_past', 'performances',
         })
 
     def test_only_active_public_artwork_and_safe_url(self):
@@ -212,7 +212,8 @@ class PublicHomepageTests(TestCase):
             event = self.event(title_ar=f'لقاء {index}')
             asset = MediaAsset.objects.create(title_ar='poster', external_url='https://example.com/poster.jpg')
             EventMedia.objects.create(event=event, media_asset=asset, role=EventMedia.Role.POSTER)
-        with self.assertNumQueries(6):
+        # One additional bounded prefetch loads showtimes for all three cards.
+        with self.assertNumQueries(7):
             context = public_homepage_context(now=NOW)
         self.assertEqual(len(context['events']), 3)
         first = self.client.get('/events/')
