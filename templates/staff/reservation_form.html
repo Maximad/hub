@@ -10,7 +10,16 @@
 <label for="reservation-end-time">وقت النهاية (اختياري)</label><input type="time" id="reservation-end-time" name="end_time" value="{{ form_values.end_time|default:'' }}">
 <label>المساحة<select name="room" id="reservation-room" data-hub-searchable-select="true"><option value="">اختر المساحة</option>{% for room in rooms %}<option value="{{ room.id }}" {% if form_values.room == room.id|stringformat:'s' %}selected{% endif %}>{{ room }}</option>{% endfor %}</select></label>
 <label>الطاولة (اختياري)<select name="table_area" id="reservation-table" data-hub-searchable-select="true"><option value="">بدون طاولة</option>{% for a in table_areas %}<option value="{{ a.id }}" data-room-id="{{ a.room_id }}" {% if form_values.table_area == a.id|stringformat:'s' %}selected{% endif %}>{{ a }}</option>{% endfor %}</select></label></div>
-<div data-reservation-group="event"><label>الفعالية<select name="event" id="reservation-event" data-hub-searchable-select="true" data-required-when-visible><option value="">اختر الفعالية</option>{% for e in events %}<option value="{{ e.id }}" data-date="{{ e.starts_at|date:'Y-m-d' }}" data-time="{{ e.starts_at|time:'H:i' }}{% if e.ends_at %}–{{ e.ends_at|time:'H:i' }}{% endif %}" data-room="{{ e.room|default:'-' }}" {% if form_values.event == e.id|stringformat:'s' %}selected{% endif %}>{{ e.title_ar }} — {{ e.starts_at|date:'Y-m-d H:i' }} — {{ e.room|default:'-' }}</option>{% endfor %}</select></label><p id="event-schedule" aria-live="polite"></p></div>
+<div data-reservation-group="event"><label>الفعالية<select name="event" id="reservation-event" data-hub-searchable-select="true" data-required-when-visible><option value="">اختر الفعالية</option>{% for e in events %}<option value="{{ e.id }}" data-date="{{ e.starts_at|date:'Y-m-d' }}" data-time="{{ e.starts_at|time:'H:i' }}{% if e.ends_at %}–{{ e.ends_at|time:'H:i' }}{% endif %}" data-room="{{ e.room|default:'-' }}" {% if form_values.event == e.id|stringformat:'s' %}selected{% endif %}>{{ e.title_ar }} — {{ e.starts_at|date:'Y-m-d H:i' }} — {{ e.room|default:'-' }}</option>{% endfor %}</select></label>
+<label>موعد العرض<select name="performance" id="reservation-performance" data-hub-searchable-select="true">
+  <option value="">اختر موعد العرض</option>
+  {% for e in events %}{% for show in e.performances.all %}
+    {% if show.status == 'scheduled' %}
+      <option value="{{ show.pk }}" data-event-id="{{ e.pk }}" data-date="{{ show.starts_at|date:'Y-m-d' }}" data-time="{{ show.starts_at|date:'H:i' }}" data-room="{{ show.effective_room|default:'-' }}"
+        {% if form_values.performance == show.pk|stringformat:'s' %}selected{% endif %}>{{ e.title_ar }} — {{ show.starts_at|date:'Y-m-d H:i' }}</option>
+    {% endif %}
+  {% endfor %}{% endfor %}
+</select></label><p id="event-schedule" aria-live="polite"></p></div>
 <label for="reservation-status">حالة الحجز</label><select id="reservation-status" name="status">{% for v,l in statuses %}<option value="{{ v }}" {% if form_values.status == v %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>
 <label for="reservation-party-size">عدد الضيوف</label><input type="number" min="1" id="reservation-party-size" name="party_size" value="{{ form_values.party_size|default:'1' }}">
 <label for="reservation-notes">ملاحظات (اختياري)</label><textarea id="reservation-notes" name="notes" placeholder="ملاحظات">{{ form_values.notes|default:'' }}</textarea><button>حفظ</button></form>{% endblock %}

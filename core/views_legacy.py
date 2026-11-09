@@ -2227,7 +2227,7 @@ def staff_reservations(request):
 @login_required
 def staff_reservation_new(request):
     _assert_staff_capability(request.user, 'reservations')
-    events = Event.objects.select_related('room').order_by('starts_at')
+    events = Event.objects.select_related('room').prefetch_related('performances').order_by('starts_at')
     rooms = Room.objects.order_by('name_ar')
     selected_room = request.POST.get('room') or request.GET.get('room')
     table_areas = TableArea.objects.select_related('room').filter(room_id=selected_room).order_by('name_ar') if selected_room else TableArea.objects.none()
@@ -2264,13 +2264,24 @@ def staff_reservation_new(request):
         event_id = request.POST.get('event')
         if event_id:
             reservation.event = Event.objects.filter(pk=event_id).first()
+        performance_id = request.POST.get('performance')
+        if performance_id:
+            from events.models import EventPerformance
+            reservation.performance = EventPerformance.objects.filter(pk=performance_id).first()
+            if reservation.performance is None:
+                errors['performance'] = ['موعد العرض غير صالح.']
+        if errors:
+            return render(request, 'staff/reservation_form.html', {**context, 'errors': errors, 'form_values': request.POST})
         try:
             create_reservation(reservation)
         except ValidationError as exc:
             return render(request, 'staff/reservation_form.html', {**context, 'errors': exc.message_dict, 'form_values': request.POST})
         return redirect('staff_reservation_detail', reservation_id=reservation.id)
     initial_type = Reservation.ReservationType.EVENT if request.GET.get('event') else Reservation.ReservationType.REGULAR
-    return render(request, 'staff/reservation_form.html', {**context, 'form_values': {'reservation_type': initial_type, 'event': request.GET.get('event', '')}})
+    return render(request, 'staff/reservation_form.html', {**context, 'form_values': {
+        'reservation_type': initial_type, 'event': request.GET.get('event', ''),
+        'performance': request.GET.get('performance', ''),
+    }})
 
 
 @login_required
