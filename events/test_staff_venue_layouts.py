@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from events.layout_validation import validate_draft_layout
-from events.models import Event, EventLayoutSnapshot, VenueLayoutTemplate
+from events.models import Event, EventLayoutSnapshot, VenueLayoutTemplate, VenueLayoutRevision
 from reservations.models import Reservation
 
 
@@ -113,6 +113,52 @@ class VenueLayoutReleaseATests(TestCase):
         self.assertEqual(stale.status_code, 409)
         entry.refresh_from_db()
         self.assertEqual(entry.layout['seats_proposed']['ground'], 4)
+
+    def test_revision_restore_keeps_immutable_history(self):
+        self.client.force_login(self.admin)
+        template_id = self.save().json()['id']
+        changed = copy.deepcopy(example_layout())
+        changed['objects'][0]['seats'] = 4
+        self.assertEqual(self.save(target='template', pk=template_id, version=1, data=changed).status_code, 200)
+        old = VenueLayoutRevision.objects.get(template_id=template_id, version=1)
+        self.assertEqual(VenueLayoutRevision.objects.filter(template_id=template_id).count(), 2)
+        stale = self.client.post(reverse('staff_layout_restore'),
+            data=json.dumps({'target': 'template', 'id': template_id,
+                             'version': 1, 'revision_id': old.pk}),
+            content_type='application/json')
+        self.assertEqual(stale.status_code, 409)
+        restored = self.client.post(reverse('staff_layout_restore'),
+            data=json.dumps({'target': 'template', 'id': template_id,
+                             'version': 2, 'revision_id': old.pk}),
+            content_type='application/json')
+        self.assertEqual(restored.status_code, 200, restored.content)
+        entry = VenueLayoutTemplate.objects.get(pk=template_id)
+        self.assertEqual(entry.version, 3)
+        self.assertEqual(entry.layout['objects'][0]['seats'], 3)
+        self.assertEqual(VenueLayoutRevision.objects.filter(template=entry).count(), 3)
+        self.assertEqual(VenueLayoutRevision.objects.get(template=entry, version=2).layout['objects'][0]['seats'], 4)
+
+    def test_event_history_restores_only_its_own_snapshot(self):
+        self.client.force_login(self.admin)
+        template_id = self.save().json()['id']
+        self.client.post(reverse('staff_layout_assign'), {
+            'event_id': self.event.pk, 'template_id': template_id,
+        })
+        snapshot = EventLayoutSnapshot.objects.get(event=self.event)
+        initial = VenueLayoutRevision.objects.get(event_layout=snapshot, version=1)
+        changed = copy.deepcopy(example_layout())
+        changed['objects'][0]['seats'] = 4
+        self.assertEqual(self.save(target='event', pk=self.event.pk,
+                                   version=1, data=changed, name=self.event.title_ar).status_code, 200)
+        response = self.client.post(reverse('staff_layout_restore'),
+            data=json.dumps({'target': 'event', 'id': self.event.pk,
+                             'version': 2, 'revision_id': initial.pk}),
+            content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        snapshot.refresh_from_db()
+        self.assertEqual(snapshot.version, 3)
+        self.assertEqual(snapshot.layout['objects'][0]['seats'], 3)
+        self.assertEqual(VenueLayoutRevision.objects.filter(event_layout=snapshot).count(), 3)
 
     def test_assign_snapshot_and_edit_event_independent_of_template(self):
         self.client.force_login(self.admin)
