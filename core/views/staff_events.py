@@ -24,7 +24,7 @@ from reservations.models import EventAdmission
 from reservations.reporting import event_booking_report
 
 from core.views_legacy import _assert_staff_capability, staff_event_new
-from events.models import Event, EventMedia
+from events.models import Event, EventMedia, EventLayoutSnapshot
 from events.finance import allocate_existing_event_expense, event_known_finance_report
 from core.models import Expense
 from django.core.exceptions import PermissionDenied
@@ -95,6 +95,7 @@ def staff_event_detail(request, event_id):
         'legacy_participations': legacy_participations,
         'public_homepage_enabled': settings.PUBLIC_HOMEPAGE_ENABLED,
         'booking_report': event_booking_report(event.pk),
+        'has_seating_layout': EventLayoutSnapshot.objects.filter(event=event).exists(),
     })
 
 

@@ -110,3 +110,97 @@ class EventExpenseAllocation(models.Model):
         super().clean()
         if not (self.rationale or '').strip():
             raise ValidationError({'rationale': 'توضيح ارتباط المصروف بالفعالية مطلوب.'})
+
+
+class VenueLayoutTemplate(models.Model):
+    """Reusable *draft* geometry; never a legal occupancy or booking inventory."""
+    class Kind(models.TextChoices):
+        COMEDY = 'comedy', 'كوميديا وطاولات'
+        THEATRE = 'theatre', 'مسرح وسينما'
+        CABARET = 'cabaret', 'موسيقى وكباريه'
+        WORKSHOP = 'workshop', 'ورشات وحوارات'
+        STANDING = 'standing', 'حفلة ووقوف'
+        CUSTOM = 'custom', 'تصميم مخصص'
+
+    name = models.CharField(max_length=120)
+    kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.COMEDY)
+    description = models.CharField(max_length=300, blank=True)
+    layout = models.JSONField(default=dict)
+    version = models.PositiveIntegerField(default=1)
+    archived = models.BooleanField(default=False)
+    created_by = models.ForeignKey(
+        'accounts.User', null=True, on_delete=models.SET_NULL,
+        related_name='venue_templates_created',
+    )
+    updated_by = models.ForeignKey(
+        'accounts.User', null=True, on_delete=models.SET_NULL,
+        related_name='venue_templates_updated',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['kind', 'name', 'pk']
+
+    def __str__(self):
+        return self.name
+
+
+class EventLayoutSnapshot(models.Model):
+    """Editable event-specific copy: NOT public seat inventory."""
+    event = models.OneToOneField(
+        Event, on_delete=models.CASCADE, related_name='seating_layout',
+    )
+    template = models.ForeignKey(
+        VenueLayoutTemplate, null=True, on_delete=models.SET_NULL,
+        related_name='event_copies',
+    )
+    layout = models.JSONField(default=dict)
+    version = models.PositiveIntegerField(default=1)
+    assigned_by = models.ForeignKey(
+        'accounts.User', null=True, on_delete=models.SET_NULL,
+        related_name='venue_layouts_assigned',
+    )
+    updated_by = models.ForeignKey(
+        'accounts.User', null=True, on_delete=models.SET_NULL,
+        related_name='venue_event_layouts_edited',
+    )
+    assigned_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.event} — تخطيط مبدئي'
+
+
+class VenueLayoutRevision(models.Model):
+    """Immutable historical draft; restore creates a *new* current revision."""
+    template = models.ForeignKey(
+        VenueLayoutTemplate, null=True, blank=True,
+        on_delete=models.CASCADE, related_name='revisions',
+    )
+    event_layout = models.ForeignKey(
+        EventLayoutSnapshot, null=True, blank=True,
+        on_delete=models.CASCADE, related_name='revisions',
+    )
+    version = models.PositiveIntegerField()
+    layout = models.JSONField()
+    created_by = models.ForeignKey(
+        'accounts.User', null=True, on_delete=models.SET_NULL,
+        related_name='venue_layout_revisions_created',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=(models.Q(template__isnull=False, event_layout__isnull=True) |
+                           models.Q(template__isnull=True, event_layout__isnull=False)),
+                name='layout_revision_one_owner',
+            ),
+            models.UniqueConstraint(
+                fields=('template', 'version'), name='unique_venue_template_revision',
+            ),
+            models.UniqueConstraint(
+                fields=('event_layout', 'version'), name='unique_venue_event_revision',
+            ),
+        ]
