@@ -9,7 +9,7 @@ def seed_original_performances(apps, schema_editor):
     Performance = apps.get_model('events', 'EventPerformance')
     Performance.objects.bulk_create([
         Performance(event_id=e.pk, uuid=uuid.uuid4(), starts_at=e.starts_at,
-                    ends_at=e.ends_at, room_id=e.room_id, capacity=e.capacity)
+                    ends_at=e.ends_at, room_id=e.room_id, capacity=e.capacity or None)
         for e in Event.objects.all().iterator()
     ], batch_size=500)
 

@@ -57,7 +57,7 @@ def add_performances(event_id, *, actor, starts_at, ends_at=None, capacity=None,
     if not EventPerformance.objects.filter(event=event).exists():
         # Old programmatic/admin-created events may not yet have a show row.
         original = EventPerformance.objects.create(event=event, starts_at=event.starts_at,
-            ends_at=event.ends_at, room=event.room, capacity=event.capacity)
+            ends_at=event.ends_at, room=event.room, capacity=event.capacity or None)
         Reservation.objects.filter(event=event, performance__isnull=True).update(performance=original)
         EventAttendanceRequest.objects.filter(event=event, performance__isnull=True).update(
             performance=original, performance_uuid=original.uuid)

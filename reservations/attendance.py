@@ -48,14 +48,14 @@ def select_request_performance(event, performance_uuid=None):
     if event is None:
         raise ValidationError('الفعالية غير متاحة.')
     now = timezone.now()
-    rows = list(EventPerformance.objects.filter(
-        event=event, status=EventPerformance.Status.SCHEDULED,
-        starts_at__gt=now).order_by('starts_at')[:50])
+    queryset = EventPerformance.objects.filter(
+        event=event, status=EventPerformance.Status.SCHEDULED, starts_at__gt=now)
     if performance_uuid:
-        selected = next((row for row in rows if str(row.uuid) == str(performance_uuid)), None)
+        selected = queryset.filter(uuid=performance_uuid).first()
         if selected is None:
             raise ValidationError('موعد العرض المختار غير متاح.')
         return selected
+    rows = list(queryset.order_by('starts_at')[:2])
     if len(rows) > 1:
         raise ValidationError('اختر موعد العرض قبل إرسال الطلب.')
     if rows:
@@ -86,6 +86,14 @@ def _lock_accepting_event(**lookup):
     # The SQL predicate's timestamp was captured before a possible lock wait.
     # Recheck the clock once the event is locked, before any write is allowed.
     if event is None:
+        return None
+    # Repeat the time gate after the row-lock wait; do not accept an event
+    # whose last performance started while the transaction was blocked.
+    if not EventPerformance.objects.filter(
+            event=event, status=EventPerformance.Status.SCHEDULED,
+            starts_at__gt=timezone.now()).exists() and (
+            EventPerformance.objects.filter(event=event).exists()
+            or event.starts_at <= timezone.now()):
         return None
     return event
 

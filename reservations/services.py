@@ -102,6 +102,10 @@ def _validate_for_status(reservation):
             reservation.performance_id = ids[0]
         if not reservation.performance_id and len(ids) > 1:
             raise ValidationError({'performance': 'اختر موعد العرض.'})
+        if reservation.performance_id:
+            show = EventPerformance.objects.get(pk=reservation.performance_id)
+            if show.event_id != reservation.event_id or show.status != EventPerformance.Status.SCHEDULED:
+                raise ValidationError({'performance': 'موعد العرض غير متاح لهذه الفعالية.'})
     if reservation.reservation_type == Reservation.ReservationType.REGULAR:
         reservation.end_time = _regular_end_time(reservation)
         _lock_regular_resource(reservation)
