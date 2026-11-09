@@ -46,6 +46,20 @@
     </div>
   </header>
 
+  <section class="events-ui__panel" aria-label="العروض والمواعيد">
+    <div class="events-ui__panel-head"><h2>العروض والمواعيد</h2></div>
+    <div class="events-ui__ticket-list">
+    {% for show in event.performances.all %}
+      <div class="events-ui__ticket">
+        <div><strong>{{ show.starts_at|date:"d/m/Y · H:i" }}</strong>
+          <span class="events-ui__muted">{% if show.status == 'cancelled' %}ملغى{% elif show.status == 'completed' %}منتهٍ{% else %}مجدول{% endif %} · السعة: {{ show.capacity|default:"—" }}</span>
+        </div>
+        <a class="hub-button" href="{% url 'staff_reservation_new' %}?event={{ event.id }}&performance={{ show.id }}">حجز لهذا العرض</a>
+      </div>
+    {% endfor %}
+    </div>
+    <p class="events-ui__notice">لكل عرض سعة وحجوزات مستقلة. فئات التذاكر مشتركة؛ الحدود تُحتسب لكل عرض.</p>
+  </section>
   <div class="events-ui__stats" aria-label="ملخص الحجوزات">
     <div class="events-ui__stat"><span>مقاعد الحجوزات المؤكدة</span><strong>{{ confirmed_guests }}</strong></div>
     <div class="events-ui__stat"><span>أشخاص بانتظار التأكيد</span><strong>{{ pending_guests }}</strong></div>

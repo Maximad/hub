@@ -2174,8 +2174,18 @@ def staff_event_new(request):
         errors = {}
         starts_at = _parse_local_dt_or_error(starts_at_raw, 'وقت البداية', errors, required=True)
         ends_at = _parse_local_dt_or_error(request.POST.get('ends_at', ''), 'وقت النهاية', errors, default=None)
-        if starts_at and ends_at and ends_at < starts_at:
-            errors['ends_at'] = 'وقت النهاية يجب أن يكون بعد أو يساوي وقت البداية.'
+        if starts_at and ends_at and ends_at <= starts_at:
+            errors['ends_at'] = 'وقت النهاية يجب أن يكون بعد وقت البداية.'
+        from events.scheduling import build_performance_schedule
+        schedules = []
+        if starts_at and not errors:
+            try:
+                schedules = build_performance_schedule(
+                    starts_at, ends_at, request.POST.get('extra_showtimes', ''),
+                    request.POST.get('repeat_weeks', '1'),
+                )
+            except ValidationError as exc:
+                errors['schedule'] = ' '.join(exc.messages)
         capacity = _parse_int_or_error(request.POST.get('capacity'), 'السعة', errors, default=0, min_value=0)
         if errors:
             return render(request, 'staff/event_form.html', {'rooms': rooms, 'statuses': Event.Status.choices, 'errors': errors, 'form_values': request.POST})
@@ -2191,7 +2201,14 @@ def staff_event_new(request):
         room_id = request.POST.get('room')
         if room_id:
             event.room = Room.objects.filter(pk=room_id).first()
-        event.save()
+        with transaction.atomic():
+            event.save()
+            from events.models import EventPerformance
+            for start, end in schedules[1:]:
+                EventPerformance.objects.create(
+                    event=event, starts_at=start, ends_at=end, room=event.room,
+                    capacity=event.capacity,
+                )
         return redirect('staff_event_detail', event_id=event.id)
     return render(request, 'staff/event_form.html', {'rooms': rooms, 'statuses': Event.Status.choices})
 
@@ -2222,10 +2239,14 @@ def staff_reservations(request):
 def staff_reservation_new(request):
     _assert_staff_capability(request.user, 'reservations')
     events = Event.objects.select_related('room').order_by('starts_at')
+    from events.models import EventPerformance
+    performances = EventPerformance.objects.select_related('event').filter(
+        status=EventPerformance.Status.SCHEDULED,
+    ).order_by('starts_at', 'pk')
     rooms = Room.objects.order_by('name_ar')
     selected_room = request.POST.get('room') or request.GET.get('room')
     table_areas = TableArea.objects.select_related('room').filter(room_id=selected_room).order_by('name_ar') if selected_room else TableArea.objects.none()
-    context = {'events': events, 'rooms': rooms, 'table_areas': table_areas, 'types': Reservation.ReservationType.choices, 'statuses': Reservation.Status.choices}
+    context = {'events': events, 'performances': performances, 'rooms': rooms, 'table_areas': table_areas, 'types': Reservation.ReservationType.choices, 'statuses': Reservation.Status.choices}
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
         errors = {}
@@ -2258,13 +2279,21 @@ def staff_reservation_new(request):
         event_id = request.POST.get('event')
         if event_id:
             reservation.event = Event.objects.filter(pk=event_id).first()
+        performance_id = request.POST.get('performance', '').strip()
+        if performance_id:
+            from events.models import EventPerformance
+            reservation.performance = EventPerformance.objects.filter(pk=performance_id).first()
+            if not reservation.performance:
+                errors['performance'] = 'موعد العرض المختار غير صالح.'
+        if errors:
+            return render(request, 'staff/reservation_form.html', {**context, 'errors': errors, 'form_values': request.POST})
         try:
             create_reservation(reservation)
         except ValidationError as exc:
             return render(request, 'staff/reservation_form.html', {**context, 'errors': exc.message_dict, 'form_values': request.POST})
         return redirect('staff_reservation_detail', reservation_id=reservation.id)
     initial_type = Reservation.ReservationType.EVENT if request.GET.get('event') else Reservation.ReservationType.REGULAR
-    return render(request, 'staff/reservation_form.html', {**context, 'form_values': {'reservation_type': initial_type, 'event': request.GET.get('event', '')}})
+    return render(request, 'staff/reservation_form.html', {**context, 'form_values': {'reservation_type': initial_type, 'event': request.GET.get('event', ''), 'performance': request.GET.get('performance', '')}})
 
 
 @login_required

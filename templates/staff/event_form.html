@@ -31,6 +31,16 @@
           <input type="datetime-local" id="event-end" name="ends_at" value="{{ form_values.ends_at|default:'' }}">
         </label>
       </div>
+      <div class="events-ui__panel">
+        <h2>العروض والمواعيد</h2>
+        <p class="events-ui__notice">فعالية واحدة مع حجوزات وسعة مستقلة لكل عرض. أضف موعداً إضافياً في كل سطر بصيغة YYYY-MM-DD HH:MM، أو كرر جميع المواعيد أسبوعياً.</p>
+        <label for="event-extra-showtimes">مواعيد إضافية (اختياري)
+          <textarea id="event-extra-showtimes" name="extra_showtimes" rows="3" placeholder="2026-11-21 21:00">{{ form_values.extra_showtimes|default:'' }}</textarea>
+        </label>
+        <label for="event-repeat-weeks">عدد الأسابيع (1 = هذه المواعيد فقط، حتى 12)
+          <input id="event-repeat-weeks" name="repeat_weeks" type="number" min="1" max="12" value="{{ form_values.repeat_weeks|default:'1' }}">
+        </label>
+      </div>
       <label for="event-description">وصف الفعالية (اختياري)
         <textarea id="event-description" name="description_ar" placeholder="معلومات للزوار والفريق">{{ form_values.description_ar|default:'' }}</textarea>
       </label>

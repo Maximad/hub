@@ -69,13 +69,13 @@ def staff_event_detail(request, event_id):
     _assert_staff_capability(request.user, 'events')
     event = get_object_or_404(
         Event.objects.select_related('room').prefetch_related(
-            _cover_media(), 'ticket_types',
+            _cover_media(), 'ticket_types', 'performances',
         ),
         pk=event_id,
     )
     reservations = list(
         Reservation.objects.filter(event=event)
-        .select_related('table_area')
+        .select_related('table_area', 'performance')
         .order_by('reservation_date', 'start_time', 'pk')
     )
     participations = VendorParticipation.objects.filter(
@@ -96,6 +96,9 @@ def staff_event_detail(request, event_id):
         'public_homepage_enabled': settings.PUBLIC_HOMEPAGE_ENABLED,
         'booking_report': event_booking_report(event.pk),
         'has_seating_layout': EventLayoutSnapshot.objects.filter(event=event).exists(),
+        'performance_totals': list(Reservation.objects.filter(
+            event=event, status__in=(Reservation.Status.PENDING, Reservation.Status.CONFIRMED),
+        ).values('performance_id').annotate(people=Sum('party_size'))),
     })
 
 
