@@ -5,11 +5,10 @@ whitenoise>=6.7
 
 qrcode>=7.4
 
-Pillow>=10.4,<12.0
-cryptography>=42.0,<47.0
-# Keep Web Push inside the application's current cryptography<47 compatibility
-# envelope until that dependency boundary is reviewed separately.
-pywebpush>=2.2.1,<2.3
+Pillow>=13.0,<14.0
+cryptography>=48.0.1,<51.0
+# Keep Web Push compatible with patched cryptography (47+ API).
+pywebpush>=2.5.0,<3.0
 
 # Hub remote management bridge. MCP runs in a separate ASGI sidecar so the
 # existing Django/Gunicorn production web process remains unchanged.
