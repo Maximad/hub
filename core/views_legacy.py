@@ -2191,7 +2191,13 @@ def staff_event_new(request):
         room_id = request.POST.get('room')
         if room_id:
             event.room = Room.objects.filter(pk=room_id).first()
-        event.save()
+        from events.models import EventPerformance
+        with transaction.atomic():
+            event.save()
+            EventPerformance.objects.create(
+                event=event, starts_at=event.starts_at, ends_at=event.ends_at,
+                room=event.room, capacity=event.capacity,
+            )
         return redirect('staff_event_detail', event_id=event.id)
     return render(request, 'staff/event_form.html', {'rooms': rooms, 'statuses': Event.Status.choices})
 
