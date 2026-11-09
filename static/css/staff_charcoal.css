@@ -306,6 +306,34 @@ body.staff-workspace-page.hub-staff-ui.hub-ui-v3 .ops-designed .ops-quick-action
 body.staff-workspace-page.hub-staff-ui.hub-ui-v3 .ops-designed .ops-quick-actions__links a,
 body.staff-workspace-page.hub-staff-ui.hub-ui-v3 .ops-designed .ops-quick-actions__links button {color:var(--cc-ink);background:var(--cc-surface);border-color:var(--cc-line)}
 
+/* Legacy Operations contains stronger light-theme card-action selectors.
+   Override them locally; leave their order/payment behavior and status copy intact. */
+body.staff-workspace-page.hub-staff-ui.hub-ui-v3 .ops-designed :is(
+  .ops-dashboard-order__balance,
+  .ops-dashboard-order__items,
+  .ops-dashboard-carryover__more,
+  .ops-dashboard-carryover__symbol,
+  .ops-dashboard-orders__head p:not(.ops-dashboard-orders__eyebrow)
+) {color:var(--cc-secondary)}
+body.staff-workspace-page.hub-staff-ui.hub-ui-v3 .ops-designed .ops-dashboard-orders__number {
+  background:#23423F;color:#A8F7E8;
+}
+body.staff-workspace-page.hub-staff-ui.hub-ui-v3 .ops-designed .ops-dashboard-carryover__count {
+  background:#493627;color:#FFD8A7;
+}
+body.staff-workspace-page.hub-staff-ui.hub-ui-v3 .ops-designed .ops-dashboard-order__actions .ops-attention-link {
+  background:var(--cc-surface);color:var(--cc-ink);border-color:var(--cc-line);
+}
+body.staff-workspace-page.hub-staff-ui.hub-ui-v3 .ops-designed .ops-dashboard-order__actions .ops-attention-link--main {
+  background:var(--cc-teal);color:#10201F;border-color:var(--cc-teal);
+}
+body.staff-workspace-page.hub-staff-ui.hub-ui-v3 .ops-designed .ops-dashboard-order__actions .ops-attention-link--pay {
+  background:#433428;color:#F7D3A8;border-color:#70513B;
+}
+body.staff-workspace-page.hub-staff-ui.hub-ui-v3 .ops-designed .ops-dashboard-order__actions .ops-attention-link--prep {
+  background:#24413A;color:#A8EED3;border-color:#396B56;
+}
+
 /* Dialogs and drawer are global staff tools, even on the Operations page. */
 body.hub-staff-ui.hub-ui-v3.staff-charcoal-operations :is(.staff-v2-dialog,.staff-context-drawer__surface,.staff-account-menu__panel) {
   background:var(--cc-surface);color:var(--cc-ink);
