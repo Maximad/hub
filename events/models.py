@@ -170,3 +170,37 @@ class EventLayoutSnapshot(models.Model):
 
     def __str__(self):
         return f'{self.event} — تخطيط مبدئي'
+
+
+class VenueLayoutRevision(models.Model):
+    """Immutable historical draft; restore creates a *new* current revision."""
+    template = models.ForeignKey(
+        VenueLayoutTemplate, null=True, blank=True,
+        on_delete=models.CASCADE, related_name='revisions',
+    )
+    event_layout = models.ForeignKey(
+        EventLayoutSnapshot, null=True, blank=True,
+        on_delete=models.CASCADE, related_name='revisions',
+    )
+    version = models.PositiveIntegerField()
+    layout = models.JSONField()
+    created_by = models.ForeignKey(
+        'accounts.User', null=True, on_delete=models.SET_NULL,
+        related_name='venue_layout_revisions_created',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=(models.Q(template__isnull=False, event_layout__isnull=True) |
+                           models.Q(template__isnull=True, event_layout__isnull=False)),
+                name='layout_revision_one_owner',
+            ),
+            models.UniqueConstraint(
+                fields=('template', 'version'), name='unique_venue_template_revision',
+            ),
+            models.UniqueConstraint(
+                fields=('event_layout', 'version'), name='unique_venue_event_revision',
+            ),
+        ]
