@@ -6,11 +6,12 @@ from datetime import timedelta
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import connection, transaction
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
 from accounts.permissions import user_has_capability
 from core.models import AuditEvent
-from events.models import Event
+from events.models import Event, EventPerformance
 from reservations.models import EventAttendanceRequest as Request, Reservation
 from reservations.services import create_reservation
 
@@ -32,8 +33,36 @@ def normalize_phone(value):
 
 
 def accepting_events(now=None):
-    return Event.objects.filter(status='published', is_public=True, accepts_attendance_requests=True,
-                                starts_at__gt=now or timezone.now(), capacity__gt=0)
+    now = now or timezone.now()
+    all_shows = EventPerformance.objects.filter(event_id=OuterRef('pk'))
+    upcoming = all_shows.filter(status=EventPerformance.Status.SCHEDULED, starts_at__gt=now)
+    return Event.objects.filter(
+        status='published', is_public=True, accepts_attendance_requests=True, capacity__gt=0,
+    ).annotate(has_shows=Exists(all_shows), has_future_show=Exists(upcoming)).filter(
+        Q(has_future_show=True) | Q(has_shows=False, starts_at__gt=now)
+    )
+
+
+def select_request_performance(event, performance_uuid=None):
+    """Resolve a particular future show; missing selection is unsafe for multi-show events."""
+    if event is None:
+        raise ValidationError('الفعالية غير متاحة.')
+    now = timezone.now()
+    rows = list(EventPerformance.objects.filter(
+        event=event, status=EventPerformance.Status.SCHEDULED,
+        starts_at__gt=now).order_by('starts_at')[:50])
+    if performance_uuid:
+        selected = next((row for row in rows if str(row.uuid) == str(performance_uuid)), None)
+        if selected is None:
+            raise ValidationError('موعد العرض المختار غير متاح.')
+        return selected
+    if len(rows) > 1:
+        raise ValidationError('اختر موعد العرض قبل إرسال الطلب.')
+    if rows:
+        return rows[0]
+    if EventPerformance.objects.filter(event=event).exists() or event.starts_at <= now:
+        raise ValidationError('لا توجد مواعيد متاحة للحضور.')
+    return None
 
 
 def _audit(row, action, actor=None, reason=''):
@@ -56,25 +85,31 @@ def _lock_accepting_event(**lookup):
     event = accepting_events().select_for_update().filter(**lookup).first()
     # The SQL predicate's timestamp was captured before a possible lock wait.
     # Recheck the clock once the event is locked, before any write is allowed.
-    if event is None or event.starts_at <= timezone.now():
+    if event is None:
         return None
     return event
 
 
 @transaction.atomic
-def submit_request(*, event_uuid, owner_hash, ip_hash, client_key, name, phone, party_size):
+def submit_request(*, event_uuid, owner_hash, ip_hash, client_key, name, phone, party_size,
+                   performance_uuid=None):
     name, phone = name.strip(), normalize_phone(phone.strip())
     _submission_locks(owner_hash, ip_hash, client_key)
     existing = Request.objects.filter(client_key=client_key).first()
     if existing:
         if existing.owner_hash != owner_hash:
             raise PermissionDenied
-        if (existing.name, existing.phone, existing.party_size) != (name, phone, party_size) or existing.event_uuid != event_uuid:
+        if ((existing.name, existing.phone, existing.party_size) != (name, phone, party_size)
+                or existing.event_uuid != event_uuid
+                or (performance_uuid and str(existing.performance_uuid) != str(performance_uuid))):
             raise ValidationError('هذا الطلب أُرسل ببيانات مختلفة. افتح طلباً جديداً.')
         return existing
-    # A fresh form key may still refer to this browser's existing request.
-    # Resolving it is read-only and must not consume submission budget.
+    # Resolve the performance before deduplication: the same browser may request
+    # two separate shows of one event, but never duplicate one active request.
+    preliminary = Event.objects.filter(uuid=event_uuid).first()
+    performance = select_request_performance(preliminary, performance_uuid)
     active = Request.objects.filter(event_uuid=event_uuid, owner_hash=owner_hash,
+                                    performance_uuid=performance.uuid if performance else None,
                                     status__in=['pending', 'approved']).first()
     if active:
         return active
@@ -86,11 +121,16 @@ def submit_request(*, event_uuid, owner_hash, ip_hash, client_key, name, phone, 
     event = _lock_accepting_event(uuid=event_uuid)
     if event is None:
         raise ValidationError('طلبات الحضور غير متاحة لهذه الفعالية.')
+    # Revalidate after the event lock: staff could have cancelled a show.
+    performance = select_request_performance(event, performance.uuid if performance else None)
     if not name.strip() or not phone.strip() or len(name) > 120 or len(phone) > 30:
         raise ValidationError('الاسم ورقم التواصل مطلوبان وبطول صالح.')
-    if isinstance(party_size, bool) or not isinstance(party_size, int) or party_size < 1 or party_size > min(event.capacity, settings.PUBLIC_ATTENDANCE_MAX_PARTY_SIZE):
+    capacity = performance.effective_capacity if performance else event.capacity
+    if isinstance(party_size, bool) or not isinstance(party_size, int) or party_size < 1 or party_size > min(capacity, settings.PUBLIC_ATTENDANCE_MAX_PARTY_SIZE):
         raise ValidationError('عدد الأشخاص المطلوب غير متاح.')
-    row = Request(event=event, event_uuid=event.uuid, event_title=event.title_ar, client_key=client_key, owner_hash=owner_hash,
+    row = Request(event=event, event_uuid=event.uuid, event_title=event.title_ar,
+                  performance=performance, performance_uuid=performance.uuid if performance else None,
+                  client_key=client_key, owner_hash=owner_hash,
                   ip_hash=ip_hash, name=name, phone=phone, party_size=party_size)
     row.full_clean()
     row.save()
@@ -128,8 +168,9 @@ def review_request(request_uuid, *, actor, action, reason=''):
         event = _lock_accepting_event(pk=row.event_id)
         if event is None:
             raise ValidationError('الفعالية لم تعد تقبل الطلبات. راجع الحالة قبل اعتماد الحضور.')
+        performance = select_request_performance(event, row.performance_uuid)
         row.reservation = create_reservation(Reservation(
-            reservation_type='event', event=event, name=row.name, phone=row.phone,
+            reservation_type='event', event=event, performance=performance, name=row.name, phone=row.phone,
             party_size=row.party_size, status='confirmed', deposit_syp=0, created_by=actor))
         row.status = Request.Status.APPROVED
     else:
