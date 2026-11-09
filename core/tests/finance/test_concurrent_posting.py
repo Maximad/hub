@@ -7,7 +7,7 @@ from threading import Event
 
 from django.contrib.auth import get_user_model
 from django.db import close_old_connections, connection
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, override_settings
 
 from core.models import (
     CashMovement, Category, DailyClose, Expense, ExpenseCategory,
@@ -19,6 +19,7 @@ from core.services.posting.context import PostingContext
 from core.services.posting.exceptions import ClosedPeriodError, InvalidTransition
 
 
+@override_settings(COLLECTION_ACCOUNT_CODES={'cash': 'cash:concurrency', 'revenue': 'revenue:concurrency', 'transfer': 'clearing:bank'})
 class PostgreSQLConcurrentPostingTests(TransactionTestCase):
     """Real row-lock tests; SQLite cannot provide the required worker semantics."""
 

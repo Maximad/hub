@@ -4,7 +4,7 @@ from io import StringIO
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from core.models import (
@@ -15,6 +15,7 @@ from core.services.posting.context import PostingContext
 from core.services.posting.order_payments import collect
 
 
+@override_settings(COLLECTION_ACCOUNT_CODES={'cash': 'cash:audit-customer', 'revenue': 'revenue:audit-customer', 'transfer': 'clearing:bank'})
 class CustomerPaymentAuditTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(

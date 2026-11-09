@@ -18,7 +18,7 @@ from core.services.posting.context import PostingContext
 from core.services.posting.exceptions import ClosedPeriodError, InvalidTransition
 
 
-@override_settings(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False)
+@override_settings(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False, COLLECTION_ACCOUNT_CODES={'cash': 'cash:refund-test', 'revenue': 'revenue:refund-test', 'transfer': 'clearing:refund-test'})
 class CustomerPaymentReversalTests(TestCase):
     def setUp(self):
         User = get_user_model()

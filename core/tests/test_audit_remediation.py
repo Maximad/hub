@@ -13,8 +13,9 @@ from django.utils import timezone
 
 from catalog.models import MediaAsset
 from core.finance import current_business_date
+from core.settings_helpers import get_system_settings
 from core.models import (Category, Expense, ExpenseCategory, FinancialAccount, Order,
-                         OrderItem, Payment, Product, Purchase, Room, TableArea, Transfer)
+                         OrderItem, Payment, Product, Purchase, Room, SystemSetting, TableArea, Transfer)
 from core.services.posting.context import PostingContext
 from core.services.posting.exceptions import IdempotencyConflict, InvalidTransition
 from core.services.posting.order_payments import collect, _collection_account
@@ -63,6 +64,9 @@ class AuditAccessTests(TestCase):
         self.assertEqual(Transfer.objects.get().approver_id, self.manager.pk)
 
     def test_new_client_cannot_reset_table_lock_and_expiry_recovers(self):
+        SystemSetting.objects.create(customer_visits_enabled=True)
+        get_system_settings.cache_clear()
+        self.addCleanup(get_system_settings.cache_clear)
         visit = create_table_visit(self.table)
         correct = visit_join_pin(visit)
         wrong = '0000' if correct != '0000' else '0001'
@@ -93,7 +97,6 @@ class AuditAccessTests(TestCase):
             response = self.client.get(url)
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response['Cache-Control'], 'private, no-store')
-            response.close()
             self.client.logout()
             image = MediaAsset.objects.create(title_ar='Receipt image', file='products/receipt.jpg')
             thumbnail = Path(directory) / 'products/receipt-card-320w.webp'
@@ -104,12 +107,12 @@ class AuditAccessTests(TestCase):
             self.assertEqual(self.client.get('/media/products/receipt-card-320w.webp').status_code, 404)
 
 
-@override_settings(COLLECTION_ACCOUNT_CODES={}, COLLECTION_BUSINESS_UNIT='')
+@override_settings(COLLECTION_ACCOUNT_CODES={}, COLLECTION_BUSINESS_UNIT='audit-tests')
 class AuditPaymentTests(TestCase):
     def setUp(self):
         self.actor = get_user_model().objects.create_user(username='audit-cashier', password='x', phone='+903', role='admin')
-        self.cash = FinancialAccount.objects.create(code='audit:cash', name_ar='cash', account_type='asset', scope='cashbox', is_active=True)
-        self.revenue = FinancialAccount.objects.create(code='audit:revenue', name_ar='revenue', account_type='revenue', is_active=True)
+        self.cash = FinancialAccount.objects.create(code='audit:cash', name_ar='cash', account_type='asset', scope='cashbox', business_unit='audit-tests', is_active=True)
+        self.revenue = FinancialAccount.objects.create(code='audit:revenue', name_ar='revenue', account_type='revenue', business_unit='audit-tests', is_active=True)
         self.category = Category.objects.create(name_ar='Audit')
         self.product = Product.objects.create(category=self.category, name_ar='Item', price_syp=100)
 
@@ -133,7 +136,7 @@ class AuditPaymentTests(TestCase):
         FinancialAccount.objects.create(code='aaa:usd', name_ar='USD', account_type='asset', scope='cashbox', currency='USD', is_active=True)
         FinancialAccount.objects.create(code='aaa:other', name_ar='Other', account_type='asset', scope='cashbox', business_unit='other', is_active=True)
         self.assertEqual(_collection_account('cash'), self.cash)
-        extra = FinancialAccount.objects.create(code='audit:second', name_ar='second', account_type='asset', scope='cashbox', is_active=True)
+        extra = FinancialAccount.objects.create(code='audit:second', name_ar='second', account_type='asset', scope='cashbox', business_unit='audit-tests', is_active=True)
         with self.assertRaises(InvalidTransition):
             _collection_account('cash')
         with override_settings(COLLECTION_ACCOUNT_CODES={'cash': extra.code}):

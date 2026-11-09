@@ -1,7 +1,7 @@
 """Regression tests for read-only customer payment posting reconciliation."""
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from core.models import (
@@ -13,6 +13,7 @@ from core.services.posting.context import PostingContext
 from core.services.posting.order_payments import collect
 
 
+@override_settings(COLLECTION_ACCOUNT_CODES={'cash': 'cash:finance-payment-scan', 'revenue': 'revenue:finance-payment-scan', 'transfer': 'clearing:finance-payment-scan'})
 class CustomerPaymentReconciliationTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(
