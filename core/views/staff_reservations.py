@@ -360,12 +360,17 @@ def staff_reservation_ticket_checkout(request, reservation_id):
     sale = ReservationTicketOrder.objects.filter(
         reservation=booking,
     ).select_related('order').first()
+    posted_links = list(
+        booking.ticket_payment_links.select_related('payment', 'payment__order')
+        .order_by('linked_at', 'pk')
+    )
     allocations = list(
         booking.ticket_allocations.select_related('ticket_type').order_by('ticket_type_id')
     )
     return render(request, 'staff/reservation_ticket_checkout.html', {
         'reservation': booking,
         'sale': sale,
+        'posted_links': posted_links,
         'allocations': allocations,
         'financial_summary': ticket_payment_summary(booking),
         'expected_total': sum(row.quantity * row.unit_price_syp for row in allocations),

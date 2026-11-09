@@ -69,6 +69,21 @@
     {% elif sale and not can_collect %}
       <p class="hub-help-text">التحصيل المباشر يتطلب صلاحيات الإدارة والكاشير. يمكنك مراجعة تفاصيل الحجز دون تسجيل دفعة.</p>
     {% endif %}
+    {% if posted_links %}
+    <h3 class="hub-section-title">سجل إيصالات التذاكر المرتبطة</h3>
+    <div class="hub-list">
+      {% for linked in posted_links %}
+        <div class="hub-card" style="margin-block:.5rem;padding:.85rem">
+          <span>سند #{{ linked.payment.pk }} · {{ linked.payment.amount_syp }} ل.س · {{ linked.payment.get_method_display }}</span>
+          {% if linked.payment.is_reversed or not linked.payment.is_active %}
+            <strong> · معكوسة / غير فعالة — لا تُحتسب</strong>
+          {% elif can_collect %}
+            <a class="hub-button" href="{% url 'staff_customer_payment_reverse' linked.payment.pk %}">عكس هذه الدفعة بعد تنفيذ الاسترداد</a>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+    {% endif %}
     <p class="hub-help-text">الاسترداد لا يتم تلقائياً بإلغاء الحجز. إذا أُعيد المال فعلياً، يجب عكس سند قبضه عبر إجراء الاسترداد المعتمد في المالية مع مرجع إثبات.</p>
   </section>
 </section>
