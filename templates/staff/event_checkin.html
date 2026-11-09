@@ -11,23 +11,40 @@
     <div>
       <p class="staff-workspace__eyebrow">بوابة الدخول / التذاكر</p>
       <h1 id="admission-title" class="hub-page-header__title">تسجيل وصول الجمهور</h1>
-      <p class="hub-page-header__meta">{{ event.title_ar }} · {{ event.starts_at|date:"d/m/Y · H:i" }} بتوقيت دمشق</p>
+      <p class="hub-page-header__meta">{{ event.title_ar }} · {% if selected_performance %}{{ selected_performance.starts_at|date:"d/m/Y · H:i" }}{% else %}اختر موعد العرض{% endif %} بتوقيت دمشق</p>
     </div>
     <a class="hub-button" href="{% url 'staff_event_detail' event.id %}">تفاصيل الفعالية</a>
   </header>
 
+  {% if performances %}
+    <div class="events-ui__panel">
+      <form method="get" class="hub-toolbar">
+        <label for="performance-chooser">موعد العرض</label>
+        <select id="performance-chooser" class="hub-input" name="performance" required>
+          {% if performances|length > 1 %}<option value="">اختر العرض</option>{% endif %}
+          {% for show in performances %}
+            <option value="{{ show.pk }}" {% if selected_performance.pk == show.pk %}selected{% endif %}>
+              {{ show.starts_at|date:"d/m/Y · H:i" }} {% if show.status == 'cancelled' %}(ملغى){% endif %}
+            </option>
+          {% endfor %}
+        </select>
+        <button class="hub-button hub-button-primary" type="submit">عرض حجوزات الموعد</button>
+      </form>
+    </div>
+  {% endif %}
   <div class="events-ui__stats" aria-label="ملخص الوصول">
     <div class="events-ui__stat"><span>الحضور المسجّل فعلياً</span><strong>{{ arrived_guests }}</strong></div>
     <div class="events-ui__stat"><span>أشخاص ضمن حجوزات مؤكدة</span><strong>{{ confirmed_guests }}</strong></div>
-    <div class="events-ui__stat"><span>السعة المسجلة للفعالية</span><strong>{{ event.capacity|default:"—" }}</strong></div>
+    <div class="events-ui__stat"><span>سعة العرض</span><strong>{% if selected_performance %}{{ selected_performance.effective_capacity|default:"—" }}{% else %}—{% endif %}</strong></div>
   </div>
   <p class="events-ui__notice">هذه شاشة حضور التذاكر فقط؛ لا تفتح جلسة مطعم، ولا تسجّل قبضاً أو إيصال دفع. تغيير العدد إلى القيمة نفسها لا يكرر تسجيل الوصول.</p>
   <div class="events-ui__panel">
     <form method="get" class="hub-toolbar">
       <label for="admission-search">ابحث عن اسم أو هاتف الحجز</label>
+      {% if selected_performance %}<input type="hidden" name="performance" value="{{ selected_performance.pk }}">{% endif %}
       <input id="admission-search" type="search" name="q" value="{{ query }}" maxlength="80" placeholder="اسم الضيف أو رقم الهاتف" class="hub-input">
       <button class="hub-button hub-button-primary" type="submit">بحث</button>
-      {% if query %}<a class="hub-button" href="{% url 'staff_event_checkin' event.id %}">مسح البحث</a>{% endif %}
+      {% if query %}<a class="hub-button" href="{% url 'staff_event_checkin' event.id %}{% if selected_performance %}?performance={{ selected_performance.pk }}{% endif %}">مسح البحث</a>{% endif %}
     </form>
     <div class="events-ui__reservation-list">
       {% for r in page %}
@@ -42,6 +59,7 @@
         {% if r.status == 'confirmed' and not r.visit_id %}
           <form method="post" class="hub-toolbar">
             {% csrf_token %}
+            {% if selected_performance %}<input type="hidden" name="performance" value="{{ selected_performance.pk }}">{% endif %}
             <input type="hidden" name="reservation_id" value="{{ r.pk }}">
             <label for="admit-{{ r.pk }}">العدد الإجمالي الذي وصل</label>
             <input id="admit-{{ r.pk }}" class="hub-input" type="number" name="arrived_count"
@@ -61,9 +79,9 @@
     </div>
     {% if page.has_other_pages %}
     <nav class="hub-toolbar" aria-label="صفحات قائمة الحضور">
-      {% if page.has_previous %}<a class="hub-button" href="?q={{ query|urlencode }}&page={{ page.previous_page_number }}">السابق</a>{% endif %}
+      {% if page.has_previous %}<a class="hub-button" href="?q={{ query|urlencode }}&page={{ page.previous_page_number }}{% if selected_performance %}&performance={{ selected_performance.pk }}{% endif %}">السابق</a>{% endif %}
       <span>الصفحة {{ page.number }} من {{ page.paginator.num_pages }}</span>
-      {% if page.has_next %}<a class="hub-button" href="?q={{ query|urlencode }}&page={{ page.next_page_number }}">التالي</a>{% endif %}
+      {% if page.has_next %}<a class="hub-button" href="?q={{ query|urlencode }}&page={{ page.next_page_number }}{% if selected_performance %}&performance={{ selected_performance.pk }}{% endif %}">التالي</a>{% endif %}
     </nav>
     {% endif %}
   </div>

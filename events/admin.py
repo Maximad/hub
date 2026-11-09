@@ -1,6 +1,6 @@
 from django.contrib import admin
 from catalog.admin_media import safe_media_preview
-from .models import Event, EventMedia, EventTicketType
+from .models import Event, EventMedia, EventTicketType, EventPerformance
 
 
 class EventMediaInline(admin.TabularInline):
@@ -15,13 +15,19 @@ class EventMediaInline(admin.TabularInline):
         return safe_media_preview(obj, width=64, ratio='4 / 5')
 
 
+class EventPerformanceInline(admin.TabularInline):
+    model = EventPerformance
+    extra = 0
+    fields = ('starts_at', 'ends_at', 'room', 'capacity', 'status')
+
+
 @admin.register(Event)
 class EventAdmin(admin.ModelAdmin):
     list_display = ('title_ar', 'starts_at', 'ends_at', 'room', 'capacity', 'status', 'is_public', 'accepts_attendance_requests')
     list_filter = ('status', 'is_public', 'accepts_attendance_requests', 'room')
     search_fields = ('title_ar', 'title_en', 'description_ar', 'uuid')
     autocomplete_fields = ('room',)
-    inlines = (EventMediaInline,)
+    inlines = (EventPerformanceInline, EventMediaInline,)
 
 
 @admin.register(EventMedia)

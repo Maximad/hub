@@ -38,6 +38,55 @@ class Event(models.Model):
         return self.title_ar or self.title_en or str(self.uuid)[:8]
 
 
+
+class EventPerformance(models.Model):
+    """One bookable occasion of a shared event; never a separate event."""
+    class Status(models.TextChoices):
+        SCHEDULED = 'scheduled', 'مجدول'
+        CANCELLED = 'cancelled', 'ملغى'
+        COMPLETED = 'completed', 'منتهٍ'
+
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='performances')
+    starts_at = models.DateTimeField()
+    ends_at = models.DateTimeField(null=True, blank=True)
+    room = models.ForeignKey('core.Room', on_delete=models.SET_NULL, null=True, blank=True,
+                             related_name='event_performances')
+    capacity = models.PositiveIntegerField(null=True, blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.SCHEDULED)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('starts_at', 'pk')
+        constraints = [
+            models.UniqueConstraint(fields=('event', 'starts_at'), name='unique_event_performance_time'),
+            models.CheckConstraint(condition=models.Q(capacity__gt=0) | models.Q(capacity__isnull=True),
+                                   name='event_performance_positive_capacity'),
+        ]
+
+    @property
+    def effective_capacity(self):
+        return self.capacity if self.capacity is not None else self.event.capacity
+
+    @property
+    def effective_room(self):
+        return self.room or self.event.room
+
+    def clean(self):
+        super().clean()
+        if self.ends_at and self.starts_at and self.ends_at <= self.starts_at:
+            raise ValidationError({'ends_at': 'يجب أن يكون وقت النهاية بعد بداية العرض.'})
+        if self.pk:
+            previous = type(self).objects.filter(pk=self.pk).first()
+            if previous and any(getattr(previous, field) != getattr(self, field)
+                    for field in ('starts_at', 'ends_at', 'room_id', 'capacity', 'status')):
+                if self.reservations.exists() or self.attendance_requests.exists():
+                    raise ValidationError('لا يمكن تعديل موعد له حجوزات أو طلبات حضور دون إجراء نقل/إلغاء مراجع.')
+
+    def __str__(self):
+        return f'{self.event} — {self.starts_at:%Y-%m-%d %H:%M}'
+
+
 class EventTicketType(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='ticket_types')

@@ -8,7 +8,7 @@ from django.db.models import Q, Sum
 from django.utils import timezone
 
 from core.models import ActivityLog, HubVisit, Member, Room, TableArea
-from events.models import Event
+from events.models import Event, EventPerformance
 from .models import Reservation
 
 ACTIVE_STATUSES = (Reservation.Status.PENDING, Reservation.Status.CONFIRMED)
@@ -54,26 +54,41 @@ def _check_regular_conflict(reservation):
         raise ValidationError({'__all__': 'يتعارض هذا الحجز مع حجز نشط في الوقت والمكان نفسيهما.'})
 
 
-def event_reserved_party_size(event_id, *, exclude_reservation_id=None):
-    """Current reservation total shared by capacity validation and staff hints."""
-    return Reservation.objects.filter(
+def event_reserved_party_size(event_id, *, performance_id=None, exclude_reservation_id=None):
+    """Capacity belongs to a particular show, not the entire recurring event."""
+    rows = Reservation.objects.filter(
         event_id=event_id, reservation_type=Reservation.ReservationType.EVENT,
         status__in=ACTIVE_STATUSES,
-    ).exclude(pk=exclude_reservation_id).aggregate(total=Sum('party_size'))['total'] or 0
+    )
+    if performance_id is not None:
+        rows = rows.filter(performance_id=performance_id)
+    return rows.exclude(pk=exclude_reservation_id).aggregate(total=Sum('party_size'))['total'] or 0
 
 
 def _check_event_capacity(reservation):
     if not reservation.event_id:
         raise ValidationError({'event': 'يرجى اختيار الفعالية.'})
     event = Event.objects.select_for_update().get(pk=reservation.event_id)
+    performances = list(EventPerformance.objects.filter(event=event).order_by('pk')[:2])
+    if not reservation.performance_id and len(performances) == 1:
+        reservation.performance = performances[0]
+    if not reservation.performance_id and len(performances) > 1:
+        raise ValidationError({'performance': 'اختر موعد العرض قبل تأكيد الحجز.'})
+    performance = None
+    if reservation.performance_id:
+        performance = EventPerformance.objects.select_for_update().get(pk=reservation.performance_id)
+        if performance.event_id != event.pk or performance.status != EventPerformance.Status.SCHEDULED:
+            raise ValidationError({'performance': 'موعد العرض غير متاح لهذه الفعالية.'})
     # Ticket allocations are optional for legacy bookings, but whenever they
     # exist they must satisfy current tier limits during confirmation/restore.
     from .ticketing import validate_saved_ticket_allocations
     validate_saved_ticket_allocations(reservation, event=event)
-    if event.capacity is None:
+    capacity = performance.effective_capacity if performance else event.capacity
+    if capacity is None:
         return
-    used = event_reserved_party_size(event.pk, exclude_reservation_id=reservation.pk)
-    if used + reservation.party_size > event.capacity:
+    used = event_reserved_party_size(event.pk, performance_id=performance.pk if performance else None,
+                                     exclude_reservation_id=reservation.pk)
+    if used + reservation.party_size > capacity:
         raise ValidationError({'party_size': 'عدد الحضور يتجاوز سعة الفعالية.'})
 
 
@@ -81,6 +96,16 @@ def _validate_for_status(reservation):
     # Besides model validation, this normalizes form-style date/time strings
     # before interval arithmetic and database comparisons.
     reservation.full_clean()
+    if reservation.reservation_type == Reservation.ReservationType.EVENT and reservation.event_id:
+        ids = list(EventPerformance.objects.filter(event_id=reservation.event_id).values_list('pk', flat=True)[:2])
+        if not reservation.performance_id and len(ids) == 1:
+            reservation.performance_id = ids[0]
+        if not reservation.performance_id and len(ids) > 1:
+            raise ValidationError({'performance': 'اختر موعد العرض.'})
+        if reservation.performance_id:
+            show = EventPerformance.objects.get(pk=reservation.performance_id)
+            if show.event_id != reservation.event_id or show.status != EventPerformance.Status.SCHEDULED:
+                raise ValidationError({'performance': 'موعد العرض غير متاح لهذه الفعالية.'})
     if reservation.reservation_type == Reservation.ReservationType.REGULAR:
         reservation.end_time = _regular_end_time(reservation)
         _lock_regular_resource(reservation)

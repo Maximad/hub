@@ -57,16 +57,19 @@ def staff_reservations(request):
     )
     active = all_rows.exclude(status=Reservation.Status.CANCELLED)
     today_rows = active.filter(
-        Q(reservation_type=Reservation.ReservationType.EVENT, event__starts_at__date=today)
+        Q(reservation_type=Reservation.ReservationType.EVENT, performance__starts_at__date=today)
+        | Q(reservation_type=Reservation.ReservationType.EVENT, performance__isnull=True, event__starts_at__date=today)
         | Q(reservation_type=Reservation.ReservationType.REGULAR, reservation_date=today)
     )
     upcoming_rows = active.exclude(status=Reservation.Status.COMPLETED).filter(
-        Q(reservation_type=Reservation.ReservationType.EVENT, event__starts_at__date__gt=today)
+        Q(reservation_type=Reservation.ReservationType.EVENT, performance__starts_at__date__gt=today)
+        | Q(reservation_type=Reservation.ReservationType.EVENT, performance__isnull=True, event__starts_at__date__gt=today)
         | Q(reservation_type=Reservation.ReservationType.REGULAR, reservation_date__gt=today)
     )
     past_cancelled_rows = all_rows.filter(
         Q(status__in=[Reservation.Status.CANCELLED, Reservation.Status.COMPLETED])
-        | Q(reservation_type=Reservation.ReservationType.EVENT, event__starts_at__date__lt=today)
+        | Q(reservation_type=Reservation.ReservationType.EVENT, performance__starts_at__date__lt=today)
+        | Q(reservation_type=Reservation.ReservationType.EVENT, performance__isnull=True, event__starts_at__date__lt=today)
         | Q(reservation_type=Reservation.ReservationType.REGULAR, reservation_date__lt=today)
     )
     return render(

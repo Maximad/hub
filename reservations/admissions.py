@@ -31,14 +31,17 @@ def set_event_admission_total(reservation_id, arrived_count, *, actor):
     if str(arrived_count).strip() != str(quantity) or quantity <= 0:
         raise ValidationError({'arrived_count': 'عدد الواصلين غير صالح.'})
 
-    booking = Reservation.objects.select_for_update(of=('self',)).select_related('event').get(pk=reservation_id)
+    booking = Reservation.objects.select_for_update(of=('self',)).select_related('event', 'performance').get(pk=reservation_id)
     if booking.reservation_type != Reservation.ReservationType.EVENT or not booking.event_id:
         raise ValidationError({'reservation': 'الحجز غير مرتبط بفعالية.'})
     if booking.status != Reservation.Status.CONFIRMED or booking.visit_id:
         raise ValidationError({'status': 'يلزم حجز مؤكد دون جلسة سابقة لتسجيل دخول التذاكر.'})
-    if booking.event.status in {Event.Status.CANCELLED, Event.Status.COMPLETED}:
+    if booking.event.status in {Event.Status.CANCELLED, Event.Status.COMPLETED} or (
+            booking.performance_id and booking.performance.status != 'scheduled'
+    ):
         raise ValidationError({'event': 'لا يمكن تسجيل حضور فعالية ملغاة أو منتهية.'})
-    if timezone.localtime(booking.event.starts_at, DAMASCUS).date() != timezone.localtime(timezone.now(), DAMASCUS).date():
+    starts_at = booking.performance.starts_at if booking.performance_id else booking.event.starts_at
+    if timezone.localtime(starts_at, DAMASCUS).date() != timezone.localtime(timezone.now(), DAMASCUS).date():
         raise ValidationError({'event': 'تسجيل الدخول متاح فقط في تاريخ الفعالية بتوقيت دمشق.'})
     if quantity > booking.party_size:
         raise ValidationError({'arrived_count': 'عدد الواصلين يتجاوز عدد الضيوف في الحجز.'})

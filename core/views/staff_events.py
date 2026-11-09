@@ -5,13 +5,16 @@ reservation mutations on their established, permission-checked services.
 """
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.db.models import Prefetch
+from django.db.models import Prefetch, OuterRef, Subquery
 from django.shortcuts import get_object_or_404, render
-from django.http import HttpResponse
+from django.http import HttpResponse, Http404
 from django.views.decorators.http import require_http_methods
 import csv
 from django.contrib import messages
 from django.core.exceptions import ValidationError
+from django.utils.dateparse import parse_datetime
+from django.utils import timezone
+from zoneinfo import ZoneInfo
 from django.core.paginator import Paginator
 from django.db.models import Q, Sum
 from django.shortcuts import redirect
@@ -19,7 +22,8 @@ from django.shortcuts import redirect
 from accounts.permissions import require_staff_capability, is_owner_or_admin
 from reservations.admissions import set_event_admission_total
 from reservations.importing import preview_uploaded_csv, import_event_bookings
-from events.models import EventTicketType
+from events.models import EventTicketType, EventPerformance
+from events.scheduling import add_performances, cancel_performance
 from reservations.models import EventAdmission
 from reservations.reporting import event_booking_report
 
@@ -53,9 +57,14 @@ def _cover_media():
 @login_required
 def staff_events(request):
     _assert_staff_capability(request.user, 'events')
+    next_show = EventPerformance.objects.filter(
+        event_id=OuterRef('pk'), status=EventPerformance.Status.SCHEDULED,
+        starts_at__gte=timezone.now(),
+    ).order_by('starts_at').values('starts_at')[:1]
     events = (
         Event.objects.select_related('room')
         .prefetch_related(_cover_media())
+        .annotate(next_show=Subquery(next_show))
         .order_by('starts_at', '-created_at')
     )
     return render(request, 'staff/events.html', {
@@ -69,14 +78,14 @@ def staff_event_detail(request, event_id):
     _assert_staff_capability(request.user, 'events')
     event = get_object_or_404(
         Event.objects.select_related('room').prefetch_related(
-            _cover_media(), 'ticket_types',
+            _cover_media(), 'ticket_types', 'performances',
         ),
         pk=event_id,
     )
     reservations = list(
         Reservation.objects.filter(event=event)
         .select_related('table_area')
-        .order_by('reservation_date', 'start_time', 'pk')
+        .order_by('performance__starts_at', 'pk')
     )
     participations = VendorParticipation.objects.filter(
         event=event,
@@ -85,7 +94,17 @@ def staff_event_detail(request, event_id):
         event__isnull=True,
         notes__icontains=event.title_ar,
     ).select_related('vendor', 'location_area').order_by('starts_at')
+    show_rows = list(event.performances.all())
+    totals = dict(
+        Reservation.objects.filter(event=event,
+            status__in=(Reservation.Status.PENDING, Reservation.Status.CONFIRMED))
+        .values('performance_id').annotate(people=Sum('party_size'))
+        .values_list('performance_id', 'people')
+    )
+    for show in show_rows:
+        show.reserved_people = totals.get(show.pk, 0)
     return render(request, 'staff/event_detail.html', {
+        'show_rows': show_rows,
         'event': event,
         'reservations': reservations,
         'reservation_count': len(reservations),
@@ -99,15 +118,65 @@ def staff_event_detail(request, event_id):
     })
 
 
+@require_staff_capability('events')
+@require_http_methods(['POST'])
+def staff_event_schedule(request, event_id):
+    """One short staff action for adding/cancelling shows, no duplicate event."""
+    event = get_object_or_404(Event, pk=event_id)
+    try:
+        if request.POST.get('action') == 'cancel':
+            show = get_object_or_404(EventPerformance, pk=request.POST.get('performance'),
+                                     event=event)
+            cancel_performance(show.pk, actor=request.user)
+            messages.success(request, 'تم إلغاء الموعد دون حذف سجله.')
+        else:
+            start = parse_datetime(request.POST.get('starts_at', ''))
+            end = parse_datetime(request.POST.get('ends_at', '')) if request.POST.get('ends_at') else None
+            if not start:
+                raise ValidationError('وقت البداية مطلوب وصيغته غير صالحة.')
+            local = ZoneInfo('Asia/Damascus')
+            if timezone.is_naive(start):
+                start = timezone.make_aware(start, local)
+            if end and timezone.is_naive(end):
+                end = timezone.make_aware(end, local)
+            raw_capacity = (request.POST.get('capacity') or '').strip()
+            raw_count = (request.POST.get('count') or '1').strip()
+            if raw_capacity and (not raw_capacity.isdecimal() or int(raw_capacity) <= 0):
+                raise ValidationError('السعة يجب أن تكون عدداً موجباً.')
+            if not raw_count.isdecimal():
+                raise ValidationError('عدد العروض غير صالح.')
+            shows = add_performances(
+                event.pk, actor=request.user, starts_at=start, ends_at=end,
+                capacity=int(raw_capacity) if raw_capacity else None,
+                frequency=request.POST.get('frequency', 'once'),
+                count=int(raw_count), room_id=request.POST.get('room') or None,
+            )
+            messages.success(request, f'تم حفظ {len(shows)} موعداً، دون إنشاء فعاليات مكررة.')
+    except (ValidationError, ValueError, TypeError) as error:
+        messages.error(request, ' '.join(error.messages) if isinstance(error, ValidationError) else 'مدخلات غير صالحة.')
+    return redirect('staff_event_detail', event_id=event.pk)
+
+
 @require_staff_capability('reservations')
 def staff_event_checkin(request, event_id):
     """Ticket-only admission desk. No HubVisit or restaurant account is created."""
     event = get_object_or_404(Event, pk=event_id)
+    shows = list(EventPerformance.objects.filter(event=event).order_by('starts_at'))
+    selected_id = request.POST.get('performance') if request.method == 'POST' else request.GET.get('performance')
+    selected = next((show for show in shows if str(show.pk) == str(selected_id)), None)
+    if selected_id and selected is None:
+        raise Http404
+    if not selected and len(shows) == 1:
+        selected = shows[0]
     if request.method == 'POST':
+        if len(shows) > 1 and not selected:
+            messages.error(request, 'اختر موعد العرض أولاً.')
+            return redirect('staff_event_checkin', event_id=event.pk)
         raw_id = request.POST.get('reservation_id', '')
         booking = get_object_or_404(
             Reservation, pk=raw_id if raw_id.isdecimal() and len(raw_id) <= 15 else None,
             event=event, reservation_type=Reservation.ReservationType.EVENT,
+            **({'performance': selected} if selected else {}),
         )
         try:
             _row, changed = set_event_admission_total(
@@ -122,14 +191,19 @@ def staff_event_checkin(request, event_id):
                 request,
                 'تم تسجيل الوصول.' if changed else 'الحضور مسجّل مسبقاً؛ لم تُضف أعداد مكررة.',
             )
-        return redirect('staff_event_checkin', event_id=event.pk)
+        url = 'staff_event_checkin'
+        from django.urls import reverse
+        location = reverse(url, kwargs={'event_id': event.pk})
+        return redirect(f'{location}?performance={selected.pk}' if selected else location)
 
     query = (request.GET.get('q') or '').strip()[:80]
     bookings = (
         Reservation.objects.filter(
             event=event, reservation_type=Reservation.ReservationType.EVENT,
         )
-        .select_related('event_admission', 'visit')
+        .filter(**({'performance': selected} if selected else
+                   {'performance__isnull': True} if len(shows) > 1 else {}))
+        .select_related('event_admission', 'visit', 'performance')
         .order_by('name', 'pk')
     )
     if query:
@@ -138,12 +212,20 @@ def staff_event_checkin(request, event_id):
     summary = Reservation.objects.filter(
         event=event, reservation_type=Reservation.ReservationType.EVENT,
         status=Reservation.Status.CONFIRMED,
-    ).aggregate(guests=Sum('party_size'))
-    arrived = EventAdmission.objects.filter(
-        reservation__event=event,
-    ).aggregate(guests=Sum('arrived_count'))['guests'] or 0
+    )
+    admissions = EventAdmission.objects.filter(reservation__event=event)
+    if selected:
+        summary = summary.filter(performance=selected)
+        admissions = admissions.filter(reservation__performance=selected)
+    elif len(shows) > 1:
+        summary = summary.none()
+        admissions = admissions.none()
+    summary = summary.aggregate(guests=Sum('party_size'))
+    arrived = admissions.aggregate(guests=Sum('arrived_count'))['guests'] or 0
     return render(request, 'staff/event_checkin.html', {
         'event': event,
+        'performances': shows,
+        'selected_performance': selected,
         'page': page,
         'query': query,
         'confirmed_guests': summary['guests'] or 0,
@@ -157,6 +239,14 @@ def staff_event_booking_import(request, event_id):
     """Two-step upload preview/confirm. No customer PII stored in browser sessions."""
     event = get_object_or_404(Event, pk=event_id)
     tiers = list(EventTicketType.objects.filter(event=event, is_active=True).order_by('pk'))
+    performances = list(EventPerformance.objects.filter(
+        event=event, status=EventPerformance.Status.SCHEDULED).order_by('starts_at'))
+    performance_id = request.POST.get('performance') if request.method == 'POST' else request.GET.get('performance')
+    selected_performance = next((row for row in performances if str(row.pk) == str(performance_id)), None)
+    if performance_id and selected_performance is None:
+        raise Http404
+    if not selected_performance and len(performances) == 1:
+        selected_performance = performances[0]
     if request.method == 'GET' and request.GET.get('template') == '1':
         response = HttpResponse(content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = f'attachment; filename="event-{event.pk}-bookings.csv"'
@@ -175,6 +265,7 @@ def staff_event_booking_import(request, event_id):
         try:
             preview, fingerprint = preview_uploaded_csv(
                 event.pk, request.FILES.get('bookings_csv'),
+                performance_id=selected_performance.pk if selected_performance else None,
             )
             if action == 'confirm':
                 confirmed_fingerprint = (request.POST.get('fingerprint') or '').strip()
@@ -182,6 +273,7 @@ def staff_event_booking_import(request, event_id):
                     raise ValidationError('الملف تغيّر بعد المعاينة؛ أعد مراجعة الملف.')
                 batch, created = import_event_bookings(
                     event.pk, preview, fingerprint, actor=request.user,
+                    performance_id=selected_performance.pk if selected_performance else None,
                 )
                 messages.success(
                     request,
@@ -196,7 +288,8 @@ def staff_event_booking_import(request, event_id):
             preview = []
             fingerprint = ''
     return render(request, 'staff/event_booking_import.html', {
-        'event': event, 'tiers': tiers, 'preview': preview,
+        'event': event, 'tiers': tiers, 'performances': performances,
+        'selected_performance': selected_performance, 'preview': preview,
         'fingerprint': fingerprint, 'error': error,
     })
 

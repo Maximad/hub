@@ -9,7 +9,7 @@ from core.views.staff_internet import staff_internet, staff_internet_sale, staff
 from core.views.internet_settings import internet_settings, internet_partner_save, internet_profile_save
 from core.views.staff_members import (staff_members, staff_member_new, staff_member_detail,
                                       staff_member_subscribe, staff_member_retry_activation)
-from core.views.staff_events import staff_events, staff_event_new, staff_event_detail, staff_event_checkin, staff_event_booking_import, staff_event_artwork, staff_event_finance
+from core.views.staff_events import staff_events, staff_event_new, staff_event_detail, staff_event_checkin, staff_event_booking_import, staff_event_artwork, staff_event_finance, staff_event_schedule
 from core.views.staff_layouts import (staff_layouts, staff_layout_new, staff_layout_edit, staff_event_layout_edit, staff_layout_save, staff_layout_assign, staff_layout_restore)
 from core.views.staff_reservations import staff_reservations, staff_reservation_new, staff_reservation_detail, staff_reservation_status, staff_reservation_tables, staff_reservation_tickets, staff_reservation_payment_arrangement, staff_reservation_ticket_payment_link, staff_event_reservation_edit, staff_reservation_ticket_checkout
 from core.views.staff_vendors import staff_vendors, staff_vendor_new, staff_vendor_detail, staff_vendor_participation_new
@@ -275,6 +275,7 @@ urlpatterns = [
     path('staff/events/', staff_events, name='staff_events'),
     path('staff/events/new/', staff_event_new, name='staff_event_new'),
     path('staff/events/<int:event_id>/', staff_event_detail, name='staff_event_detail'),
+    path('staff/events/<int:event_id>/schedule/', staff_event_schedule, name='staff_event_schedule'),
     path('staff/events/<int:event_id>/check-in/', staff_event_checkin, name='staff_event_checkin'),
     path('staff/events/<int:event_id>/finances/', staff_event_finance, name='staff_event_finance'),
     path('staff/events/<int:event_id>/artwork/', staff_event_artwork, name='staff_event_artwork'),
