@@ -20,6 +20,7 @@ class PublicPerformance:
     starts_at: datetime
     ends_at: datetime | None
     status: str
+    is_bookable: bool
 
 
 @dataclass(frozen=True)
@@ -78,7 +79,7 @@ def public_event(event, *, now):
     shows = tuple(PublicPerformance(
         uuid=show.uuid, starts_at=timezone.localtime(show.starts_at, DAMASCUS),
         ends_at=timezone.localtime(show.ends_at, DAMASCUS) if show.ends_at else None,
-        status=show.status,
+        status=show.status, is_bookable=show.starts_at > now,
     ) for show in event.public_performances if show.status == EventPerformance.Status.SCHEDULED)
     upcoming = next((show for show in shows if show.starts_at >= timezone.localtime(now, DAMASCUS)), None)
     display_show = upcoming or (shows[-1] if shows else None)

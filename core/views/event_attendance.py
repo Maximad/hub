@@ -24,7 +24,7 @@ from reservations.attendance import (
 )
 from reservations.models import EventAttendanceRequest as AttendanceRequest
 from reservations.attendance_review import attendance_review_info
-from events.models import Event
+from events.models import Event, EventPerformance
 
 from reservations.attendance_tracking import (
     OWNER_SESSION_KEY, owner_digest, owned_attendance_requests, public_attendance_item,
@@ -36,11 +36,22 @@ class AttendanceForm(forms.Form):
     phone = forms.RegexField(label='رقم التواصل', regex=r'^\+?[0-9٠-٩۰-۹ ()-]{5,30}$', max_length=30,
                             error_messages={'invalid': 'أدخل رقم تواصل صالحاً.'}, widget=forms.TextInput(attrs={'type': 'tel'}))
     party_size = forms.IntegerField(label='عدد الأشخاص', min_value=1)
+    performance = forms.ChoiceField(label='موعد العرض', required=False, choices=())
     client_key = forms.UUIDField(widget=forms.HiddenInput)
     website = forms.CharField(required=False, widget=forms.HiddenInput)
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, performances=(), **kwargs):
         super().__init__(*args, **kwargs)
+        performances = tuple(performances)
+        if performances:
+            self.fields['performance'].choices = [
+                ('', 'اختر الموعد') if len(performances) > 1 else ('', 'اختر الموعد'),
+                *[(str(show.uuid), timezone.localtime(show.starts_at).strftime('%d/%m/%Y · %H:%M'))
+                  for show in performances],
+            ]
+            self.fields['performance'].required = len(performances) > 1
+        else:
+            self.fields.pop('performance')
         self.fields['party_size'].max_value = settings.PUBLIC_ATTENDANCE_MAX_PARTY_SIZE
         self.fields['party_size'].validators.append(MaxValueValidator(settings.PUBLIC_ATTENDANCE_MAX_PARTY_SIZE))
         self.fields['party_size'].widget.attrs['max'] = settings.PUBLIC_ATTENDANCE_MAX_PARTY_SIZE
@@ -60,8 +71,15 @@ def attendance_form(request, uuid):
     event = get_object_or_404(published_events(), uuid=uuid)
     if request.method == 'GET' and not accepting_events().filter(pk=event.pk).exists():
         raise Http404
-    form = AttendanceForm(request.POST if request.method == 'POST' else None,
-                          initial={'party_size': 1, 'client_key': uuidlib.uuid4()})
+    performances = tuple(EventPerformance.objects.filter(
+        event=event, status=EventPerformance.Status.SCHEDULED,
+        starts_at__gt=timezone.now()).order_by('starts_at')[:50])
+    preferred = request.GET.get('performance') or (str(performances[0].uuid) if len(performances) == 1 else '')
+    form = AttendanceForm(
+        request.POST if request.method == 'POST' else None,
+        performances=performances,
+        initial={'party_size': 1, 'client_key': uuidlib.uuid4(), 'performance': preferred},
+    )
     status = 200
     if request.method == 'POST' and form.is_valid():
         if form.cleaned_data['website']:
@@ -71,8 +89,11 @@ def attendance_form(request, uuid):
             owner_token = request.session.get(OWNER_SESSION_KEY) or secrets.token_urlsafe(32)
             ip_hash = salted_hmac('public-attendance-ip', request.META.get('REMOTE_ADDR', 'unknown'), algorithm='sha256').hexdigest()
             try:
-                row = submit_request(event_uuid=event.uuid, owner_hash=digest(owner_token), ip_hash=ip_hash,
-                                     **{key: form.cleaned_data[key] for key in ['client_key', 'name', 'phone', 'party_size']})
+                row = submit_request(
+                    event_uuid=event.uuid, owner_hash=digest(owner_token), ip_hash=ip_hash,
+                    performance_uuid=form.cleaned_data.get('performance') or None,
+                    **{key: form.cleaned_data[key] for key in ['client_key', 'name', 'phone', 'party_size']},
+                )
             except RequestRateLimited:
                 form.add_error(None, 'وصلت للحد المؤقت للطلبات. حاول لاحقاً.')
                 status = 429
