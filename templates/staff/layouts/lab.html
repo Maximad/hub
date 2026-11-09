@@ -37,6 +37,8 @@
   </label>
   <button id="serverSave" class="btn primary" type="button">حفظ في هَبّ</button>
   <button id="serverSaveCopy" class="btn" type="button">حفظ كقالب جديد</button>
+  <label for="serverHistory">نسخ سابقة<select id="serverHistory" aria-label="اختر نسخة سابقة"><option value="">اختر نسخة</option></select></label>
+  <button id="serverRestore" class="btn" type="button">استعادة كنسخة جديدة</button>
   <span id="serverResult" role="status" aria-live="polite">نسخة تخطيطية، غير معتمدة للسعة</span>
 </nav>
 {{ layout_config|json_script:"hub-layout-config" }}
@@ -288,7 +290,14 @@ buildTemplate(preset);
   const result=document.getElementById('serverResult');
   const save=document.getElementById('serverSave');
   const copy=document.getElementById('serverSaveCopy');
+  const history=document.getElementById('serverHistory');
+  const restore=document.getElementById('serverRestore');
   const lab=window.HubLayoutLab;
+  for(const rev of config.revisions||[]){
+    const option=document.createElement('option');
+    option.value=String(rev.id); option.textContent='نسخة '+rev.version;
+    history.appendChild(option);
+  }
   let target=config.target, id=config.id, version=config.version||0;
   name.value=target==='new'?'':config.label||'';
   kind.value=config.kind||'comedy';
@@ -315,6 +324,22 @@ buildTemplate(preset);
   }
   save.addEventListener('click',()=>persist(false));
   copy.addEventListener('click',()=>persist(true));
+  restore.addEventListener('click',async()=>{
+    if(!history.value||target==='new'){result.textContent='اختر نسخة محفوظة أولاً.';return;}
+    if(!confirm('استعادة النسخة المحددة؟ سيُحفظ التخطيط المستعاد بنسخة جديدة، دون حذف تاريخ التعديلات.'))return;
+    restore.disabled=true;result.textContent='جارٍ استعادة النسخة…';
+    try{
+      const response=await fetch(config.restoreUrl,{
+        method:'POST', credentials:'same-origin',
+        headers:{'Content-Type':'application/json','X-CSRFToken':csrf},
+        body:JSON.stringify({target,id,version,revision_id:Number(history.value)})
+      });
+      const data=await response.json();
+      if(!response.ok){result.textContent=data.error||'تعذرت الاستعادة.';return;}
+      window.location.reload();
+    }catch(e){result.textContent='تعذرت الاستعادة. حاول مرة أخرى.';}
+    finally{restore.disabled=false;}
+  });
 })();
 </script>
 </body></html>
