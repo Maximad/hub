@@ -1,6 +1,6 @@
 # Hub Suite — Charcoal Creative Control Room (Step 1)
 
-**Scope:** authenticated staff application shell and `/staff/` Operations workspace.  
+**Scope:** charcoal header/navigation across authenticated staff pages; full dark surfaces exclusively on `/staff/` Operations (`staff-charcoal-operations`).  
 **Status:** feature branch, pending PR review/CI/manual browser QA. Not merged or deployed.
 
 ## Design contract
@@ -11,7 +11,7 @@ Palette: canvas `#15181C`, surface `#1E2329`, raised surface `#262C33`, line `#3
 
 ### Source of truth for this theme
 
-- `static/css/staff_charcoal.css`: **one** new, scoped token and visual layer, loaded after the existing v2/v3/2026 staff CSS; do **not** duplicate dark overrides into `staff_foundation.css`, `staff_ui_v2.css` or `staff_operations_designed.css`. Staff-specific tokens are explicitly bridged to the existing `--staff-v2-*` and `--hub-*` families so future modules can migrate without a second theme engine.
+- `static/css/staff_charcoal.css`: **one** new, scoped token and visual layer, loaded after the existing v2/v3/2026 staff CSS; do **not** duplicate dark overrides into `staff_foundation.css`, `staff_ui_v2.css` or `staff_operations_designed.css`. The shared staff header uses charcoal design tokens; full dark surfaces and bridges to `--staff-v2-*` / `--hub-*` are **opted into only by Operations** (`staff-charcoal-operations`) to avoid untested POS, kitchen and finance contrast regressions.
 - `templates/base.html`: guarded dark CSS and Focus JS entrypoints for logged-in `/staff/` pages only; staff PWA theme color updated. Public menu, Wi-Fi, provider portal and Django admin are unaffected.
 - `templates/includes/staff_shell_nav.html`: a single `type=button` Focus toggle, alongside the existing role-gated navigation and notification tools.
 - `static/js/staff_charcoal.js`: local, client-only preference. No AJAX, database changes, cookies, session mutations or backend API. Degrades gracefully when localStorage is disabled.
@@ -39,6 +39,8 @@ Use the `◎ وضع التركيز` button in the staff header. The button expos
 5. Check POS/kitchen/cashier/internet routes at least for readable navigation and functional role gates, as they share the global shell. Check high contrast on forms, loading and empty states.
 6. Test low-bandwidth optional font fallback and `prefers-reduced-motion`. Verify focus mode with storage unavailable.
 7. Do not merge/deploy until visual/browser evidence and functional regression checks pass.
+
+**Compatibility:** other staff modules keep their existing light content surfaces temporarily. This is a deliberate staged rollout, not a claim of suite-wide dark parity. The charcoal header applies across those modules and needs mobile smoke review.
 
 **Current limitation:** this branch was authored through GitHub source operations. A live Django server, browser screenshots from real application data, PostgreSQL suite, CI and production revision were not independently executed/verified during authoring.
 
