@@ -2,12 +2,12 @@
 
 **Scope:** Events, reservations, cashier receipts, ticket admission, CSV imports,
 event covers and known-cost reporting. Owner: Hub Sweida operations/finance.
-**Status:** Engineering implementation is not proof of production acceptance.
+**Status:** Four-phase implementation merged to `main`. Engineering CI is not proof of production acceptance; verify the current combined commit before deploying.
 
 ## Release preconditions
 
 1. Verify deployed container commit and required migrations
-   (`reservations.0006–0011`, `events.0003`) against the exact merged release.
+   (`reservations.0006–0011`, `events.0003–0005`) against the exact merged release.
    Run full Django/PostgreSQL CI and `python manage.py check --deploy`.
 2. Confirm a completed backup **and verified restore evidence**; rollback plan must
    preserve any real post-deploy transactions. Never reset production data.
