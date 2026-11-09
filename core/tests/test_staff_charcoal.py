@@ -36,7 +36,7 @@ class StaffCharcoalContractTests(SimpleTestCase):
         for token in ("#15181C", "#1E2329", "#262C33", "#343C45",
                       "#F3F1EC", "#A9B0B8", "#24C6B2", "#D88A3D"):
             self.assertIn(token, self.css)
-        self.assertIn("body.staff-workspace-page.hub-staff-ui .ops-designed", self.css)
+        self.assertIn("body.staff-workspace-page.hub-staff-ui.hub-ui-v3 .ops-designed", self.css)
         self.assertIn(":focus-visible", self.css)
         self.assertIn("@media(prefers-reduced-motion:reduce)", self.css)
         self.assertIn("@media print", self.css)
