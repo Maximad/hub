@@ -384,3 +384,32 @@ class ReservationImportBatch(models.Model):
                 name='unique_event_booking_import_batch',
             ),
         ]
+
+
+class ReservationTicketOrder(models.Model):
+    """One event booking's immutable POS ticket order, not a payment receipt.
+
+    Tickets are represented as hidden event-ticket catalog lines; no beverage
+    SKU is chosen at booking time. Actual money is in linked journal-backed
+    Payment records, and reversals remain owned by core finance.
+    """
+    reservation = models.OneToOneField(
+        Reservation, on_delete=models.PROTECT, related_name='ticket_order',
+    )
+    order = models.OneToOneField(
+        'core.Order', on_delete=models.PROTECT, related_name='reservation_ticket_order',
+    )
+    face_total_syp = models.PositiveIntegerField()
+    created_by = models.ForeignKey(
+        'accounts.User', null=True, on_delete=models.SET_NULL,
+        related_name='issued_event_ticket_orders',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def clean(self):
+        super().clean()
+        if self.reservation_id and (
+            self.reservation.reservation_type != Reservation.ReservationType.EVENT
+            or not self.reservation.event_id
+        ):
+            raise ValidationError({'reservation': 'فاتورة التذاكر تتطلب حجز فعالية.'})
