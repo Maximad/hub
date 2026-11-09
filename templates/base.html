@@ -9,7 +9,7 @@
   {% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %}
   <link rel="manifest" href="{% url 'staff_web_app_manifest' %}">
   <link rel="apple-touch-icon" href="{% static 'img/pwa-180.png' %}">
-  <meta name="theme-color" content="#176b5a">
+  <meta name="theme-color" content="#15181C">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   {% endif %}
@@ -65,6 +65,10 @@
     {% if system_settings.safe_button_padding_scale == 'compact' %}--hub-button-padding-y:.4rem;--hub-button-padding-x:.7rem;{% elif system_settings.safe_button_padding_scale == 'large' %}--hub-button-padding-y:.75rem;--hub-button-padding-x:1.15rem;{% else %}--hub-button-padding-y:.55rem;--hub-button-padding-x:.9rem;{% endif %}
     {% if system_settings.safe_input_size == 'compact' %}--hub-input-padding-y:.42rem;--hub-input-padding-x:.55rem;{% elif system_settings.safe_input_size == 'large' %}--hub-input-padding-y:.75rem;--hub-input-padding-x:.85rem;{% else %}--hub-input-padding-y:.55rem;--hub-input-padding-x:.65rem;{% endif %}
   }</style>{% endif %}
+  {# Authenticated staff only: single canonical charcoal layer, loaded after legacy themes. #}
+  {% if request.user.is_authenticated and request.path|slice:":7" == "/staff/" %}
+  <link rel="stylesheet" href="{% static 'css/staff_charcoal.css' %}">
+  {% endif %}
   <script src="{% static 'js/htmx.min.js' %}"></script>
   {% block extra_head %}{% endblock %}
 </head>
@@ -116,6 +120,7 @@
     <script src="{% static 'js/staff_ui_v2.js' %}"></script>
     {% if request.path == "/staff/" %}<script src="{% static 'js/staff_operations_brand.js' %}" defer></script>{% endif %}
     <script src="{% static 'js/staff_account_menu.js' %}" defer></script>
+    <script src="{% static 'js/staff_charcoal.js' %}" defer></script>
     <script src="{% static 'js/staff_launch_ui.js' %}"></script>
     <script src="{% static 'js/staff_pos_polish.js' %}"></script>
     <script src="{% static 'js/hub_searchable_select.js' %}"></script>
