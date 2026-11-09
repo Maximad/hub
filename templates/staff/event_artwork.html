@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}صور الفعالية{% endblock %}
+{% block content %}
+<section class="hub-section" dir="rtl">
+  <header class="hub-page-header">
+    <div>
+      <p class="hub-page-header__meta"><a href="{% url 'staff_events' %}">الفعاليات</a> / <a href="{% url 'staff_event_detail' event.pk %}">{{ event.title_ar }}</a></p>
+      <h1 class="hub-page-header__title">صور وملصقات الفعالية</h1>
+      <p class="hub-page-header__meta">يمكن تغيير الصورة الأساسية دون حذف الملفات السابقة. تظهر الصورة المناسبة للزوار عندما تكون الفعالية عامة ومنشورة.</p>
+    </div>
+    <a class="hub-button" href="{% url 'staff_event_detail' event.pk %}">العودة للفعالية</a>
+  </header>
+  <section class="hub-card">
+    {% if error %}<p class="hub-message hub-message-error" role="alert">{{ error }}</p>{% endif %}
+    <form method="post" enctype="multipart/form-data" class="hub-form hub-form-section">
+      {% csrf_token %}
+      <label for="event-art-role">نوع الصورة</label>
+      <select id="event-art-role" name="role" class="hub-input" required>
+        <option value="cover">صورة الغلاف</option>
+        <option value="poster">ملصق الفعالية</option>
+      </select>
+      <label for="event-art-file">ملف الصورة</label>
+      <input id="event-art-file" name="image" type="file" accept="image/jpeg,image/png,image/webp,image/gif" required>
+      <p class="hub-help-text">PNG / JPG / WebP / GIF. الحد الأقصى والأبعاد وفق إعدادات مكتبة الوسائط. لا تُرفع صور ببيانات خاصة بالضيوف.</p>
+      <label for="event-art-alt">وصف الصورة بالعربية (اختياري)</label>
+      <input id="event-art-alt" class="hub-input" name="alt_text_ar" maxlength="180" placeholder="وصف الصورة لسهولة الوصول">
+      <button class="hub-button hub-button-primary" type="submit">رفع وربط الصورة</button>
+    </form>
+  </section>
+  <section class="hub-section">
+    <h2 class="hub-section-title">الصور المسجلة</h2>
+    <div class="hub-grid hub-grid-3">
+      {% for entry in event_media %}
+        <article class="hub-card">
+          {% with image_url=entry.media_asset.safe_url %}
+            {% if image_url %}<img src="{{ image_url }}" alt="{{ entry.media_asset.alt_text_ar|default:event.title_ar }}" loading="lazy" style="width:100%;height:190px;object-fit:cover;border-radius:12px">{% endif %}
+          {% endwith %}
+          <p><strong>{{ entry.get_role_display }}</strong>{% if entry.is_primary %} · الصورة الأساسية{% endif %}{% if not entry.is_active %} · غير نشطة{% endif %}</p>
+        </article>
+      {% empty %}<p class="hub-empty-state">لا توجد صور مرتبطة بالفعالية بعد.</p>{% endfor %}
+    </div>
+  </section>
+</section>
+{% endblock %}
