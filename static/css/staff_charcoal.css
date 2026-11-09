@@ -1,0 +1,353 @@
+/*
+ * Hub Suite — Charcoal Creative Control Room / Step 1
+ * Canonical dark treatment for authenticated staff shell and Operations.
+ * Loaded once, after legacy CSS. Do not copy these selectors into v2/v3 layers.
+ * Future modules should migrate to the semantic tokens below, not add new overrides.
+ */
+body.hub-staff-ui {
+  color-scheme:dark;
+  --cc-canvas:#15181C;
+  --cc-surface:#1E2329;
+  --cc-raised:#262C33;
+  --cc-line:#343C45;
+  --cc-ink:#F3F1EC;
+  --cc-secondary:#A9B0B8;
+  --cc-muted:#94A0A9;
+  --cc-teal:#24C6B2;
+  --cc-teal-hover:#169D8D;
+  --cc-amber:#D88A3D;
+  --cc-green:#64CBA2;
+  --cc-danger:#FF8B86;
+  --cc-warning:#F2BD76;
+  --cc-blue:#87BBFF;
+  --cc-rad:14px;
+  --staff-v2-bg:var(--cc-canvas);
+  --staff-v2-surface:var(--cc-surface);
+  --staff-v2-surface-soft:var(--cc-raised);
+  --staff-v2-ink:var(--cc-ink);
+  --staff-v2-muted:var(--cc-secondary);
+  --staff-v2-line:var(--cc-line);
+  --staff-v2-brand:var(--cc-teal);
+  --staff-v2-brand-strong:var(--cc-teal-hover);
+  --staff-v2-brand-soft:#163D3D;
+  --staff-v2-sand:var(--cc-amber);
+  --staff-v2-sand-soft:#3E3024;
+  --staff-v2-danger:var(--cc-danger);
+  --staff-v2-danger-soft:#432C30;
+  --staff-v2-success:var(--cc-green);
+  --staff-v2-success-soft:#1D3932;
+  --staff-v2-shadow:0 8px 28px rgba(0,0,0,.10);
+  --staff-v2-shadow-raised:0 22px 55px rgba(0,0,0,.32);
+  --hub-color-background:var(--cc-canvas);
+  --hub-color-surface:var(--cc-surface);
+  --hub-color-surface-secondary:var(--cc-raised);
+  --hub-color-surface-hover:#303943;
+  --hub-color-text:var(--cc-ink);
+  --hub-color-text-muted:var(--cc-secondary);
+  --hub-color-border:var(--cc-line);
+  --hub-color-primary:var(--cc-teal);
+  --hub-color-primary-contrast:#10201F;
+  --hub-color-primary-hover:var(--cc-teal-hover);
+  --hub-bg:var(--cc-canvas);
+  --hub-surface:var(--cc-surface);
+  --hub-surface-alt:var(--cc-raised);
+  --hub-border:var(--cc-line);
+  --hub-card:var(--cc-surface);
+  --hub-text:var(--cc-ink);
+  --hub-muted:var(--cc-secondary);
+  --hub-primary:var(--cc-teal);
+  --hub-brand:var(--cc-teal);
+  --hub-page-background:var(--cc-canvas);
+  --hub-surface-main:var(--cc-surface);
+  --hub-text-primary:var(--cc-ink);
+  --hub-text-muted:var(--cc-secondary);
+  --hub-border-subtle:var(--cc-line);
+  --hub-v3-primary:var(--cc-teal);
+  --hub-v3-ink:var(--cc-ink);
+  --hub-v3-muted:var(--cc-secondary);
+  --hub-v3-canvas:var(--cc-canvas);
+  --hub-v3-surface:var(--cc-surface);
+  --hub-v3-subtle:var(--cc-raised);
+  --hub-v3-border:var(--cc-line);
+  background:var(--cc-canvas);
+  color:var(--cc-ink);
+  accent-color:var(--cc-teal);
+}
+
+/* Keep native forms and all permission / event handlers; restyle presentation only. */
+body.hub-staff-ui :is(button,input,textarea,select,summary) {font-family:inherit}
+body.hub-staff-ui :is(a,button,input,textarea,select,summary,[tabindex]):focus-visible {
+  outline:3px solid var(--cc-teal) !important;outline-offset:3px;
+}
+body.hub-staff-ui a:not(.hub-button):not(.staff-v2-button) {text-underline-offset:3px}
+body.hub-staff-ui :is(input:not([type=checkbox]):not([type=radio]):not([type=hidden]),textarea,select) {
+  color:var(--cc-ink);background:var(--cc-raised);border-color:var(--cc-line);
+}
+body.hub-staff-ui :is(input,textarea)::placeholder {color:var(--cc-secondary);opacity:1}
+body.hub-staff-ui :is(input,select,textarea):disabled {opacity:.62}
+body.hub-staff-ui :is(.hub-card,.hub-panel,.hub-summary-card,.hub-table-wrap,.staff-v2-panel,.staff-v2-toolbar) {
+  background:var(--cc-surface);border-color:var(--cc-line);color:var(--cc-ink);
+}
+body.hub-staff-ui :is(.hub-page-header__title,.hub-section-title,.staff-v2-title) {color:var(--cc-ink)}
+body.hub-staff-ui :is(.hub-muted,.hub-help-text,.hub-page-header__meta,.staff-v2-subtitle) {color:var(--cc-secondary)}
+body.hub-staff-ui :is(.hub-table th,.hub-table td) {border-color:var(--cc-line)}
+body.hub-staff-ui .hub-table th {color:var(--cc-ink);background:var(--cc-raised)}
+body.hub-staff-ui .hub-table :is(tr:hover,td:hover) {background-color:transparent}
+body.hub-staff-ui :is(.hub-nav-tabs,.hub-nav-chip,.staff-v2-button,.hub-button:not(.hub-button-primary)) {
+  background:var(--cc-surface);border-color:var(--cc-line);color:var(--cc-ink);
+}
+body.hub-staff-ui :is(.hub-button-primary,.staff-v2-button--primary) {
+  background:var(--cc-teal);border-color:var(--cc-teal);color:#10201F;
+}
+body.hub-staff-ui :is(.hub-button-primary,.staff-v2-button--primary):hover {
+  background:var(--cc-teal-hover);border-color:var(--cc-teal-hover);color:#fff;
+}
+body.hub-staff-ui :is(.hub-nav-chip[aria-current="page"],.hub-nav-chip.is-active) {
+  background:#163D3D;border-color:#267D73;color:#A8F7E8;
+}
+body.hub-staff-ui :is(.hub-badge,.staff-v2-badge,.hub-status-chip) {border-color:var(--cc-line)}
+body.hub-staff-ui :is(.hub-badge-warning,.staff-v2-badge--warning) {background:#463727;color:#F8D3A0}
+body.hub-staff-ui :is(.hub-badge-success,.staff-v2-badge--success) {background:#1B3932;color:#9CE8C4}
+body.hub-staff-ui :is(.hub-badge-danger,.staff-v2-badge--danger) {background:#432C30;color:#FFAAA6}
+
+/* Stable high-density application shell: never displace POS / kitchen links. */
+body.hub-staff-ui .staff-app-header {
+  border-bottom:1px solid var(--cc-line);background:rgba(22,25,29,.96);
+  backdrop-filter:blur(14px);
+}
+body.hub-staff-ui .staff-app-header__inner {min-height:62px}
+body.hub-staff-ui .staff-app-header__brand {color:var(--cc-ink)}
+body.hub-staff-ui .staff-app-header__mark {
+  background:var(--cc-raised);color:var(--cc-teal);border:1px solid var(--cc-line);
+}
+body.hub-staff-ui .staff-app-header__brand-copy strong {color:var(--cc-ink);letter-spacing:.025em}
+body.hub-staff-ui .staff-app-header__brand-copy span {color:var(--cc-secondary)}
+body.hub-staff-ui .staff-app-header .staff-shell-nav,
+body.hub-staff-ui .staff-app-header .staff-shell-nav__inner {background:transparent;box-shadow:none;border:0}
+body.hub-staff-ui .staff-shell-nav a {color:#CCD3D7;background:transparent}
+body.hub-staff-ui .staff-shell-nav a:hover {color:var(--cc-ink);background:var(--cc-raised)}
+body.hub-staff-ui .staff-shell-nav :is(a[aria-current="page"],.staff-shell-nav__primary) {
+  color:var(--cc-teal) !important;background:#233B3B !important;
+}
+body.hub-staff-ui .staff-shell-nav :is(a[aria-current="page"],.staff-shell-nav__primary)::after {background:var(--cc-teal)}
+body.hub-staff-ui .staff-app-header__tools {gap:8px}
+body.hub-staff-ui .staff-app-header__tool {color:var(--cc-ink)}
+body.hub-staff-ui .staff-notifications,
+body.hub-staff-ui .staff-app-header__user.staff-account-menu,
+body.hub-staff-ui .staff-account-menu__panel,
+body.hub-staff-ui .staff-notification-dropdown {
+  background:var(--cc-surface);border-color:var(--cc-line);color:var(--cc-ink);
+}
+body.hub-staff-ui .staff-account-menu__heading,
+body.hub-staff-ui .staff-account-menu__trigger:hover,
+body.hub-staff-ui .staff-account-menu__links a:hover {background:var(--cc-raised)}
+body.hub-staff-ui .staff-account-menu__label,
+body.hub-staff-ui .staff-account-menu__heading small {color:var(--cc-secondary)}
+body.hub-staff-ui .staff-account-menu__logout button {color:var(--cc-danger)}
+body.hub-staff-ui .staff-app-header__avatar {background:#25443F;color:#B7F7E9}
+body.hub-staff-ui .staff-notification-bell,
+body.hub-staff-ui #staff-sound-toggle,
+body.hub-staff-ui #staff-browser-toggle {color:var(--cc-ink);background:var(--cc-surface);border-color:var(--cc-line)}
+body.hub-staff-ui #staff-notification-badge {background:var(--cc-teal);color:#10201F}
+
+/* Keyboard/assistive-tech accessible, client-only presentation preference. */
+body.hub-staff-ui .staff-charcoal-focus {
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  min-height:40px;min-width:44px;padding:6px 11px;
+  border:1px solid var(--cc-line);border-radius:10px;
+  background:var(--cc-surface);color:var(--cc-secondary);
+  font-size:.76rem;font-weight:700;line-height:1.2;cursor:pointer;
+  transition:background .15s,color .15s,border-color .15s;
+}
+body.hub-staff-ui .staff-charcoal-focus:hover {color:var(--cc-ink);border-color:#5C6872}
+body.hub-staff-ui .staff-charcoal-focus[aria-pressed="true"] {
+  color:var(--cc-teal);background:#223C3B;border-color:#397F75;
+}
+body.hub-staff-ui .staff-charcoal-focus__symbol {font-size:1rem;line-height:1}
+body.hub-staff-ui .staff-mobile-nav {
+  background:rgba(24,28,33,.98);border-color:var(--cc-line);
+  box-shadow:0 -12px 36px rgba(0,0,0,.22);
+}
+body.hub-staff-ui .staff-mobile-nav a {color:var(--cc-secondary)}
+body.hub-staff-ui .staff-mobile-nav a[aria-current="page"] {
+  color:var(--cc-teal);background:#233B3B;
+}
+body.hub-staff-ui .staff-mobile-nav__create {color:var(--cc-teal) !important}
+body.hub-staff-ui .hub-skip-to-content:focus-visible {background:var(--cc-teal);color:#10201F}
+
+/* Operations-only: sculptural brand entry and perfectly conventional tasks. */
+body.staff-workspace-page.hub-staff-ui .ops-designed {
+  --op-ink:var(--cc-ink);--op-line:var(--cc-line);
+  --ops-ink:var(--cc-ink);--ops-muted:var(--cc-secondary);
+  --ops-border:var(--cc-line);--ops-bg:var(--cc-canvas);
+  --ops-teal:var(--cc-teal);--ops-orange:var(--cc-amber);
+  color:var(--cc-ink);gap:12px;
+}
+body.staff-workspace-page.hub-staff-ui .ops-dashboard-topbar {
+  position:relative;isolation:isolate;min-height:122px;
+  padding:20px clamp(18px,3vw,34px);overflow:visible;
+  border:1px solid var(--cc-line);border-radius:20px;
+  background:linear-gradient(115deg,#262B31 0%,#1B2026 72%);
+}
+body.staff-workspace-page.hub-staff-ui .ops-dashboard-topbar::before {
+  content:"";position:absolute;z-index:-1;pointer-events:none;
+  width:170px;height:170px;inset-inline-end:4%;inset-block-start:-48px;
+  background:
+    linear-gradient(136deg,transparent 45%,#D88A3D 45% 57%,transparent 57%),
+    radial-gradient(circle at 45% 55%,transparent 0 36%,#56616A 36% 37%,transparent 38%),
+    linear-gradient(45deg,transparent 38%,#52616A 38% 39%,transparent 39%);
+  transform:rotate(-16deg);opacity:.85;
+}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-v2__hero {position:relative;z-index:1;padding:0;margin:0}
+body.staff-workspace-page.hub-staff-ui .ops-designed .staff-v2-eyebrow {
+  color:var(--cc-amber);font-size:.72rem;letter-spacing:.045em;
+}
+body.staff-workspace-page.hub-staff-ui .ops-designed .staff-v2-title {
+  color:var(--cc-ink);font-size:clamp(1.65rem,3.1vw,2.75rem);font-weight:750;
+}
+body.staff-workspace-page.hub-staff-ui .ops-designed .staff-v2-subtitle {color:var(--cc-secondary);font-size:.82rem}
+body.staff-workspace-page.hub-staff-ui .ops-brand-more>summary {
+  color:var(--cc-secondary);background:var(--cc-raised);border:1px solid var(--cc-line);
+}
+body.staff-workspace-page.hub-staff-ui .ops-brand-more__panel {
+  color:var(--cc-ink);background:var(--cc-surface);border-color:var(--cc-line);
+}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-brand-shortcut {
+  --ops-tile-soft:var(--cc-surface);
+  background:var(--cc-surface);border:1px solid var(--cc-line);
+  color:var(--cc-ink);box-shadow:none;
+  min-height:74px;transition:transform .16s ease,border-color .16s ease,background .16s ease;
+}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-brand-shortcut:is(:hover,:focus-visible) {
+  border-color:#54736E;background:var(--cc-raised);transform:translateY(-1px);
+}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-brand-shortcut--order {
+  background:#23504B;border-color:#377D73;color:#F3F1EC;
+}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-brand-shortcut__icon {
+  color:var(--cc-teal);background:#29403E;
+}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-brand-shortcut--cashier .ops-brand-shortcut__icon,
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-brand-shortcut--day .ops-brand-shortcut__icon {color:var(--cc-amber);background:#413227}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-brand-shortcut small {color:var(--cc-secondary);opacity:1}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-brand-internet {
+  background:var(--cc-surface);border:1px solid var(--cc-line);box-shadow:none;
+}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-brand-internet__title h3 {color:var(--cc-ink)}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-brand-internet__title p,
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-brand-internet__disabled {color:var(--cc-secondary)}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-brand-internet__icon,
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-brand-pin__line strong {
+  background:#26384B;color:#B3D7FF;border-color:#42586B;
+}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-pin-compact summary {color:var(--cc-blue)}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-brand-pin__copy,
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-brand-internet__manage {background:#345D7A;color:#F3F8FC}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-brand-internet__pending {
+  background:#49362B;border-color:#6C513D;color:#FFD8A7;
+}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-v2__stat {
+  border:1px solid var(--cc-line);background:var(--cc-surface);
+  color:var(--cc-ink);box-shadow:none;min-height:82px;
+}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-v2__stat:hover {background:var(--cc-raised);border-color:#58646E}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-v2__stat-icon {background:var(--cc-raised);color:var(--cc-amber)}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-stat--orders .ops-v2__stat-icon {color:#EAB38A}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-stat--ready .ops-v2__stat-icon {color:var(--cc-green)}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-stat--old .ops-v2__stat-icon {color:#D4A4E7}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-v2__stat strong {color:var(--cc-ink)}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-v2__stat span:last-child {color:var(--cc-secondary)}
+body.staff-workspace-page.hub-staff-ui .ops-designed :is(.ops-dashboard-filter,.ops-v2__toolbar,.ops-v2__filter-menu,.ops-v2__tabs) {
+  background:var(--cc-surface);border-color:var(--cc-line);color:var(--cc-ink);box-shadow:none;
+}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-dashboard-filter>summary {color:var(--cc-secondary)}
+body.staff-workspace-page.hub-staff-ui .ops-designed .staff-v2-search input {
+  background:var(--cc-raised) !important;border-color:var(--cc-line) !important;color:var(--cc-ink);
+}
+body.staff-workspace-page.hub-staff-ui .ops-designed .staff-v2-search kbd {background:var(--cc-surface);color:var(--cc-secondary)}
+body.staff-workspace-page.hub-staff-ui .ops-designed :is(.ops-v2__tabs button,.staff-v2-segmented button) {color:var(--cc-secondary)}
+body.staff-workspace-page.hub-staff-ui .ops-designed :is(.ops-v2__tabs button.is-active,.staff-v2-segmented button.is-active,.ops-v2__filter-menu button.is-active) {
+  color:#A8F7E8;background:#23423F;
+}
+body.staff-workspace-page.hub-staff-ui .ops-designed :is(.ops-v2__orders-panel,.ops-v2__accounts,.ops-inbox,.ops-inbox__group,.ops-rollover-alert,.ops-dashboard-carryover,.ops-dashboard-collections,.staff-v2-panel) {
+  background:var(--cc-surface);border-color:var(--cc-line);color:var(--cc-ink);box-shadow:none;
+}
+body.staff-workspace-page.hub-staff-ui .ops-designed :is(.ops-dashboard-orders__head,.ops-dashboard-order__head,.ops-inbox__head,.ops-inbox__group-head) {color:var(--cc-ink)}
+body.staff-workspace-page.hub-staff-ui .ops-designed :is(.ops-dashboard-orders__eyebrow,.ops-dashboard-orders__head p,.ops-dashboard-order__meta,.ops-dashboard-order__age,.ops-inbox__item-info span,.ops-inbox__item-info small) {color:var(--cc-secondary)}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-dashboard-orders__number {color:var(--cc-teal)}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-dashboard-orders__board {color:var(--cc-teal);border-color:#3A716C}
+body.staff-workspace-page.hub-staff-ui .ops-designed :is(.ops-dashboard-order,.ops-v2__account,.ops-inbox__item,.ops-dashboard-empty,.ops-v2__order,.ops-inbox__group) {
+  background:var(--cc-raised);border-color:var(--cc-line);color:var(--cc-ink);box-shadow:none;
+}
+body.staff-workspace-page.hub-staff-ui .ops-designed :is(.ops-dashboard-order__identity,.ops-dashboard-order__price,.ops-dashboard-order__place,.ops-v2__account-title strong,.ops-v2__money-cell strong,.ops-inbox__item-info strong) {color:var(--cc-ink)}
+body.staff-workspace-page.hub-staff-ui .ops-designed :is(.ops-dashboard-status,.ops-v2__status) {border:1px solid var(--cc-line);background:#334049;color:var(--cc-ink)}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-dashboard-status--ready {background:#1E4337;color:#9CE8C4;border-color:#396E54}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-dashboard-status--prep {background:#3F342C;color:#F7D2A1;border-color:#72543C}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-dashboard-status--new {background:#2B3C50;color:#BFD8FF;border-color:#4A627F}
+body.staff-workspace-page.hub-staff-ui .ops-designed :is(.ops-dashboard-order__actions,.ops-v2__account-actions) {background:#22292F;border-color:var(--cc-line)}
+body.staff-workspace-page.hub-staff-ui .ops-designed :is(.ops-attention-link,.ops-inbox__button,.ops-dashboard-carryover summary,.ops-dashboard-collections summary) {
+  color:var(--cc-ink);background:var(--cc-surface);border-color:var(--cc-line);
+}
+body.staff-workspace-page.hub-staff-ui .ops-designed :is(.ops-attention-link--main,.ops-inbox__button--primary) {
+  color:#10201F;background:var(--cc-teal);border-color:var(--cc-teal);
+}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-attention-link--pay {
+  color:#F7D3A8;background:#433428;border-color:#70513B;
+}
+body.staff-workspace-page.hub-staff-ui .ops-designed :is(.ops-v2__account-foot,.ops-v2__money-cell span,.ops-v2__account-title span,.staff-v2-panel-head p,.ops-dashboard-carryover p) {color:var(--cc-secondary)}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-inbox__total {color:var(--cc-amber);background:#463325;border-color:#78563A}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-rollover-alert {background:#433628;border-color:#8A653D;color:#FFE0AE}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-rollover-alert * {color:inherit}
+body.staff-workspace-page.hub-staff-ui .ops-designed .hub-ux5-directory__links a {background:var(--cc-raised);border-color:var(--cc-line);color:var(--cc-ink)}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-quick-actions>summary {background:var(--cc-teal);color:#10201F}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-quick-actions__links {background:var(--cc-raised);border-color:var(--cc-line)}
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-quick-actions__links a,
+body.staff-workspace-page.hub-staff-ui .ops-designed .ops-quick-actions__links button {color:var(--cc-ink);background:var(--cc-surface);border-color:var(--cc-line)}
+
+/* Dialogs and drawer are global staff tools, even on the Operations page. */
+body.hub-staff-ui :is(.staff-v2-dialog,.staff-context-drawer__surface,.staff-account-menu__panel) {
+  background:var(--cc-surface);color:var(--cc-ink);
+}
+body.hub-staff-ui :is(.staff-v2-dialog__head,.staff-context-drawer__header,.staff-context-drawer__close,.staff-v2-dialog__body input,.staff-v2-dialog__body select) {
+  background:var(--cc-raised);color:var(--cc-ink);border-color:var(--cc-line);
+}
+body.hub-staff-ui :is(.staff-visit-panel__totals>div,.staff-order-panel__totals>div,.staff-visit-panel__section,.staff-order-panel__section) {
+  background:var(--cc-raised);border-color:var(--cc-line);
+}
+body.hub-staff-ui :is(.staff-context-drawer__body,.staff-context-drawer__loading) {color:var(--cc-ink)}
+body.hub-staff-ui :is(.staff-context-drawer,.staff-v2-dialog)::backdrop {background:rgba(5,8,12,.74)}
+body.hub-staff-ui .staff-context-drawer__close {min-width:40px;min-height:40px}
+
+/* Focus mode removes art and nonessential movement; preserves every control and status. */
+body.hub-staff-ui.staff-focus-mode .ops-dashboard-topbar::before {display:none}
+body.hub-staff-ui.staff-focus-mode .ops-dashboard-topbar {background:var(--cc-surface)}
+body.hub-staff-ui.staff-focus-mode :is(.ops-brand-shortcut,.ops-v2__account,.ops-v2__stat,.staff-v2-button,.hub-button) {
+  transition:none !important;transform:none !important;animation:none !important;
+}
+body.hub-staff-ui.staff-focus-mode :is(.ops-brand-shortcut,.ops-v2__account,.ops-v2__stat):hover {transform:none}
+@media(max-width:900px) {
+  body.hub-staff-ui .staff-app-header__inner {min-height:58px}
+  body.hub-staff-ui .staff-charcoal-focus {padding:5px;min-width:38px;min-height:38px}
+  body.hub-staff-ui .staff-charcoal-focus__label {display:none}
+  body.hub-staff-ui .staff-app-header__tools {gap:4px}
+}
+@media(max-width:700px) {
+  body.staff-workspace-page.hub-staff-ui .ops-dashboard-topbar {min-height:88px;padding:14px 16px}
+  body.staff-workspace-page.hub-staff-ui .ops-dashboard-topbar::before {width:105px;height:105px;inset-block-start:-22px}
+  body.staff-workspace-page.hub-staff-ui .ops-designed .staff-v2-title {font-size:1.5rem}
+  body.hub-staff-ui .staff-mobile-nav {border-top-color:var(--cc-line)}
+}
+@media(prefers-reduced-motion:reduce) {
+  body.hub-staff-ui *,body.hub-staff-ui *::before,body.hub-staff-ui *::after {
+    scroll-behavior:auto !important;animation-duration:.01ms !important;
+    animation-iteration-count:1 !important;transition-duration:.01ms !important;
+  }
+}
+@media print {
+  body.hub-staff-ui {color-scheme:light;background:#fff !important;color:#111 !important}
+  body.hub-staff-ui :is(.staff-app-header,.staff-mobile-nav,.staff-charcoal-focus) {display:none !important}
+  body.hub-staff-ui :is(.hub-card,.hub-panel,.staff-v2-panel) {
+    background:#fff !important;color:#111 !important;border-color:#aaa !important;
+  }
+  body.staff-workspace-page.hub-staff-ui .ops-dashboard-topbar::before {display:none}
+}
