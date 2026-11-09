@@ -8,7 +8,7 @@ from django.db.models import Q, Sum
 from django.utils import timezone
 
 from core.models import ActivityLog, HubVisit, Member, Room, TableArea
-from events.models import Event
+from events.models import Event, EventPerformance
 from .models import Reservation
 
 ACTIVE_STATUSES = (Reservation.Status.PENDING, Reservation.Status.CONFIRMED)
@@ -54,12 +54,15 @@ def _check_regular_conflict(reservation):
         raise ValidationError({'__all__': 'يتعارض هذا الحجز مع حجز نشط في الوقت والمكان نفسيهما.'})
 
 
-def event_reserved_party_size(event_id, *, exclude_reservation_id=None):
+def event_reserved_party_size(event_id, *, exclude_reservation_id=None, performance_id=None):
     """Current reservation total shared by capacity validation and staff hints."""
-    return Reservation.objects.filter(
+    rows = Reservation.objects.filter(
         event_id=event_id, reservation_type=Reservation.ReservationType.EVENT,
         status__in=ACTIVE_STATUSES,
-    ).exclude(pk=exclude_reservation_id).aggregate(total=Sum('party_size'))['total'] or 0
+    )
+    if performance_id is not None:
+        rows = rows.filter(performance_id=performance_id)
+    return rows.exclude(pk=exclude_reservation_id).aggregate(total=Sum('party_size'))['total'] or 0
 
 
 def _check_event_capacity(reservation):
@@ -69,12 +72,16 @@ def _check_event_capacity(reservation):
     # Ticket allocations are optional for legacy bookings, but whenever they
     # exist they must satisfy current tier limits during confirmation/restore.
     from .ticketing import validate_saved_ticket_allocations
+    performance = EventPerformance.objects.select_for_update().get(pk=reservation.performance_id, event=event)
+    if performance.status != EventPerformance.Status.SCHEDULED:
+        raise ValidationError({'performance': 'هذا العرض غير متاح للحجز.'})
     validate_saved_ticket_allocations(reservation, event=event)
-    if event.capacity is None:
+    capacity = performance.capacity if performance.capacity is not None else event.capacity
+    if capacity is None:
         return
-    used = event_reserved_party_size(event.pk, exclude_reservation_id=reservation.pk)
-    if used + reservation.party_size > event.capacity:
-        raise ValidationError({'party_size': 'عدد الحضور يتجاوز سعة الفعالية.'})
+    used = event_reserved_party_size(event.pk, exclude_reservation_id=reservation.pk, performance_id=performance.pk)
+    if used + reservation.party_size > capacity:
+        raise ValidationError({'party_size': 'عدد الحضور يتجاوز سعة هذا العرض.'})
 
 
 def _validate_for_status(reservation):

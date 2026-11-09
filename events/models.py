@@ -1,6 +1,7 @@
 import uuid
 from django.db import models
 from django.core.exceptions import ValidationError
+from django.db import transaction
 
 
 class Event(models.Model):
@@ -34,8 +35,50 @@ class Event(models.Model):
         if self.accepts_attendance_requests and not self.capacity:
             raise ValidationError({'capacity': 'حدّد سعة موجبة قبل فتح طلبات الحضور.'})
 
+    def save(self, *args, **kwargs):
+        creating = self._state.adding
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            if creating:
+                EventPerformance.objects.create(
+                    event=self, starts_at=self.starts_at, ends_at=self.ends_at,
+                    room=self.room, capacity=self.capacity,
+                )
+
     def __str__(self):
         return self.title_ar or self.title_en or str(self.uuid)[:8]
+
+
+class EventPerformance(models.Model):
+    """One separately bookable occurrence of a shared event; no separate event page."""
+    class Status(models.TextChoices):
+        SCHEDULED = 'scheduled', 'مجدول'
+        CANCELLED = 'cancelled', 'ملغى'
+        COMPLETED = 'completed', 'منتهٍ'
+
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='performances')
+    starts_at = models.DateTimeField()
+    ends_at = models.DateTimeField(null=True, blank=True)
+    room = models.ForeignKey('core.Room', on_delete=models.SET_NULL, null=True, blank=True)
+    capacity = models.PositiveIntegerField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.SCHEDULED)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('starts_at', 'pk')
+        constraints = [
+            models.UniqueConstraint(fields=('event', 'starts_at'), name='uniq_event_performance_start'),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.ends_at and self.ends_at <= self.starts_at:
+            raise ValidationError({'ends_at': 'وقت نهاية العرض يجب أن يكون بعد بدايته.'})
+        if self.capacity is not None and self.capacity <= 0:
+            raise ValidationError({'capacity': 'السعة يجب أن تكون موجبة.'})
+
+    def __str__(self):
+        return f'{self.event} — {self.starts_at:%Y-%m-%d %H:%M}'
 
 
 class EventTicketType(models.Model):

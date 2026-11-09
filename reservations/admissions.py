@@ -36,9 +36,10 @@ def set_event_admission_total(reservation_id, arrived_count, *, actor):
         raise ValidationError({'reservation': 'الحجز غير مرتبط بفعالية.'})
     if booking.status != Reservation.Status.CONFIRMED or booking.visit_id:
         raise ValidationError({'status': 'يلزم حجز مؤكد دون جلسة سابقة لتسجيل دخول التذاكر.'})
-    if booking.event.status in {Event.Status.CANCELLED, Event.Status.COMPLETED}:
+    if booking.event.status in {Event.Status.CANCELLED, Event.Status.COMPLETED} or (booking.performance_id and booking.performance.status != 'scheduled'):
         raise ValidationError({'event': 'لا يمكن تسجيل حضور فعالية ملغاة أو منتهية.'})
-    if timezone.localtime(booking.event.starts_at, DAMASCUS).date() != timezone.localtime(timezone.now(), DAMASCUS).date():
+    show_start = booking.performance.starts_at if booking.performance_id else booking.event.starts_at
+    if timezone.localtime(show_start, DAMASCUS).date() != timezone.localtime(timezone.now(), DAMASCUS).date():
         raise ValidationError({'event': 'تسجيل الدخول متاح فقط في تاريخ الفعالية بتوقيت دمشق.'})
     if quantity > booking.party_size:
         raise ValidationError({'arrived_count': 'عدد الواصلين يتجاوز عدد الضيوف في الحجز.'})

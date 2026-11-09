@@ -144,6 +144,8 @@ def import_event_bookings(event_id, rows, fingerprint, *, actor):
     if not hmac.compare_digest(str(fingerprint), actual):
         raise ValidationError('بيانات الاستيراد تغيرت؛ أعد المعاينة.')
     event = Event.objects.select_for_update().get(pk=event_id)
+    if event.performances.count() != 1:
+        raise ValidationError({'event': 'استيراد الحجوزات الجماعي لفعالية متعددة العروض يتطلب تحديد العرض أولاً؛ استخدم الحجز الفردي حالياً.'})
     if event.status in {Event.Status.CANCELLED, Event.Status.COMPLETED} or event.starts_at <= timezone.now():
         raise ValidationError('الفعالية بدأت أو انتهت ولا تسمح باستيراد حجوزات جديدة.')
     previous = ReservationImportBatch.objects.filter(

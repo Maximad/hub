@@ -24,6 +24,7 @@ class Reservation(models.Model):
     table_area = models.ForeignKey('core.TableArea', on_delete=models.SET_NULL, null=True, blank=True)
     room = models.ForeignKey('core.Room', on_delete=models.SET_NULL, null=True, blank=True, related_name='reservations')
     event = models.ForeignKey('events.Event', on_delete=models.SET_NULL, null=True, blank=True)
+    performance = models.ForeignKey('events.EventPerformance', on_delete=models.PROTECT, null=True, blank=True, related_name='reservations')
     visit = models.OneToOneField(
         'core.HubVisit',
         on_delete=models.SET_NULL,
@@ -148,20 +149,28 @@ class Reservation(models.Model):
 
     @property
     def effective_date(self):
+        if self.reservation_type == self.ReservationType.EVENT and self.performance_id:
+            return self.performance.starts_at.date()
         return self.event.starts_at.date() if self.reservation_type == self.ReservationType.EVENT and self.event_id else self.reservation_date
 
     @property
     def effective_starts_at(self):
+        if self.reservation_type == self.ReservationType.EVENT and self.performance_id:
+            return self.performance.starts_at.time()
         return self.event.starts_at.time() if self.reservation_type == self.ReservationType.EVENT and self.event_id else self.start_time
 
     @property
     def effective_ends_at(self):
+        if self.reservation_type == self.ReservationType.EVENT and self.performance_id:
+            return self.performance.ends_at.time() if self.performance.ends_at else None
         if self.reservation_type == self.ReservationType.EVENT and self.event_id:
             return self.event.ends_at.time() if self.event.ends_at else None
         return self.end_time
 
     @property
     def effective_room(self):
+        if self.reservation_type == self.ReservationType.EVENT and self.performance_id:
+            return self.performance.room or self.event.room
         if self.reservation_type == self.ReservationType.EVENT and self.event_id:
             return self.event.room
         return self.room or (self.table_area.room if self.table_area_id else None)
@@ -171,10 +180,23 @@ class Reservation(models.Model):
         if self.reservation_type == self.ReservationType.EVENT:
             if not self.event_id:
                 errors['event'] = 'يرجى اختيار الفعالية.'
+            else:
+                from events.models import EventPerformance
+                if not self.performance_id:
+                    candidates = list(EventPerformance.objects.filter(event_id=self.event_id).values_list('pk', flat=True)[:2])
+                    if len(candidates) == 1:
+                        self.performance_id = candidates[0]
+                    else:
+                        errors['performance'] = 'اختر موعد العرض المحدد.'
+                elif not EventPerformance.objects.filter(pk=self.performance_id, event_id=self.event_id).exists():
+                    errors['performance'] = 'موعد العرض لا يتبع هذه الفعالية.'
+                elif (self.status in {self.Status.PENDING, self.Status.CONFIRMED}
+                      and not EventPerformance.objects.filter(pk=self.performance_id, status='scheduled').exists()):
+                    errors['performance'] = 'هذا العرض لا يقبل حجوزات جديدة.'
             self.reservation_date = self.start_time = self.end_time = None
             self.room = self.table_area = None
         else:
-            if self.event_id:
+            if self.event_id or self.performance_id:
                 errors['event'] = 'لا يمكن ربط حجز عادي بفعالية.'
             if not self.reservation_date:
                 errors['reservation_date'] = 'يرجى تحديد تاريخ الحجز.'
@@ -200,6 +222,7 @@ class EventAttendanceRequest(models.Model):
     owner_hash = models.CharField(max_length=64, editable=False)
     ip_hash = models.CharField(max_length=64, editable=False)
     event = models.ForeignKey('events.Event', null=True, on_delete=models.SET_NULL, related_name='attendance_requests')
+    performance = models.ForeignKey('events.EventPerformance', null=True, on_delete=models.SET_NULL, related_name='attendance_requests')
     event_uuid = models.UUIDField(editable=False)
     event_title = models.CharField(max_length=200)
     name = models.CharField(max_length=120)
@@ -219,8 +242,8 @@ class EventAttendanceRequest(models.Model):
                    models.Index(fields=['status', 'created_at'])]
         constraints = [
             models.CheckConstraint(condition=models.Q(party_size__gt=0), name='attendance_request_positive_party'),
-            models.UniqueConstraint(fields=['event', 'owner_hash'], condition=models.Q(status__in=['pending', 'approved']),
-                                    name='one_open_attendance_request_per_browser'),
+            models.UniqueConstraint(fields=['performance', 'owner_hash'], condition=models.Q(status__in=['pending', 'approved']),
+                                    name='one_open_request_per_performance_browser'),
         ]
 
 

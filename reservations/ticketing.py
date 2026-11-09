@@ -9,7 +9,7 @@ from django.db.models import Sum
 
 from accounts.permissions import user_has_capability
 from core.models import ActivityLog
-from events.models import Event, EventTicketType
+from events.models import Event, EventTicketType, EventPerformance
 from .models import Reservation, ReservationTicketAllocation, ReservationTicketOrder
 
 _ACTIVE = (Reservation.Status.PENDING, Reservation.Status.CONFIRMED)
@@ -45,10 +45,14 @@ def _check_tier_usage(event, reservation, quantities):
     if len(available) != len(quantities):
         raise ValidationError({'tickets': 'تحتوي البيانات على فئة تذكرة لا تتبع الفعالية.'})
     from .services import event_reserved_party_size
-    if reservation.status in _ACTIVE and event.capacity is not None:
-        used = event_reserved_party_size(event.pk, exclude_reservation_id=reservation.pk)
-        if used + reservation.party_size > event.capacity:
-            raise ValidationError({'party_size': 'عدد الضيوف يتجاوز سعة الفعالية.'})
+    performance = EventPerformance.objects.select_for_update().get(pk=reservation.performance_id, event=event)
+    if reservation.status in _ACTIVE and performance.status != EventPerformance.Status.SCHEDULED:
+        raise ValidationError({'performance': 'هذا العرض غير متاح.'})
+    capacity = performance.capacity if performance.capacity is not None else event.capacity
+    if reservation.status in _ACTIVE and capacity is not None:
+        used = event_reserved_party_size(event.pk, exclude_reservation_id=reservation.pk, performance_id=performance.pk)
+        if used + reservation.party_size > capacity:
+            raise ValidationError({'party_size': 'عدد الضيوف يتجاوز سعة العرض.'})
     if reservation.status in _ACTIVE:
         for ticket_id, quantity in quantities.items():
             ticket = available[ticket_id]
@@ -58,6 +62,7 @@ def _check_tier_usage(event, reservation, quantities):
                 ReservationTicketAllocation.objects.filter(
                     ticket_type_id=ticket_id,
                     reservation__event_id=event.pk,
+                    reservation__performance_id=reservation.performance_id,
                     reservation__status__in=_ACTIVE,
                     reservation__reservation_type=Reservation.ReservationType.EVENT,
                 ).exclude(reservation_id=reservation.pk)

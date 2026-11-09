@@ -80,9 +80,10 @@ def edit_event_reservation(reservation_id, *, actor, name, phone, party_size,
         raise ValidationError({'tickets': 'غيّر توزيع فئات التذاكر مع عدد الأشخاص.'})
     if (old_allocations or new_allocations) and sum(new_allocations.values()) != size:
         raise ValidationError({'tickets': 'مجموع فئات التذاكر يجب أن يساوي عدد الضيوف.'})
-    if event.capacity is not None and event_reserved_party_size(
-        event.pk, exclude_reservation_id=booking.pk,
-    ) + size > event.capacity:
+    capacity = booking.performance.capacity if booking.performance_id and booking.performance.capacity is not None else event.capacity
+    if capacity is not None and event_reserved_party_size(
+        event.pk, exclude_reservation_id=booking.pk, performance_id=booking.performance_id,
+    ) + size > capacity:
         raise ValidationError({'party_size': 'عدد الضيوف يتجاوز السعة المتبقية.'})
 
     old_size = booking.party_size
