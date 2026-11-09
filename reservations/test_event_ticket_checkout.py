@@ -164,6 +164,19 @@ class EventTicketCheckoutTests(TestCase):
         self.assertEqual(ticket_payment_summary(self.booking)['posted'], 0)
         self.assertEqual(sale.order.payments.count(), 0)
 
+    def test_checkout_exposes_existing_finance_refund_for_posted_ticket_payment(self):
+        self.finance_accounts()
+        issue_ticket_order(self.booking.pk, actor=self.admin)
+        receipt = collect_ticket_payment(
+            self.booking.pk, actor=self.admin, amount_syp=1000,
+            method=Payment.Method.CASH, request_key='refund-link-attempt',
+        )
+        self.client.force_login(self.admin)
+        page = self.client.get(reverse('staff_reservation_ticket_checkout', args=[self.booking.pk]))
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, reverse('staff_customer_payment_reverse', args=[receipt.pk]))
+        self.assertContains(page, 'عكس هذه الدفعة بعد تنفيذ الاسترداد')
+
     def test_staff_checkout_screen_has_no_payment_before_invoice(self):
         self.client.force_login(self.admin)
         page = self.client.get(reverse('staff_reservation_ticket_checkout', args=[self.booking.pk]))
