@@ -77,6 +77,15 @@ class VenueLayoutReleaseATests(TestCase):
         self.assertContains(response, '50 × 50')
         self.assertEqual(self.client.get(reverse('staff_layouts')).status_code, 200)
 
+    def test_five_unapproved_event_type_templates_seeded(self):
+        expected = {'comedy', 'theatre', 'cabaret', 'workshop', 'standing'}
+        models = VenueLayoutTemplate.objects.filter(kind__in=expected)
+        self.assertEqual(models.count(), 5)
+        for item in models:
+            self.assertFalse(item.layout['measured'])
+            self.assertEqual(item.layout['status'], 'SCHEMATIC_NOT_APPROVED')
+            self.assertEqual(validate_draft_layout(item.layout)['architecture']['width'], 7)
+
     def test_validate_legacy_prototype_document_normalizes_seats(self):
         doc = validate_draft_layout(example_layout())
         self.assertEqual(doc['seats_proposed']['ground'], 3)
@@ -142,6 +151,7 @@ class VenueLayoutReleaseATests(TestCase):
 
     def test_invalid_payloads_never_create_template_or_approved_capacity(self):
         self.client.force_login(self.admin)
+        before = VenueLayoutTemplate.objects.count()
         unsafe = example_layout()
         unsafe['measured'] = True
         self.assertEqual(self.save(data=unsafe).status_code, 400)
@@ -151,7 +161,7 @@ class VenueLayoutReleaseATests(TestCase):
         unsafe = example_layout()
         unsafe['objects'].append(copy.deepcopy(unsafe['objects'][0]))
         self.assertEqual(self.save(data=unsafe).status_code, 400)
-        self.assertFalse(VenueLayoutTemplate.objects.exists())
+        self.assertEqual(VenueLayoutTemplate.objects.count(), before)
 
     def test_read_only_public_events_have_no_seat_selector(self):
         self.client.force_login(self.admin)
