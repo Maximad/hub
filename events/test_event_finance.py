@@ -2,6 +2,7 @@
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -94,7 +95,9 @@ class EventFinanceAttributionTests(TestCase):
             scope='cashbox', is_active=True,
         )
         batch = PostingBatch.objects.create(
-            operation_type='expense.pay', business_date=timezone.localdate(),
+            operation_type='expense.pay_immediately', business_date=timezone.localdate(),
+            source_content_type=ContentType.objects.get_for_model(Expense),
+            source_object_id=str(self.expense.pk),
             status=PostingBatch.Status.POSTED,
             posted_at=timezone.now(), idempotency_key='event-cost-test-1',
         )
