@@ -92,6 +92,7 @@ def event_known_finance_report(event_id):
             and expense.posting_state == Expense.PostingState.POSTED
             and expense.payment_batch_id
             and expense.payment_batch.status == PostingBatch.Status.POSTED
+            and expense.payment_batch.is_balanced()
         ):
             verified_paid_costs += link.amount_syp
         else:
