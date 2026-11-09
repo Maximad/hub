@@ -11,6 +11,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from core.models import (
@@ -126,6 +127,9 @@ def grant_internal_access(*, staff_user, grant_kind, bandwidth_profile, access_m
         max_registered_devices=max_registered_devices,
     )
 
+    now = at or timezone.now()
+    # A grant past valid_until can still be stored as active until the worker
+    # reconciles it. Renewal must not depend on manual cancellation.
     overlapping = InternalStaffInternetGrant.objects.select_for_update().filter(
         user=staff_user,
         entitlement__origin_type__in=INTERNAL_ORIGINS,
@@ -134,11 +138,13 @@ def grant_internal_access(*, staff_user, grant_kind, bandwidth_profile, access_m
             InternetEntitlement.Status.ACTIVE,
             InternetEntitlement.Status.SUSPENDED,
         ),
+    ).filter(
+        Q(entitlement__valid_until__isnull=True)
+        | Q(entitlement__valid_until__gt=now)
     ).exists()
     if overlapping:
         raise ValidationError('يوجد بالفعل وصول داخلي قائم لهذا الموظف. ألغِ المنحة الحالية أولاً.')
 
-    now = at or timezone.now()
     valid_until = validity_end(now, int(validity_value), validity_unit)
     network_backend = 'mikrotik' if settings.MIKROTIK_ENABLED else 'manual'
     entitlement = InternetEntitlement.objects.create(
