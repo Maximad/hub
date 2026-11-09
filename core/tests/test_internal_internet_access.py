@@ -140,6 +140,31 @@ class InternalInternetAccessTests(TestCase):
         with self.assertRaisesMessage(ValidationError, 'يوجد بالفعل وصول داخلي قائم لهذا الموظف'):
             self.grant(grant_kind='owner')
 
+    def test_expired_stored_active_grant_does_not_block_renewal(self):
+        expired = self.grant()
+        expired.valid_until = timezone.now() - timedelta(minutes=1)
+        expired.save(update_fields=['valid_until', 'updated_at'])
+        self.assertEqual(expired.status, InternetEntitlement.Status.ACTIVE)
+        self.assertEqual(expired.effective_status(), InternetEntitlement.Status.EXPIRED)
+
+        replacement = self.grant()
+        self.assertNotEqual(replacement.pk, expired.pk)
+        self.assertEqual(replacement.effective_status(), InternetEntitlement.Status.ACTIVE)
+        self.assertEqual(replacement.internal_staff_grant.user_id, self.staff_user.pk)
+
+        self.client.force_login(self.actor)
+        response = self.client.get(reverse('staff_internet_sale') + '?internal=1')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'الحالة المخزنة:')
+        self.assertContains(response, 'تجهيز الشبكة (لا يثبت اتصال الجهاز)')
+        self.assertContains(response, 'المنح الصالحة الآن')
+        self.assertContains(response, '>1</strong>', html=False)
+
+    def test_current_stored_active_grant_still_blocks_overlap(self):
+        self.grant()
+        with self.assertRaisesMessage(ValidationError, 'يوجد بالفعل وصول داخلي قائم لهذا الموظف'):
+            self.grant()
+
     def test_internet_provider_account_cannot_receive_internal_staff_grant(self):
         with self.assertRaisesMessage(ValidationError, 'حساب مزوّد الإنترنت'):
             self.grant(staff_user=self.provider_user)
