@@ -145,7 +145,10 @@ class PostgreSQLConcurrentPostingTests(TransactionTestCase):
 
     def test_collection_rechecks_period_after_close_wins_account_lock(self):
         order = self.order()
-        daily_close = DailyClose.objects.create(business_date=self.day, account=self.cash)
+        daily_close = DailyClose.objects.create(
+            business_date=self.day, account=self.cash,
+            status=DailyClose.Status.OPEN, is_finalized=False,
+        )
         entered, resume = Event(), Event()
         resolve = order_payments._collection_account
 

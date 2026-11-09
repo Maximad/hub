@@ -5,6 +5,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, RequestFactory, TestCase, override_settings
@@ -59,8 +60,15 @@ class AuditAccessTests(TestCase):
         self.client.post(url, payload)
         self.assertFalse(Transfer.objects.exists())
         payload['approver_password'] = 'manager-secret'
+        # Authentication is necessary but not sufficient for high-risk approval.
+        denied = self.client.post(url, payload)
+        self.assertEqual(denied.status_code, 200)
+        self.assertContains(denied, 'هذا المبلغ يحتاج موافقة مدير يملك صلاحية اعتماد المبالغ عالية المخاطر.')
+        self.assertFalse(Transfer.objects.exists())
+        self.manager.user_permissions.add(Permission.objects.get(
+            content_type__app_label='core', codename='approve_high_risk_amount'))
         response = self.client.post(url, payload)
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 302, getattr(response, 'context', None))
         self.assertEqual(Transfer.objects.get().approver_id, self.manager.pk)
 
     def test_new_client_cannot_reset_table_lock_and_expiry_recovers(self):
