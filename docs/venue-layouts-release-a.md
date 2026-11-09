@@ -11,7 +11,7 @@ Staff-only implementation of the uploaded SVG `hub_seating_designer_v02.html`. T
 - Back in the library, select a template and an existing event without a layout, then **Copy layout to event**. The event gets its **own independent JSON snapshot**.
 - Open the event's staff detail page to edit its specific layout. Changing the master template later will not modify its snapshot.
 - Use the editor's **Visitor preview** only as an illustration. It does **not** hold seats or confirm purchases.
-- A stale browser version returns HTTP 409; reload before saving rather than overwriting someone else's changes. For offline backups, use the editor's existing SVG/JSON download options.
+- Choose a historical revision and **Restore as new version**; all earlier drafts remain available. A stale browser version returns HTTP 409; reload before saving rather than overwriting someone else's changes. For offline backups, use the editor's existing SVG/JSON download options.
 
 ## Safety and data boundaries
 - The baseline shell assumes 7×10 m and a two-level plan with provisional stair/void positions; ground floor is based on the reference drawing's ground staircase, not an engineer-approved survey.
