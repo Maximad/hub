@@ -187,7 +187,9 @@ def pay(purchase, context, amount, source_account, payment_method=''):
         sync_state(source); ActivityLog.objects.create(actor=context.actor, action='purchase_payment_posted', details={'purchase_id':source.pk,'payment_id':payment.pk})
         _audit(context, 'supplier_payment_posted', payment, {'purchase_id':source.pk,'business_date':str(payment.business_date),'amount_syp':str(amount),'debit':payable.code,'credit':settlement.code,'posting_batch_id':str(batch.pk)}, approver=approver)
         return payment
-    return dispatch('purchase.payment', purchase, context, handle)
+    return dispatch('purchase.payment', purchase, context, handle, intent={
+        'amount': format(amount.normalize(), 'f'), 'source_account': source_account.pk,
+        'date': str(context.date_for(purchase)), 'method': payment_method})
 
 
 def reverse_payment(payment, context, reason):
@@ -243,3 +245,4 @@ def cancel(purchase, context, reason):
 
 return_purchase = cancel
 reverse = cancel
+

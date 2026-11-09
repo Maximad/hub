@@ -304,7 +304,17 @@ CURRENCY_RISK_THRESHOLDS = {
     'cash_closing': {'warning': '5000', 'acknowledgment': '10000', 'manager': '50000'},
 }
 
+# Empty mappings retain only an unambiguous SYP/global legacy account. Production
+# should set the stable codes documented in .env.example; never pick the first row.
+COLLECTION_BUSINESS_UNIT = os.getenv('COLLECTION_BUSINESS_UNIT', '')
+COLLECTION_ACCOUNT_CODES = {
+    'cash': os.getenv('COLLECTION_CASH_ACCOUNT', ''),
+    'transfer': os.getenv('COLLECTION_TRANSFER_ACCOUNT', ''),
+    'revenue': os.getenv('COLLECTION_REVENUE_ACCOUNT', ''),
+}
+
 # Public attendance requests are separately opt-in per event; limits are not seat holds.
 PUBLIC_ATTENDANCE_MAX_PARTY_SIZE = 10
 PUBLIC_ATTENDANCE_OWNER_HOURLY_LIMIT = 5
 PUBLIC_ATTENDANCE_IP_HOURLY_LIMIT = 60
+

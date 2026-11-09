@@ -34,15 +34,29 @@ def _existing(receipt):
     return model.objects.get(pk=receipt.result_id)
 
 
-def dispatch(command, source, context, handler, *, allow_closed=False):
+def _validate_replay(receipt, command, source, context, intent):
+    if receipt.command != command or receipt.source_type != source._meta.label:
+        raise IdempotencyConflict('مفتاح المحاولة مستخدم لعملية أخرى.')
+    source_id = str(source.pk or '')
+    expected_id = receipt.source_id or (
+        receipt.result_id if receipt.result_type == receipt.source_type else '')
+    if source_id and expected_id and source_id != expected_id:
+        raise IdempotencyConflict('مفتاح المحاولة يعود إلى سجل آخر.')
+    if receipt.actor_id != getattr(context.actor, 'pk', None):
+        raise IdempotencyConflict('مفتاح المحاولة يعود إلى مستخدم آخر.')
+    original = receipt.request_metadata.get('_posting_intent')
+    if intent is not None and original != intent:
+        raise IdempotencyConflict('تغيرت تفاصيل العملية. استخدم محاولة جديدة بعد مراجعة السند السابق.')
+
+
+def dispatch(command, source, context, handler, *, allow_closed=False, intent=None):
     """Serialize a source and execute one command exactly once."""
     if not context.idempotency_key:
         raise IdempotencyConflict('مفتاح idempotency مطلوب.')
     with transaction.atomic():
         receipt = PostingCommand.objects.select_for_update().filter(key=context.idempotency_key).first()
         if receipt:
-            if receipt.command != command:
-                raise IdempotencyConflict('مفتاح idempotency مستخدم لأمر آخر.')
+            _validate_replay(receipt, command, source, context, intent)
             return _existing(receipt)
         # UUID primary keys exist before the first save; they are not lockable rows yet.
         locked = lock_instance(source) if getattr(source, 'pk', None) and not source._state.adding else source
@@ -51,7 +65,7 @@ def dispatch(command, source, context, handler, *, allow_closed=False):
                         ('financial_account', 'source_account', 'destination_account', 'account')]
             accounts = [account for account in accounts if account is not None]
             if accounts:
-                for account in accounts:
+                for account in sorted(accounts, key=lambda item: item.pk):
                     ensure_period_open(context.date_for(locked), account)
             else:
                 ensure_period_open(context.date_for(locked))
@@ -65,15 +79,15 @@ def dispatch(command, source, context, handler, *, allow_closed=False):
                     key=context.idempotency_key, command=command,
                     source_type=locked._meta.label, source_id=str(locked.pk or ''),
                     actor=context.actor, channel=context.channel,
-                    request_metadata=dict(context.request_metadata),
+                    request_metadata={**dict(context.request_metadata), **({'_posting_intent': intent} if intent is not None else {})},
                 )
         except IntegrityError:
             receipt = PostingCommand.objects.select_for_update().get(key=context.idempotency_key)
-            if receipt.command != command:
-                raise IdempotencyConflict('مفتاح idempotency مستخدم لأمر آخر.')
+            _validate_replay(receipt, command, source, context, intent)
             return _existing(receipt)
         result = handler(locked)
         receipt.result_type = result._meta.label
         receipt.result_id = str(result.pk)
         receipt.save(update_fields=['result_type', 'result_id', 'updated_at'])
         return result
+

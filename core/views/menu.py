@@ -19,6 +19,7 @@ from core.services.table_visit_access import (
     record_pin_failure,
     resolve_table_number,
     visit_join_pin,
+    verify_table_pin,
 )
 from core.services.visit_internet import customer_packages, metered_customer_error, self_service_enabled
 from core.services.visit_internet_devices import active_browser_session
@@ -231,7 +232,7 @@ def _handle_table_visit_action(request, table, action):
     elif action == 'join':
         try:
             assert_pin_attempt_allowed(request, table)
-            visit = find_open_visit_by_pin(table, request.POST.get('pin', ''))
+            visit = verify_table_pin(table, request.POST.get('pin', ''))
         except ValidationError as exc:
             if 'مؤقتاً' not in _validation_message(exc):
                 record_pin_failure(request, table)
@@ -381,3 +382,4 @@ def staff_cashier_pay(request, public_code):
             return response
         return render_payment_panel(request, public_code)
     return response
+

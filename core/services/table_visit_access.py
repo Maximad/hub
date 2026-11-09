@@ -3,6 +3,9 @@ import hashlib
 import hmac
 import re
 import time
+from datetime import timedelta
+from django.utils import timezone
+from locations.models import TablePINThrottle
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -94,6 +97,36 @@ def find_open_visit_by_pin(table, raw_pin):
     return matches[0]
 
 
+def verify_table_pin(table, raw_pin):
+    """Commit failed guesses before raising; serialize even the first bucket insert."""
+    error = None
+    visit = None
+    now = timezone.now()
+    with transaction.atomic():
+        TableArea.objects.select_for_update().get(pk=table.pk)
+        bucket, _ = TablePINThrottle.objects.get_or_create(
+            table=table, defaults={'window_started_at': now})
+        if bucket.locked_until and bucket.locked_until > now:
+            error = ValidationError('تم إيقاف محاولات الرمز مؤقتاً. جرّب بعد بضع دقائق.')
+        else:
+            if now - bucket.window_started_at >= timedelta(seconds=PIN_LOCK_SECONDS):
+                bucket.failures = 0
+                bucket.window_started_at = now
+                bucket.locked_until = None
+            try:
+                visit = find_open_visit_by_pin(table, raw_pin)
+            except ValidationError as exc:
+                error = exc
+                bucket.failures += 1
+                if bucket.failures >= PIN_ATTEMPT_LIMIT:
+                    bucket.locked_until = now + timedelta(seconds=PIN_LOCK_SECONDS)
+            # Successful guesses do not erase other clients' failed attempts.
+            bucket.save()
+    if error is not None:
+        raise error
+    return visit
+
+
 def _attempt_key(table):
     return f'hub_visit_pin_attempts:{table.pk}'
 
@@ -121,3 +154,4 @@ def record_pin_failure(request, table):
 def clear_pin_failures(request, table):
     request.session.pop(_attempt_key(table), None)
     request.session.modified = True
+

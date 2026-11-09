@@ -7,6 +7,7 @@ import re
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
+from core.finance import current_business_date
 
 from accounts.permissions import is_owner_or_admin, user_has_capability
 from core.models import ActivityLog, Category, Order, OrderItem, Payment, Product
@@ -126,7 +127,7 @@ def collect_ticket_payment(reservation_id, *, actor, amount_syp, method, request
     if sale.order.status == Order.Status.CANCELLED:
         raise ValidationError({'order': 'الفاتورة ملغاة.'})
     context = PostingContext(
-        actor=actor, business_date=timezone.localdate(),
+        actor=actor, business_date=current_business_date(),
         channel='event-ticket', idempotency_key=f'event-ticket:{sale.pk}:{key}',
         request_metadata={'reservation_id': booking.pk, 'event_id': booking.event_id},
     )
@@ -135,3 +136,4 @@ def collect_ticket_payment(reservation_id, *, actor, amount_syp, method, request
     # If linkage fails, transaction rolls back both Payment and its journal.
     link_posted_ticket_payment(booking.pk, payment.pk, actor=actor)
     return payment
+

@@ -1,3 +1,5 @@
+from django.conf import settings
+from decimal import Decimal
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -12,6 +14,25 @@ from .policy import require_active, require_finance_actor, require_permitted_app
 from .ledger import post_balanced_batch
 
 
+def _collection_account(kind):
+    unit = getattr(settings, 'COLLECTION_BUSINESS_UNIT', '')
+    code = getattr(settings, 'COLLECTION_ACCOUNT_CODES', {}).get(kind)
+    query = FinancialAccount.objects.filter(is_active=True, currency='SYP', business_unit=unit)
+    if kind == 'cash':
+        query = query.filter(scope='cashbox', account_type=FinancialAccount.AccountType.ASSET)
+    else:
+        query = query.filter(account_type=(FinancialAccount.AccountType.REVENUE if kind == 'revenue'
+                                          else FinancialAccount.AccountType.CLEARING))
+    if not code:
+        canonical = {'cash': 'cash:main', 'transfer': 'clearing:bank', 'revenue': 'revenue:operating'}[kind]
+        if query.filter(code=canonical).exists():
+            code = canonical
+    rows = list(query.filter(code=code)[:2] if code else query[:2])
+    if len(rows) != 1:
+        raise InvalidTransition('حدد حساب تحصيل نشطاً ووحيداً بالعملة ووحدة العمل الصحيحتين: ' + kind)
+    return rows[0]
+
+
 def collect(order, context, amount, method, notes=''):
     def handle(source):
         # ``dispatch`` holds an order row lock, so concurrent collectors cannot both
@@ -23,32 +44,26 @@ def collect(order, context, amount, method, notes=''):
             raise InvalidTransition('المبلغ لا يجوز أن يتجاوز المتبقي على الطلب.')
         if method in {Payment.Method.UNPAID, Payment.Method.FREE, Payment.Method.MEMBER_DISCOUNT}:
             raise InvalidTransition('هذه الطريقة ليست دفعة محصلة.')
-        payment=Payment(order=source, amount_syp=amount, method=method, notes=notes, created_by=context.actor)
-        payment.full_clean(); payment.save()
-        revenue = FinancialAccount.objects.filter(
-            account_type=FinancialAccount.AccountType.REVENUE, is_active=True,
-        ).order_by('pk').first()
-        if not revenue:
-            raise InvalidTransition('لا يوجد حساب إيراد مالي نشط.')
-        require_active(revenue)
+        revenue = _collection_account('revenue')
+        account = _collection_account('cash' if method == Payment.Method.CASH else 'transfer')
+        selected = {row.pk: row for row in (account, revenue)}
+        locked = list(FinancialAccount.objects.select_for_update().filter(pk__in=selected).order_by('pk'))
+        for row in locked:
+            require_active(row)
+            previous = selected[row.pk]
+            if (row.currency != 'SYP' or row.business_unit != getattr(settings, 'COLLECTION_BUSINESS_UNIT', '')
+                    or row.account_type != previous.account_type or row.scope != previous.scope
+                    or row.code != previous.code):
+                raise InvalidTransition('تغير إعداد حساب التحصيل. راجع الحسابات.')
+            ensure_period_open(context.date_for(source), row)
+        payment = Payment(order=source, amount_syp=amount, method=method, notes=notes, created_by=context.actor)
+        payment.full_clean()
+        payment.save()
         if method == Payment.Method.CASH:
-            account = FinancialAccount.objects.filter(
-                scope='cashbox', is_active=True,
-            ).order_by('pk').first()
-            if not account:
-                raise InvalidTransition('لا يوجد حساب صندوق مالي نشط لاستلام الدفعة النقدية.')
-            require_active(account)
             CashMovement.objects.create(business_date=context.date_for(source), movement_type=CashMovement.MovementType.OTHER,
                 direction=CashMovement.Direction.IN, amount_syp=amount, related_order=source, related_payment=payment,
                 financial_account=account, is_generated=True,
                 title=f'دفع {source.display_number}', created_by=context.actor, approved_by=context.approver)
-        else:
-            account = FinancialAccount.objects.filter(
-                account_type=FinancialAccount.AccountType.CLEARING, is_active=True,
-            ).order_by('pk').first()
-            if not account:
-                raise InvalidTransition('لا يوجد حساب مقاصة مالي نشط.')
-            require_active(account)
         batch = PostingBatch.objects.create(
             operation_type='order_payment.collect',
             source_content_type=ContentType.objects.get_for_model(payment),
@@ -66,7 +81,8 @@ def collect(order, context, amount, method, notes=''):
         ])
         ActivityLog.objects.create(actor=context.actor, action='payment_added', details={'payment_id':payment.pk,'posting_key':context.idempotency_key})
         return payment
-    return dispatch('order_payment.collect', order, context, handle)
+    return dispatch('order_payment.collect', order, context, handle, intent={
+        'amount': format(Decimal(str(amount)).normalize(), 'f'), 'method': method, 'notes': notes})
 
 
 def reverse(payment, context, reason, *, reason_code=CancellationReason.OTHER):
@@ -221,3 +237,4 @@ def reverse(payment, context, reason, *, reason_code=CancellationReason.OTHER):
         )
         return source
     return dispatch('order_payment.reverse', payment, context, handle)
+

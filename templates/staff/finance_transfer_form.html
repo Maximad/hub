@@ -7,4 +7,6 @@
 {% include "components/currency_entry.html" %}
 <label>السبب <textarea name="reason" required>{{ form_values.reason }}</textarea></label>
 <label>المعتمد (إلزامي عند بلوغ الحد) <select name="approver"><option value="">— لا يلزم دون الحد —</option>{% for u in approvers %}<option value="{{ u.id }}">{{ u }}</option>{% endfor %}</select></label>
+<label>كلمة مرور المدير المعتمد <input type="password" name="approver_password" autocomplete="off"></label>
 <button class="hub-btn" type="submit">ترحيل التحويل</button></form>{% endblock %}
+

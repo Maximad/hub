@@ -84,7 +84,10 @@ def post(transfer, context):
         source.posting_batch=batch; source.state=Transfer.State.POSTED
         source.save(update_fields=['posting_batch', 'state', 'updated_at'])
         return source
-    return dispatch('transfer.post', transfer, context, handle)
+    return dispatch('transfer.post', transfer, context, handle, intent={
+        'source_account': transfer.source_account_id, 'destination_account': transfer.destination_account_id,
+        'amount': format(Decimal(str(transfer.amount)).normalize(), 'f'),
+        'date': str(transfer.business_date), 'reason': transfer.reason})
 
 
 def reverse(transfer, context, reason):
@@ -118,3 +121,4 @@ def reverse(transfer, context, reason):
         source.save(update_fields=['reversal_batch', 'state', 'updated_at'])
         return source
     return dispatch('transfer.reverse', transfer, context, handle)
+

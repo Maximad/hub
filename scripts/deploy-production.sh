@@ -226,9 +226,16 @@ else
     git merge --ff-only "origin/$BRANCH"
 fi
 
+HUB_IMAGE="${HUB_IMAGE:-$(awk -F= '$1 == "HUB_IMAGE" {sub(/^[^=]*=/, ""); print}' "$ENV_FILE" | tail -n 1)}"
+[[ "$HUB_IMAGE" =~ ^ghcr\.io/maximad/hub@sha256:[a-f0-9]{64}$ ]] || die "Set HUB_IMAGE to the tested GHCR digest recorded by Django CI."
+export HUB_IMAGE
+
 log "Building application images"
 
-dc build web management-mcp internet-worker notification-worker
+# Production consumes the exact CI-tested image, never resolves dependencies here.
+dc pull web management-mcp internet-worker notification-worker
+image_revision="$(docker image inspect "$HUB_IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
+[[ "$image_revision" == "$TARGET_COMMIT" ]] || die "Release image revision does not match target commit."
 
 log "Running pre-deployment checks"
 
@@ -264,6 +271,9 @@ fi
 log "Checking consolidated Internet release invariants"
 dc run --rm -T web python manage.py internet_release_audit --json
 
+log "Verifying release static assets"
+dc run --rm -T web python scripts/check-static-manifest.py
+
 log "Replacing web + management integration + background worker containers"
 
 dc up -d --no-deps --force-recreate web management-mcp internet-worker notification-worker
@@ -271,15 +281,6 @@ dc up -d --no-deps --force-recreate web management-mcp internet-worker notificat
 log "Checking MCP bridge registration"
 
 dc exec -T management-mcp python scripts/check-mcp-bridge.py
-
-log "Collecting static files"
-
-dc exec -T web mkdir -p /app/staticfiles
-dc exec -T web python manage.py collectstatic --noinput --clear
-
-log "Restarting web service"
-
-dc restart web
 
 log "Waiting for application"
 
@@ -333,3 +334,4 @@ log "Deployment completed successfully"
 printf '\nDeployed commit: %s\n' "$DEPLOY_COMMIT"
 printf 'Database backup: %s\n' "$BACKUP_FILE"
 printf 'Public menu: %s/menu/\n' "$BASE_URL"
+

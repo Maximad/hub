@@ -12,6 +12,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect
 from django.utils import timezone
+from core.finance import current_business_date
 
 from accounts.permissions import can_approve_partial_payment
 from core.currency_forms import CurrencyEntryFormService
@@ -156,7 +157,7 @@ def collect_standalone_payment(request, public_code):
 
                 payment = collect_order_payment(order, PostingContext(
                     actor=request.user, approver=approver,
-                    business_date=timezone.localdate(),
+                    business_date=current_business_date(),
                     idempotency_key=key, channel='cashier',
                     request_metadata={'path': request.path,
                                       'cashier_payment_fingerprint': fingerprint},
@@ -202,3 +203,4 @@ def collect_standalone_payment(request, public_code):
         return staff_cashier_order(request, public_code)
 
     return redirect('staff_cashier_order', public_code=order.public_code)
+
