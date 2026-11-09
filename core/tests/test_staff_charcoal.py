@@ -30,7 +30,9 @@ class StaffCharcoalContractTests(SimpleTestCase):
         self.assertIn('class="hub-page hub-ui-v3 ', self.base)
 
     def test_palette_scope_and_accessibility(self):
-        self.assertIn("body.hub-staff-ui {", self.css)
+        self.assertIn("body.hub-staff-ui.hub-ui-v3 {", self.css)
+        self.assertIn("body.hub-staff-ui.hub-ui-v3.staff-charcoal-operations {", self.css)
+        self.assertIn("staff-charcoal-operations", self.operations)
         for token in ("#15181C", "#1E2329", "#262C33", "#343C45",
                       "#F3F1EC", "#A9B0B8", "#24C6B2", "#D88A3D"):
             self.assertIn(token, self.css)
