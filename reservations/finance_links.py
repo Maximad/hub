@@ -9,7 +9,7 @@ from django.db import transaction
 
 from accounts.permissions import is_owner_or_admin
 from core.models import ActivityLog, Order, Payment, PostingBatch, Product
-from .models import Reservation, ReservationTicketPaymentLink
+from .models import Reservation, ReservationTicketPaymentLink, ReservationTicketOrder
 
 
 def _verified_payment(payment):
@@ -74,6 +74,9 @@ def link_posted_ticket_payment(reservation_id, payment_id, *, actor):
         if previous.reservation_id == booking.pk:
             return previous, False
         raise ValidationError({'payment': 'سند القبض مرتبط بالفعل بحجز آخر.'})
+    order_link = ReservationTicketOrder.objects.filter(reservation=booking).first()
+    if order_link and order_link.order_id != payment.order_id:
+        raise ValidationError({'payment': 'هذا السند لا يتبع فاتورة تذاكر هذا الحجز.'})
     if payment.order.status == Order.Status.CANCELLED:
         raise ValidationError({'payment': 'طلب البيع ملغى.'})
     if not _verified_payment(payment):

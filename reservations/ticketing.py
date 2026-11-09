@@ -10,7 +10,7 @@ from django.db.models import Sum
 from accounts.permissions import user_has_capability
 from core.models import ActivityLog
 from events.models import Event, EventTicketType
-from .models import Reservation, ReservationTicketAllocation
+from .models import Reservation, ReservationTicketAllocation, ReservationTicketOrder
 
 _ACTIVE = (Reservation.Status.PENDING, Reservation.Status.CONFIRMED)
 
@@ -92,6 +92,8 @@ def set_event_ticket_allocations(reservation_id, quantities, *, actor):
         raise ValidationError({'tickets': 'هذا الحجز غير مرتبط بفعالية.'})
     if reservation.status not in _ACTIVE or reservation.visit_id:
         raise ValidationError({'tickets': 'لا يمكن تعديل فئات حجز منتهٍ أو ملغى أو بعد تسجيل الوصول.'})
+    if ReservationTicketOrder.objects.filter(reservation=reservation).exists():
+        raise ValidationError({'tickets': 'صدرت فاتورة التذاكر؛ لا يمكن تغيير الفئات بعد إصدارها.'})
     if reservation.ticket_payment_links.exists():
         raise ValidationError({'tickets': 'هذا الحجز مرتبط بسند قبض. يلزم تسوية مالية قبل تعديل فئات التذاكر.'})
 

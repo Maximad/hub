@@ -7,7 +7,7 @@ from django.db import transaction
 from accounts.permissions import user_has_capability
 from core.models import ActivityLog
 from events.models import Event
-from .models import EventAdmission, Reservation, ReservationTicketPaymentLink
+from .models import EventAdmission, Reservation, ReservationTicketOrder, ReservationTicketPaymentLink
 from .services import event_reserved_party_size
 from .ticketing import set_event_ticket_allocations
 
@@ -70,6 +70,8 @@ def edit_event_reservation(reservation_id, *, actor, name, phone, party_size,
                 new_allocations[tier_id] = amount
     changed_tickets = new_allocations != old_allocations
     changed_size = size != booking.party_size
+    if (changed_size or changed_tickets) and ReservationTicketOrder.objects.filter(reservation=booking).exists():
+        raise ValidationError({'tickets': 'صدرت فاتورة التذاكر. صحّحها مالياً قبل تغيير المقاعد.'})
     if (changed_size or changed_tickets) and ReservationTicketPaymentLink.objects.filter(
         reservation=booking,
     ).exists():

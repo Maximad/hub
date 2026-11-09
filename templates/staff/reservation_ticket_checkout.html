@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}فاتورة تذاكر الفعالية{% endblock %}
+{% block content %}
+<section class="hub-section" dir="rtl" style="max-width:960px;margin-inline:auto">
+  <nav class="hub-page-header__meta">
+    <a href="{% url 'staff_events' %}">الفعاليات</a> /
+    <a href="{% url 'staff_event_detail' reservation.event_id %}">{{ reservation.event.title_ar }}</a> /
+    <a href="{% url 'staff_reservation_detail' reservation.id %}">الحجز</a>
+  </nav>
+  <header class="hub-page-header">
+    <div>
+      <h1 class="hub-page-header__title">فاتورة تذاكر {{ reservation.event.title_ar }}</h1>
+      <p class="hub-page-header__meta">حجز رقم {{ reservation.id }} · {{ reservation.name }} · {{ reservation.party_size }} أشخاص</p>
+    </div>
+    <a class="hub-button" href="{% url 'staff_reservation_detail' reservation.id %}">العودة للحجز</a>
+  </header>
+
+  <section class="hub-card hub-section">
+    <h2 class="hub-section-title">التذاكر المحجوزة</h2>
+    <div class="hub-table-wrap">
+      <table class="hub-table">
+        <thead><tr><th>الفئة</th><th>العدد</th><th>سعر التذكرة عند الحجز</th><th>الإجمالي</th></tr></thead>
+        <tbody>
+          {% for row in allocations %}
+            <tr><td>{{ row.ticket_type.name_ar }}</td><td>{{ row.quantity }}</td><td>{{ row.unit_price_syp }} ل.س</td><td>{% widthratio row.unit_price_syp 1 row.quantity %} ل.س</td></tr>
+          {% empty %}<tr><td colspan="4">حدّد فئات التذاكر أولاً.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p><strong>القيمة الاسمية للحجز: {{ expected_total }} ل.س</strong></p>
+    <p class="hub-help-text">قد يشمل الدخول مشروباً يختاره الضيف لاحقاً. لا يخصص هذا النظام مشروباً أو يخصم مخزوناً عند إصدار التذكرة.</p>
+    {% if sale %}
+      <p><strong>الفاتورة الصادرة:</strong> {{ sale.order.display_number }} · {{ sale.face_total_syp }} ل.س</p>
+      {% if can_collect %}<a class="hub-button" href="{% url 'staff_cashier_order' sale.order.public_code %}">عرض طلب الكاشير</a>{% endif %}
+      <p class="hub-help-text">لا يمكن تغيير فئات التذاكر بعد إصدار الفاتورة. يحتاج أي تعديل مالي أو استرداد إلى مراجعة السندات والإدارة.</p>
+    {% elif allocations and reservation.status == 'confirmed' %}
+      <form method="post" class="hub-form" style="margin-top:1rem">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="issue">
+        <button class="hub-button hub-button-primary" type="submit">إصدار فاتورة التذاكر دون قبض</button>
+      </form>
+    {% else %}
+      <p class="hub-help-text">يجب تأكيد الحجز وتوزيع جميع الضيوف على فئات التذاكر لإصدار فاتورة.</p>
+    {% endif %}
+  </section>
+
+  <section class="hub-card hub-section">
+    <h2 class="hub-section-title">حالة التحصيل المثبت</h2>
+    <div class="hub-grid hub-grid-2">
+      <div><strong>مقبوض بسندات محاسبية</strong><p>{{ financial_summary.posted }} ل.س</p></div>
+      <div><strong>متبقٍ</strong><p>{{ financial_summary.outstanding|default_if_none:'غير محسوب' }} ل.س</p></div>
+      <div><strong>الحالة</strong><p>{{ financial_summary.label }}</p></div>
+    </div>
+    {% if sale and can_collect and financial_summary.outstanding > 0 and reservation.status == 'confirmed' %}
+      <form method="post" class="hub-form hub-form-section" style="margin-top:1rem">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="collect">
+        <input type="hidden" name="request_key" value="{{ request_key }}">
+        <label for="ticket-pay-amount">المبلغ المستلم الآن بالليرة السورية</label>
+        <input id="ticket-pay-amount" class="hub-input" name="amount_syp" type="number" min="1" max="{{ financial_summary.outstanding }}" step="1" value="{{ financial_summary.outstanding }}" required>
+        <label for="ticket-pay-method">طريقة الدفع الفعلية</label>
+        <select id="ticket-pay-method" name="method" class="hub-input">
+          <option value="cash">نقداً — تم استلامه</option>
+          <option value="manual_transfer">حوالة — تم التحقق من وصولها</option>
+        </select>
+        <p class="hub-help-text">اضغط التحصيل فقط بعد استلام المال أو التحقق من التحويل. يسجّل هذا الإجراء سند قبض حقيقياً وقيداً مالياً في نظام الكاشير، وليس مجرد تأكيد حجز.</p>
+        <button class="hub-button hub-button-primary" type="submit">تسجيل التحصيل الفعلي</button>
+      </form>
+    {% elif sale and not can_collect %}
+      <p class="hub-help-text">التحصيل المباشر يتطلب صلاحيات الإدارة والكاشير. يمكنك مراجعة تفاصيل الحجز دون تسجيل دفعة.</p>
+    {% endif %}
+    <p class="hub-help-text">الاسترداد لا يتم تلقائياً بإلغاء الحجز. إذا أُعيد المال فعلياً، يجب عكس سند قبضه عبر إجراء الاسترداد المعتمد في المالية مع مرجع إثبات.</p>
+  </section>
+</section>
+{% endblock %}
