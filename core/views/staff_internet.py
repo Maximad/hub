@@ -162,7 +162,7 @@ def _internal_access_page(request, form=None):
     grants = list(
         internal_grants().select_related(
             'member', 'internal_staff_grant__user',
-        ).order_by('-created_at')[:60]
+        ).prefetch_related('network_operations').order_by('-created_at')[:60]
     )
     now = timezone.now()
     recent_device_cutoff = now - timedelta(days=30)
@@ -180,6 +180,14 @@ def _internal_access_page(request, form=None):
         entitlement.internal_subject_role = (
             staff_target.user.get_role_display() if staff_target else ''
         )
+        recent_provision = sorted(
+            (op for op in entitlement.network_operations.all()
+             if op.operation == op.Operation.PROVISION),
+            key=lambda op: op.created_at,
+            reverse=True,
+        )
+        entitlement.internal_provision_job = recent_provision[0] if recent_provision else None
+        entitlement.internal_effective_status = entitlement.effective_status(now)
         snapshot = getattr(staff_target, 'connection_snapshot', None) if staff_target else None
         entitlement.internal_observation = snapshot
         entitlement.internal_observation_current = observation_is_fresh(snapshot)
@@ -220,11 +228,7 @@ def _internal_access_page(request, form=None):
         )
     active_count = sum(
         1 for entitlement in grants
-        if entitlement.status in {
-            InternetEntitlement.Status.PENDING,
-            InternetEntitlement.Status.ACTIVE,
-            InternetEntitlement.Status.SUSPENDED,
-        }
+        if entitlement.internal_effective_status == InternetEntitlement.Status.ACTIVE
     )
     return render(request, 'staff/internet_internal_access.html', {
         'internal_access_form': form or InternalAccessGrantForm(),
@@ -299,7 +303,7 @@ def staff_internet_sale(request):
         except ValidationError as exc:
             messages.error(request, ' '.join(exc.messages))
             return _internal_access_page(request, form=form)
-        messages.success(request, 'تم منح الوصول الداخلي للموظف دون إنشاء بيع أو دفعة.')
+        messages.success(request, 'تم تسجيل منحة إنترنت الموظف. تأكد من اكتمال تجهيز الشبكة قبل اعتبار الجهاز متصلاً.')
         return redirect(_internal_access_url())
 
     if action == 'internal_revoke':
