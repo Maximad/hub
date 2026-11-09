@@ -23,7 +23,7 @@ Staff-only implementation of the uploaded SVG `hub_seating_designer_v02.html`. T
 ## Deployment and acceptance
 1. After green PostgreSQL Django CI, review and merge the PR.
 2. Confirm production DB backup and verified restore record, current git revision, and the existing deployment checks; use the established Hub Suite deployment script.
-3. Confirm `events.0006` and `events.0007` migrations are applied (they are additive and create only draft layouts).
+3. Confirm `events.0006`, `events.0007`, and `events.0008` migrations are applied (they are additive and create only draft layouts).
 4. With synthetic events: save/reload a template, clone into event, edit independently, open on narrow mobile viewport, and test rejected stale versions.
 5. Confirm existing public events, staff reservations, ticket payment/check-in and media are unaffected.
 6. Do not enable public seat assignment until Release B is implemented, concurrent PostgreSQL tests have passed, and venue geometry/clearances/capacity have been independently verified.
