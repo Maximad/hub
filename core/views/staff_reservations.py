@@ -11,14 +11,17 @@ from django.utils.dateparse import parse_datetime
 from zoneinfo import ZoneInfo
 from django.views.decorators.http import require_http_methods
 
-from accounts.permissions import require_staff_capability, is_owner_or_admin
+from accounts.permissions import require_staff_capability, is_owner_or_admin, user_has_capability
 from core.models import Member, TableArea, Payment, Product
 from reservations.models import Reservation
 from reservations.ticketing import set_event_ticket_allocations
 from reservations.editing import edit_event_reservation
+from reservations.checkout import issue_ticket_order, collect_ticket_payment
+from core.services.posting.exceptions import InvalidTransition
+from uuid import uuid4
 from reservations.arrangements import set_payment_arrangement
 from reservations.finance_links import link_posted_ticket_payment, ticket_payment_summary
-from reservations.models import ReservationPaymentArrangement
+from reservations.models import ReservationPaymentArrangement, ReservationTicketOrder
 from events.models import EventTicketType
 from reservations.services import change_reservation_status, check_in_reservation
 from core.views_legacy import (
@@ -316,4 +319,56 @@ def staff_event_reservation_edit(request, reservation_id):
         'form_values': request.POST if request.method == 'POST' else None,
         'has_payment_links': booking.ticket_payment_links.exists(),
         'has_admission': hasattr(booking, 'event_admission'),
+    })
+
+
+@require_staff_capability('reservations')
+@require_http_methods(['GET', 'POST'])
+def staff_reservation_ticket_checkout(request, reservation_id):
+    """Ticket invoice and collection: direct verified finance posting only."""
+    booking = get_object_or_404(
+        Reservation.objects.select_related('event'), pk=reservation_id,
+        reservation_type=Reservation.ReservationType.EVENT,
+    )
+    if request.method == 'POST':
+        action = request.POST.get('action', '')
+        try:
+            if action == 'issue':
+                _sale, created = issue_ticket_order(booking.pk, actor=request.user)
+                messages.success(
+                    request,
+                    'تم إصدار فاتورة التذاكر دون تحصيل.' if created
+                    else 'الفاتورة موجودة مسبقاً؛ لم تنشأ فاتورة مكررة.',
+                )
+            elif action == 'collect':
+                payment = collect_ticket_payment(
+                    booking.pk, actor=request.user,
+                    amount_syp=request.POST.get('amount_syp'),
+                    method=request.POST.get('method'),
+                    request_key=request.POST.get('request_key'),
+                )
+                messages.success(request, f'تم تحصيل {payment.amount_syp} ل.س وسُجّل السند #{payment.pk}.')
+            else:
+                raise ValidationError('الإجراء غير صالح.')
+        except (ValidationError, InvalidTransition) as error:
+            messages.error(
+                request,
+                _validation_message(error) if isinstance(error, ValidationError)
+                else str(error),
+            )
+        return redirect('staff_reservation_ticket_checkout', reservation_id=booking.pk)
+    sale = ReservationTicketOrder.objects.filter(
+        reservation=booking,
+    ).select_related('order').first()
+    allocations = list(
+        booking.ticket_allocations.select_related('ticket_type').order_by('ticket_type_id')
+    )
+    return render(request, 'staff/reservation_ticket_checkout.html', {
+        'reservation': booking,
+        'sale': sale,
+        'allocations': allocations,
+        'financial_summary': ticket_payment_summary(booking),
+        'expected_total': sum(row.quantity * row.unit_price_syp for row in allocations),
+        'can_collect': is_owner_or_admin(request.user) and user_has_capability(request.user, 'cashier'),
+        'request_key': uuid4().hex,
     })
