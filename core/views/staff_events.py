@@ -7,7 +7,7 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404, render
-from django.http import HttpResponse
+from django.http import HttpResponse, Http404
 from django.views.decorators.http import require_http_methods
 import csv
 from django.contrib import messages
@@ -160,7 +160,7 @@ def staff_event_checkin(request, event_id):
     selected_id = request.POST.get('performance') if request.method == 'POST' else request.GET.get('performance')
     selected = next((show for show in shows if str(show.pk) == str(selected_id)), None)
     if selected_id and selected is None:
-        raise ValidationError('موعد العرض غير معروف.')
+        raise Http404
     if not selected and len(shows) == 1:
         selected = shows[0]
     if request.method == 'POST':

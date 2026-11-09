@@ -46,11 +46,59 @@
     </div>
   </header>
 
+
+  <section class="events-ui__panel" aria-labelledby="showtime-section-title">
+    <div class="events-ui__panel-head">
+      <h2 id="showtime-section-title">مواعيد العروض</h2>
+      <span class="events-ui__muted">فعالية واحدة · حجوزات وسعة مستقلة لكل موعد</span>
+    </div>
+    <div class="events-ui__ticket-list">
+      {% for show in show_rows %}
+        <div class="events-ui__ticket">
+          <div>
+            <strong>{{ show.starts_at|date:"d/m/Y · H:i" }}{% if show.ends_at %} – {{ show.ends_at|date:"H:i" }}{% endif %}</strong>
+            <span class="events-ui__muted">{% if show.status == 'cancelled' %}ملغى{% elif show.status == 'completed' %}منتهٍ{% else %}مجدول{% endif %} · {{ show.effective_room|default:"بدون مساحة محددة" }} · المحجوز: {{ show.reserved_people }}{% if show.effective_capacity %} / {{ show.effective_capacity }}{% endif %}</span>
+          </div>
+          <div class="hub-toolbar">
+            {% if staff_caps.reservations and show.status == 'scheduled' %}
+              <a class="hub-button" href="{% url 'staff_reservation_new' %}?event={{ event.pk }}&performance={{ show.pk }}">حجز لهذا العرض</a>
+              <a class="hub-button" href="{% url 'staff_event_checkin' event.pk %}?performance={{ show.pk }}">بوابة العرض</a>
+            {% endif %}
+            {% if staff_caps.events and show.status == 'scheduled' %}
+              <form method="post" action="{% url 'staff_event_schedule' event.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="cancel">
+                <input type="hidden" name="performance" value="{{ show.pk }}">
+                <button type="submit" class="hub-button">إلغاء الموعد</button>
+              </form>
+            {% endif %}
+          </div>
+        </div>
+      {% empty %}
+        <p class="events-ui__muted">لا توجد مواعيد بعد. أضف الموعد الأول.</p>
+      {% endfor %}
+    </div>
+    {% if staff_caps.events %}
+      <form method="post" action="{% url 'staff_event_schedule' event.pk %}" class="hub-form hub-form-section">
+        {% csrf_token %}
+        <h3>إضافة موعد أو إنشاء تكرار</h3>
+        <div class="events-ui__form-grid">
+          <label>بداية العرض <input type="datetime-local" name="starts_at" required></label>
+          <label>النهاية (اختياري) <input type="datetime-local" name="ends_at"></label>
+          <label>السعة الخاصة بهذا الموعد (اختياري) <input type="number" min="1" name="capacity" placeholder="استخدم سعة الفعالية"></label>
+          <label>التكرار <select name="frequency"><option value="once">مرة واحدة</option><option value="weekly">أسبوعياً</option><option value="monthly">شهرياً</option></select></label>
+          <label>عدد المواعيد <input type="number" min="1" max="12" value="1" name="count"></label>
+        </div>
+        <p class="events-ui__notice">عند اختيار التكرار، تُنشأ المواعيد المحددة فقط (1–12). الأسعار والملصق من الفعالية نفسها؛ يمكن إلغاء أي موعد غير محجوز بشكل مستقل. لا تُنشأ فعالية مكررة.</p>
+        <button type="submit" class="hub-button hub-button-primary">حفظ المواعيد</button>
+      </form>
+    {% endif %}
+  </section>
   <div class="events-ui__stats" aria-label="ملخص الحجوزات">
     <div class="events-ui__stat"><span>مقاعد الحجوزات المؤكدة</span><strong>{{ confirmed_guests }}</strong></div>
     <div class="events-ui__stat"><span>أشخاص بانتظار التأكيد</span><strong>{{ pending_guests }}</strong></div>
     <div class="events-ui__stat"><span>عدد سجلات الحجوزات</span><strong>{{ reservation_count }}</strong></div>
-    <div class="events-ui__stat"><span>السعة المسجلة</span><strong>{{ event.capacity|default:"—" }}</strong></div>
+    <div class="events-ui__stat"><span>سعة الفعالية الافتراضية للموعد</span><strong>{{ event.capacity|default:"—" }}</strong></div>
   </div>
   <p class="events-ui__notice">هذه أعداد الحجوزات، وليست بيانات تذاكر مدفوعة أو سعة جلوس معتمدة. لا تُسجّل إيرادات دون عملية قبض فعلية.</p>
 
