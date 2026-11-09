@@ -100,7 +100,7 @@ body.hub-staff-ui :is(.hub-button-primary,.staff-v2-button--primary) {
   background:var(--cc-teal);border-color:var(--cc-teal);color:#10201F;
 }
 body.hub-staff-ui :is(.hub-button-primary,.staff-v2-button--primary):hover {
-  background:var(--cc-teal-hover);border-color:var(--cc-teal-hover);color:#fff;
+  background:var(--cc-teal-hover);border-color:var(--cc-teal-hover);color:#10201F;
 }
 body.hub-staff-ui :is(.hub-nav-chip[aria-current="page"],.hub-nav-chip.is-active) {
   background:#163D3D;border-color:#267D73;color:#A8F7E8;
