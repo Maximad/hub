@@ -16,7 +16,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q, Sum
 from django.shortcuts import redirect
 
-from accounts.permissions import require_staff_capability
+from accounts.permissions import require_staff_capability, is_owner_or_admin
 from reservations.admissions import set_event_admission_total
 from reservations.importing import preview_uploaded_csv, import_event_bookings
 from events.models import EventTicketType
@@ -25,6 +25,9 @@ from reservations.reporting import event_booking_report
 
 from core.views_legacy import _assert_staff_capability, staff_event_new
 from events.models import Event, EventMedia
+from events.finance import allocate_existing_event_expense, event_known_finance_report
+from core.models import Expense
+from django.core.exceptions import PermissionDenied
 from catalog.models import MediaAsset
 from django.db import transaction
 from reservations.models import Reservation
@@ -244,4 +247,40 @@ def staff_event_artwork(request, event_id):
     return render(request, 'staff/event_artwork.html', {
         'event': event, 'event_media': media,
         'error': error,
+    })
+
+@login_required
+@require_http_methods(['GET', 'POST'])
+def staff_event_finance(request, event_id):
+    """Management-only attribution of already recorded expenses, no payments."""
+    if not is_owner_or_admin(request.user):
+        raise PermissionDenied('متابعة مالية الفعاليات للإدارة فقط.')
+    event = get_object_or_404(Event, pk=event_id)
+    if request.method == 'POST':
+        raw_id = (request.POST.get('expense_id') or '').strip()
+        try:
+            if not raw_id.isdecimal() or len(raw_id) > 15:
+                raise ValidationError('اختر مصروفاً موجوداً في حسابات هَب.')
+            link, created = allocate_existing_event_expense(
+                event.pk, int(raw_id), request.POST.get('amount_syp'),
+                request.POST.get('rationale'), actor=request.user,
+            )
+            messages.success(
+                request,
+                'تم ربط المصروف بالفعالية دون إنشاء قبض أو صرف جديد.' if created
+                else 'هذا الربط موجود مسبقاً؛ لم يسجّل مرة ثانية.',
+            )
+        except (ValidationError, Expense.DoesNotExist) as error:
+            messages.error(
+                request, ' '.join(error.messages) if isinstance(error, ValidationError)
+                else 'المصروف المطلوب غير موجود.',
+            )
+        return redirect('staff_event_finance', event_id=event.pk)
+    expenses = Expense.objects.filter(
+        status__in=(Expense.Status.APPROVED, Expense.Status.PAID),
+    ).exclude(paid_from=Expense.PaidFrom.EXTERNAL).select_related('category').order_by('-business_date', '-pk')[:100]
+    return render(request, 'staff/event_finance.html', {
+        'event': event,
+        'report': event_known_finance_report(event.pk),
+        'expenses': expenses,
     })
