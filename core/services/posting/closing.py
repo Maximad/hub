@@ -122,10 +122,13 @@ def reopen(daily_close, context, reason):
     actor = context.actor
     if not actor or not (actor.is_superuser or getattr(actor, 'role', '') == 'admin'):
         raise InvalidTransition('إعادة فتح فترة تحتاج صلاحية الإدارة المالية.')
+    account_id = DailyClose.objects.values_list('account_id', flat=True).get(pk=daily_close.pk)
+    FinancialAccount.objects.select_for_update().get(pk=account_id)
     source = DailyClose.objects.select_for_update().get(pk=daily_close.pk)
     if source.status != DailyClose.Status.CLOSED or not source.is_finalized:
         raise InvalidTransition('يمكن إعادة فتح إغلاق نهائي مغلق فقط.')
-    FinancialAccount.objects.select_for_update().filter(pk=source.account_id).first()
+    if source.account_id != account_id:
+        raise InvalidTransition('The close account changed; retry the operation.')
     before = source.close_snapshot
     DailyCloseRevision.objects.create(daily_close=source, revision_type='before_reopen', snapshot=before, reason=reason, created_by=actor)
     source.status = DailyClose.Status.REOPENED; source.is_finalized = False
@@ -141,3 +144,4 @@ def reopen(daily_close, context, reason):
 def enforce_open(business_date, account=None):
     from .engine import ensure_period_open
     return ensure_period_open(business_date, account)
+

@@ -16,6 +16,14 @@ def normalize_table_entry_code(value):
     return str(int(text))
 
 
+class TablePINThrottle(models.Model):
+    table = models.OneToOneField('core.TableArea', on_delete=models.CASCADE,
+                                related_name='pin_throttle')
+    failures = models.PositiveIntegerField(default=0)
+    window_started_at = models.DateTimeField()
+    locked_until = models.DateTimeField(null=True, blank=True)
+
+
 class TableAreaSettings(models.Model):
     """Staff-managed metadata kept separate from the public table identity/QR."""
 
@@ -60,3 +68,4 @@ class TableAreaSettings(models.Model):
     def __str__(self):
         code = self.customer_entry_code or 'بدون رقم'
         return f'{code} — {self.table}'
+

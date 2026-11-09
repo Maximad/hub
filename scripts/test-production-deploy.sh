@@ -16,7 +16,7 @@ bash -n "$repo/scripts/deploy-production.sh"
 grep -Fq 'MIKROTIK_COMPOSE_FILE="docker-compose.mikrotik.yml"' "$repo/scripts/deploy-production.sh"
 grep -Fq 'COMPOSE_ARGS+=(-f "$MIKROTIK_COMPOSE_FILE")' "$repo/scripts/deploy-production.sh"
 grep -Fq 'MIKROTIK_ENABLED=true requires' "$repo/scripts/deploy-production.sh"
-grep -Fq 'dc build web management-mcp internet-worker notification-worker' "$repo/scripts/deploy-production.sh"
+grep -Fq 'dc pull web management-mcp internet-worker notification-worker' "$repo/scripts/deploy-production.sh"
 grep -Fq 'dc up -d --no-deps --force-recreate web management-mcp internet-worker notification-worker' "$repo/scripts/deploy-production.sh"
 grep -Fq 'dc exec -T management-mcp python scripts/check-mcp-bridge.py' "$repo/scripts/deploy-production.sh"
 grep -Fq 'dc logs --tail=150 web management-mcp internet-worker notification-worker' "$repo/scripts/deploy-production.sh"
@@ -45,6 +45,11 @@ run_phase() (
     allow_data="${4:-false}"
     fail_release="${5:-false}"
     PROJECT_DIR="/opt/hub"
+    HUB_IMAGE="ghcr.io/maximad/hub@sha256:test"
+    TARGET_COMMIT="test-revision"
+    fail_static="${6:-false}"
+    docker() { printf '%s\n' "$TARGET_COMMIT"; }
+    die() { echo "$*" >&2; exit 1; }
 
     log() { printf 'LOG %s\n' "$*" >>"$events"; }
     check_route() { printf 'ROUTE %s %s\n' "$1" "$2" >>"$events"; }
@@ -55,6 +60,9 @@ run_phase() (
         printf ' <%s>' "$@" >>"$events"
         printf '\n' >>"$events"
 
+        if [[ "$fail_static" == true && "$*" == *check-static-manifest.py* ]]; then
+            exit 45
+        fi
         local i next
         for ((i=1; i<$#; i++)); do
             next=$((i + 1))
@@ -86,14 +94,13 @@ line_of() {
     printf '%s\n' "$line"
 }
 
-build_line="$(line_of 'DC <build> <web> <management-mcp> <internet-worker> <notification-worker>' "$events")"
+build_line="$(line_of 'DC <pull> <web> <management-mcp> <internet-worker> <notification-worker>' "$events")"
 check_line="$(line_of 'DC <run> <--rm> <-T> <web> <python> <manage.py> <check>' "$events")"
 migration_line="$(line_of 'DC <run> <--rm> <-T> <web> <python> <manage.py> <migrate> <--noinput>' "$events")"
 readiness_line="$(line_of '<manage.py> <launch_readiness> <--json>' "$events")"
 replacement_line="$(line_of 'DC <up> <-d> <--no-deps> <--force-recreate> <web> <management-mcp> <internet-worker> <notification-worker>' "$events")"
 mcp_line="$(line_of 'DC <exec> <-T> <management-mcp> <python> <scripts/check-mcp-bridge.py>' "$events")"
-static_line="$(line_of 'DC <exec> <-T> <web> <python> <manage.py> <collectstatic> <--noinput> <--clear>' "$events")"
-restart_line="$(line_of 'DC <restart> <web>' "$events")"
+static_line="$(line_of 'DC <run> <--rm> <-T> <web> <python> <scripts/check-static-manifest.py>' "$events")"
 route_line="$(line_of 'ROUTE /menu/ 200' "$events")"
 mikrotik_line="$(line_of 'DC <exec> <-T> <web> <python> <manage.py> <mikrotik_healthcheck> <--json>' "$events")"
 runtime_readiness_line="$(line_of 'DC <exec> <-T> <web> <python> <manage.py> <internet_readiness> <--json>' "$events")"
@@ -102,10 +109,9 @@ runtime_readiness_line="$(line_of 'DC <exec> <-T> <web> <python> <manage.py> <in
 (( check_line < migration_line ))
 (( migration_line < readiness_line ))
 (( readiness_line < replacement_line ))
+(( static_line < replacement_line ))
 (( replacement_line < mcp_line ))
-(( mcp_line < static_line ))
-(( static_line < restart_line ))
-(( restart_line < route_line ))
+(( mcp_line < route_line ))
 (( route_line < mikrotik_line ))
 (( mikrotik_line < runtime_readiness_line ))
 
@@ -171,3 +177,15 @@ if grep -F 'manage.py launch_readiness' "$repo/scripts/deploy-production.sh" | g
 fi
 
 echo "production deployment ordering tests passed"
+
+
+static_failed_events="$tmp/static-failure.events"
+set +e
+run_phase "$static_failed_events" false false false false true
+static_failure_status=$?
+set -e
+[[ "$static_failure_status" != 0 ]]
+if grep -Fq 'DC <up>' "$static_failed_events"; then
+    echo "traffic switched after static verification failure" >&2
+    exit 1
+fi

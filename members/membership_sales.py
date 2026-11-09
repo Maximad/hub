@@ -9,6 +9,7 @@ from datetime import timedelta
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
+from core.finance import current_business_date
 
 from accounts.permissions import user_has_capability
 from core.models import ActivityLog, Category, Order, OrderItem, Payment, Product
@@ -149,7 +150,7 @@ def create_membership_sale(*, member, plan, payment_method, actor, idempotency_k
         payment = None
         if gross:
             payment = collect_order_payment(order, PostingContext(
-                actor=actor, business_date=timezone.localdate(),
+                actor=actor, business_date=current_business_date(),
                 idempotency_key=f'membership-sale:{key}:payment',
                 channel='membership-sale'), gross, payment_method)
         subscription = MembershipSubscription.objects.create(
@@ -168,3 +169,4 @@ def create_membership_sale(*, member, plan, payment_method, actor, idempotency_k
         if starts_at <= timezone.now():
             transaction.on_commit(lambda: _activate_committed_subscription(subscription.pk, actor.pk))
     return MembershipSale(subscription, True)
+

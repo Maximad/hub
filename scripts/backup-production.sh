@@ -48,7 +48,16 @@ final="$BACKUP_ROOT/$name"
 [[ ! -e "$staging" && ! -e "$final" ]] || die "Backup name already exists"
 mkdir -m 0700 "$staging"
 web_paused=false
+snapshot_pid=""
+snapshot_in=""
 cleanup() {
+    if [[ -n "$snapshot_in" ]]; then
+        printf 'ROLLBACK;\n\\q\n' >&"$snapshot_in" 2>/dev/null || true
+        exec {snapshot_in}>&-
+    fi
+    if [[ -n "$snapshot_pid" ]]; then
+        wait "$snapshot_pid" 2>/dev/null || true
+    fi
     if [[ "$web_paused" == true ]]; then
         dc unpause web >/dev/null 2>&1 || true
     fi
@@ -63,17 +72,35 @@ log "Pausing application writes for a consistent snapshot"
 dc pause web >/dev/null
 web_paused=true
 
+# Read non-secret identifiers from the actual database container, not the host.
+DB_USER="$(dc exec -T db printenv POSTGRES_USER)"
+DB_NAME="$(dc exec -T db printenv POSTGRES_DB)"
+coproc SNAPSHOT_KEEPER { dc exec -T db psql --username "$DB_USER" --dbname "$DB_NAME" -X -q -A -t -v ON_ERROR_STOP=1; }
+snapshot_pid="$SNAPSHOT_KEEPER_PID"
+exec {snapshot_in}>&"${SNAPSHOT_KEEPER[1]}"
+exec {snapshot_out}<&"${SNAPSHOT_KEEPER[0]}"
+printf 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;\nSELECT pg_export_snapshot();\n' >&"$snapshot_in"
+IFS= read -r -t 30 snapshot <&"$snapshot_out" || die "Could not export database snapshot"
+[[ "$snapshot" =~ ^[0-9A-Fa-f]+-[0-9A-Fa-f]+-[0-9]+$ ]] || die "Invalid database snapshot identifier"
+
 log "Dumping PostgreSQL"
-dc exec -T db pg_dump --username "${POSTGRES_USER:-hub}" --dbname "${POSTGRES_DB:-hub}" \
-    --no-owner --no-privileges >"$staging/database.sql"
+dc exec -T db pg_dump --username "$DB_USER" --dbname "$DB_NAME" \
+    --snapshot="$snapshot" --no-owner --no-privileges >"$staging/database.sql"
 [[ -s "$staging/database.sql" ]] || die "Database dump is empty"
 grep -q '^-- PostgreSQL database dump complete' "$staging/database.sql" || die "Database dump is incomplete"
 
 # Each row is table name<TAB>row count. Identifiers are quoted by PostgreSQL itself.
-dc exec -T db psql --username "${POSTGRES_USER:-hub}" --dbname "${POSTGRES_DB:-hub}" \
-    -X -A -t -v ON_ERROR_STOP=1 -F $'\t' -c \
-    "SELECT schemaname||'.'||relname, (xpath('/row/c/text()', query_to_xml(format('SELECT count(*) AS c FROM %I.%I', schemaname, relname), false, true, '')))[1]::text::bigint FROM pg_stat_user_tables ORDER BY 1" \
+dc exec -T db psql --username "$DB_USER" --dbname "$DB_NAME" \
+    -X -q -A -t -v ON_ERROR_STOP=1 -F $'\t' -c \
+    "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY; SET TRANSACTION SNAPSHOT '$snapshot'; SELECT schemaname||'.'||relname, (xpath('/row/c/text()', query_to_xml(format('SELECT count(*) AS c FROM %I.%I', schemaname, relname), false, true, '')))[1]::text::bigint FROM pg_stat_user_tables ORDER BY 1; COMMIT;" \
     >"$staging/counts.tsv"
+
+printf 'COMMIT;\n\\q\n' >&"$snapshot_in"
+exec {snapshot_in}>&-
+snapshot_in=""
+exec {snapshot_out}<&-
+wait "$snapshot_pid"
+snapshot_pid=""
 
 log "Archiving media"
 mkdir -p media
@@ -111,3 +138,4 @@ log "Backup completed: $final"
 
 # Only inspect direct, validated backup directories, and always preserve the newest success.
 cleanup_production_backups "$root_real" "$RETENTION_DAYS"
+

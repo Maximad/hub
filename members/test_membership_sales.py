@@ -9,7 +9,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import close_old_connections, connection
 from django.core.management import call_command
-from django.test import Client, TestCase, TransactionTestCase
+from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -19,6 +19,7 @@ from members.activation import attempt_membership_sale_activation
 from members.models import MembershipPlan, MembershipSubscription
 
 
+@override_settings(COLLECTION_ACCOUNT_CODES={'cash': 'cash:membership', 'revenue': 'revenue:membership', 'transfer': 'clearing:bank'})
 class MembershipSaleTests(TestCase):
     def setUp(self):
         self.actor = get_user_model().objects.create_user(

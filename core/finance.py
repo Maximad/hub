@@ -71,7 +71,8 @@ from django.utils import timezone
 
 
 def current_business_date():
-    return timezone.localdate()
+    from operations.services import current_business_date as operational_business_date
+    return operational_business_date()
 
 
 def close_snapshot(close):
@@ -161,3 +162,4 @@ def reopen_daily_close(close, user, reason):
     context = PostingContext(actor=user, approver=user, business_date=close.business_date,
                              idempotency_key=f'compat-reopen:{close.pk}:{close.updated_at.isoformat()}')
     return closing.reopen(close, context, reason)
+

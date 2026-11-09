@@ -2,10 +2,12 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from decimal import Decimal
 from unittest import SkipTest
+from unittest.mock import patch
+from threading import Event
 
 from django.contrib.auth import get_user_model
 from django.db import close_old_connections, connection
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, override_settings
 
 from core.models import (
     CashMovement, Category, DailyClose, Expense, ExpenseCategory,
@@ -17,6 +19,7 @@ from core.services.posting.context import PostingContext
 from core.services.posting.exceptions import ClosedPeriodError, InvalidTransition
 
 
+@override_settings(COLLECTION_ACCOUNT_CODES={'cash': 'cash:concurrency', 'revenue': 'revenue:concurrency', 'transfer': 'clearing:bank'})
 class PostgreSQLConcurrentPostingTests(TransactionTestCase):
     """Real row-lock tests; SQLite cannot provide the required worker semantics."""
 
@@ -139,6 +142,42 @@ class PostgreSQLConcurrentPostingTests(TransactionTestCase):
         self.assertEqual(PostingCommand.objects.filter(key='order:duplicate').count(), 1)
         self.assertEqual(Payment.objects.filter(order=order).count(), 1)
         self.assertEqual(CashMovement.objects.filter(related_order=order).count(), 1)
+
+    def test_collection_rechecks_period_after_close_wins_account_lock(self):
+        order = self.order()
+        daily_close = DailyClose.objects.create(
+            business_date=self.day, account=self.cash,
+            status=DailyClose.Status.OPEN, is_finalized=False,
+        )
+        entered, resume = Event(), Event()
+        resolve = order_payments._collection_account
+
+        def paused_resolve(kind):
+            entered.set()
+            if not resume.wait(15):
+                raise TimeoutError('Collection did not resume')
+            return resolve(kind)
+
+        def collect_in_worker():
+            close_old_connections()
+            try:
+                return order_payments.collect(order, self.context('order:close-between-checks'), 600, Payment.Method.CASH)
+            finally:
+                connection.close()
+
+        with patch.object(order_payments, '_collection_account', side_effect=paused_resolve):
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                pending = pool.submit(collect_in_worker)
+                try:
+                    self.assertTrue(entered.wait(15))
+                    closing.close(daily_close, self.close_context('close:before-account-lock'), 0)
+                finally:
+                    resume.set()
+                with self.assertRaises(ClosedPeriodError):
+                    pending.result(timeout=15)
+        daily_close.refresh_from_db()
+        self.assertEqual(daily_close.expected_cash_syp, 0)
+        self.assertFalse(Payment.objects.filter(order=order).exists())
 
     def refund_context(self, key):
         return PostingContext(

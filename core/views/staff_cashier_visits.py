@@ -10,6 +10,7 @@ from django.db import transaction
 from django.db.models import Prefetch, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from core.finance import current_business_date
 from django.views.decorators.http import require_GET, require_POST
 
 from accounts.permissions import can_approve_partial_payment, require_staff_capability
@@ -285,7 +286,7 @@ def staff_cashier_visit_pay(request, public_code):
                 if method not in dict(COLLECTIBLE_PAYMENT_METHODS):
                     raise ValidationError('اختر طريقة دفع صالحة.')
                 context = PostingContext(actor=request.user, approver=approver,
-                    business_date=timezone.localdate(), idempotency_key=posting_key, channel='cashier',
+                    business_date=current_business_date(), idempotency_key=posting_key, channel='cashier',
                     request_metadata={'path': request.path, 'visit_id': visit.pk,
                                       'cashier_payment_fingerprint': fingerprint})
                 settled_visit, _allocations = allocate_visit_payment(
@@ -358,7 +359,7 @@ def staff_cashier_visit_settle(request, public_code):
                     raise ValidationError('اختر طريقة الدفع قبل تسديد وإغلاق الجلسة.')
                 context = PostingContext(
                     actor=request.user,
-                    business_date=timezone.localdate(),
+                    business_date=current_business_date(),
                     idempotency_key=posting_key,
                     channel='cashier',
                     request_metadata={
@@ -450,3 +451,4 @@ def staff_cashier_visit_receipt_thermal(request, public_code):
         details={'visit_id': visit.pk, 'template': 'thermal'},
     )
     return render(request, 'staff/prints/visit_receipt_thermal.html', _receipt_context(request, visit, 'thermal'))
+

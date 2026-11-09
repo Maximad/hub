@@ -39,6 +39,7 @@
   <details class="hub-ux5-module__more" data-purchase-approval><summary>اعتماد المدير (مطلوب عند {{ approval_limit }} ل.س أو أكثر)</summary>
     <p class="hub-help-text" data-purchase-approval-note>إذا تجاوزت الدفعة الحد، اختر مديراً مخولاً مختلفاً عن منفذ الدفع.</p>
     <label>المعتمد <select name="approver"><option value="">اختر عند الحاجة</option>{% for user in approvers %}<option value="{{ user.pk }}">{{ user }}</option>{% endfor %}</select></label>
+<label>كلمة مرور المدير المعتمد <input type="password" name="approver_password" autocomplete="off"></label>
   </details>
   <button name="action" value="pay" class="hub-btn" type="submit">ترحيل دفعة المورد</button>
 </form>
@@ -54,3 +55,4 @@
 {% if purchase.status != "cancelled" %}<form class="hub-form-section" method="post">{% csrf_token %}<label>سبب الإلغاء <textarea name="reason"></textarea></label><button name="action" value="cancel" class="hub-btn" type="submit">تأكيد إلغاء الشراء</button></form>{% endif %}
 <h4>حركات المخزون</h4><ul>{% for m in purchase.stock_movements.all %}<li>{{ m.get_movement_type_display }} — {{ m.get_direction_display }} — {{ m.inventory_item }} — {{ m.quantity }}</li>{% empty %}<li>لا توجد حركات</li>{% endfor %}</ul>
 {% endblock %}
+

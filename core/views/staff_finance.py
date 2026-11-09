@@ -2,7 +2,7 @@ import csv
 from uuid import UUID, uuid4
 
 from django.contrib import messages
-from django.contrib.auth import get_user_model
+from django.contrib.auth import authenticate, get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Q, Sum
@@ -55,10 +55,24 @@ def _validation_messages(error):
         return list(error.messages)
     return [str(error)]
 
+def _authenticated_approver(request):
+    selected = request.POST.get('approver')
+    if not selected:
+        return None
+    candidate = get_user_model().objects.filter(pk=selected).first()
+    user = authenticate(request, username=candidate.get_username() if candidate else '',
+                        password=request.POST.get('approver_password', ''))
+    if (user is None or user.pk != candidate.pk or user.pk == request.user.pk
+            or not is_finance_user(user)
+            or not (user.is_superuser or getattr(user, 'role', '') == 'admin')):
+        raise ValidationError('يلزم أن يؤكد مدير مختلف موافقته بكلمة مروره الصحيحة.')
+    return user
+
+
 def _posting_context(request, business_date=None, approver=None):
     import hashlib
     supplied=request.headers.get('Idempotency-Key') or request.POST.get('idempotency_key')
-    digest=hashlib.sha256(repr(sorted((key, request.POST.getlist(key)) for key in request.POST)).encode()).hexdigest()[:24]
+    digest=hashlib.sha256(repr(sorted((key, request.POST.getlist(key)) for key in request.POST if key not in {'csrfmiddlewaretoken', 'approver_password', 'manager_password'})).encode()).hexdigest()[:24]
     return PostingContext(actor=request.user,approver=approver,business_date=business_date,
         idempotency_key=supplied or f'{request.path}:{request.user.pk}:{digest}',channel='staff',
         request_metadata={'path':request.path,'remote_addr':request.META.get('REMOTE_ADDR','')})
@@ -223,13 +237,13 @@ def staff_transfer_new(request):
     errors=[]
     if request.method == 'POST':
         business_date=_parse_report_date(request.POST.get('business_date'))
-        approver=get_user_model().objects.filter(pk=request.POST.get('approver') or None).first()
-        currency_service=CurrencyEntryFormService(request, operation='transfer', business_date=business_date, approver=approver)
         try:
+            approver = _authenticated_approver(request)
+            currency_service=CurrencyEntryFormService(request, operation='transfer', business_date=business_date, approver=approver)
             currency_entry=currency_service.clean(request.POST.get('amount'))
             transfer=Transfer(source_account_id=request.POST.get('source_account'), destination_account_id=request.POST.get('destination_account'), amount=currency_entry.base_amount, business_date=business_date, reason=request.POST.get('reason','').strip(), actor=request.user)
             with transaction.atomic():
-                transfer_posting.post(transfer, _posting_context(request, transfer.business_date, approver))
+                transfer = transfer_posting.post(transfer, _posting_context(request, transfer.business_date, approver))
                 currency_service.snapshot(transfer, currency_entry, 'amount')
         except Exception as error:
             errors.extend(_validation_messages(error))
@@ -365,9 +379,9 @@ def staff_purchase_detail(request,purchase_id):
         return _cancel_purchase(request,p)
     if request.method=='POST' and request.POST.get('action')=='pay':
         business_date=_parse_report_date(request.POST.get('business_date'))
-        approver=get_user_model().objects.filter(pk=request.POST.get('approver') or None).first()
-        service=CurrencyEntryFormService(request,operation='purchase_payment',business_date=business_date,approver=approver)
         try:
+            approver = _authenticated_approver(request)
+            service=CurrencyEntryFormService(request,operation='purchase_payment',business_date=business_date,approver=approver)
             entry=service.clean(request.POST.get('amount_syp'))
             account=FinancialAccount.objects.get(pk=request.POST.get('source_account'))
             with transaction.atomic():
@@ -427,3 +441,4 @@ def _cancel_purchase(request,p):
     else:
         messages.success(request,'تم إلغاء الشراء بحركات عكسية.')
     return redirect('staff_purchase_detail', purchase_id=p.pk)
+

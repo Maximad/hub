@@ -680,7 +680,7 @@ class InternetHttpWorkflowTests(TestCase):
         self.assertEqual(response.context['totals']['partner'], Decimal('0'))
 
 
-@override_settings(SECURE_SSL_REDIRECT=False)
+@override_settings(SECURE_SSL_REDIRECT=False, COLLECTION_ACCOUNT_CODES={'cash': 'cash:date-range', 'revenue': 'revenue:date-range', 'transfer': 'clearing:bank'})
 class PartnerDashboardDateRangeTests(TestCase):
     def setUp(self):
         from django.contrib.auth import get_user_model

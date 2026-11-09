@@ -20,7 +20,7 @@ from reservations.models import (
 from reservations.ticketing import set_event_ticket_allocations
 
 
-@override_settings(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False)
+@override_settings(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False, COLLECTION_ACCOUNT_CODES={'cash': 'eventposcash', 'revenue': 'eventposrevenue', 'transfer': 'clearing:bank'})
 class EventTicketCheckoutTests(TestCase):
     def setUp(self):
         self.admin = get_user_model().objects.create_user(

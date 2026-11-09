@@ -18,7 +18,7 @@ from core.services.visits import issue_visit_credential
 from core.tests import test_visit_cashier_settlement as fixtures
 from internet.models import InternetSessionNetworkOperation
 
-WEB = dict(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False, MIKROTIK_ENABLED=False,
+WEB = dict(COLLECTION_ACCOUNT_CODES={'cash': 'cash:visit-settlement', 'revenue': 'revenue:visit-settlement', 'transfer': 'clearing:bank'}, ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False, MIKROTIK_ENABLED=False,
            STORAGES={'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
 MODELS = (Payment, CashMovement, PostingBatch, PostingEntry, PostingCommand, CurrencyEntrySnapshot)
 
