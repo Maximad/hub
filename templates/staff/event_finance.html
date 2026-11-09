@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}مالية الفعالية{% endblock %}
+{% block content %}
+<section class="hub-section" dir="rtl" style="max-width:1100px;margin-inline:auto">
+  <header class="hub-page-header">
+    <div>
+      <p class="hub-page-header__meta"><a href="{% url 'staff_events' %}">الفعاليات</a> / <a href="{% url 'staff_event_detail' event.id %}">{{ event.title_ar }}</a></p>
+      <h1 class="hub-page-header__title">متابعة مالية الفعالية</h1>
+      <p class="hub-page-header__meta">عرض محافظ للمقبوضات والمصروفات المرتبطة فعلياً بفعالية هَبّ.</p>
+    </div>
+    <a class="hub-button" href="{% url 'staff_event_detail' event.id %}">العودة إلى الفعالية</a>
+  </header>
+  <section class="hub-card hub-section">
+    <h2 class="hub-section-title">المقبوض والمصروف المعروف</h2>
+    <div class="hub-grid hub-grid-2">
+      <div><strong>مقبوضات تذاكر مُرحّلة</strong><p>{{ report.verified_receipts_syp }} ل.س</p></div>
+      <div><strong>مصروفات موزّعة ومدفوعة بقيد موثّق</strong><p>{{ report.verified_paid_costs_syp }} ل.س</p></div>
+      <div><strong>فرق النقد الموثق من هذه السجلات</strong><p>{{ report.known_cash_difference_syp }} ل.س</p></div>
+      <div><strong>مصروفات مرتبطة لم يثبت دفعها</strong><p>{{ report.allocated_unverified_costs_syp }} ل.س</p></div>
+    </div>
+    <p class="hub-message"><strong>ليس هذا صافي ربح الفعالية.</strong> لا يشمل إيرادات غير مرتبطة بسندات محاسبية، أو تكاليف لم تُوزَّع، أو أجوراً وعمولات وشركاء وضرائب ومشروبات مجانية أو استردادات خارج النظام. تظهر النتائج حسب البيانات المُثبتة فقط.</p>
+    {% if report.cancelled_booking_receipts_syp %}
+      <p class="hub-message hub-message-error">تنبيه: يوجد {{ report.cancelled_booking_receipts_syp }} ل.س من إيصالات فعالة مرتبطة بحجوزات ملغاة؛ راجع عمليات الاسترداد يدوياً.</p>
+    {% endif %}
+  </section>
+
+  <section class="hub-card hub-section">
+    <h2 class="hub-section-title">ربط مصروف معتمد ومسجل في مالية هَبّ</h2>
+    <p class="hub-help-text">ربط المصروف لا ينشئ عملية صرف، ولا يغيّر حالة الدفع. اختر مصروفاً يعود إلى هَبّ فقط، وليس إلى حبق أو مشروع خارجي.</p>
+    <form method="post" class="hub-form hub-form-section">
+      {% csrf_token %}
+      <label for="finance-expense-id">المصروف المسجل</label>
+      <select id="finance-expense-id" name="expense_id" class="hub-input" required>
+        <option value="">اختر مصروفاً من أحدث 100 سجل</option>
+        {% for expense in expenses %}
+          <option value="{{ expense.pk }}">#{{ expense.pk }} · {{ expense.title }} · {{ expense.amount_syp }} ل.س · {{ expense.business_date|date:"Y-m-d" }}</option>
+        {% endfor %}
+      </select>
+      <label for="finance-expense-amount">المبلغ الخاص بهذه الفعالية من المصروف</label>
+      <input id="finance-expense-amount" name="amount_syp" type="number" min="1" step="1" class="hub-input" required>
+      <label for="finance-expense-rationale">سبب ارتباط المصروف بالفعالية</label>
+      <input id="finance-expense-rationale" name="rationale" class="hub-input" maxlength="200" minlength="3" placeholder="مثلاً: إيجار معدات الصوت لهذه الليلة" required>
+      <button type="submit" class="hub-button hub-button-primary">ربط المصروف فقط (دون عملية دفع)</button>
+    </form>
+  </section>
+
+  <section class="hub-card hub-section">
+    <h2 class="hub-section-title">المصروفات المنسوبة للفعالية</h2>
+    <div class="hub-table-wrap">
+      <table class="hub-table">
+        <thead><tr><th>المصروف</th><th>التاريخ</th><th>المخصص</th><th>الحالة المالية</th><th>السبب</th></tr></thead>
+        <tbody>
+          {% for link in report.allocations %}
+            <tr>
+              <td>#{{ link.expense.pk }} · {{ link.expense.title }}</td>
+              <td>{{ link.expense.business_date|date:"Y-m-d" }}</td>
+              <td>{{ link.amount_syp }} ل.س</td>
+              <td>{{ link.expense.get_status_display }}</td>
+              <td>{{ link.rationale }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5">لم تُربط أي مصروفات مسجلة بهذه الفعالية بعد. لا يمكن استنتاج الأرباح دون بيانات التكاليف.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>
+{% endblock %}
