@@ -14,7 +14,7 @@ from django.views.decorators.http import require_GET, require_POST
 from accounts.permissions import require_staff_capability
 from core.models import ActivityLog
 from events.layout_validation import validate_draft_layout, MAX_LAYOUT_BYTES
-from events.models import Event, EventLayoutSnapshot, VenueLayoutTemplate
+from events.models import Event, EventLayoutSnapshot, VenueLayoutTemplate, VenueLayoutRevision
 
 
 @require_staff_capability('events')
@@ -67,10 +67,18 @@ def staff_event_layout_edit(request, event_id):
 
 
 def _render_lab(request, *, label, target, layout=None, pk=None, version=0, kind='comedy'):
+    if target == 'template':
+        history = VenueLayoutRevision.objects.filter(template_id=pk).order_by('-version')[:30]
+    elif target == 'event':
+        history = VenueLayoutRevision.objects.filter(event_layout__event_id=pk).order_by('-version')[:30]
+    else:
+        history = []
     config = {
         'label': label, 'target': target, 'id': pk, 'version': version,
         'kind': kind, 'layout': layout,
         'saveUrl': reverse('staff_layout_save'),
+        'restoreUrl': reverse('staff_layout_restore'),
+        'revisions': [{'id': r.pk, 'version': r.version} for r in history],
         'indexUrl': reverse('staff_layouts'),
     }
     return render(request, 'staff/layouts/lab.html', {'layout_config': config})
@@ -105,6 +113,10 @@ def staff_layout_save(request):
                     name=name, kind=kind, layout=layout,
                     created_by=request.user, updated_by=request.user,
                 )
+                VenueLayoutRevision.objects.create(
+                    template=template, version=template.version,
+                    layout=copy.deepcopy(layout), created_by=request.user,
+                )
                 ActivityLog.objects.create(
                     actor=request.user, action='venue_layout.template_created',
                     details={'layout_template_id': template.pk, 'seat_count_schematic':
@@ -124,6 +136,10 @@ def staff_layout_save(request):
                 template.version += 1
                 template.updated_by = request.user
                 template.save(update_fields=['name', 'kind', 'layout', 'version', 'updated_by', 'updated_at'])
+                VenueLayoutRevision.objects.create(
+                    template=template, version=template.version,
+                    layout=copy.deepcopy(layout), created_by=request.user,
+                )
                 ActivityLog.objects.create(
                     actor=request.user, action='venue_layout.template_updated',
                     details={'layout_template_id': pk, 'revision': template.version},
@@ -142,6 +158,10 @@ def staff_layout_save(request):
                 snapshot.version += 1
                 snapshot.updated_by = request.user
                 snapshot.save(update_fields=['layout', 'version', 'updated_by', 'updated_at'])
+                VenueLayoutRevision.objects.create(
+                    event_layout=snapshot, version=snapshot.version,
+                    layout=copy.deepcopy(layout), created_by=request.user,
+                )
                 ActivityLog.objects.create(
                     actor=request.user, action='venue_layout.event_edited',
                     details={'event_id': pk, 'revision': snapshot.version},
@@ -188,6 +208,10 @@ def staff_layout_assign(request):
         except IntegrityError:
             messages.error(request, 'تم إسناد مخطط لهذه الفعالية من جلسة أخرى.')
             return redirect('staff_layouts')
+        VenueLayoutRevision.objects.create(
+            event_layout=snapshot, version=snapshot.version,
+            layout=copy.deepcopy(snapshot.layout), created_by=request.user,
+        )
         ActivityLog.objects.create(
             actor=request.user, action='venue_layout.event_assigned',
             details={'event_id': event.pk, 'layout_template_id': template.pk,
@@ -195,3 +219,54 @@ def staff_layout_assign(request):
         )
     messages.success(request, 'تم إنشاء نسخة مستقلة للفعالية. هذا لا يفتح حجوزات المقاعد.')
     return redirect('staff_event_layout_edit', event_id=event.pk)
+
+
+@require_staff_capability('events')
+@require_POST
+def staff_layout_restore(request):
+    """Restore a historical draft by creating a new revision (no destructive rewind)."""
+    if len(request.body) > 4096:
+        return JsonResponse({'error': 'طلب استعادة كبير جداً.'}, status=413)
+    try:
+        payload = json.loads(request.body)
+        if not isinstance(payload, dict):
+            raise ValidationError('طلب غير صالح.')
+        pk = _positive_pk(payload.get('id'))
+        revision_id = _positive_pk(payload.get('revision_id'))
+        if isinstance(payload.get('version'), bool) or not isinstance(payload.get('version'), int):
+            raise ValidationError('نسخة مخطط غير صالحة.')
+        with transaction.atomic():
+            if payload.get('target') == 'template':
+                instance = get_object_or_404(
+                    VenueLayoutTemplate.objects.select_for_update(),
+                    pk=pk, archived=False,
+                )
+                revision = get_object_or_404(VenueLayoutRevision, pk=revision_id, template=instance)
+            elif payload.get('target') == 'event':
+                instance = get_object_or_404(
+                    EventLayoutSnapshot.objects.select_for_update(), event_id=pk,
+                )
+                revision = get_object_or_404(VenueLayoutRevision, pk=revision_id, event_layout=instance)
+            else:
+                raise ValidationError('هدف الاستعادة غير صالح.')
+            if instance.version != payload['version']:
+                return JsonResponse({'error': 'تغيّر المخطط. أعد فتحه أولاً.'}, status=409)
+            instance.layout = validate_draft_layout(revision.layout)
+            instance.version += 1
+            instance.updated_by = request.user
+            instance.save(update_fields=['layout', 'version', 'updated_by', 'updated_at'])
+            VenueLayoutRevision.objects.create(
+                template=instance if payload['target'] == 'template' else None,
+                event_layout=instance if payload['target'] == 'event' else None,
+                version=instance.version, layout=copy.deepcopy(instance.layout),
+                created_by=request.user,
+            )
+            ActivityLog.objects.create(
+                actor=request.user, action='venue_layout.revision_restored',
+                details={'target': payload['target'], 'record_id': pk,
+                         'from_revision_id': revision_id, 'new_version': instance.version},
+            )
+        return JsonResponse({'version': instance.version, 'restored': True})
+    except (ValidationError, ValueError, TypeError) as error:
+        msg = ' '.join(error.messages) if isinstance(error, ValidationError) else 'طلب الاستعادة غير صالح.'
+        return JsonResponse({'error': msg}, status=400)
