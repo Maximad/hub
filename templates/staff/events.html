@@ -41,7 +41,7 @@
             {% endif %}
           </div>
           <h2 class="events-ui__title"><a href="{% url 'staff_event_detail' e.id %}">{{ e.title_ar }}</a></h2>
-          <p class="events-ui__meta"><strong>الموعد</strong> <time datetime="{{ e.starts_at|date:'c' }}">{{ e.starts_at|date:"d/m/Y · H:i" }}</time></p>
+          <p class="events-ui__meta"><strong>الموعد</strong> <time datetime="{{ e.starts_at|date:'c' }}">{{ e.next_show|default:e.starts_at|date:"d/m/Y · H:i" }}</time></p>
           <p class="events-ui__meta"><strong>المكان</strong> {{ e.room|default:"غير محدد" }}</p>
           <p class="events-ui__meta"><strong>السعة المسجلة</strong> {{ e.capacity|default:"غير محددة" }}</p>
           <div class="events-ui__card-actions">

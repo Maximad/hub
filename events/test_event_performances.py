@@ -130,13 +130,16 @@ class EventPerformanceTests(TestCase):
 
     def test_staff_can_add_second_show_without_second_event(self):
         self.client.force_login(self.staff)
+        initial_events = Event.objects.count()
+        initial_shows = self.event.performances.count()
+        third = timezone.localtime(self.late.starts_at, DAMASCUS) + timedelta(hours=3)
         response = self.client.post(reverse('staff_event_schedule', args=[self.event.pk]), {
-            'starts_at': timezone.localtime(self.event.starts_at, DAMASCUS).strftime('%Y-%m-%dT%H:%M'),
+            'starts_at': third.strftime('%Y-%m-%dT%H:%M'),
             'frequency': 'once', 'count': '1',
         })
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(Event.objects.count(), 1)
-        self.assertEqual(self.event.performances.count(), 2)
+        self.assertEqual(Event.objects.count(), initial_events)
+        self.assertEqual(self.event.performances.count(), initial_shows + 1)
         response = self.client.get(reverse('staff_event_detail', args=[self.event.pk]))
         self.assertContains(response, 'مواعيد العروض')
 

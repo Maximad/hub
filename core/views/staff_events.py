@@ -5,7 +5,7 @@ reservation mutations on their established, permission-checked services.
 """
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.db.models import Prefetch
+from django.db.models import Prefetch, OuterRef, Subquery
 from django.shortcuts import get_object_or_404, render
 from django.http import HttpResponse, Http404
 from django.views.decorators.http import require_http_methods
@@ -57,9 +57,14 @@ def _cover_media():
 @login_required
 def staff_events(request):
     _assert_staff_capability(request.user, 'events')
+    next_show = EventPerformance.objects.filter(
+        event_id=OuterRef('pk'), status=EventPerformance.Status.SCHEDULED,
+        starts_at__gte=timezone.now(),
+    ).order_by('starts_at').values('starts_at')[:1]
     events = (
         Event.objects.select_related('room')
         .prefetch_related(_cover_media())
+        .annotate(next_show=Subquery(next_show))
         .order_by('starts_at', '-created_at')
     )
     return render(request, 'staff/events.html', {
