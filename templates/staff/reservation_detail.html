@@ -46,6 +46,7 @@
   {% if reservation.reservation_type == 'event' and reservation.event_id %}
   <section class="hub-card hub-section">
     <h3>تحصيل تذاكر الفعالية</h3>
+    <p><a class="hub-button hub-button-primary" href="{% url 'staff_reservation_ticket_checkout' reservation.id %}">فاتورة التذاكر والتحصيل</a></p>
     {% if ticket_financial_summary.classified %}
       <div class="hub-grid hub-grid-2">
         <div><strong>القيمة الاسمية</strong><p>{{ ticket_financial_summary.expected }} ل.س</p></div>
