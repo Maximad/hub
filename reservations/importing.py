@@ -17,7 +17,7 @@ from django.utils import timezone
 
 from accounts.permissions import user_has_capability
 from core.models import ActivityLog
-from events.models import Event, EventTicketType
+from events.models import Event, EventTicketType, EventPerformance
 from .models import Reservation, ReservationImportBatch
 from .services import create_reservation, event_reserved_party_size
 from .ticketing import set_event_ticket_allocations
@@ -38,17 +38,33 @@ def normalize_phone(value):
     return cleaned
 
 
-def _fingerprint(event_id, rows):
-    data = json.dumps({'event': event_id, 'rows': rows}, ensure_ascii=False,
+def _fingerprint(event_id, rows, performance_id=None):
+    data = json.dumps({'event': event_id, 'performance': performance_id, 'rows': rows}, ensure_ascii=False,
                       sort_keys=True, separators=(',', ':')).encode('utf-8')
     return hmac.new(settings.SECRET_KEY.encode('utf-8'), data, hashlib.sha256).hexdigest()
 
 
-def validate_rows(event_id, rows, *, actor=None):
+def _import_performance(event, performance_id=None):
+    rows = list(EventPerformance.objects.filter(event=event).order_by('starts_at')[:2])
+    if performance_id:
+        performance = EventPerformance.objects.filter(event=event, pk=performance_id,
+            status=EventPerformance.Status.SCHEDULED).first()
+        if not performance:
+            raise ValidationError('موعد العرض غير صالح.')
+        return performance
+    if len(rows) > 1:
+        raise ValidationError('اختر موعد العرض قبل استيراد الحجوزات.')
+    if rows and rows[0].status != EventPerformance.Status.SCHEDULED:
+        raise ValidationError('موعد العرض غير متاح.')
+    return rows[0] if rows else None
+
+
+def validate_rows(event_id, rows, *, actor=None, performance_id=None):
     """Return canonical import rows and HMAC. No writes or customer data logging."""
     if not isinstance(rows, list) or not rows or len(rows) > MAX_ROWS:
         raise ValidationError('عدد صفوف الحجز يجب أن يكون بين 1 و250.')
     event = Event.objects.get(pk=event_id)
+    performance = _import_performance(event, performance_id)
     tiers = {tier.pk: tier for tier in EventTicketType.objects.filter(
         event=event, is_active=True,
     )}
@@ -97,10 +113,10 @@ def validate_rows(event_id, rows, *, actor=None):
             'name': name, 'phone': phone, 'party_size': size,
             'status': status, 'tiers': normalized_tiers,
         })
-    return canonical, _fingerprint(event_id, canonical)
+    return canonical, _fingerprint(event_id, canonical, performance.pk if performance else None)
 
 
-def preview_uploaded_csv(event_id, uploaded):
+def preview_uploaded_csv(event_id, uploaded, *, performance_id=None):
     if not uploaded:
         raise ValidationError('اختر ملف CSV.')
     raw = uploaded.read(MAX_FILE_BYTES + 1)
@@ -133,18 +149,20 @@ def preview_uploaded_csv(event_id, uploaded):
             rows.append(parsed)
     except (UnicodeDecodeError, csv.Error) as error:
         raise ValidationError('تعذر قراءة CSV بترميز UTF-8 أو أن تنسيق الملف غير صالح.') from error
-    return validate_rows(event_id, rows)
+    return validate_rows(event_id, rows, performance_id=performance_id)
 
 
 @transaction.atomic
-def import_event_bookings(event_id, rows, fingerprint, *, actor):
+def import_event_bookings(event_id, rows, fingerprint, *, actor, performance_id=None):
     if not getattr(actor, 'is_active', False) or not user_has_capability(actor, 'reservations'):
         raise ValidationError('لا تملك صلاحية استيراد حجوزات الفعاليات.')
-    canonical, actual = validate_rows(event_id, rows)
+    canonical, actual = validate_rows(event_id, rows, performance_id=performance_id)
     if not hmac.compare_digest(str(fingerprint), actual):
         raise ValidationError('بيانات الاستيراد تغيرت؛ أعد المعاينة.')
     event = Event.objects.select_for_update().get(pk=event_id)
-    if event.status in {Event.Status.CANCELLED, Event.Status.COMPLETED} or event.starts_at <= timezone.now():
+    performance = _import_performance(event, performance_id)
+    starts_at = performance.starts_at if performance else event.starts_at
+    if event.status in {Event.Status.CANCELLED, Event.Status.COMPLETED} or starts_at <= timezone.now():
         raise ValidationError('الفعالية بدأت أو انتهت ولا تسمح باستيراد حجوزات جديدة.')
     previous = ReservationImportBatch.objects.filter(
         event=event, fingerprint=actual,
@@ -153,7 +171,7 @@ def import_event_bookings(event_id, rows, fingerprint, *, actor):
         return previous, False
     duplicates = set()
     for phone in Reservation.objects.filter(
-        event=event, status__in=ACTIVE,
+        event=event, performance=performance, status__in=ACTIVE,
     ).values_list('phone', flat=True):
         try:
             duplicates.add(normalize_phone(phone))
@@ -164,7 +182,9 @@ def import_event_bookings(event_id, rows, fingerprint, *, actor):
     if duplicates.intersection(row['phone'] for row in canonical):
         raise ValidationError('توجد أرقام هواتف محجوزة بالفعل في هذه الفعالية؛ راجع التكرار يدوياً.')
     needed = sum(row['party_size'] for row in canonical)
-    if event.capacity is not None and event_reserved_party_size(event.pk) + needed > event.capacity:
+    capacity = performance.effective_capacity if performance else event.capacity
+    if capacity is not None and event_reserved_party_size(
+            event.pk, performance_id=performance.pk if performance else None) + needed > capacity:
         raise ValidationError('عدد الضيوف في ملف الاستيراد يتجاوز السعة المتبقية للفعالية.')
     batch = ReservationImportBatch.objects.create(
         event=event, fingerprint=actual, imported_count=len(canonical),
@@ -173,7 +193,7 @@ def import_event_bookings(event_id, rows, fingerprint, *, actor):
     for row in canonical:
         booking = create_reservation(Reservation(
             reservation_type=Reservation.ReservationType.EVENT,
-            event=event, name=row['name'], phone=row['phone'],
+            event=event, performance=performance, name=row['name'], phone=row['phone'],
             party_size=row['party_size'], status=row['status'],
             created_by=actor,
         ))

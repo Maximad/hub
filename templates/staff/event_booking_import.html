@@ -25,6 +25,16 @@
     <form method="post" enctype="multipart/form-data" class="hub-form hub-form-section">
       {% csrf_token %}
       <input type="hidden" name="action" value="preview">
+      {% if performances %}
+        <label for="import-performance">موعد العرض
+          <select id="import-performance" name="performance" {% if performances|length > 1 %}required{% endif %}>
+            {% if performances|length > 1 %}<option value="">اختر العرض</option>{% endif %}
+            {% for show in performances %}
+              <option value="{{ show.pk }}" {% if selected_performance.pk == show.pk %}selected{% endif %}>{{ show.starts_at|date:"d/m/Y · H:i" }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      {% endif %}
       <label for="bookings-csv">ملف حجوزات CSV</label>
       <input id="bookings-csv" name="bookings_csv" type="file" accept=".csv,text/csv" required>
       <button type="submit" class="hub-button hub-button-primary">معاينة الحجوزات بدون حفظ</button>
@@ -55,6 +65,7 @@
         {% csrf_token %}
         <input type="hidden" name="action" value="confirm">
         <input type="hidden" name="fingerprint" value="{{ fingerprint }}">
+        {% if selected_performance %}<input type="hidden" name="performance" value="{{ selected_performance.pk }}">{% endif %}
         <label for="confirm-bookings-csv">اختر الملف ذاته مرة ثانية لتأكيد الاستيراد</label>
         <input id="confirm-bookings-csv" name="bookings_csv" type="file" accept=".csv,text/csv" required>
         <button class="hub-button hub-button-primary" type="submit">تأكيد واستيراد الحجوزات</button>

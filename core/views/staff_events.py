@@ -234,6 +234,14 @@ def staff_event_booking_import(request, event_id):
     """Two-step upload preview/confirm. No customer PII stored in browser sessions."""
     event = get_object_or_404(Event, pk=event_id)
     tiers = list(EventTicketType.objects.filter(event=event, is_active=True).order_by('pk'))
+    performances = list(EventPerformance.objects.filter(
+        event=event, status=EventPerformance.Status.SCHEDULED).order_by('starts_at'))
+    performance_id = request.POST.get('performance') if request.method == 'POST' else request.GET.get('performance')
+    selected_performance = next((row for row in performances if str(row.pk) == str(performance_id)), None)
+    if performance_id and selected_performance is None:
+        raise Http404
+    if not selected_performance and len(performances) == 1:
+        selected_performance = performances[0]
     if request.method == 'GET' and request.GET.get('template') == '1':
         response = HttpResponse(content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = f'attachment; filename="event-{event.pk}-bookings.csv"'
@@ -252,6 +260,7 @@ def staff_event_booking_import(request, event_id):
         try:
             preview, fingerprint = preview_uploaded_csv(
                 event.pk, request.FILES.get('bookings_csv'),
+                performance_id=selected_performance.pk if selected_performance else None,
             )
             if action == 'confirm':
                 confirmed_fingerprint = (request.POST.get('fingerprint') or '').strip()
@@ -259,6 +268,7 @@ def staff_event_booking_import(request, event_id):
                     raise ValidationError('الملف تغيّر بعد المعاينة؛ أعد مراجعة الملف.')
                 batch, created = import_event_bookings(
                     event.pk, preview, fingerprint, actor=request.user,
+                    performance_id=selected_performance.pk if selected_performance else None,
                 )
                 messages.success(
                     request,
@@ -273,7 +283,8 @@ def staff_event_booking_import(request, event_id):
             preview = []
             fingerprint = ''
     return render(request, 'staff/event_booking_import.html', {
-        'event': event, 'tiers': tiers, 'preview': preview,
+        'event': event, 'tiers': tiers, 'performances': performances,
+        'selected_performance': selected_performance, 'preview': preview,
         'fingerprint': fingerprint, 'error': error,
     })
 
