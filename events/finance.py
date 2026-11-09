@@ -3,6 +3,7 @@
 This does not post, pay, approve or reverse any Expense/Payment and does not
 allocate Habaq or external-project funds into Hub operations.
 """
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Sum
@@ -84,15 +85,21 @@ def event_known_finance_report(event_id):
     allocated_total = 0
     verified_paid_costs = 0
     not_verified_paid = 0
+    expense_content_type = ContentType.objects.get_for_model(Expense)
     for link in allocations:
         expense = link.expense
         allocated_total += link.amount_syp
+        batch = expense.payment_batch if expense.payment_batch_id else None
         if (
             expense.status == Expense.Status.PAID
             and expense.posting_state == Expense.PostingState.POSTED
-            and expense.payment_batch_id
-            and expense.payment_batch.status == PostingBatch.Status.POSTED
-            and expense.payment_batch.is_balanced()
+            and batch
+            and batch.status == PostingBatch.Status.POSTED
+            and batch.operation_type in ('expense.pay_immediately', 'expense.settle_liability')
+            and batch.source_content_type_id == expense_content_type.pk
+            and batch.source_object_id == str(expense.pk)
+            and batch.entries.exists()
+            and batch.is_balanced()
         ):
             verified_paid_costs += link.amount_syp
         else:
