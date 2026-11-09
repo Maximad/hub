@@ -21,6 +21,7 @@ from members.plan_readiness import assess_membership_plan
     SECURE_SSL_REDIRECT=False,
     STORAGES={'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}},
 )
+@override_settings(COLLECTION_ACCOUNT_CODES={'cash': 'cash:member-readiness', 'revenue': 'revenue:member-readiness', 'transfer': 'clearing:bank'})
 class MembershipReadinessTests(TestCase):
     def setUp(self):
         self.cashier = get_user_model().objects.create_user(

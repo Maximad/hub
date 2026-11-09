@@ -32,6 +32,7 @@ from core.settings_helpers import get_system_settings
     SECURE_SSL_REDIRECT=False,
     STORAGES={'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}},
 )
+@override_settings(COLLECTION_ACCOUNT_CODES={'cash': 'cash:visit-settlement', 'revenue': 'revenue:visit-settlement', 'transfer': 'clearing:bank'})
 class VisitCashierSettlementTests(TestCase):
     def setUp(self):
         User = get_user_model()

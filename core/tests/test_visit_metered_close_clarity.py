@@ -8,7 +8,7 @@ from django.utils import timezone
 from core.models import ActivityLog, InternetSession, Order, Payment
 from core.tests import test_visit_cashier_settlement as fixtures
 
-WEB = dict(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False,
+WEB = dict(COLLECTION_ACCOUNT_CODES={'cash': 'cash:visit-settlement', 'revenue': 'revenue:visit-settlement', 'transfer': 'clearing:bank'}, ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False,
            STORAGES={'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
 
 
