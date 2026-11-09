@@ -19,7 +19,7 @@ from reservations.services import create_reservation
 from reservations.ticketing import set_event_ticket_allocations
 
 
-@override_settings(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False)
+@override_settings(ALLOWED_HOSTS=['testserver'], SECURE_SSL_REDIRECT=False, COLLECTION_ACCOUNT_CODES={'cash': 'cash:ticket-finance', 'revenue': 'revenue:ticket-finance', 'transfer': 'clearing:bank'})
 class TicketPaymentLinkTests(TestCase):
     def setUp(self):
         User = get_user_model()
