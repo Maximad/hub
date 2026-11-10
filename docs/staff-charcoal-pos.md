@@ -1,7 +1,7 @@
 # Hub Suite — Charcoal POS (Phase 2)
 
 **Branch:** `feat/charcoal-pos-workspace`  
-**Parent:** `feat/charcoal-creative-control-room` (PR #403, pending CI).  
+**Base:** `main` after approved PR #403 merged; PR #404 contains only POS-scoped changes.  
 **Status:** design/implementation candidate; **not production tested or deployed**.
 
 ## Scope
@@ -22,7 +22,5 @@ The POS remains deliberately efficient: same fast-touch product grid, quantity c
 
 ## Release sequence
 
-1. Clear and merge #403 after CI / user approval gates.
-2. Rebase or retarget this stacked PR onto `main` with only POS-scoped files.
-3. Confirm full suite CI and manual operator smoke tests on the merged baseline.
-4. Merge POS separately; do not assume GitHub merge equals production deployment.
+1. Confirm full suite CI and manual operator smoke tests against the `main` baseline.
+2. Merge POS separately after acceptance checks; do not assume GitHub merge equals production deployment.
