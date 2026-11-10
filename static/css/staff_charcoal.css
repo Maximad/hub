@@ -965,12 +965,16 @@ body.hub-staff-ui.hub-ui-v3.staff-charcoal-management :is(
 body.hub-staff-ui.hub-ui-v3.staff-charcoal-management :is(input,textarea)::placeholder {
   color:var(--cc-secondary);opacity:1;
 }
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-management .hub-ux5-module__more {
+  border-color:var(--cc-line);background:var(--cc-surface);color:var(--cc-ink);
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-management .hub-ux5-caution {
+  border-color:#74563A;background:#3E3127;color:#F8D5A7;
+}
 body.hub-staff-ui.hub-ui-v3.staff-charcoal-management :is(
-  .hub-ux5-module__more,.hub-ux5-caution
-) {border-color:#74563A;background:#3E3127;color:#F8D5A7}
-body.hub-staff-ui.hub-ui-v3.staff-charcoal-management :is(
-  .hub-card a:not(.hub-button),.hub-section a:not(.hub-button):not(.hub-ux5-kpi),
-  .hub-ux5-module a:not(.hub-button):not(.hub-ux5-kpi):not([aria-current])
+  .hub-card a:not(.hub-button):not(.hub-ux5-kpi),
+  .hub-ux5-module p a:not(.hub-button),
+  .hub-ux5-module li a:not(.hub-button)
 ) {color:#8AE6D8}
 body.hub-staff-ui.hub-ui-v3.staff-charcoal-management :is(a,button,input,select,textarea,summary):focus-visible {
   outline:3px solid var(--cc-teal)!important;outline-offset:3px;
