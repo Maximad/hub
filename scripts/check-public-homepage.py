@@ -87,7 +87,10 @@ pages['attendance-history'] = render_to_string('public/attendance_history.html',
 pages['attendance-history-empty'] = render_to_string('public/attendance_history.html', dict(context, items=(),
     page=Paginator([], 12).get_page(1), attendance_tracking_available=False))
 with sync_playwright() as p:
-    browser = p.chromium.launch(executable_path=os.environ.get('CHROMIUM_EXECUTABLE', '/usr/bin/chromium'))
+    executable = os.environ.get('CHROMIUM_EXECUTABLE')
+    if not executable and Path('/usr/bin/chromium').exists():
+        executable = '/usr/bin/chromium'
+    browser = p.chromium.launch(executable_path=executable) if executable else p.chromium.launch()
     page = browser.new_page()
 
     def assets(route):
