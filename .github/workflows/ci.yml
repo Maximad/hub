@@ -2,6 +2,8 @@ name: Django CI
 
 on:
   pull_request:
+    # Drafts get fast feedback; ready_for_review starts the full release gate.
+    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft]
   push:
     branches:
       - main
@@ -15,8 +17,47 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Draft PRs: fast, read-only checks without PostgreSQL services, Playwright,
+  # Docker build, image publication, or deploying anything.
+  fast-checks:
+    name: Fast draft checks
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DJANGO_SETTINGS_MODULE: config.test_settings
+      DJANGO_DEBUG: "true"
+      DJANGO_SECRET_KEY: ci-only-django-secret-key-not-for-production
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+      DJANGO_SECURE_SSL_REDIRECT: "false"
+      MIKROTIK_ENABLED: "false"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.lock
+      - name: Install pinned dependencies
+        run: python -m pip install --require-hashes -r requirements.lock
+      - name: Django system check
+        run: python manage.py check
+      - name: Lightweight source and UI contract tests (no database)
+        run: >-
+          python manage.py test --noinput
+          core.tests.test_hub_ui_v3_suite
+          core.tests.test_public_charcoal.PublicCharcoalStaticContracts
+          core.tests.test_staff_charcoal
+      - name: Public menu pricing calculation
+        run: node --test static/js/tests/menu_cart_pricing.test.js
+
+  # Ready PRs and main get the unchanged full PostgreSQL + image + browser gate.
+  # A changed ready PR runs it again for the new head, preventing stale checks.
   postgres-tests:
     name: PostgreSQL checks and tests
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
