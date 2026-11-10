@@ -516,3 +516,213 @@ body.hub-staff-ui.hub-ui-v3.staff-charcoal-pos :is(button,input,select):disabled
   }
   body.hub-staff-ui.hub-ui-v3.staff-charcoal-pos .staff-pos__header::before {display:none}
 }
+
+
+/* Charcoal program / events and reservations — Phase 3.
+   Reuses live event posters, real dates and capacity; no booking or publishing logic. */
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program {
+  color-scheme:dark;
+  --staff-v2-bg:var(--cc-canvas);
+  --staff-v2-surface:var(--cc-surface);
+  --staff-v2-surface-soft:var(--cc-raised);
+  --staff-v2-ink:var(--cc-ink);
+  --staff-v2-muted:var(--cc-secondary);
+  --staff-v2-line:var(--cc-line);
+  --staff-v2-brand:var(--cc-teal);
+  --staff-v2-brand-strong:var(--cc-teal-hover);
+  --staff-v2-brand-soft:#23423D;
+  --staff-v2-success:#9CE8C4;
+  --staff-v2-success-soft:#1D3932;
+  --staff-v2-danger:#FFB4AE;
+  --staff-v2-danger-soft:#493032;
+  --staff-v2-shadow:0 12px 35px rgba(0,0,0,.15);
+  --hub-bg:var(--cc-canvas);
+  --hub-surface:var(--cc-surface);
+  --hub-surface-alt:var(--cc-raised);
+  --hub-border:var(--cc-line);
+  --hub-text:var(--cc-ink);
+  --hub-muted:var(--cc-secondary);
+  --hub-primary:var(--cc-teal);
+  --hub-v3-canvas:var(--cc-canvas);
+  --hub-v3-surface:var(--cc-surface);
+  --hub-v3-ink:var(--cc-ink);
+  --hub-v3-muted:var(--cc-secondary);
+  --hub-v3-border:var(--cc-line);
+  --hub-v3-primary:var(--cc-teal);
+  background:var(--cc-canvas);
+  color:var(--cc-ink);
+  accent-color:var(--cc-teal);
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(
+  .hub-page-header,.events-ui__header
+) {color:var(--cc-ink)}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program .events-ui__header,
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program .hub-section > .hub-page-header:first-child {
+  position:relative;isolation:isolate;overflow:hidden;
+  padding:clamp(16px,2.3vw,30px);
+  border:1px solid var(--cc-line);
+  border-radius:19px;
+  background:linear-gradient(125deg,#282C33,#1C2228 78%);
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program .events-ui__header::before,
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program .hub-section > .hub-page-header:first-child::before {
+  content:"";position:absolute;z-index:-1;pointer-events:none;
+  width:140px;height:140px;inset-inline-end:5%;inset-block-start:-65px;
+  background:linear-gradient(135deg,transparent 43%,#D88A3D 43% 56%,transparent 56%);
+  transform:rotate(-12deg);opacity:.82;
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(
+  .hub-page-header__title,.hub-section-title,.events-ui__title,.events-ui__hero h1,
+  .events-ui__panel h2,.events-ui__panel h3,.hub-card h3,
+  .events-ui__stat strong,.hub-list-card strong
+) {color:var(--cc-ink)}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(
+  .hub-page-header__meta,.staff-workspace__eyebrow,.events-ui__meta,
+  .events-ui__description,.events-ui__notice,.events-ui__muted,
+  .events-ui__crumb,.hub-empty-state,.events-ui__empty p
+) {color:var(--cc-secondary)}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(
+  .events-ui__meta strong,.events-ui__hero-date
+) {color:var(--cc-ink)}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(
+  .events-ui__card,.events-ui__hero,.events-ui__panel,.events-ui__stat,
+  .events-ui__empty,.hub-card,.hub-list-card,.hub-list,.hub-form-section,
+  .hub-table-wrap
+) {
+  border-color:var(--cc-line);
+  background:var(--cc-surface);color:var(--cc-ink);
+  box-shadow:none;
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program .events-ui__card {
+  border-radius:17px;overflow:hidden;
+  transition:border-color .16s ease,transform .16s ease;
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program .events-ui__card:is(:hover,:focus-within) {
+  border-color:#5A6C71;transform:translateY(-2px);
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(
+  .events-ui__media-link,.events-ui__hero-media
+) {background:var(--cc-raised)}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program .events-ui__fallback {
+  background:
+    radial-gradient(circle at 75% 25%,rgba(216,138,61,.26),transparent 46%),
+    linear-gradient(125deg,#2B353C,#1B2228 75%);
+  border-inline-end:1px solid var(--cc-line);
+  color:var(--cc-ink);
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program .events-ui__fallback span {
+  color:var(--cc-amber);letter-spacing:.03em;
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program .events-ui__cover {
+  background:var(--cc-raised);
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program .events-ui__title a:hover {
+  color:var(--cc-teal);
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(
+  .events-ui__badge,.hub-badge,.hub-status-chip
+) {border:1px solid #4B565E;background:var(--cc-raised);color:var(--cc-ink)}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(
+  .events-ui__badge--good,.hub-badge-success
+) {border-color:#396C56;background:#204337;color:#B3EFD1}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(
+  .events-ui__badge--bad,.hub-badge-danger
+) {border-color:#775056;background:#492E34;color:#FFC3BC}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program .hub-badge-info {
+  border-color:#48617B;background:#293D53;color:#C5DDFF;
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program .hub-badge-warning {
+  border-color:#776047;background:#463729;color:#F6D2A4;
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(
+  .events-ui__card-actions,.events-ui__panel-head,.events-ui__reservation,
+  .events-ui__ticket,.events-ui__stats,.hub-list-card
+) {border-color:var(--cc-line)}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(
+  .hub-button:not(.hub-button-primary),.events-ui__card-actions .hub-button:not(.hub-button-primary)
+) {background:var(--cc-raised);color:var(--cc-ink);border-color:var(--cc-line)}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program .hub-button:not(.hub-button-primary):hover {
+  background:#343D46;border-color:#60717D;
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(
+  .hub-button-primary,.hub-button.hub-button-primary
+) {background:var(--cc-teal);border-color:var(--cc-teal);color:#10201F}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program .hub-button-primary:not(:disabled):hover {
+  background:var(--cc-teal-hover);border-color:var(--cc-teal-hover);color:#10201F;
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(
+  .hub-list-card a,.events-ui__text-link,.events-ui__crumb a
+) {color:#7DE3D3}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(
+  .hub-list-card a,.events-ui__text-link,.events-ui__crumb a
+):hover {color:#B6F6E7}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program .events-ui__stat {
+  border-radius:13px;background:var(--cc-raised);
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program .events-ui__stat span {
+  color:var(--cc-secondary);
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(
+  .hub-form-section input:not([type=checkbox]):not([type=radio]):not([type=hidden]),
+  .hub-form-section select,.hub-form-section textarea,
+  .events-ui__form input,.events-ui__form select,.events-ui__form textarea
+) {background:var(--cc-raised);border-color:#4F5A63;color:var(--cc-ink)}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(input,textarea)::placeholder {color:var(--cc-secondary)}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(
+  .events-ui__form label,.hub-form-section label
+) {color:var(--cc-ink)}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(
+  a,button,input,select,textarea,summary,[tabindex]
+):focus-visible {outline:3px solid var(--cc-teal)!important;outline-offset:3px}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(button,input,select,textarea):disabled {
+  opacity:.6;cursor:not-allowed;
+}
+/* The bookings index stays operationally compact: today is prominent, past is subdued. */
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program .hub-section > .hub-card.hub-section {
+  border-radius:18px;padding:clamp(14px,2vw,22px);
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program .hub-section > .hub-card.hub-section:first-of-type {
+  border-color:#487B71;
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program .hub-list-card {
+  border:1px solid var(--cc-line);border-radius:12px;padding:12px;
+  background:var(--cc-raised);
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program .hub-empty-state {
+  background:var(--cc-raised);border-color:var(--cc-line);
+  border-radius:12px;
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-program .hub-message-error {
+  background:#492E34;border:1px solid #775056;color:#FFC3BC;
+}
+@media(max-width:700px) {
+  body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(
+    .events-ui__header,.hub-section > .hub-page-header:first-child
+  ) {padding:14px;border-radius:15px}
+  body.hub-staff-ui.hub-ui-v3.staff-charcoal-program .events-ui__card {transform:none}
+  body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(
+    .events-ui__header::before,.hub-section > .hub-page-header:first-child::before
+  ) {width:90px;height:90px;inset-block-start:-30px}
+}
+@media(prefers-reduced-motion:reduce) {
+  body.hub-staff-ui.hub-ui-v3.staff-charcoal-program .events-ui__card {
+    transition:none;transform:none;
+  }
+}
+@media print {
+  body.hub-staff-ui.hub-ui-v3.staff-charcoal-program {
+    color-scheme:light;background:#fff!important;color:#111!important;
+  }
+  body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(
+    .events-ui__header::before,.hub-section > .hub-page-header:first-child::before
+  ) {display:none}
+  body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(
+    .events-ui__card,.events-ui__hero,.events-ui__panel,.events-ui__stat,
+    .events-ui__empty,.hub-card,.hub-list-card,.hub-form-section
+  ) {background:#fff!important;color:#111!important;border-color:#aaa!important;box-shadow:none!important}
+  body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(
+    .hub-page-header__title,.events-ui__title,.events-ui__meta,
+    .events-ui__meta strong,.events-ui__panel h2,.events-ui__panel h3,
+    .events-ui__stat strong,.events-ui__stat span
+  ) {color:#111!important}
+}
