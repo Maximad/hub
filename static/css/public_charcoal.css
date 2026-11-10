@@ -215,6 +215,23 @@ body.hub-page.public-member-page .hub-table{color:var(--pc-text)}
 body.hub-page.public-member-page .hub-table :is(th,td){border-color:var(--pc-border)}
 body.hub-page.public-member-page .hub-table th{background:var(--pc-raised)}
 
+/* Customer navigation and cart selection retain strong contrast. */
+body.hub-page:is(.public-menu-page,.customer-space-page,.customer-order-confirm-page) .customer-space-nav :is(a,button).is-active{
+  background:var(--pc-teal);color:#10201F;
+}
+body.hub-page.public-menu-page .public-menu-order-method{
+  background:var(--pc-raised);color:var(--pc-text);border:1px solid var(--pc-border);
+}
+body.hub-page.public-menu-page :is(.public-menu-cart-header,.public-menu-cart-items,.menu-cart-review__heading){
+  background:var(--pc-surface);color:var(--pc-text);border-color:var(--pc-border);
+}
+body.hub-page.public-menu-page .menu-public__logo,
+body.hub-page.wifi-entry-page .wifi-welcome__logo{
+  border-radius:12px;
+  background:#E7E7E2;
+  padding:6px;
+}
+
 /* Captive portal: entirely local CSS; always preserve the actual network forms. */
 body.hub-page.wifi-entry-page{
   margin:0;min-height:100vh;background:radial-gradient(ellipse at top,#28323A,#15181C 72%);
