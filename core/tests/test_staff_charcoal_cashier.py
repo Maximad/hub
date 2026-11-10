@@ -51,3 +51,22 @@ class StaffCharcoalCashierContracts(SimpleTestCase):
         ):
             self.assertIn(marker, self.css)
         self.assertNotIn("pointer-events:none!important", self.css)
+
+
+    def test_cashier_status_and_money_contrast(self):
+        """Primary numbers, labels and warning text maintain AA contrast."""
+        def luminance(code):
+            rgb = [int(code[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+            linear = [x / 12.92 if x <= 0.04045 else ((x + .055) / 1.055) ** 2.4 for x in rgb]
+            return sum(v * weight for v, weight in zip(linear, (0.2126, 0.7152, 0.0722)))
+
+        for foreground, background in (
+            ("#F3F1EC", "#1E2329"),
+            ("#A9B0B8", "#1E2329"),
+            ("#10201F", "#24C6B2"),
+            ("#FFE0AF", "#49392A"),
+            ("#B3EFD1", "#204337"),
+        ):
+            light, dark = sorted((luminance(foreground), luminance(background)), reverse=True)
+            with self.subTest(foreground=foreground, background=background):
+                self.assertGreaterEqual((light + 0.05) / (dark + 0.05), 4.5)
