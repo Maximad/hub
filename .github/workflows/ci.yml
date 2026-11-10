@@ -50,6 +50,7 @@ jobs:
           core.tests.test_hub_ui_v3_suite
           core.tests.test_public_charcoal.PublicCharcoalStaticContracts
           core.tests.test_staff_charcoal
+          core.tests.test_ci_gates
       - name: Public menu pricing calculation
         run: node --test static/js/tests/menu_cart_pricing.test.js
 
