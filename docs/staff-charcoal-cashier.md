@@ -1,7 +1,7 @@
 # Charcoal cashier directory and consolidated account — Phase 4
 
 **Scope:** `/staff/cashier/` directory and consolidated visit summary only.  
-**Parent branch:** Phase 3 `feat/charcoal-events-reservations`.  
+**Base:** `main` after Phase 3 PR #405 merged.  
 **Status:** presentation-only draft, not merged/deployed.
 
 ## What changes
