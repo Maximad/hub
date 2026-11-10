@@ -1,7 +1,7 @@
 /* Progressive enhancement: native details works even if JS is unavailable. */
 (function () {
   function menus() {
-    return Array.from(document.querySelectorAll('details[data-staff-account-menu]'));
+    return Array.from(document.querySelectorAll('details[data-staff-account-menu], details[data-staff-module-menu]'));
   }
   document.addEventListener('click', function (event) {
     menus().forEach(function (menu) {
