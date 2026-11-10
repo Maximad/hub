@@ -726,3 +726,128 @@ body.hub-staff-ui.hub-ui-v3.staff-charcoal-program .hub-message-error {
     .events-ui__stat strong,.events-ui__stat span
   ) {color:#111!important}
 }
+
+
+/* Charcoal cashier overview — Phase 4. Keep payment handlers and approvals untouched.
+   Only cashier directory and consolidated visit summary opt into this theme. */
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier {
+  color-scheme:dark;
+  --staff-v2-bg:var(--cc-canvas);
+  --staff-v2-surface:var(--cc-surface);
+  --staff-v2-surface-soft:var(--cc-raised);
+  --staff-v2-ink:var(--cc-ink);
+  --staff-v2-muted:var(--cc-secondary);
+  --staff-v2-line:var(--cc-line);
+  --staff-v2-brand:var(--cc-teal);
+  --staff-v2-brand-soft:#24413C;
+  --hub-bg:var(--cc-canvas);
+  --hub-surface:var(--cc-surface);
+  --hub-border:var(--cc-line);
+  --hub-text:var(--cc-ink);
+  --hub-muted:var(--cc-secondary);
+  --hub-primary:var(--cc-teal);
+  --hub-v3-canvas:var(--cc-canvas);
+  --hub-v3-surface:var(--cc-surface);
+  --hub-v3-ink:var(--cc-ink);
+  --hub-v3-border:var(--cc-line);
+  background:var(--cc-canvas);color:var(--cc-ink);
+  accent-color:var(--cc-teal);
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier :is(
+  .hub-page-header__title,.hub-section-title,.hub-page-header h3,
+  .hub-card h3,.hub-card strong,.hub-money,.staff-order-panel__totals strong
+) {color:var(--cc-ink)}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier :is(
+  .hub-help-text,.hub-location-detail,.staff-workspace__eyebrow,.hub-page-header__meta,
+  .staff-order-panel__totals span
+) {color:var(--cc-secondary)}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier :is(
+  .hub-card,.hub-grid>.hub-card,.hub-form-section,.hub-list-card,
+  .staff-order-panel__totals>div
+) {
+  color:var(--cc-ink);background:var(--cc-surface);border-color:var(--cc-line);
+  box-shadow:none;
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier .hub-grid>.hub-card {
+  border-radius:16px;border:1px solid var(--cc-line);
+  padding:clamp(13px,1.6vw,20px);min-width:0;
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier .hub-grid>.hub-card:is(:hover,:focus-within) {
+  border-color:#59766F;
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier .hub-section>.hub-page-header:first-child {
+  border-radius:17px;border:1px solid var(--cc-line);
+  padding:16px;background:linear-gradient(115deg,#282E34,#1C2228);
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier :is(
+  .hub-card .hub-toolbar,.hub-toolbar,.hub-nav-tabs
+) {border-color:var(--cc-line)}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier .hub-toolbar {
+  gap:8px;flex-wrap:wrap;
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier :is(
+  .hub-button:not(.hub-button-primary),.hub-toolbar .hub-button:not(.hub-button-primary)
+) {
+  background:var(--cc-raised);border-color:var(--cc-line);color:var(--cc-ink);
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier .hub-button:not(.hub-button-primary):hover {
+  background:#343D46;border-color:#60717D;
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier :is(
+  .hub-button-primary,.hub-toolbar .hub-button-primary
+) {background:var(--cc-teal);border-color:var(--cc-teal);color:#10201F}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier .hub-button-primary:hover {
+  background:var(--cc-teal-hover);border-color:var(--cc-teal-hover);color:#10201F;
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier :is(
+  .hub-form-section input:not([type=checkbox]):not([type=radio]):not([type=hidden]),
+  .hub-form-section select,.hub-form-section textarea,.hub-input
+) {color:var(--cc-ink);background:var(--cc-raised);border-color:#4D5962}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier :is(input,textarea)::placeholder {
+  color:var(--cc-secondary);
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier :is(
+  .hub-card a:not(.hub-button),.hub-section a:not(.hub-button),.hub-toolbar a:not(.hub-button)
+) {color:#8BE7DA}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier :is(
+  .hub-badge,.hub-status-chip
+) {border:1px solid var(--cc-line);background:var(--cc-raised);color:var(--cc-ink)}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier .hub-badge-success {
+  border-color:#396C56;background:#204337;color:#B3EFD1;
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier .hub-badge-info {
+  border-color:#48617B;background:#293D53;color:#C5DDFF;
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier .hub-message-warning {
+  border:1px solid #806247;background:#49392A;color:#FFE0AF;
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier .hub-message-error {
+  border:1px solid #775056;background:#492E34;color:#FFC3BC;
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier .hub-message-success {
+  border:1px solid #396C56;background:#204337;color:#B3EFD1;
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier .staff-order-panel__totals>div {
+  border:1px solid var(--cc-line);border-radius:13px;background:var(--cc-raised);
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier :is(a,button,input,select,textarea,summary):focus-visible {
+  outline:3px solid var(--cc-teal)!important;outline-offset:3px;
+}
+body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier :is(button,input,select,textarea):disabled {
+  opacity:.6;
+}
+@media(max-width:700px) {
+  body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier .hub-grid>.hub-card {padding:12px}
+  body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier .hub-toolbar .hub-button {min-height:42px}
+}
+@media(prefers-reduced-motion:reduce) {
+  body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier .hub-grid>.hub-card {transition:none}
+}
+@media print {
+  body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier {
+    color-scheme:light;background:#fff!important;color:#111!important;
+  }
+  body.hub-staff-ui.hub-ui-v3.staff-charcoal-cashier :is(
+    .hub-card,.hub-form-section,.staff-order-panel__totals>div
+  ) {background:#fff!important;border-color:#aaa!important;color:#111!important;box-shadow:none!important}
+}
