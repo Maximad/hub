@@ -140,6 +140,20 @@ jobs:
           path: ${{ runner.temp }}/hub-consumption-preview
           if-no-files-found: ignore
 
+      - name: Verify public charcoal discovery layout
+        env:
+          PUBLIC_HOMEPAGE_PREVIEW_DIR: ${{ runner.temp }}/hub-public-charcoal-preview
+          PYTHONPATH: .
+        run: python scripts/check-public-homepage.py
+
+      - name: Upload public charcoal screenshot previews
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-charcoal-preview
+          path: ${{ runner.temp }}/hub-public-charcoal-preview
+          if-no-files-found: ignore
+
 
       - name: Save tested release image
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

@@ -110,7 +110,8 @@ class HubUiV3SuiteContractTests(SimpleTestCase):
         self.assertIn("member_account_logout", home)
         self.assertIn("{% csrf_token %}", home)
         self.assertEqual(home.count("{% block title %}"), 1)
-        self.assertEqual(home.count("{% endblock %}"), 2)
+        self.assertIn("{% block body_class %}public-member-page{% endblock %}", home)
+        self.assertEqual(home.count("{% endblock %}"), 3)
 
     def test_existing_reports_data_is_preserved(self):
         report = self.source("templates/staff/reports_home.html")

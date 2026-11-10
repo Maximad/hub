@@ -1,0 +1,311 @@
+/*
+ * Hub Sweida — Public Charcoal
+ * One presentation-only layer for public discovery, menus, guest accounts
+ * and the local-assets-only Wi-Fi captive portal.
+ * Transaction flows, editorial release gating and access controls unchanged.
+ */
+body.hub-page:is(.public-home,.public-menu-page,.customer-space-page,.customer-order-confirm-page,.table-entry-page,.public-member-page,.wifi-entry-page){
+  color-scheme:dark;
+  --pc-bg:#15181C;--pc-surface:#1E2329;--pc-raised:#262C33;--pc-border:#414A52;
+  --pc-text:#F3F1EC;--pc-muted:#A9B0B8;--pc-teal:#24C6B2;--pc-hover:#169D8D;--pc-amber:#D88A3D;
+  --hub-bg:var(--pc-bg);--hub-surface:var(--pc-surface);
+  --hub-surface-alt:var(--pc-raised);--hub-border:var(--pc-border);
+  --hub-text:var(--pc-text);--hub-muted:var(--pc-muted);--hub-primary:var(--pc-teal);
+  --hub-v3-canvas:var(--pc-bg);--hub-v3-surface:var(--pc-surface);
+  --hub-v3-ink:var(--pc-text);--hub-v3-muted:var(--pc-muted);
+  --hub-v3-border:var(--pc-border);--hub-v3-primary:var(--pc-teal);
+  --hub26-paper:var(--pc-bg);--hub26-ink:var(--pc-text);
+  --hub26-teal:var(--pc-teal);--hub26-surface:var(--pc-surface);
+  --hub26-outline:var(--pc-border);--hub26-action:var(--pc-teal);
+  background:var(--pc-bg);color:var(--pc-text);accent-color:var(--pc-teal);
+}
+body.hub-page:is(.public-home,.public-menu-page,.customer-space-page,.customer-order-confirm-page,.table-entry-page,.public-member-page,.wifi-entry-page) :is(a,button,input,textarea,select,summary):focus-visible{
+  outline:3px solid var(--pc-teal)!important;outline-offset:3px;
+}
+body.hub-page:is(.public-menu-page,.customer-space-page,.customer-order-confirm-page,.table-entry-page,.public-member-page,.wifi-entry-page) :is(.hub-card,.hub-list-card,.hub-form-section,.hub-table-wrap){
+  color:var(--pc-text);background:var(--pc-surface);border-color:var(--pc-border);box-shadow:none;
+}
+body.hub-page:is(.public-menu-page,.customer-space-page,.customer-order-confirm-page,.table-entry-page,.public-member-page,.wifi-entry-page) :is(.hub-section-title,.hub-page-header__title,.hub-card h2,.hub-card h3,.hub-card strong,.hub-money){
+  color:var(--pc-text);
+}
+body.hub-page:is(.public-menu-page,.customer-space-page,.customer-order-confirm-page,.table-entry-page,.public-member-page,.wifi-entry-page) :is(.hub-help-text,.hub-location-detail,.hub-page-header__meta){
+  color:var(--pc-muted);
+}
+body.hub-page:is(.public-menu-page,.customer-space-page,.customer-order-confirm-page,.table-entry-page,.public-member-page,.wifi-entry-page) :is(.hub-button-primary,.hub-button.hub-button-primary){
+  background:var(--pc-teal);border-color:var(--pc-teal);color:#10201F;font-weight:750;
+}
+body.hub-page:is(.public-menu-page,.customer-space-page,.customer-order-confirm-page,.table-entry-page,.public-member-page,.wifi-entry-page) .hub-button-primary:not(:disabled):hover{
+  background:var(--pc-hover);border-color:var(--pc-hover);color:#10201F;
+}
+body.hub-page:is(.public-menu-page,.customer-space-page,.customer-order-confirm-page,.table-entry-page,.public-member-page,.wifi-entry-page) :is(.hub-button-secondary,.hub-button:not(.hub-button-primary)){
+  background:var(--pc-raised);border-color:var(--pc-border);color:var(--pc-text);
+}
+body.hub-page:is(.public-menu-page,.customer-space-page,.customer-order-confirm-page,.table-entry-page,.public-member-page,.wifi-entry-page) :is(.hub-button-secondary,.hub-button:not(.hub-button-primary)):hover{
+  background:#34404A;border-color:#71818B;color:var(--pc-text);
+}
+body.hub-page:is(.public-menu-page,.customer-space-page,.customer-order-confirm-page,.table-entry-page,.public-member-page,.wifi-entry-page) :is(.hub-input,input:not([type=hidden]):not([type=checkbox]):not([type=radio]),textarea,select){
+  background:var(--pc-raised);color:var(--pc-text);border-color:#5A6670;
+}
+body.hub-page:is(.public-menu-page,.customer-space-page,.customer-order-confirm-page,.table-entry-page,.public-member-page,.wifi-entry-page) :is(input,textarea)::placeholder{
+  color:var(--pc-muted);opacity:1;
+}
+body.hub-page:is(.public-menu-page,.customer-space-page,.customer-order-confirm-page,.table-entry-page,.public-member-page,.wifi-entry-page) .hub-badge-success{background:#204337;color:#B3EFD1;border-color:#396C56}
+body.hub-page:is(.public-menu-page,.customer-space-page,.customer-order-confirm-page,.table-entry-page,.public-member-page,.wifi-entry-page) .hub-badge-warning{background:#49392A;color:#FFE0AF;border-color:#806247}
+body.hub-page:is(.public-menu-page,.customer-space-page,.customer-order-confirm-page,.table-entry-page,.public-member-page,.wifi-entry-page) .hub-badge-danger{background:#492E34;color:#FFC3BC;border-color:#775056}
+body.hub-page:is(.public-menu-page,.customer-space-page,.customer-order-confirm-page,.table-entry-page,.public-member-page,.wifi-entry-page) .hub-badge-info{background:#293D53;color:#C5DDFF;border-color:#48617B}
+body.hub-page:is(.public-menu-page,.customer-space-page,.customer-order-confirm-page,.table-entry-page,.public-member-page,.wifi-entry-page) :is(.hub-message-error,.hub-alert-danger){background:#492E34;color:#FFC3BC;border-color:#775056}
+body.hub-page:is(.public-menu-page,.customer-space-page,.customer-order-confirm-page,.table-entry-page,.public-member-page,.wifi-entry-page) :is(.hub-message-success,.hub-alert-success){background:#204337;color:#B3EFD1;border-color:#396C56}
+body.hub-page:is(.public-menu-page,.customer-space-page,.customer-order-confirm-page,.table-entry-page,.public-member-page,.wifi-entry-page) .hub-header--customer{
+  border-color:var(--pc-border);background:rgba(30,35,41,.97);
+}
+body.hub-page:is(.public-menu-page,.customer-space-page,.customer-order-confirm-page,.table-entry-page,.public-member-page,.wifi-entry-page) .hub-customer-header__brand strong{color:var(--pc-text)}
+
+/* Homepage: venue editorial rather than operational dashboard. */
+body.hub-page.public-home{
+  --ph-paper:var(--pc-bg);--ph-ink:var(--pc-text);
+  --ph-green:var(--pc-surface);--ph-accent:var(--pc-amber);--ph-card:var(--pc-surface);
+}
+body.hub-page.public-home .ph-header{background:rgba(21,24,28,.96);border-color:var(--pc-border)}
+body.hub-page.public-home .ph-brand__mark{color:var(--pc-teal);border-color:var(--pc-border)}
+body.hub-page.public-home .ph-brand small,
+body.hub-page.public-home .ph-eyebrow{color:var(--pc-muted)}
+body.hub-page.public-home .ph-hero{position:relative;isolation:isolate}
+body.hub-page.public-home .ph-hero::before{
+  content:"";position:absolute;z-index:-1;pointer-events:none;
+  width:min(200px,18vw);aspect-ratio:1;inset-inline-end:2%;inset-block-start:0;
+  transform:rotate(-16deg);
+  background:linear-gradient(135deg,transparent 40%,rgba(216,138,61,.15) 40% 54%,transparent 54%);
+}
+body.hub-page.public-home .ph-hero em,body.hub-page.public-home .ph-evergreen em{color:#F1B87A}
+body.hub-page.public-home .ph-button{
+  background:var(--pc-teal);color:#10201F;border-color:var(--pc-teal);
+  border-radius:10px;font-weight:750;
+}
+body.hub-page.public-home .ph-button:hover{background:var(--pc-hover);color:#10201F;border-color:var(--pc-hover)}
+body.hub-page.public-home .ph-button--outline{background:transparent;color:var(--pc-text);border-color:#64737B}
+body.hub-page.public-home .ph-button--outline:hover{background:var(--pc-raised);color:var(--pc-text)}
+body.hub-page.public-home .ph-feature-link,
+body.hub-page.public-home .ph-discovery-card{
+  background:var(--pc-surface);border:1px solid var(--pc-border);border-radius:17px;overflow:hidden;
+}
+body.hub-page.public-home .ph-art{background:var(--pc-raised);color:var(--pc-text)}
+body.hub-page.public-home .ph-art img{background:var(--pc-raised)}
+body.hub-page.public-home .ph-art__fallback{
+  background:linear-gradient(140deg,#2C343C 45%,#40342E 45% 49%,#21262D 49%);
+}
+body.hub-page.public-home .ph-evergreen{
+  color:var(--pc-text);background:linear-gradient(145deg,#2C353D,#1D2329 70%);
+  border:1px solid var(--pc-border);
+}
+body.hub-page.public-home .ph-text-link{color:#8AE6D8;text-decoration-color:#607E76}
+body.hub-page.public-home .ph-text-link:hover{color:#B3F6E8}
+body.hub-page.public-home :is(.ph-section,.ph-hero__footnote,.ph-tiles,.ph-tiles article){border-color:var(--pc-border)}
+body.hub-page.public-home .ph-tiles article{background:var(--pc-surface)}
+body.hub-page.public-home .ph-tile-number{color:#F1B87A}
+body.hub-page.public-home .ph-participation{
+  background:linear-gradient(110deg,#292F36,#222831);border:1px solid var(--pc-border);border-radius:18px;
+}
+body.hub-page.public-home .ph-asterisk{color:var(--pc-amber)}
+body.hub-page.public-home .ph-empty,body.hub-page.public-home .ph-notice{
+  background:var(--pc-surface);border-color:var(--pc-amber);color:var(--pc-text);border-radius:10px;
+}
+body.hub-page.public-home .ph-status{background:#25483D;color:#B3EFD1}
+body.hub-page.public-home .ph-footer{background:#1A2025;color:var(--pc-text);border-top:1px solid var(--pc-border)}
+body.hub-page.public-home .ph-footer__note{color:var(--pc-muted)}
+body.hub-page.public-home .ph-mobile-nav nav{background:var(--pc-surface);color:var(--pc-text);box-shadow:0 14px 26px #0007}
+body.hub-page.public-home .ph-preview{background:var(--pc-raised);border-color:var(--pc-amber)}
+body.hub-page.public-home .ph-preview :is(input,select){
+  background:var(--pc-surface);color:var(--pc-text);border-color:var(--pc-border);
+}
+body.hub-page.public-home .ph-form-field input{
+  background:var(--pc-raised);color:var(--pc-text);border-color:#64737B;
+}
+body.hub-page.public-home .ph-attendance .errorlist{color:#FFB4AE}
+
+/* Menu: content-first product photography, with dark surfaces and legible currency. */
+body.hub-page.public-menu-page .menu-public{color:var(--pc-text)}
+body.hub-page.public-menu-page .hub-header--customer{background:rgba(30,35,41,.96)}
+body.hub-page.public-menu-page .menu-public__header{
+  background:linear-gradient(120deg,#2B333A,#1B2228 83%);color:var(--pc-text);
+  border:1px solid var(--pc-border);border-radius:22px;
+}
+body.hub-page.public-menu-page .menu-public__heading .hub-section-title,
+body.hub-page.public-menu-page .menu-public__header p,
+body.hub-page.public-menu-page :is(.menu-public__brand,.menu-public__eyebrow,.menu-public__table-banner){
+  color:var(--pc-text);
+}
+body.hub-page.public-menu-page .menu-public__eyebrow{color:#F1B87A}
+body.hub-page.public-menu-page .hub-v3-feature{
+  color:var(--pc-text);background:linear-gradient(135deg,#344048,#242C33);border:1px solid var(--pc-border);
+  box-shadow:none;
+}
+body.hub-page.public-menu-page .hub-v3-feature--2{
+  background:linear-gradient(135deg,#47362C,#282A2E);
+}
+body.hub-page.public-menu-page .hub-v3-feature__title,
+body.hub-page.public-menu-page .hub-v3-feature__eyebrow,
+body.hub-page.public-menu-page .hub-v3-feature__more{color:var(--pc-text);text-shadow:none}
+body.hub-page.public-menu-page .hub-v3-menu-tools,
+body.hub-page.public-menu-page .menu-sections-nav{background:rgba(21,24,28,.96);border-color:var(--pc-border)}
+body.hub-page.public-menu-page .customer-menu-search{background:var(--pc-raised);border-color:var(--pc-border);color:var(--pc-text)}
+body.hub-page.public-menu-page .menu-section-chip{
+  background:var(--pc-raised);color:var(--pc-text);border-color:var(--pc-border);
+}
+body.hub-page.public-menu-page .menu-section-chip:is(:hover,:focus-visible,[aria-current="true"],.is-active){
+  background:#24413C;color:#B3F6E8;border-color:#397E71;
+}
+body.hub-page.public-menu-page .menu-section-heading .hub-section-title,
+body.hub-page.public-menu-page .menu-product-name,
+body.hub-page.public-menu-page .menu-list-title{color:var(--pc-text)}
+body.hub-page.public-menu-page .menu-product-card,
+body.hub-page.public-menu-page .menu-list-row{
+  color:var(--pc-text);background:var(--pc-surface);border:1px solid var(--pc-border);
+  box-shadow:none;
+}
+body.hub-page.public-menu-page .menu-product-card:is(:hover,:focus-within){border-color:#618A80;box-shadow:0 8px 22px #0004}
+body.hub-page.public-menu-page .menu-product-price,
+body.hub-page.public-menu-page .menu-list-price{color:#94EEDD;font-variant-numeric:tabular-nums}
+body.hub-page.public-menu-page .menu-product-desc,
+body.hub-page.public-menu-page .menu-list-description{color:var(--pc-muted)}
+body.hub-page.public-menu-page .menu-product-media--placeholder,
+body.hub-page.public-menu-page .product-media-placeholder{background:#30423F;color:#B3F6E8}
+body.hub-page.public-menu-page .menu-cart-review,
+body.hub-page.public-menu-page .menu-item-modal-content{
+  color:var(--pc-text);background:var(--pc-surface);border-color:var(--pc-border);
+}
+body.hub-page.public-menu-page :is(.menu-cart-list,.menu-cart-total,.public-menu-checkout,.public-menu-cart-summary,.menu-item-modal-handle){
+  border-color:var(--pc-border);color:var(--pc-text);
+}
+body.hub-page.public-menu-page .menu-option-chip{
+  color:var(--pc-text);background:var(--pc-raised);border-color:var(--pc-border);
+}
+body.hub-page.public-menu-page .menu-option-chip:has(input:checked){color:#B3F6E8;background:#24413C;border-color:#397E71}
+body.hub-page.public-menu-page .menu-sticky-cart{
+  color:var(--pc-text);background:#232B32;border:1px solid #537B70;box-shadow:0 -12px 30px #0008;
+}
+body.hub-page.public-menu-page .visit-banner,
+body.hub-page.public-menu-page .customer-visit-hub__menu-links{
+  background:var(--pc-surface);border-color:var(--pc-border);color:var(--pc-text);
+}
+
+/* QR/table entry, member account, order and visit remain live transactional views. */
+body.hub-page.table-entry-page .table-entry__hero,
+body.hub-page.table-entry-page .table-entry__choice{
+  background:var(--pc-surface);color:var(--pc-text);border-color:var(--pc-border);box-shadow:none;
+}
+body.hub-page.table-entry-page .table-entry__eyebrow{color:#F1B87A}
+body.hub-page.table-entry-page .table-entry__choice small,
+body.hub-page.table-entry-page .table-entry__hero p{color:var(--pc-muted)}
+body.hub-page.customer-space-page :is(.current-visit__header,.current-visit__quick-actions,.current-visit__internet,.current-visit__checkout,.current-visit__orders,.customer-space-service-card,.customer-order-card){
+  background:var(--pc-surface);border-color:var(--pc-border);color:var(--pc-text);
+}
+body.hub-page.customer-space-page :is(.customer-visit-hub__navigation,.customer-visit-hub__nav-link,.current-visit__internet-choice){
+  background:var(--pc-raised);border-color:var(--pc-border);color:var(--pc-text);
+}
+body.hub-page.customer-space-page .customer-visit-hub__nav-link:is(:hover,:focus-visible){
+  color:#B3F6E8;background:#24413C;
+}
+body.hub-page.customer-order-confirm-page :is(.order-confirm,.order-confirm__section,.order-confirm__totals,.order-confirm__item){
+  background:var(--pc-surface);border-color:var(--pc-border);color:var(--pc-text);
+}
+body.hub-page.public-member-page :is(.hub-member-home__intro,.hub-member-home__sections,.hub-member-home__qr-frame,.hub-public-auth){
+  background:var(--pc-surface);border-color:var(--pc-border);color:var(--pc-text);
+}
+body.hub-page.public-member-page .hub-table{color:var(--pc-text)}
+body.hub-page.public-member-page .hub-table :is(th,td){border-color:var(--pc-border)}
+body.hub-page.public-member-page .hub-table th{background:var(--pc-raised)}
+
+/* Customer navigation and cart selection retain strong contrast. */
+body.hub-page:is(.public-menu-page,.customer-space-page,.customer-order-confirm-page) .customer-space-nav :is(a,button).is-active{
+  background:var(--pc-teal);color:#10201F;
+}
+body.hub-page.public-menu-page .public-menu-order-method{
+  background:var(--pc-raised);color:var(--pc-text);border:1px solid var(--pc-border);
+}
+body.hub-page.public-menu-page :is(.public-menu-cart-header,.public-menu-cart-items,.menu-cart-review__heading){
+  background:var(--pc-surface);color:var(--pc-text);border-color:var(--pc-border);
+}
+body.hub-page.public-menu-page .menu-public__logo,
+body.hub-page.wifi-entry-page .wifi-welcome__logo{
+  border-radius:12px;
+  background:#E7E7E2;
+  padding:6px;
+}
+
+/* Captive portal: entirely local CSS; always preserve the actual network forms. */
+body.hub-page.wifi-entry-page{
+  margin:0;min-height:100vh;background:radial-gradient(ellipse at top,#28323A,#15181C 72%);
+  color:var(--pc-text);
+}
+body.hub-page.wifi-entry-page .wifi-welcome__wordmark{color:var(--pc-teal)}
+body.hub-page.wifi-entry-page .wifi-welcome__hero{
+  background:var(--pc-raised);box-shadow:0 15px 36px #0006;border:1px solid var(--pc-border);
+}
+body.hub-page.wifi-entry-page .wifi-welcome__hero--placeholder{
+  background:linear-gradient(145deg,#3A464D,#222930 66%,#46352B);
+}
+body.hub-page.wifi-entry-page .wifi-welcome__hero-placeholder{
+  background:linear-gradient(133deg,transparent 39%,rgba(216,138,61,.26) 39% 47%,transparent 47%);
+  color:var(--pc-text);
+}
+body.hub-page.wifi-entry-page .wifi-welcome__intro h1{color:var(--pc-text)}
+body.hub-page.wifi-entry-page .wifi-welcome__intro p{color:var(--pc-muted)}
+body.hub-page.wifi-entry-page .wifi-welcome__accent{background:var(--pc-amber)}
+body.hub-page.wifi-entry-page .wifi-choice--internet,
+body.hub-page.wifi-entry-page .wifi-sheet__primary{
+  background:var(--pc-teal);color:#10201F;box-shadow:none;border:1px solid var(--pc-teal);
+}
+body.hub-page.wifi-entry-page .wifi-choice--internet .wifi-choice__icon{
+  background:#10201F18;color:#10201F;
+}
+body.hub-page.wifi-entry-page .wifi-choice--menu{
+  background:var(--pc-surface);color:var(--pc-text);border-color:var(--pc-border);box-shadow:none;
+}
+body.hub-page.wifi-entry-page .wifi-choice--menu .wifi-choice__icon{
+  background:#3B312B;color:#F1B87A;
+}
+body.hub-page.wifi-entry-page .wifi-welcome__note{
+  background:var(--pc-surface);color:var(--pc-muted);
+}
+body.hub-page.wifi-entry-page .wifi-sheet-backdrop{background:rgba(0,0,0,.64)}
+body.hub-page.wifi-entry-page .wifi-sheet{
+  background:var(--pc-surface);color:var(--pc-text);box-shadow:0 -20px 60px #0009;
+  border:1px solid var(--pc-border);border-bottom:0;
+}
+body.hub-page.wifi-entry-page :is(.wifi-sheet__heading h2,.wifi-sheet__code-form label,.wifi-sheet__table-form label){
+  color:var(--pc-text);
+}
+body.hub-page.wifi-entry-page :is(.wifi-sheet__heading p,.wifi-sheet__primary-note,.wifi-sheet__divider){
+  color:var(--pc-muted);
+}
+body.hub-page.wifi-entry-page .wifi-sheet__divider::before,
+body.hub-page.wifi-entry-page .wifi-sheet__divider::after{background:var(--pc-border)}
+body.hub-page.wifi-entry-page :is(.wifi-sheet__secondary,.wifi-sheet__option,.wifi-sheet__more>summary,.wifi-sheet__close){
+  color:var(--pc-text);background:var(--pc-raised);border-color:var(--pc-border);
+}
+body.hub-page.wifi-entry-page :is(.wifi-sheet__code,.wifi-sheet__table-form){
+  background:var(--pc-raised);border-color:var(--pc-border);
+}
+body.hub-page.wifi-entry-page .wifi-sheet__icon{background:#24413C;color:#B3F6E8}
+body.hub-page.wifi-entry-page .wifi-sheet__handle{background:#6D7983}
+body.hub-page.wifi-entry-page .wifi-welcome__hero-edit{
+  color:var(--pc-text);background:#20272B;border:1px solid var(--pc-border);
+}
+@media(max-width:700px){
+ body.hub-page.public-home .ph-hero::before{width:90px}
+ body.hub-page.public-menu-page .menu-public__header{border-radius:16px}
+ body.hub-page.wifi-entry-page .wifi-sheet{border-radius:20px 20px 0 0}
+}
+@media(prefers-reduced-motion:reduce){
+ body.hub-page.public-home *,
+ body.hub-page.public-menu-page *,
+ body.hub-page.wifi-entry-page *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+}
+@media print{
+ body.hub-page:is(.public-home,.public-menu-page,.customer-space-page,.customer-order-confirm-page,.table-entry-page,.public-member-page,.wifi-entry-page){
+  color-scheme:light;background:#fff!important;color:#111!important;
+ }
+ body.hub-page:is(.public-home,.public-menu-page,.customer-space-page,.customer-order-confirm-page,.table-entry-page,.public-member-page) :is(.hub-card,.ph-tiles article,.menu-product-card,.ph-feature-link){
+  background:#fff!important;color:#111!important;border-color:#aaa!important;box-shadow:none!important;
+ }
+}
