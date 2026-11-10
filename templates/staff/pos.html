@@ -1,6 +1,7 @@
 {% extends "base.html" %}{% load hub_icons %}
 {% load static menu_form product_media hub_numbers %}
 {% block title %}طلب جديد{% endblock %}
+{% block body_class %}staff-charcoal-pos{% endblock %}
 {% block content %}
 <div class="staff-pos pos-layout-{{ system_settings.pos_layout_preset|default:'fast_touch' }} pos-cart-{{ system_settings.pos_cart_position|default:'side' }} {{ system_settings.pos_mobile_layout_class|default:'layout-grid-2' }} {{ system_settings.pos_tablet_layout_class|default:'layout-tablet-3' }} {{ system_settings.pos_desktop_layout_class|default:'layout-grid-4' }}" dir="rtl">
   <header class="hub-card staff-pos__header">
