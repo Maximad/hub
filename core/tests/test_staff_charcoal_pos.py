@@ -37,3 +37,19 @@ class StaffCharcoalPosContractTests(SimpleTestCase):
         self.assertIn("@media(prefers-reduced-motion:reduce)", self.css)
         self.assertIn("color-scheme:dark", self.css)
         self.assertIn("@media print", self.css)
+
+    def test_dark_palette_text_contrast(self):
+        """Major operational text pairs must meet WCAG AA (normal text)."""
+        def luminosity(hex_color):
+            channels = [int(hex_color[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+            linear = [x / 12.92 if x <= 0.04045 else ((x + .055) / 1.055) ** 2.4 for x in channels]
+            return sum(x * weight for x, weight in zip(linear, (.2126, .7152, .0722)))
+
+        for foreground, background in (
+            ("#24C6B2", "#10201F"),
+            ("#F3F1EC", "#1E2329"),
+            ("#A9B0B8", "#1E2329"),
+            ("#F3F1EC", "#262C33"),
+        ):
+            lighter, darker = sorted((luminosity(foreground), luminosity(background)), reverse=True)
+            self.assertGreaterEqual((lighter + .05) / (darker + .05), 4.5)
