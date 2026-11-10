@@ -12,7 +12,7 @@
 </section>
 
 <section class="hub-section ops-kpis" aria-label="ملخص الوصول الداخلي">
-  <div class="ops-kpi"><span>المنح القائمة</span><strong>{{ internal_active_count }}</strong><small>إدارة + فريق</small></div>
+  <div class="ops-kpi"><span>المنح الصالحة الآن</span><strong>{{ internal_active_count }}</strong><small>لا تشمل المنتهية أو المعلّقة</small></div>
   <div class="ops-kpi"><span>النوع</span><strong>مجاني</strong><small>خارج البيع والمحاسبة</small></div>
 </section>
 
@@ -49,15 +49,26 @@
 </section>
 
 <section class="hub-section ops-section-card">
-  <div class="ops-section-head"><div><h2>المنح الداخلية</h2><p>الاتصال الحالي نتيجة قراءة فعلية من MikroTik عندما يكون الفحص حديثاً. عدد الأجهزة ودقائق الاستخدام ليست حدوداً مضمونة التنفيذ بعد.</p></div></div>
+  <div class="ops-section-head"><div><h2>المنح الداخلية</h2><p>إنشاء المنحة لا يعني نجاح تجهيز الشبكة أو اتصال الجهاز. حالة الاتصال المرصودة تشمل اسم مستخدم المنحة القديمة فقط، ولا تحصي اتصالات المتصفحات المستقلة الجديدة. عدد الأجهزة ودقائق الاستخدام ليست حدوداً مضمونة التنفيذ بعد.</p></div></div>
   <div class="internal-grant-list">
     {% for e in internal_grants %}
     <article class="internal-grant">
       <div class="internal-grant__person"><strong>{{ e.internal_subject_label }}</strong><small>{% if e.internal_subject_role %}{{ e.internal_subject_role }} · {% endif %}{{ e.internal_kind_label }}</small></div>
-      <div><small>الحالة</small><br><strong>{{ e.get_status_display }}</strong></div>
+      <div><small>حالة الصلاحية الفعلية</small><br><strong>{{ e.effective_status_label }}</strong>
+        {% if e.status != e.internal_effective_status %}<small>الحالة المخزنة: {{ e.get_status_display }} · بانتظار التسوية</small>{% endif %}
+      </div>
+      <div><small>تجهيز الشبكة (لا يثبت اتصال الجهاز)</small><br>
+        <strong>{{ e.get_network_status_display }}</strong>
+        {% if e.internal_provision_job %}
+          <small>آخر محاولة تجهيز: {{ e.internal_provision_job.get_status_display }}</small>
+          {% if e.internal_provision_job.status == 'failed' %}<small class="hub-text-danger">فشل تجهيز الشبكة · يحتاج مراجعة مسؤول الإنترنت</small>{% endif %}
+        {% else %}
+          <small>لم تُسجّل محاولة تجهيز بعد</small>
+        {% endif %}
+      </div>
       <div><small>الصلاحية</small><br><strong>{{ e.valid_until|ar_date }}</strong></div>
       <div><small>السقف المطلوب</small><br><strong>{{ e.max_concurrent_devices }} / {{ e.max_registered_devices }}</strong><small>لم يُتحقق من تطبيقه</small></div>
-      <div><small>اتصالات الشبكة الآن</small><br>{% if e.internal_observation_current %}<strong>{{ e.internal_online_count }}</strong>{% if e.internal_device_count != None %}<small>أجهزة مميزة: {{ e.internal_device_count }}</small>{% else %}<small>عدد الأجهزة غير متاح</small>{% endif %}{% else %}<strong>غير معروف</strong><small>{% if e.internal_observation %}فحص غير مكتمل أو قديم{% else %}لم يُفحص بعد{% endif %}</small>{% endif %}{% if e.internal_observation_current %}<small>أطول اتصال نشط: {% if e.internal_longest_login_minutes != None %}{{ e.internal_longest_login_minutes }} دقيقة{% else %}غير معروف{% endif %}</small>{% endif %}{% if e.internal_observation and e.internal_observation.checked_at %}<small>آخر فحص: {{ e.internal_observation.checked_at|date:'Y-m-d H:i' }}</small>{% endif %}</div>
+      <div><small>اتصالات اسم المنحة الأصلي المرصودة</small><br>{% if e.internal_observation_current %}<strong>{{ e.internal_online_count }}</strong>{% if e.internal_device_count != None %}<small>أجهزة مميزة: {{ e.internal_device_count }}</small>{% else %}<small>عدد الأجهزة غير متاح</small>{% endif %}{% else %}<strong>غير معروف</strong><small>{% if e.internal_observation %}فحص غير مكتمل أو قديم{% else %}لم يُفحص بعد{% endif %}</small>{% endif %}{% if e.internal_observation_current %}<small>أطول اتصال نشط: {% if e.internal_longest_login_minutes != None %}{{ e.internal_longest_login_minutes }} دقيقة{% else %}غير معروف{% endif %}</small>{% endif %}{% if e.internal_observation and e.internal_observation.checked_at %}<small>آخر فحص: {{ e.internal_observation.checked_at|date:'Y-m-d H:i' }}</small>{% endif %}</div>
       <div><small>عناوين أجهزة شوهدت آخر 30 يوماً</small><br>{% if e.internal_observed_devices_30d != None %}<strong>على الأقل {{ e.internal_observed_devices_30d }}</strong>{% if e.internal_registered_device_excess_observed %}<small class="hub-text-danger">يتجاوز العدد الإرشادي للمسجلين. يحتاج مراجعة</small>{% endif %}{% else %}<strong>غير معروف</strong>{% endif %}<small>عناوين شبكة مرصودة، وليست هوية أجهزة مؤكدة أو حدّاً مفروضاً</small></div>
       <div><small>استمرارية اتصال مرصودة آخر 24 ساعة</small><br>{% if e.internal_sampled_device_minutes_24h != None %}<strong>{{ e.internal_sampled_device_minutes_24h }} دقيقة-جهاز</strong>{% else %}<strong>غير معروف</strong>{% endif %}<small>مقاطع قصيرة مدعومة بعينات متتابعة فقط، ولا تمثل إجمالي الاستهلاك أو رصيداً قابلاً للخصم</small></div>
       <div><small>فحص الحد المتزامن</small><br>{% if e.internal_limit_observation == 'exceeded' %}<strong class="hub-text-danger">تجاوز مرصود يحتاج مراجعة</strong>{% elif e.internal_limit_observation == 'within_observed_limit' %}<strong>ضمن الحد وقت الفحص</strong>{% else %}<strong>غير معروف</strong>{% endif %}<small>استرشادي فقط. لا يفرض الحد ولا يحصي الأجهزة المسجلة تاريخياً.</small></div>

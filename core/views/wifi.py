@@ -105,6 +105,7 @@ def wifi_staff_login(request):
                 return redirect(next_path)
             if usable_internal_grant_for_user(user) is not None:
                 return _start_staff_wifi(request)
+            messages.warning(request, 'تم تسجيل الدخول إلى حساب العمل، لكن لا توجد منحة إنترنت فعالة مرتبطة بهذا الحساب. اطلب من الإدارة التحقق من صلاحية المنحة وتجهيز الشبكة.')
             return redirect(_wifi_internet_path())
 
     response = render(request, 'menu/wifi_staff_login.html', {'form': form, 'next_path': next_path})

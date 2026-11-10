@@ -97,6 +97,17 @@ class StaffInternalWifiFlowTests(TestCase):
         self.assertEqual(Order.objects.count(), 0)
         self.assertEqual(Payment.objects.count(), 0)
 
+    def test_staff_login_without_active_grant_explains_missing_access(self):
+        response = self.client.post(reverse('wifi_staff_login'), {
+            'username': self.other_user.username,
+            'password': 'pass',
+        }, follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'لا توجد منحة إنترنت فعالة مرتبطة بهذا الحساب')
+        self.assertNotContains(response, 'value="start_staff_wifi"')
+        self.assertEqual(Order.objects.count(), 0)
+        self.assertEqual(Payment.objects.count(), 0)
+
     def test_authenticated_staff_sees_private_grant_as_primary_wifi_option(self):
         self.client.force_login(self.staff_user)
 
