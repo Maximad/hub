@@ -1,0 +1,27 @@
+{# Role-gated links shared by desktop and mobile module directory. #}
+            <div class="staff-module-menu__group">
+              <strong class="staff-module-menu__group-title">التشغيل اليومي</strong>
+              <a href="{% url 'staff_home' %}">العمليات</a>
+              <a href="{% url 'staff_operational_tasks' %}">المهام</a>
+              {% if staff_caps.pos %}<a href="{% url 'staff_pos' %}">طلب جديد</a>{% endif %}
+              {% if staff_caps.cashier %}<a href="{% url 'staff_cashier' %}">الكاشير</a>{% endif %}
+            </div>
+            {% if staff_caps.events or staff_caps.reservations %}
+            <div class="staff-module-menu__group">
+              <strong class="staff-module-menu__group-title">البرنامج والجمهور</strong>
+              {% if staff_caps.events %}<a href="{% url 'staff_events' %}">الفعاليات</a>{% endif %}
+              {% if staff_caps.reservations %}<a href="{% url 'staff_reservations' %}">الحجوزات</a>{% endif %}
+              {% if staff_caps.events %}<a href="{% url 'staff_layouts' %}">مخططات القاعة</a>{% endif %}
+            </div>
+            {% endif %}
+            {% if staff_caps.inventory or staff_caps.finance or staff_caps.reports or staff_caps.users or staff_caps.settings %}
+            <div class="staff-module-menu__group">
+              <strong class="staff-module-menu__group-title">الإدارة والموارد</strong>
+              {% if staff_caps.inventory %}<a href="{% url 'staff_inventory_home' %}">المخزون</a>{% endif %}
+              {% if staff_caps.finance %}<a href="{% url 'staff_finance_home' %}">المالية</a>{% endif %}
+              {% if staff_caps.reports %}<a href="{% url 'staff_reports_home' %}">تقارير الإدارة</a>{% endif %}
+              {% if staff_caps.users %}<a href="{% url 'staff_users_list' %}">المستخدمون والصلاحيات</a>{% endif %}
+              {% if staff_caps.settings %}<a href="{% url 'staff_qr_links' %}">إعدادات الطاولات</a>{% endif %}
+            </div>
+            {% endif %}
+            <a class="staff-module-menu__all" href="{% url 'staff_home' %}#staff-more">جميع الأقسام والأدوات</a>
