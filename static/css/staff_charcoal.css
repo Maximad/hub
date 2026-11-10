@@ -716,4 +716,13 @@ body.hub-staff-ui.hub-ui-v3.staff-charcoal-program .hub-message-error {
   body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(
     .events-ui__header::before,.hub-section > .hub-page-header:first-child::before
   ) {display:none}
+  body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(
+    .events-ui__card,.events-ui__hero,.events-ui__panel,.events-ui__stat,
+    .events-ui__empty,.hub-card,.hub-list-card,.hub-form-section
+  ) {background:#fff!important;color:#111!important;border-color:#aaa!important;box-shadow:none!important}
+  body.hub-staff-ui.hub-ui-v3.staff-charcoal-program :is(
+    .hub-page-header__title,.events-ui__title,.events-ui__meta,
+    .events-ui__meta strong,.events-ui__panel h2,.events-ui__panel h3,
+    .events-ui__stat strong,.events-ui__stat span
+  ) {color:#111!important}
 }
