@@ -10,7 +10,7 @@ from django.utils import timezone
 from accounts.permissions import user_has_capability
 from core.models import Room
 from events.models import Event, EventPerformance
-from reservations.models import EventAttendanceRequest, Reservation
+from reservations.models import EventAdmission, EventAttendanceRequest, Reservation
 
 DAMASCUS = ZoneInfo('Asia/Damascus')
 ACTIVE_BOOKINGS = (Reservation.Status.PENDING, Reservation.Status.CONFIRMED)
@@ -101,6 +101,8 @@ def cancel_performance(performance_id, *, actor):
     if Reservation.objects.filter(performance=show).filter(
             ticket_order__isnull=False).exists():
         raise ValidationError('توجد فواتير تذاكر لهذا العرض؛ يجب تسويتها قبل الإلغاء.')
+    if EventAdmission.objects.filter(reservation__performance=show).exists():
+        raise ValidationError('تم تسجيل حضور ضيوف لهذا العرض؛ لا يمكن إلغاء موعده.')
     show.status = EventPerformance.Status.CANCELLED
     show.save(update_fields=['status'])
     return show
