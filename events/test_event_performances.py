@@ -111,6 +111,21 @@ class EventPerformanceTests(TestCase):
         with self.assertRaises(ValidationError):
             self.book(self.late)
 
+    def test_completed_booking_with_admission_blocks_show_cancellation(self):
+        # A completed booking is no longer active, but its recorded arrivals
+        # must still prevent the performance from being cancelled.
+        booking = self.book(self.late)
+        with patch('reservations.admissions.timezone.now',
+                   return_value=self.late.starts_at + timedelta(minutes=10)):
+            set_event_admission_total(booking.pk, 1, actor=self.staff)
+        Reservation.transition_status(
+            booking.pk, actor=self.staff, new_status=Reservation.Status.COMPLETED)
+
+        with self.assertRaises(ValidationError):
+            cancel_performance(self.late.pk, actor=self.staff)
+        self.late.refresh_from_db()
+        self.assertEqual(self.late.status, EventPerformance.Status.SCHEDULED)
+
     def test_browser_may_request_each_show_but_not_reuse_key_for_different_show(self):
         common = dict(event_uuid=self.event.uuid, owner_hash='a' * 64, ip_hash='b' * 64,
                       name='ضيف', phone='+963991234567', party_size=1)
