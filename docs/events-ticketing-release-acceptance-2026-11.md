@@ -11,9 +11,11 @@ event covers and known-cost reporting. Owner: Hub Sweida operations/finance.
    Run full Django/PostgreSQL CI and `python manage.py check --deploy`.
 2. Confirm a completed backup **and verified restore evidence**; rollback plan must
    preserve any real post-deploy transactions. Never reset production data.
-3. Resolve the 21 November 2026 show schedule and whether one or two separate
-   performances exist before creating event records. Prior screenshots recorded
-   an 20:00 event, while the show discussion included 18:00 and 21:00.
+3. Resolve the 21 November 2026 show schedule and number of performances before
+   creating bookings. Use one Event with one independent EventPerformance per
+   confirmed showtime; do not create duplicate Events for the same production.
+   Prior screenshots recorded a 20:00 event, while discussion included 18:00
+   and 21:00. Neither is an approved schedule.
 4. Get a signed-off venue-safe capacity and independently checked exit/aisle
    arrangement. The prior entered value of 250 is **not** an approved capacity.
    Prior ticket tier allocations (60 rear + 25 near-stage = 85) require review.
@@ -49,8 +51,9 @@ event covers and known-cost reporting. Owner: Hub Sweida operations/finance.
    completed and post equal-and-opposite journal. It must not reopen an
    already used/expired ticket. Audit the new outstanding balance.
 8. Scan/search guest name or phone on the staff event check-in desk. Admit
-   only a confirmed reservation and only within the event's local date.
-   Partial group arrival must be idempotent and not open a HubVisit.
+   only a confirmed reservation on its selected performance's Damascus-local
+   date (not another performance's date). Partial group arrival must be
+   idempotent and not open a HubVisit.
 9. Import a **synthetic** UTF-8 CSV: preview, check names/phones/tiers,
    re-upload unchanged file to confirm. Duplicate file retry must create no
    additional records; mismatched file and over-capacity batches must fail
