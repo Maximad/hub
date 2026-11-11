@@ -1,6 +1,7 @@
 """Focused acceptance tests for multi-show and bounded recurrence events."""
 from datetime import datetime, timedelta
 from uuid import uuid4
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from django.contrib.auth import get_user_model
@@ -11,6 +12,7 @@ from django.utils import timezone
 
 from events.models import Event, EventPerformance, EventTicketType
 from events.scheduling import add_performances, cancel_performance
+from reservations.admissions import set_event_admission_total
 from reservations.attendance import review_request, submit_request
 from reservations.importing import import_event_bookings, validate_rows
 from reservations.models import Reservation
@@ -66,6 +68,30 @@ class EventPerformanceTests(TestCase):
                 name='موعد غائب', phone='+963991234561',
                 status=Reservation.Status.CONFIRMED, party_size=1,
             ))
+
+    def test_admission_is_restricted_to_selected_performance_local_date(self):
+        # Two showtimes of one event may fall on different Damascus-local days.
+        self.late.starts_at = self.early.starts_at + timedelta(days=1)
+        self.late.ends_at = self.late.starts_at + timedelta(hours=2)
+        self.late.save(update_fields=['starts_at', 'ends_at'])
+        early_booking = self.book(self.early, phone='+963991234567')
+        late_booking = self.book(self.late, phone='+963991234568')
+
+        with patch('reservations.admissions.timezone.now',
+                   return_value=self.early.starts_at + timedelta(minutes=10)):
+            admission, created = set_event_admission_total(
+                early_booking.pk, 1, actor=self.staff)
+            self.assertTrue(created)
+            self.assertEqual(admission.arrived_count, 1)
+            with self.assertRaises(ValidationError):
+                set_event_admission_total(late_booking.pk, 1, actor=self.staff)
+
+        with patch('reservations.admissions.timezone.now',
+                   return_value=self.late.starts_at + timedelta(minutes=10)):
+            admission, created = set_event_admission_total(
+                late_booking.pk, 1, actor=self.staff)
+            self.assertTrue(created)
+            self.assertEqual(admission.arrived_count, 1)
 
     def test_ticket_tier_capacity_is_per_performance(self):
         tier = EventTicketType.objects.create(
