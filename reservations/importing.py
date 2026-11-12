@@ -38,6 +38,11 @@ def normalize_phone(value):
     return cleaned
 
 
+def _phone_dedupe_key(normalized_phone):
+    """Match the same international digits with or without an optional leading +."""
+    return normalized_phone.removeprefix('+')
+
+
 def _fingerprint(event_id, rows, performance_id=None):
     data = json.dumps({'event': event_id, 'performance': performance_id, 'rows': rows}, ensure_ascii=False,
                       sort_keys=True, separators=(',', ':')).encode('utf-8')
@@ -83,9 +88,10 @@ def validate_rows(event_id, rows, *, actor=None, performance_id=None):
             phone = normalize_phone(row.get('phone'))
         except ValidationError as error:
             raise ValidationError(f'السطر {number}: {error.messages[0]}')
-        if phone in seen:
+        phone_key = _phone_dedupe_key(phone)
+        if phone_key in seen:
             raise ValidationError(f'السطر {number}: تكرار رقم هاتف في الملف؛ افحص الحجوزات يدوياً.')
-        seen.add(phone)
+        seen.add(phone_key)
         raw_size = row.get('party_size')
         if isinstance(raw_size, bool) or str(raw_size).strip() not in [str(i) for i in range(1, 101)]:
             raise ValidationError(f'السطر {number}: عدد الضيوف يجب أن يكون بين 1 و100.')
@@ -174,12 +180,12 @@ def import_event_bookings(event_id, rows, fingerprint, *, actor, performance_id=
         event=event, performance=performance, status__in=ACTIVE,
     ).values_list('phone', flat=True):
         try:
-            duplicates.add(normalize_phone(phone))
+            duplicates.add(_phone_dedupe_key(normalize_phone(phone)))
         except ValidationError:
             # Legacy malformed contacts remain protected from blind updates,
             # but cannot be used as canonical duplicate keys.
             pass
-    if duplicates.intersection(row['phone'] for row in canonical):
+    if duplicates.intersection(_phone_dedupe_key(row['phone']) for row in canonical):
         raise ValidationError('توجد أرقام هواتف محجوزة بالفعل في هذه الفعالية؛ راجع التكرار يدوياً.')
     needed = sum(row['party_size'] for row in canonical)
     capacity = performance.effective_capacity if performance else event.capacity
