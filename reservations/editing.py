@@ -6,7 +6,7 @@ from django.db import transaction
 
 from accounts.permissions import user_has_capability
 from core.models import ActivityLog
-from events.models import Event
+from events.models import Event, EventPerformance
 from .models import EventAdmission, Reservation, ReservationTicketOrder, ReservationTicketPaymentLink
 from .services import event_reserved_party_size
 from .ticketing import set_event_ticket_allocations
@@ -80,9 +80,21 @@ def edit_event_reservation(reservation_id, *, actor, name, phone, party_size,
         raise ValidationError({'tickets': 'غيّر توزيع فئات التذاكر مع عدد الأشخاص.'})
     if (old_allocations or new_allocations) and sum(new_allocations.values()) != size:
         raise ValidationError({'tickets': 'مجموع فئات التذاكر يجب أن يساوي عدد الضيوف.'})
-    if event.capacity is not None and event_reserved_party_size(
-        event.pk, exclude_reservation_id=booking.pk,
-    ) + size > event.capacity:
+    # Each scheduled performance owns its own capacity. Other showtimes of
+    # this event must neither block this edit nor mask an oversold smaller show.
+    performance_id = booking.performance_id
+    capacity = event.capacity
+    if performance_id:
+        performance = EventPerformance.objects.select_for_update().get(
+            pk=performance_id, event=event,
+        )
+        if performance.status != EventPerformance.Status.SCHEDULED:
+            raise ValidationError({'performance': 'موعد العرض غير متاح لهذه الفعالية.'})
+        capacity = performance.effective_capacity
+    if capacity is not None and event_reserved_party_size(
+        event.pk, performance_id=performance_id,
+        exclude_reservation_id=booking.pk,
+    ) + size > capacity:
         raise ValidationError({'party_size': 'عدد الضيوف يتجاوز السعة المتبقية.'})
 
     old_size = booking.party_size
