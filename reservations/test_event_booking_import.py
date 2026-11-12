@@ -90,6 +90,27 @@ class EventBookingImportTests(TestCase):
             import_event_bookings(self.event.pk, rows, digest, actor=self.manager)
         self.assertFalse(ReservationImportBatch.objects.exists())
 
+    def test_existing_phone_without_plus_cannot_be_imported_again(self):
+        Reservation.objects.create(
+            reservation_type=Reservation.ReservationType.EVENT,
+            event=self.event, name='حجز سابق', phone='963911111111',
+            party_size=1, status=Reservation.Status.CONFIRMED,
+        )
+        rows, digest = preview_uploaded_csv(self.event.pk, self.csv())
+        with self.assertRaises(ValidationError):
+            import_event_bookings(self.event.pk, rows, digest, actor=self.manager)
+        self.assertEqual(Reservation.objects.count(), 1)
+        self.assertFalse(ReservationImportBatch.objects.exists())
+
+    def test_incoming_plus_and_plain_country_code_are_same_contact(self):
+        with self.assertRaises(ValidationError):
+            preview_uploaded_csv(self.event.pk, self.csv(
+                f'name,phone,party_size,status,ticket_{self.front.pk}\n'
+                'ضيف أول,+963911111111,1,confirmed,1\n'
+                'ضيف ثان,963911111111,1,pending,1\n'
+            ))
+        self.assertFalse(Reservation.objects.exists())
+
     def test_form_requires_login_and_preview_does_not_save(self):
         self.assertEqual(self.client.get(self.url).status_code, 302)
         self.client.force_login(self.manager)
