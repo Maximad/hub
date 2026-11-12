@@ -7,7 +7,14 @@ event covers and known-cost reporting. Owner: Hub Sweida operations/finance.
 ## Release preconditions
 
 1. Verify deployed container commit and required migrations
-   (`reservations.0006–0011`, `events.0003–0005`) against the exact merged release.
+   (`reservations.0006–0012`, `events.0003–0009`) against the exact merged release.
+   In particular, verify `events.0009_event_performances` and
+   `reservations.0012_performance_links`: they create the original performance
+   and attach legacy bookings/attendance requests. On a restored staging copy,
+   verify those links and unchanged booking counts before any authorized rollout.
+   Record `python manage.py showmigrations events reservations --plan` and
+   `python manage.py migrate --check` from the target environment; a historical
+   migration range alone is not proof that its schema matches the release.
    Run full Django/PostgreSQL CI and `python manage.py check --deploy`.
 2. Confirm a completed backup **and verified restore evidence**; rollback plan must
    preserve any real post-deploy transactions. Never reset production data.
