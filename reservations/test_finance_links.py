@@ -13,6 +13,7 @@ from core.models import (
 from core.services.posting.context import PostingContext
 from core.services.posting.order_payments import collect
 from events.models import Event, EventTicketType
+from reservations.checkout import issue_ticket_order
 from reservations.finance_links import link_posted_ticket_payment, ticket_payment_summary
 from reservations.models import Reservation, ReservationTicketPaymentLink
 from reservations.services import create_reservation
@@ -128,6 +129,37 @@ class TicketPaymentLinkTests(TestCase):
         extra_payment = self.pay(order=extra_order, amount=1500, key='ticket-excess')
         with self.assertRaises(ValidationError):
             link_posted_ticket_payment(self.booking.pk, extra_payment.pk, actor=self.manager)
+
+    def test_unlinked_cashier_receipt_cannot_be_taken_from_another_booking_invoice(self):
+        sale, _ = issue_ticket_order(self.booking.pk, actor=self.manager)
+        # Generic cashier collection posts the receipt before manual attribution.
+        receipt = self.pay(order=sale.order, amount=1000, key='owned-ticket-receipt')
+        other = create_reservation(Reservation(
+            reservation_type='event', event=self.event, name='حجز اختبار آخر',
+            phone='+963800003', party_size=1, status='confirmed',
+        ))
+        set_event_ticket_allocations(other.pk, {self.tier.pk: 1}, actor=self.manager)
+        before = (Payment.objects.count(), PostingBatch.objects.count())
+        self.assertFalse(ReservationTicketPaymentLink.objects.exists())
+
+        # The destination has no invoice; the source invoice still owns its receipt.
+        with self.assertRaisesMessage(ValidationError, 'فاتورة هذا السند تخص حجزاً آخر.'):
+            link_posted_ticket_payment(other.pk, receipt.pk, actor=self.manager)
+        self.assertFalse(ReservationTicketPaymentLink.objects.exists())
+        self.assertEqual(ticket_payment_summary(other)['posted'], 0)
+        self.assertEqual((Payment.objects.count(), PostingBatch.objects.count()), before)
+
+        link, created = link_posted_ticket_payment(
+            self.booking.pk, receipt.pk, actor=self.manager,
+        )
+        self.assertTrue(created)
+        again, created = link_posted_ticket_payment(
+            self.booking.pk, receipt.pk, actor=self.manager,
+        )
+        self.assertFalse(created)
+        self.assertEqual(again.pk, link.pk)
+        self.assertEqual(ticket_payment_summary(self.booking)['posted'], 1000)
+        self.assertEqual((Payment.objects.count(), PostingBatch.objects.count()), before)
 
     def test_reversed_or_inactive_payment_no_longer_counted(self):
         receipt = self.pay()
