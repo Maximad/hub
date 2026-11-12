@@ -8,7 +8,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from core.models import Order, Payment
-from events.models import Event, EventTicketType
+from events.models import Event, EventPerformance, EventTicketType
 from reservations.editing import edit_event_reservation
 from reservations.models import (
     EventAdmission, Reservation, ReservationTicketAllocation,
@@ -74,6 +74,42 @@ class EventReservationEditTests(TestCase):
         self.booking.refresh_from_db()
         self.assertEqual(self.booking.party_size, 2)
         self.assertEqual(self.booking.name, 'ضيف')
+
+    def test_edit_capacity_isolated_to_selected_performance(self):
+        first = EventPerformance.objects.create(
+            event=self.event, starts_at=self.event.starts_at, capacity=3,
+        )
+        later = EventPerformance.objects.create(
+            event=self.event, starts_at=self.event.starts_at + timedelta(hours=3),
+            capacity=3,
+        )
+        self.booking.performance = first
+        self.booking.save(update_fields=['performance'])
+        Reservation.objects.create(
+            reservation_type=Reservation.ReservationType.EVENT,
+            event=self.event, performance=later,
+            name='ضيف العرض الثاني', phone='+963922222222', party_size=3,
+            status=Reservation.Status.CONFIRMED,
+        )
+        # Four seats is the event fallback, not a combined limit for both shows.
+        self.edit(3, {self.front.pk: 2, self.rear.pk: 1})
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.party_size, 3)
+        self.assertEqual(self.booking.performance_id, first.pk)
+
+    def test_edit_rejects_smaller_performance_capacity_and_rolls_back(self):
+        first = EventPerformance.objects.create(
+            event=self.event, starts_at=self.event.starts_at, capacity=2,
+        )
+        self.booking.performance = first
+        self.booking.save(update_fields=['performance'])
+        # Event fallback is four, but this particular show permits only two.
+        with self.assertRaises(ValidationError):
+            self.edit(3, {self.front.pk: 2, self.rear.pk: 1})
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.party_size, 2)
+        self.assertEqual(self.booking.name, 'ضيف')
+        self.assertEqual(self.booking.ticket_allocations.count(), 2)
 
     def test_tier_limit_failure_rolls_back_name_and_size(self):
         with self.assertRaises(ValidationError):
