@@ -74,6 +74,13 @@ def link_posted_ticket_payment(reservation_id, payment_id, *, actor):
         if previous.reservation_id == booking.pk:
             return previous, False
         raise ValidationError({'payment': 'سند القبض مرتبط بالفعل بحجز آخر.'})
+    # A cashier receipt may not have a payment link yet, but its issued
+    # ticket order already belongs to one booking. Enforce that ownership
+    # even when the destination booking has no issued invoice of its own.
+    if ReservationTicketOrder.objects.filter(order_id=payment.order_id).exclude(
+        reservation_id=booking.pk,
+    ).exists():
+        raise ValidationError({'payment': 'فاتورة هذا السند تخص حجزاً آخر.'})
     order_link = ReservationTicketOrder.objects.filter(reservation=booking).first()
     if order_link and order_link.order_id != payment.order_id:
         raise ValidationError({'payment': 'هذا السند لا يتبع فاتورة تذاكر هذا الحجز.'})
