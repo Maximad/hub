@@ -1,4 +1,4 @@
-from urllib.parse import urljoin
+from urllib.parse import urlencode, urljoin
 
 from django.conf import settings
 from django.contrib import messages
@@ -14,6 +14,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 from accounts.permissions import user_has_capability
 from core.models import ActivityLog, InternetSession, Member
 from member_accounts.identity import resolve_member_identity
+from member_accounts.delivery import login_delivery_configured
 from members.presentation import membership_subscription_rows
 from member_accounts.models import MemberAccount, MemberInvitation, MemberLoginChallenge
 from member_accounts.services import (
@@ -109,7 +110,8 @@ def member_login(request):
 
     next_path = _safe_next(request, request.GET.get('next') if request.method != 'POST' else request.POST.get('next'))
     error = ''
-    if request.method == 'POST':
+    delivery_available = login_delivery_configured()
+    if request.method == 'POST' and delivery_available:
         phone = (request.POST.get('phone') or '').strip()
         try:
             result = request_login_challenge(
@@ -130,6 +132,7 @@ def member_login(request):
     response = render(request, 'member_accounts/login.html', {
         'error': error,
         'next_path': next_path,
+        'delivery_available': delivery_available,
     })
     return _no_store(response)
 
@@ -156,9 +159,15 @@ def member_login_verify(request, challenge_id):
             response = redirect(destination)
             return _set_member_cookie(response, result.cookie_value)
 
+    retry_url = reverse('member_account_login')
+    next_path = _safe_next(request, challenge.next_path)
+    if next_path:
+        retry_url += '?' + urlencode({'next': next_path})
     response = render(request, 'member_accounts/login_verify.html', {
         'challenge': challenge,
         'error': error,
+        'retry_url': retry_url,
+        'resend_seconds': int(getattr(settings, 'MEMBER_LOGIN_RESEND_SECONDS', 60)),
     })
     return _no_store(response)
 

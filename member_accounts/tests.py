@@ -1,4 +1,6 @@
 from datetime import timedelta
+from unittest.mock import patch
+from urllib.parse import urlencode
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
@@ -6,7 +8,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from core.models import Member
-from member_accounts.delivery import LOC_MEM_OUTBOX
+from member_accounts.delivery import LOC_MEM_OUTBOX, LoginDeliveryUnavailable
 from member_accounts.identity import resolve_member_identity
 from member_accounts.models import MemberAccount, MemberInvitation, MemberLoginChallenge
 from member_accounts.services import create_invitation
@@ -270,3 +272,49 @@ class MemberAccountFlowTests(TestCase):
         self.assertEqual(response.status_code, 302)
         challenge = MemberLoginChallenge.objects.get()
         self.assertEqual(challenge.next_path, '')
+
+    def test_unconfigured_delivery_offers_recovery_without_account_lookup(self):
+        for backend, url in [('disabled', ''), ('webhook', ''), ('invalid', '')]:
+            with self.subTest(backend=backend), self.settings(
+                MEMBER_LOGIN_DELIVERY_BACKEND=backend, MEMBER_LOGIN_WEBHOOK_URL=url,
+            ), patch('member_accounts.views.request_login_challenge') as request_code:
+                for phone in [self.member.phone, '0991999999']:
+                    response, challenge = self.request_login(phone=phone)
+                    self.assertContains(response, 'إرسال رموز الدخول غير متاح حالياً')
+                    self.assertContains(response, 'رابط تفعيل')
+                    self.assertNotContains(response, 'name="phone"')
+                    self.assertEqual(response.headers['Cache-Control'], 'no-store')
+                    self.assertIsNone(challenge)
+                request_code.assert_not_called()
+
+    def test_failed_delivery_has_same_recovery_as_unknown_phone_and_can_retry(self):
+        next_path = reverse('menu_public')
+        with patch('member_accounts.services.send_login_code', side_effect=LoginDeliveryUnavailable):
+            failed, failed_challenge = self.request_login(next_path=next_path)
+        self.assertEqual(failed_challenge.delivery_status, MemberLoginChallenge.DeliveryStatus.FAILED)
+        unknown, _ = self.request_login(phone='0991999999', next_path=next_path)
+        for location in [failed.url, unknown.url]:
+            page = self.client.get(location)
+            self.assertContains(page, 'قد يتعذر الإرسال مؤقتاً')
+            self.assertContains(page, 'رابط تفعيل')
+            self.assertNotContains(page, 'فقد أرسلنا')
+            self.assertNotContains(page, self.member.phone)
+            self.assertEqual(page.context['retry_url'], reverse('member_account_login') + '?' + urlencode({'next': next_path}))
+            self.assertEqual(page.headers['Cache-Control'], 'no-store')
+        repeated, _ = self.request_login(next_path=next_path)
+        self.assertEqual(repeated.url, failed.url)
+        self.assertEqual(len(LOC_MEM_OUTBOX), 0)
+        MemberLoginChallenge.objects.filter(pk=failed_challenge.pk).update(
+            created_at=timezone.now() - timedelta(seconds=61),
+        )
+        retried, challenge = self.request_login(next_path=next_path)
+        self.assertNotEqual(retried.url, failed.url)
+        self.assertEqual(challenge.delivery_status, MemberLoginChallenge.DeliveryStatus.SENT)
+        self.assertEqual(len(LOC_MEM_OUTBOX), 1)
+
+    def test_recovery_link_revalidates_next_destination(self):
+        response, challenge = self.request_login()
+        challenge.next_path = 'https://attacker.example/'
+        challenge.save(update_fields=['next_path'])
+        page = self.client.get(response.url)
+        self.assertEqual(page.context['retry_url'], reverse('member_account_login'))
