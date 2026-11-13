@@ -48,6 +48,14 @@ def browser_session_queryset(credential, *, include_legacy=True):
     return queryset.filter(owned)
 
 
+def has_active_metered_session(credential):
+    """Whether this browser has unfinalized metered usage on its own visit."""
+    return browser_session_queryset(credential).filter(
+        status=InternetSession.Status.ACTIVE,
+        billing_mode=InternetSession.BillingMode.OPEN_METERED,
+    ).exists()
+
+
 def active_browser_session(credential):
     return (
         browser_session_queryset(credential)
