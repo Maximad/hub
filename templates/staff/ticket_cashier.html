@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block title %}كاشير التذاكر{% endblock %}
+{% block content %}
+<section class="hub-section" dir="rtl">
+  <h1>كاشير تذاكر الفعاليات</h1>
+  <p><a href="{% url 'staff_cashier' %}">العودة إلى الكاشير</a></p>
+  <p>اختر الحجز المؤكد لمراجعة فئات التذاكر وإصدار الفاتورة والتحصيل. تعديل الحجز يتم عبر فريق الحجوزات.</p>
+  <form method="get" class="hub-form hub-card">
+    <label for="ticket-search">اسم صاحب الحجز أو رقم التواصل أو الفعالية</label>
+    <input id="ticket-search" class="hub-input" name="q" value="{{ query }}" maxlength="100" type="search">
+    <button class="hub-button" type="submit">بحث</button>
+  </form>
+  <div class="hub-table-wrap"><table class="hub-table">
+    <thead><tr><th>الحجز</th><th>الفعالية</th><th>العرض</th><th>الأشخاص</th><th>الحساب</th></tr></thead>
+    <tbody>{% for booking in page %}<tr>
+      <td>#{{ booking.pk }} · {{ booking.name }}</td><td>{{ booking.event.title_ar }}</td>
+      <td>{{ booking.performance.starts_at|default:booking.event.starts_at }}</td><td>{{ booking.party_size }}</td>
+      <td><a class="hub-button" href="{% url 'staff_reservation_ticket_checkout' booking.pk %}">فتح حساب التذاكر</a></td>
+    </tr>{% empty %}<tr><td colspan="5">لا توجد حجوزات مؤكدة مطابقة.</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <nav aria-label="صفحات الحجوزات">
+    {% if page.has_previous %}<a href="?q={{ query|urlencode }}&amp;page={{ page.previous_page_number }}">السابق</a>{% endif %}
+    <span>{{ page.number }} / {{ page.paginator.num_pages }}</span>
+    {% if page.has_next %}<a href="?q={{ query|urlencode }}&amp;page={{ page.next_page_number }}">التالي</a>{% endif %}
+  </nav>
+</section>
+{% endblock %}

@@ -6,6 +6,9 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from accounts.permissions import user_has_capability
+from core.services.posting.context import PostingContext
+from core.services.posting.order_payments import reverse as reverse_payment
 
 from core.models import FinancialAccount, Payment, PostingBatch, Product, Order
 from core.services.posting.exceptions import InvalidTransition
@@ -183,4 +186,66 @@ class EventTicketCheckoutTests(TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, 'إصدار فاتورة التذاكر دون قبض')
         self.assertContains(page, '2750')
+        self.assertContains(page, reverse('staff_reservation_detail', args=[self.booking.pk]))
         self.assertEqual(Payment.objects.count(), 0)
+
+    def test_cashier_can_issue_collect_and_retry_without_reservation_admin(self):
+        self.finance_accounts()
+        cashier = get_user_model().objects.create_user(
+            username='ticket-cashier', phone='989382', password='test', role='cashier',
+        )
+        self.assertFalse(user_has_capability(cashier, 'reservations'))
+        self.client.force_login(cashier)
+        queue = self.client.get(reverse('staff_ticket_cashier'), {'q': self.booking.name})
+        checkout_url = reverse('staff_reservation_ticket_checkout', args=[self.booking.pk])
+        self.assertContains(queue, checkout_url)
+        self.assertEqual(queue.headers['Cache-Control'], 'no-store')
+        self.assertEqual(self.client.get(checkout_url).status_code, 200)
+        self.assertEqual(self.client.post(checkout_url, {'action': 'issue'}).status_code, 302)
+        self.assertFalse(Payment.objects.exists())
+        for _ in range(2):
+            self.client.post(checkout_url, {
+                'action': 'collect', 'amount_syp': '2750', 'method': 'cash',
+                'request_key': 'cashier-repeat-1111',
+            })
+        receipt = Payment.objects.get()
+        self.assertEqual(receipt.created_by, cashier)
+        self.assertEqual(ticket_payment_summary(self.booking)['posted'], 2750)
+        self.assertEqual(ReservationTicketPaymentLink.objects.count(), 1)
+        self.assertEqual(PostingBatch.objects.filter(operation_type='order_payment.collect').count(), 1)
+        page = self.client.get(checkout_url)
+        self.assertNotContains(page, reverse('staff_customer_payment_reverse', args=[receipt.pk]))
+        self.assertNotContains(page, reverse('staff_reservation_detail', args=[self.booking.pk]))
+        self.assertContains(page, reverse('staff_ticket_cashier'))
+        with self.assertRaises(ValidationError):
+            link_posted_ticket_payment(self.booking.pk, receipt.pk, actor=cashier)
+        with self.assertRaises(InvalidTransition):
+            reverse_payment(receipt, PostingContext(actor=cashier, idempotency_key='deny-refund-1111'), 'test')
+        receipt.refresh_from_db()
+        self.assertFalse(receipt.is_reversed)
+
+    def test_ticket_collection_rejects_waiter_inactive_and_provider(self):
+        self.finance_accounts()
+        issue_ticket_order(self.booking.pk, actor=self.admin)
+        for role, active in [('waiter', True), ('cashier', False), ('internet_provider', True)]:
+            actor = get_user_model().objects.create_user(
+                username=f'ticket-denied-{role}', phone=f'98938{len(role)}',
+                password='test', role=role, is_active=active,
+            )
+            with self.subTest(role=role), self.assertRaises(ValidationError):
+                collect_ticket_payment(self.booking.pk, actor=actor, amount_syp=2750,
+                                       method='cash', request_key='denied-attempt-1111')
+        self.assertFalse(Payment.objects.exists())
+        self.assertFalse(ReservationTicketPaymentLink.objects.exists())
+
+    def test_ticket_queue_rejects_non_cashier_and_filters_other_bookings(self):
+        waiter = get_user_model().objects.create_user(
+            username='ticket-queue-waiter', phone='989390', password='test', role='waiter',
+        )
+        self.client.force_login(waiter)
+        self.assertEqual(self.client.get(reverse('staff_ticket_cashier')).status_code, 302)
+        self.client.force_login(self.admin)
+        self.booking.status = Reservation.Status.CANCELLED
+        self.booking.save(update_fields=['status'])
+        page = self.client.get(reverse('staff_ticket_cashier'))
+        self.assertNotContains(page, reverse('staff_reservation_ticket_checkout', args=[self.booking.pk]))

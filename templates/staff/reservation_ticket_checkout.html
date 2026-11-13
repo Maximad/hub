@@ -3,16 +3,22 @@
 {% block content %}
 <section class="hub-section" dir="rtl" style="max-width:960px;margin-inline:auto">
   <nav class="hub-page-header__meta">
+    {% if can_manage_reservations %}
     <a href="{% url 'staff_events' %}">الفعاليات</a> /
     <a href="{% url 'staff_event_detail' reservation.event_id %}">{{ reservation.event.title_ar }}</a> /
     <a href="{% url 'staff_reservation_detail' reservation.id %}">الحجز</a>
+    {% else %}<a href="{% url 'staff_ticket_cashier' %}">كاشير التذاكر</a>{% endif %}
   </nav>
   <header class="hub-page-header">
     <div>
       <h1 class="hub-page-header__title">فاتورة تذاكر {{ reservation.event.title_ar }}</h1>
       <p class="hub-page-header__meta">حجز رقم {{ reservation.id }} · {{ reservation.name }} · {{ reservation.party_size }} أشخاص</p>
     </div>
+    {% if can_manage_reservations %}
     <a class="hub-button" href="{% url 'staff_reservation_detail' reservation.id %}">العودة للحجز</a>
+    {% else %}
+    <a class="hub-button" href="{% url 'staff_ticket_cashier' %}">العودة لكاشير التذاكر</a>
+    {% endif %}
   </header>
 
   <section class="hub-card hub-section">
@@ -67,7 +73,7 @@
         <button class="hub-button hub-button-primary" type="submit">تسجيل التحصيل الفعلي</button>
       </form>
     {% elif sale and not can_collect %}
-      <p class="hub-help-text">التحصيل المباشر يتطلب صلاحيات الإدارة والكاشير. يمكنك مراجعة تفاصيل الحجز دون تسجيل دفعة.</p>
+      <p class="hub-help-text">التحصيل المباشر يتطلب صلاحية الكاشير. يمكنك مراجعة تفاصيل الحجز دون تسجيل دفعة.</p>
     {% endif %}
     {% if posted_links %}
     <h3 class="hub-section-title">سجل إيصالات التذاكر المرتبطة</h3>
@@ -77,7 +83,7 @@
           <span>سند #{{ linked.payment.pk }} · {{ linked.payment.amount_syp }} ل.س · {{ linked.payment.get_method_display }}</span>
           {% if linked.payment.is_reversed or not linked.payment.is_active %}
             <strong> · معكوسة / غير فعالة — لا تُحتسب</strong>
-          {% elif can_collect %}
+          {% elif can_refund %}
             <a class="hub-button" href="{% url 'staff_customer_payment_reverse' linked.payment.pk %}">عكس هذه الدفعة بعد تنفيذ الاسترداد</a>
           {% endif %}
         </div>

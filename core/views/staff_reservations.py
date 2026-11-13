@@ -1,6 +1,8 @@
 """Reservation queue, creation, status transitions, and visit check-in."""
 
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.core.exceptions import ValidationError
 from django.db.models import Q
 from django.http import Http404
@@ -325,10 +327,32 @@ def staff_event_reservation_edit(request, reservation_id):
     })
 
 
-@require_staff_capability('reservations')
+@require_staff_capability('cashier')
+@require_http_methods(['GET'])
+def staff_ticket_cashier(request):
+    """Read-only ticket checkout queue without granting reservation management."""
+    query = (request.GET.get('q') or '').strip()[:100]
+    bookings = Reservation.objects.filter(
+        reservation_type=Reservation.ReservationType.EVENT,
+        status=Reservation.Status.CONFIRMED,
+    ).select_related('event', 'performance').order_by('-created_at', '-pk')
+    if query:
+        bookings = bookings.filter(
+            Q(name__icontains=query) | Q(phone__icontains=query) | Q(event__title_ar__icontains=query)
+        )
+    response = render(request, 'staff/ticket_cashier.html', {
+        'page': Paginator(bookings, 25).get_page(request.GET.get('page')), 'query': query,
+    })
+    response['Cache-Control'] = 'no-store'
+    return response
+
+
+@login_required
 @require_http_methods(['GET', 'POST'])
 def staff_reservation_ticket_checkout(request, reservation_id):
     """Ticket invoice and collection: direct verified finance posting only."""
+    if not (user_has_capability(request.user, 'reservations') or user_has_capability(request.user, 'cashier')):
+        raise Http404
     booking = get_object_or_404(
         Reservation.objects.select_related('event'), pk=reservation_id,
         reservation_type=Reservation.ReservationType.EVENT,
@@ -377,6 +401,8 @@ def staff_reservation_ticket_checkout(request, reservation_id):
         'allocations': allocations,
         'financial_summary': ticket_payment_summary(booking),
         'expected_total': sum(row.quantity * row.unit_price_syp for row in allocations),
-        'can_collect': is_owner_or_admin(request.user) and user_has_capability(request.user, 'cashier'),
+        'can_collect': user_has_capability(request.user, 'cashier'),
+        'can_refund': is_owner_or_admin(request.user) and user_has_capability(request.user, 'cashier'),
+        'can_manage_reservations': user_has_capability(request.user, 'reservations'),
         'request_key': uuid4().hex,
     })
