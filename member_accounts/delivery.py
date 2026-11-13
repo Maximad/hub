@@ -29,6 +29,14 @@ def _send_locmem(phone, code, challenge_uuid):
     })
 
 
+def login_delivery_configured():
+    """Public availability depends on configuration, never on a phone/account."""
+    backend = str(_setting('MEMBER_LOGIN_DELIVERY_BACKEND', 'disabled')).strip().lower()
+    return backend == 'locmem' or (
+        backend == 'webhook' and bool(str(_setting('MEMBER_LOGIN_WEBHOOK_URL', '')).strip())
+    )
+
+
 def _send_webhook(phone, code, challenge_uuid):
     url = str(_setting('MEMBER_LOGIN_WEBHOOK_URL', '')).strip()
     if not url:

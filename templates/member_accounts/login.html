@@ -4,7 +4,8 @@
 {% block content %}
 <section class="hub-card hub-public-auth">
   <h2 class="hub-page-header__title">تسجيل الدخول إلى حساب هَب</h2>
-  <p>أدخل رقم الهاتف المرتبط بحسابك. إذا كان الرقم مسجلاً، سنرسل رمز تحقق قصير.</p>
+  {% if delivery_available %}
+  <p>أدخل رقم الهاتف المرتبط بحسابك لطلب رمز تحقق قصير.</p>
   {% if error %}<div class="hub-message hub-message-error" role="alert">{{ error }}</div>{% endif %}
   <form method="post" class="hub-form">
     {% csrf_token %}
@@ -13,6 +14,10 @@
     <input id="member-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" required autofocus>
     <button class="hub-button hub-button-primary" type="submit">إرسال رمز التحقق</button>
   </form>
+  {% else %}
+  <p role="status">إرسال رموز الدخول غير متاح حالياً. حاول لاحقاً أو اطلب رابط تفعيل من فريق هَب بعد التحقق من هويتك.</p>
+  <p><a class="hub-button hub-button-secondary" href="{% url 'member_account_login' %}?next={{ next_path|urlencode }}">إعادة المحاولة</a></p>
+  {% endif %}
   <p class="hub-help-text">إذا لم يصلك الرمز، يمكنك طلب رابط تفعيل جديد من إدارة هَب.</p>
 </section>
 {% endblock %}
