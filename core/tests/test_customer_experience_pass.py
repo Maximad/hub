@@ -2,21 +2,26 @@ from pathlib import Path
 
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from core.models import (
     ActivityLog,
     Category,
     HubVisit,
+    InternetSession,
     NotificationEvent,
     Order,
     OrderItem,
     Product,
+    Payment,
+    PostingBatch,
     Room,
     SystemSetting,
     TableArea,
 )
 from core.services.visits import issue_visit_credential
 from core.settings_helpers import get_system_settings
+from internet.models import InternetSessionBrowserBinding
 
 
 @override_settings(
@@ -77,6 +82,73 @@ class CustomerServiceRequestTests(TestCase):
         self.assertEqual(event.target_role, 'service')
         self.assertIn('مساعدة مطلوبة', event.title_ar)
         self.assertEqual(ActivityLog.objects.filter(action='customer.assistance_requested').count(), 1)
+
+    def metered_visit(self):
+        visit = HubVisit.objects.create()
+        credential, token = issue_visit_credential(visit)
+        self.client.cookies['hub_visit'] = token
+        session = InternetSession.objects.create(
+            visit=visit, start_time=timezone.now(), rate_per_hour_syp=100,
+            billing_mode=InternetSession.BillingMode.OPEN_METERED,
+        )
+        InternetSessionBrowserBinding.objects.create(session=session, credential=credential)
+        return visit, session
+
+    def test_metered_checkout_without_order_notifies_once_without_billing(self):
+        visit, session = self.metered_visit()
+        before = (Order.objects.count(), Payment.objects.count(), PostingBatch.objects.count())
+        page = self.client.get(reverse('current_visit'))
+        self.assertContains(page, 'name="action" value="bill"')
+        self.assertTrue(page.context['can_request_bill'])
+        url = reverse('customer_visit_request')
+        for _ in range(2):
+            self.assertEqual(self.client.post(url, {'action': 'bill'}).status_code, 302)
+        event = NotificationEvent.objects.get(event_type='payment_pending')
+        self.assertEqual(event.target_role, 'cashier')
+        self.assertIsNone(event.order_id)
+        self.assertIn(str(visit.display_number), event.title_ar)
+        self.assertIn(str(visit.display_number), event.message_ar)
+        self.assertEqual(ActivityLog.objects.filter(action='customer.bill_requested').count(), 1)
+        session.refresh_from_db()
+        visit.refresh_from_db()
+        self.assertEqual(session.status, InternetSession.Status.ACTIVE)
+        self.assertIsNone(session.end_time)
+        self.assertIsNone(session.linked_order_id)
+        self.assertIsNone(session.linked_payment_id)
+        self.assertEqual(visit.status, HubVisit.Status.OPEN)
+        self.assertEqual(before, (Order.objects.count(), Payment.objects.count(), PostingBatch.objects.count()))
+
+    def test_metered_checkout_requires_own_browser_and_visit(self):
+        visit, session = self.metered_visit()
+        for other_visit in [visit, HubVisit.objects.create()]:
+            _credential, token = issue_visit_credential(other_visit)
+            self.client.cookies['hub_visit'] = token
+            page = self.client.get(reverse('current_visit'))
+            self.assertFalse(page.context['can_request_bill'])
+            self.client.post(reverse('customer_visit_request'), {'action': 'bill'})
+        self.client.cookies.clear()
+        self.client.post(reverse('customer_visit_request'), {'action': 'bill'})
+        self.assertFalse(NotificationEvent.objects.filter(event_type='payment_pending').exists())
+
+    def test_free_or_ended_internet_does_not_enable_empty_bill_request(self):
+        _visit, session = self.metered_visit()
+        for mode, status in [
+            (InternetSession.BillingMode.FREE, InternetSession.Status.ACTIVE),
+            (InternetSession.BillingMode.OPEN_METERED, InternetSession.Status.ENDED),
+        ]:
+            session.billing_mode, session.status = mode, status
+            session.save(update_fields=['billing_mode', 'status'])
+            page = self.client.get(reverse('current_visit'))
+            self.assertFalse(page.context['can_request_bill'])
+            self.client.post(reverse('customer_visit_request'), {'action': 'bill'})
+        self.assertFalse(NotificationEvent.objects.filter(event_type='payment_pending').exists())
+
+    def test_closed_metered_visit_cannot_request_checkout(self):
+        visit, _session = self.metered_visit()
+        visit.status = HubVisit.Status.CLOSED
+        visit.save(update_fields=['status'])
+        self.client.post(reverse('customer_visit_request'), {'action': 'bill'})
+        self.assertFalse(NotificationEvent.objects.filter(event_type='payment_pending').exists())
 
     def test_public_menu_does_not_render_staff_asset_bundle(self):
         response = self.client.get(reverse('menu_public'))

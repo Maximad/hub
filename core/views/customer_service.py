@@ -9,6 +9,7 @@ from django.views.decorators.http import require_POST
 from core.models import ActivityLog, HubVisit, Order
 from core.notifications import create_notification
 from core.services.visits import resolve_visit_credential
+from core.services.visit_internet_devices import has_active_metered_session
 
 REQUEST_THROTTLE = timedelta(minutes=2)
 
@@ -16,7 +17,7 @@ REQUEST_THROTTLE = timedelta(minutes=2)
 def _visit_label(visit):
     if visit.table_id:
         return visit.table.display_name
-    return 'جلسة هَبّ'
+    return f'جلسة هَبّ {visit.display_number}'
 
 
 def _recent_request(visit, action):
@@ -68,13 +69,18 @@ def customer_visit_request(request):
     label = _visit_label(visit)
 
     if action == 'bill':
-        if latest_order is None or visit.remaining_syp <= 0:
+        metered_active = has_active_metered_session(credential)
+        if not metered_active and (latest_order is None or visit.remaining_syp <= 0):
             messages.info(request, 'لا يوجد مبلغ متبقٍ لطلب الحساب حالياً.')
             return redirect(reverse('current_visit') + '#visit-actions')
         create_notification(
             'payment_pending',
             f'{label} تطلب الحساب',
-            f'المتبقي على الجلسة: {visit.remaining_syp} ل.س',
+            (
+                f'جلسة {visit.display_number}: يرجى مراجعة استخدام الإنترنت الجاري وإنهاء الحساب عند الكاشير. '
+                'طلب الحساب لا يوقف احتساب الوقت.'
+                if metered_active else f'المتبقي على الجلسة: {visit.remaining_syp} ل.س'
+            ),
             order=latest_order,
             target_role='cashier',
         )

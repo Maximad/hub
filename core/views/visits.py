@@ -40,6 +40,7 @@ from core.services.visit_internet import (
 )
 from core.services.visit_internet_devices import (
     active_browser_session,
+    has_active_metered_session,
     browser_session_queryset,
     create_visit_internet_sale_and_start,
     start_existing_visit_entitlement,
@@ -139,6 +140,7 @@ def current_visit(request):
         'menu_url': menu_url,
         'table_entry_url': table_entry_url,
         'active_internet_session': active_internet_session,
+        'can_request_bill': visit.remaining_syp > 0 or has_active_metered_session(credential),
         'show_checkout_qr': bool(
             orders.exists()
             or (

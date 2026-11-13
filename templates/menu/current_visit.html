@@ -46,11 +46,12 @@
   <section class="hub-card current-visit__quick-actions" id="visit-actions" aria-label="خدمة الجلسة">
     <div class="current-visit__quick-actions-head"><h2>الخدمة</h2></div>
     <div class="customer-visit-actions">
-      {% if visit.remaining_syp %}
+      {% if can_request_bill %}
       <form method="post" action="{% url 'customer_visit_request' %}">{% csrf_token %}<input type="hidden" name="action" value="bill"><button class="hub-button customer-visit-actions__bill" type="submit">طلب الحساب</button></form>
       {% endif %}
       <form method="post" action="{% url 'customer_visit_request' %}">{% csrf_token %}<input type="hidden" name="action" value="assistance"><button class="hub-button hub-button-secondary" type="submit">أحتاج مساعدة</button></form>
     </div>
+    {% if can_request_bill %}<p class="hub-help-text">طلب الحساب يبلغ الكاشير فقط. يستمر احتساب الإنترنت الجاري حتى إيقافه.</p>{% endif %}
   </section>
 
   {% if internet_self_service_enabled %}
