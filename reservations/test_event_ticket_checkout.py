@@ -186,6 +186,7 @@ class EventTicketCheckoutTests(TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, 'إصدار فاتورة التذاكر دون قبض')
         self.assertContains(page, '2750')
+        self.assertContains(page, reverse('staff_reservation_detail', args=[self.booking.pk]))
         self.assertEqual(Payment.objects.count(), 0)
 
     def test_cashier_can_issue_collect_and_retry_without_reservation_admin(self):
@@ -215,6 +216,7 @@ class EventTicketCheckoutTests(TestCase):
         page = self.client.get(checkout_url)
         self.assertNotContains(page, reverse('staff_customer_payment_reverse', args=[receipt.pk]))
         self.assertNotContains(page, reverse('staff_reservation_detail', args=[self.booking.pk]))
+        self.assertContains(page, reverse('staff_ticket_cashier'))
         with self.assertRaises(ValidationError):
             link_posted_ticket_payment(self.booking.pk, receipt.pk, actor=cashier)
         with self.assertRaises(InvalidTransition):
