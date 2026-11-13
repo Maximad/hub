@@ -9,12 +9,12 @@ from django.db import transaction
 from django.utils import timezone
 from core.finance import current_business_date
 
-from accounts.permissions import is_owner_or_admin, user_has_capability
+from accounts.permissions import user_has_capability
 from core.models import ActivityLog, Category, Order, OrderItem, Payment, Product
 from core.services.posting.context import PostingContext
 from core.services.posting.order_payments import collect as collect_order_payment
 from events.models import Event, EventTicketType
-from .finance_links import link_posted_ticket_payment
+from .finance_links import _link_posted_ticket_payment
 from .models import (
     EventAdmission, Reservation, ReservationTicketOrder, ReservationTicketPaymentLink,
 )
@@ -50,8 +50,10 @@ def _hidden_ticket_product(tier):
 @transaction.atomic
 def issue_ticket_order(reservation_id, *, actor):
     """One exact-ticket cashier order per booking; no money is taken here."""
-    if not getattr(actor, 'is_active', False) or not user_has_capability(actor, 'reservations'):
-        raise ValidationError({'actor': 'تحتاج إلى صلاحية الحجوزات لإصدار فاتورة تذاكر.'})
+    if not getattr(actor, 'is_active', False) or not (
+        user_has_capability(actor, 'reservations') or user_has_capability(actor, 'cashier')
+    ):
+        raise ValidationError({'actor': 'تحتاج إلى صلاحية الحجوزات أو الكاشير لإصدار فاتورة تذاكر.'})
     booking = Reservation.objects.select_for_update().get(pk=reservation_id)
     if booking.reservation_type != Reservation.ReservationType.EVENT or not booking.event_id:
         raise ValidationError({'reservation': 'يجب اختيار حجز فعالية.'})
@@ -108,8 +110,8 @@ def issue_ticket_order(reservation_id, *, actor):
 @transaction.atomic
 def collect_ticket_payment(reservation_id, *, actor, amount_syp, method, request_key):
     """Collect once in the trusted POS journal, then bind receipt in same tx."""
-    if not getattr(actor, 'is_active', False) or not is_owner_or_admin(actor) or not user_has_capability(actor, 'cashier'):
-        raise ValidationError({'actor': 'قبض تذاكر الفعاليات يحتاج صلاحية الإدارة والكاشير.'})
+    if not getattr(actor, 'is_active', False) or not user_has_capability(actor, 'cashier'):
+        raise ValidationError({'actor': 'قبض تذاكر الفعاليات يحتاج صلاحية الكاشير.'})
     if isinstance(amount_syp, bool) or not re.fullmatch(r'[1-9][0-9]{0,11}', str(amount_syp).strip()):
         raise ValidationError({'amount_syp': 'المبلغ يجب أن يكون عدداً موجباً.'})
     amount = int(amount_syp)
@@ -134,6 +136,6 @@ def collect_ticket_payment(reservation_id, *, actor, amount_syp, method, request
     # finance service owns the actual receipt, period gates and idempotency.
     payment = collect_order_payment(sale.order, context, amount, method)
     # If linkage fails, transaction rolls back both Payment and its journal.
-    link_posted_ticket_payment(booking.pk, payment.pk, actor=actor)
+    _link_posted_ticket_payment(booking.pk, payment.pk, actor=actor)
     return payment
 

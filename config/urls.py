@@ -11,7 +11,7 @@ from core.views.staff_members import (staff_members, staff_member_new, staff_mem
                                       staff_member_subscribe, staff_member_retry_activation)
 from core.views.staff_events import staff_events, staff_event_new, staff_event_detail, staff_event_checkin, staff_event_booking_import, staff_event_artwork, staff_event_finance, staff_event_schedule
 from core.views.staff_layouts import (staff_layouts, staff_layout_new, staff_layout_edit, staff_event_layout_edit, staff_layout_save, staff_layout_assign, staff_layout_restore)
-from core.views.staff_reservations import staff_reservations, staff_reservation_new, staff_reservation_detail, staff_reservation_status, staff_reservation_tables, staff_reservation_tickets, staff_reservation_payment_arrangement, staff_reservation_ticket_payment_link, staff_event_reservation_edit, staff_reservation_ticket_checkout
+from core.views.staff_reservations import staff_reservations, staff_reservation_new, staff_reservation_detail, staff_reservation_status, staff_reservation_tables, staff_reservation_tickets, staff_reservation_payment_arrangement, staff_reservation_ticket_payment_link, staff_event_reservation_edit, staff_reservation_ticket_checkout, staff_ticket_cashier
 from core.views.staff_vendors import staff_vendors, staff_vendor_new, staff_vendor_detail, staff_vendor_participation_new
 from core.views.staff_import import (
     staff_import_home, staff_import_upload, staff_import_template, staff_import_preview, staff_import_confirm,
@@ -179,6 +179,7 @@ urlpatterns = [
     path('staff/orders/<uuid:public_code>/edit/items/<int:item_id>/update/', menu.staff_order_edit_update_item, name='staff_order_edit_update_item'),
     path('staff/orders/<uuid:public_code>/edit/items/<int:item_id>/remove/', menu.staff_order_edit_remove_item, name='staff_order_edit_remove_item'),
     path('staff/cashier/', menu.staff_cashier, name='staff_cashier'),
+    path('staff/cashier/tickets/', staff_ticket_cashier, name='staff_ticket_cashier'),
     path('staff/cashier/<uuid:public_code>/', menu.staff_cashier_order, name='staff_cashier_order'),
     path('staff/cashier/<uuid:public_code>/pay/', menu.staff_cashier_pay, name='staff_cashier_pay'),
     path('staff/cashier/<uuid:public_code>/discount/', menu.staff_cashier_discount, name='staff_cashier_discount'),

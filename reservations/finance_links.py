@@ -58,10 +58,19 @@ def ticket_payment_summary(reservation):
     }
 
 
-@transaction.atomic
 def link_posted_ticket_payment(reservation_id, payment_id, *, actor):
     if not is_owner_or_admin(actor):
         raise ValidationError({'payment': 'ربط سندات قبض الفعاليات يتطلب موافقة الإدارة.'})
+    return _link_posted_ticket_payment(reservation_id, payment_id, actor=actor)
+
+
+@transaction.atomic
+def _link_posted_ticket_payment(reservation_id, payment_id, *, actor):
+    """Internal linkage after authorization by manual attribution or checkout.
+
+    Checkout passes only the payment returned for this booking's issued order
+    within its collection transaction. Public manual attribution stays admin-only.
+    """
     booking = Reservation.objects.select_for_update().get(pk=reservation_id)
     if booking.reservation_type != Reservation.ReservationType.EVENT or not booking.event_id:
         raise ValidationError({'reservation': 'هذا ليس حجز فعالية.'})
