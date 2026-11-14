@@ -4,12 +4,14 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_http_methods, require_POST
+from django.views.decorators.cache import never_cache
 
 from accounts.permissions import user_has_capability
 from core.models import ActivityLog, InternetSession, Member
@@ -172,6 +174,8 @@ def member_login_verify(request, challenge_id):
     return _no_store(response)
 
 
+@never_cache
+@require_http_methods(['GET', 'HEAD'])
 def member_home(request):
     identity = resolve_member_identity(request)
     if identity is None:
@@ -184,7 +188,7 @@ def member_home(request):
                      for row in subscription_rows for benefit in row['internet']]
     devices = member.device_tokens.filter(revoked_at__isnull=True).order_by('-created_at')
     sessions = InternetSession.objects.filter(member=member).select_related('package').order_by('-created_at')[:20]
-    orders = member.orders.order_by('-created_at')[:20]
+    orders = member.orders.prefetch_related('items', 'discounts').order_by('-created_at')[:20]
     return render(request, 'member_accounts/home.html', {
         'identity': identity,
         'account': identity.account,
@@ -197,6 +201,48 @@ def member_home(request):
         'sessions': sessions,
         'orders': orders,
     })
+
+
+@never_cache
+@require_POST
+@transaction.atomic
+def member_revoke_device(request, device_id):
+    identity = resolve_member_identity(request, touch=False)
+    if identity is None:
+        raise Http404
+    device = get_object_or_404(identity.member.device_tokens.select_for_update(), uuid=device_id)
+    if device.revoked_at is None:
+        device.revoked_at = timezone.now()
+        device.save(update_fields=['revoked_at'])
+        ActivityLog.objects.create(action='member_account.revoke_device', details={
+            'member_public_code': str(identity.member.public_code), 'device_uuid': str(device.uuid),
+        })
+    response = redirect('member_account_home')
+    if device.pk == identity.device.pk:
+        response = redirect('menu_public')
+        response.delete_cookie(settings.MEMBER_DEVICE_COOKIE_NAME, path='/', samesite='Lax')
+    return response
+
+
+@never_cache
+@require_http_methods(['GET', 'HEAD'])
+def member_order_detail(request, public_code):
+    identity = resolve_member_identity(request, touch=False)
+    if identity is None:
+        raise Http404
+    order = get_object_or_404(identity.member.orders.prefetch_related('items', 'discounts'), public_code=public_code)
+    # Render only customer-facing snapshots; internal notes, costs and contacts stay private.
+    details = {
+        'number': order.display_number, 'created_at': order.created_at, 'status': order.get_status_display(),
+        'subtotal': order.subtotal_syp, 'discount': order.discount_syp,
+        'delivery_fee': order.delivery_fee_syp, 'total': order.total_syp,
+        'items': [{'name': item.product_name_ar_snapshot, 'quantity': item.quantity,
+                   'total': item.line_total_syp_snapshot if item.line_total_syp_snapshot is not None
+                   else item.quantity * item.unit_price_syp_snapshot} for item in order.items.all()],
+    }
+    response = render(request, 'member_accounts/order_detail.html', {'details': details})
+    response['X-Robots-Tag'] = 'noindex, nofollow'
+    return response
 
 
 @require_POST

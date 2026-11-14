@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block body_class %}public-member-page{% endblock %}
+{% block title %}تفاصيل طلبي{% endblock %}
+{% block content %}
+<div class="hub-member-home"><section class="hub-card">
+  <h1>تفاصيل الطلب {{ details.number }}</h1>
+  <p>{{ details.created_at }} · {{ details.status }}</p>
+  <p>تفاصيل الأصناف والمبالغ المسجلة، وليست إيصال دفع أو إثبات تسوية. راجع كاشير هَب للتحقق من الدفع أو طلب تغيير.</p>
+  <div class="hub-table-wrap"><table class="hub-table">
+    <tr><th>الصنف</th><th>الكمية</th><th>إجمالي السطر</th></tr>
+    {% for item in details.items %}<tr><td>{{ item.name }}</td><td>{{ item.quantity }}</td><td>{{ item.total }} ل.س</td></tr>
+    {% empty %}<tr><td colspan="3">لا توجد أصناف مسجلة.</td></tr>{% endfor %}
+  </table></div>
+  <p>الأصناف: {{ details.subtotal }} ل.س · الخصم: {{ details.discount }} ل.س · التوصيل: {{ details.delivery_fee }} ل.س</p>
+  <p><strong>الإجمالي: {{ details.total }} ل.س</strong></p>
+  <a class="hub-button" href="{% url 'member_account_home' %}">العودة إلى حسابي</a>
+</section></div>
+{% endblock %}
