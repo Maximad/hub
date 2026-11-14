@@ -7,11 +7,16 @@ event covers and known-cost reporting. Owner: Hub Sweida operations/finance.
 ## Release preconditions
 
 1. Verify deployed container commit and required migrations
-   (`reservations.0006–0012`, `events.0003–0009`) against the exact merged release.
+   (`reservations.0006–0013`, `events.0003–0009`) against the exact merged release.
    In particular, verify `events.0009_event_performances` and
    `reservations.0012_performance_links`: they create the original performance
    and attach legacy bookings/attendance requests. On a restored staging copy,
    verify those links and unchanged booking counts before any authorized rollout.
+   Verify `reservations.0013_attendance_account` and its member-account dependency.
+   Existing requests remain unclaimed: the migration must not associate accounts
+   by phone. On synthetic staging records, explicitly claim a browser-owned request,
+   verify access from another authenticated device, and reject another account or
+   the old browser token alone. Verify revoked-device denial and own-order privacy.
    Record `python manage.py showmigrations events reservations --plan` and
    `python manage.py migrate --check` from the target environment; a historical
    migration range alone is not proof that its schema matches the release.
