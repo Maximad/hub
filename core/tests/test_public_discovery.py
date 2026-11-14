@@ -50,6 +50,15 @@ class PublicDiscoveryTests(TestCase):
             code=code, name_ar='خطة معلنة', is_active=True, visible_to_customer=True,
             price_syp=14500, billing_period=MembershipPlan.BillingPeriod.MONTHLY), **kwargs))
 
+    def test_joining_instructions_are_read_only_for_each_public_offering(self):
+        program, popup, plan = self.program(), self.popup(), self.plan()
+        for path in [f'/programs/{program.code}/', f'/popups/{popup.uuid}/', f'/memberships/{plan.code}/']:
+            with self.subTest(path=path), CaptureQueriesContext(connection) as queries:
+                response = self.client.get(path)
+            self.assertContains(response, 'id="joining-steps"')
+            self.assertNotContains(response, '<form')
+            self.assertFalse(any(q['sql'].lstrip().split()[0].upper() in {'INSERT', 'UPDATE', 'DELETE'} for q in queries))
+
     def test_program_gate_dates_status_and_stable_ordering(self):
         first = self.program('first', starts_at=self.now-timedelta(days=1), ends_at=self.now+timedelta(hours=1))
         second = self.program('second', starts_at=self.now)

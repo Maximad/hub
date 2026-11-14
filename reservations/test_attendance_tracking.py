@@ -143,6 +143,30 @@ class AttendanceTrackingTests(TestCase):
         self.row(status='withdrawn')
         self.assertEqual(client.get('/attendance/').context['page'].paginator.count, 3)
 
+    def test_confirmed_handoff_requires_owned_approved_live_reservation(self):
+        row = self.row(status='approved')
+        client = self.browser(self.owner)
+        marker = 'id="confirmed-next-steps"'
+        self.assertNotContains(client.get(self.receipt(row)), marker)
+        reservation = Reservation.objects.create(reservation_type='event', event=self.source,
+                                                name='staff', phone='12345', party_size=2, status='confirmed')
+        row.reservation = reservation
+        row.save()
+        with CaptureQueriesContext(connection) as queries:
+            response = client.get(self.receipt(row))
+        self.assertContains(response, marker)
+        self.assertFalse(any(q['sql'].lstrip().split()[0].upper() in {'INSERT', 'UPDATE', 'DELETE'} for q in queries))
+        for private in [row.name, row.phone, row.owner_hash, row.review_reason]:
+            self.assertNotContains(response, private)
+        self.assertEqual(self.browser(self.other_owner).get(self.receipt(row)).status_code, 404)
+        for status in ['pending', 'cancelled', 'completed', 'no_show']:
+            Reservation.objects.filter(pk=reservation.pk).update(status=status)
+            self.assertNotContains(client.get(self.receipt(row)), marker)
+        Reservation.objects.filter(pk=reservation.pk).update(status='confirmed')
+        for status in ['pending', 'rejected', 'withdrawn']:
+            Request.objects.filter(pk=row.pk).update(status=status)
+            self.assertNotContains(client.get(self.receipt(row)), marker)
+
     def test_pending_withdrawal_still_uses_existing_csrf_protected_receipt(self):
         row = self.row(status='pending')
         client = Client(enforce_csrf_checks=True)
