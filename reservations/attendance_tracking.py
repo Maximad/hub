@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from core.services.public_homepage import DAMASCUS
-from reservations.attendance import digest
+from reservations.attendance import attendance_access, digest
 from reservations.models import EventAttendanceRequest as Request
 
 OWNER_SESSION_KEY = 'public_attendance_owner'
@@ -17,8 +17,8 @@ def owner_digest(request):
     return digest(token) if isinstance(token, str) and token else None
 
 
-def owned_attendance_requests(owner_hash):
-    return Request.objects.filter(owner_hash=owner_hash).select_related('event', 'reservation').order_by('-created_at', '-pk')
+def owned_attendance_requests(owner_hash=None, account_id=None):
+    return Request.objects.filter(attendance_access(owner_hash, account_id)).select_related('event', 'reservation').order_by('-created_at', '-pk')
 
 
 @dataclass(frozen=True)

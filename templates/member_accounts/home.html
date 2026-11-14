@@ -60,6 +60,7 @@
 
 <section class="hub-card">
   <h3>أجهزتي</h3>
+  <p><a href="{% url 'member_attendance_history' %}">طلبات حضوري وحجوزات الفعاليات المرتبطة بحسابي</a></p>
   <div class="hub-table-wrap"><table class="hub-table">
     <tr><th>الجهاز</th><th>تاريخ التفعيل</th><th>آخر استخدام</th></tr>
     {% for device in devices %}<tr><td>{{ device.device_label|default:'جهاز' }}</td><td>{{ device.created_at }}</td><td>{{ device.last_used_at|default:'—' }}</td></tr>
