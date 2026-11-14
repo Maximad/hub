@@ -71,5 +71,7 @@ with sync_playwright() as p:
     verify_internet_session_recovery(browser, output, assets)
     from check_standalone_cashier_recovery_mobile import verify_standalone_cashier_recovery
     verify_standalone_cashier_recovery(browser, output, assets)
+    from check_member_account_mobile import verify_member_account
+    verify_member_account(browser, output, assets)
     browser.close()
 print(f'RTL mobile layout and conversion passed; screenshots in {output}')
