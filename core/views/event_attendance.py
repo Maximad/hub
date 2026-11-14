@@ -11,6 +11,7 @@ from django.core.validators import MaxValueValidator
 from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils.crypto import salted_hmac
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods
@@ -25,6 +26,8 @@ from reservations.attendance import (
 from reservations.models import EventAttendanceRequest as AttendanceRequest
 from reservations.attendance_review import attendance_review_info
 from events.models import Event, EventPerformance
+from member_accounts.identity import resolve_member_identity
+from reservations.attendance import claim_request
 
 from reservations.attendance_tracking import (
     OWNER_SESSION_KEY, owner_digest, owned_attendance_requests, public_attendance_item,
@@ -114,22 +117,34 @@ def attendance_form(request, uuid):
 def attendance_receipt(request, uuid):
     require_public_release()
     owner = owner_digest(request)
-    if not owner:
-        raise Http404
-    row = get_object_or_404(owned_attendance_requests(owner), uuid=uuid)
+    identity = resolve_member_identity(request, touch=False)
+    account_id = identity.account.pk if identity else None
+    row = get_object_or_404(owned_attendance_requests(owner, account_id), uuid=uuid)
     error = ''
     if request.method == 'POST':
-        if request.POST.get('action') != 'withdraw':
+        action = request.POST.get('action')
+        if action not in {'withdraw', 'claim'}:
             raise Http404
         try:
-            withdraw_request(row.uuid, owner_hash=owner)
+            if action == 'claim':
+                if not identity or not owner or row.owner_hash != owner:
+                    raise Http404
+                claim_request(row.uuid, owner_hash=owner, account_id=account_id)
+            else:
+                withdraw_request(row.uuid, owner_hash=owner, account_id=account_id)
+        except AttendanceRequest.DoesNotExist:
+            raise Http404
         except ValidationError as exc:
             error = _message(exc)
-            row = get_object_or_404(owned_attendance_requests(owner), uuid=uuid)
+            row = get_object_or_404(owned_attendance_requests(owner, account_id), uuid=uuid)
         else:
             return redirect('public_attendance_receipt', uuid=row.uuid)
     receipt = public_attendance_item(row)
-    response = render(request, 'public/attendance_receipt.html', {'receipt': receipt, 'error': error}, status=409 if error else 200)
+    response = render(request, 'public/attendance_receipt.html', {
+        'receipt': receipt, 'error': error, 'account_linked': bool(row.account_id),
+        'can_claim': bool(identity and owner and not row.account_id and row.owner_hash == owner),
+        'claim_login': not identity and not row.account_id,
+    }, status=409 if error else 200)
     response['X-Robots-Tag'] = 'noindex, nofollow'
     return response
 
@@ -143,6 +158,22 @@ def attendance_history(request):
     page = Paginator(rows, 12).get_page(request.GET.get('page'))
     items = tuple(public_attendance_item(row) for row in page.object_list)
     response = render(request, 'public/attendance_history.html', {'items': items, 'page': page})
+    response['X-Robots-Tag'] = 'noindex, nofollow'
+    return response
+
+
+@never_cache
+@require_http_methods(['GET', 'HEAD'])
+def member_attendance_history(request):
+    require_public_release()
+    identity = resolve_member_identity(request, touch=False)
+    if identity is None:
+        return redirect(reverse('member_account_login') + '?next=' + reverse('member_attendance_history'))
+    page = Paginator(owned_attendance_requests(account_id=identity.account.pk), 12).get_page(request.GET.get('page'))
+    response = render(request, 'public/attendance_history.html', {
+        'items': tuple(public_attendance_item(row) for row in page.object_list),
+        'page': page, 'account_history': True,
+    })
     response['X-Robots-Tag'] = 'noindex, nofollow'
     return response
 

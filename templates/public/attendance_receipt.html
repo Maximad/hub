@@ -2,6 +2,14 @@
 {% block title %}حالة طلب الحضور | هَبّ السويداء{% endblock %}
 {% block content %}<div class="ph-wrap ph-section ph-attendance"><h1>حالة طلب الحضور</h1><h2>{{ receipt.title }}</h2><p>عدد الأشخاص: {{ receipt.party_size }}</p>{% include 'public/_attendance_dates.html' %}<p role="status" class="ph-notice">{{ receipt.status_label }}</p>
 {% if error %}<p role="alert">{{ error }}</p>{% endif %}
+{% if can_claim %}
+<section class="ph-notice"><h3>احفظ الطلب في حسابك</h3>
+<p>بعد الربط يمكنك متابعة الطلب من أجهزتك المسجلة. سيصبح تسجيل الدخول إلى هذا الحساب مطلوباً لعرض الطلب أو سحبه.</p>
+<form method="post">{% csrf_token %}<input type="hidden" name="action" value="claim"><button class="ph-button" type="submit">ربط هذا الطلب بحسابي</button></form></section>
+{% elif claim_login %}
+<p><a class="ph-text-link" href="{% url 'member_account_login' %}?next={{ request.path|urlencode }}">سجّل الدخول ثم اربط الطلب بحسابك لمتابعته من جهاز آخر</a></p>
+{% endif %}
+{% if account_linked %}<p>هذا الطلب مرتبط بحسابك. <a class="ph-text-link" href="{% url 'member_attendance_history' %}">طلبات الحضور في حسابي</a></p>{% endif %}
 {% if receipt.booking_confirmed %}
 <section class="ph-notice" id="confirmed-next-steps" aria-labelledby="confirmed-next-title">
   <h3 id="confirmed-next-title">الخطوة التالية: راجع فريق الاستقبال</h3>

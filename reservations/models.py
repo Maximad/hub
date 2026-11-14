@@ -215,6 +215,8 @@ class EventAttendanceRequest(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     client_key = models.UUIDField(unique=True, editable=False)
     owner_hash = models.CharField(max_length=64, editable=False)
+    account = models.ForeignKey('member_accounts.MemberAccount', null=True, blank=True,
+                                on_delete=models.PROTECT, related_name='attendance_requests', editable=False)
     ip_hash = models.CharField(max_length=64, editable=False)
     event = models.ForeignKey('events.Event', null=True, on_delete=models.SET_NULL, related_name='attendance_requests')
     event_uuid = models.UUIDField(editable=False)

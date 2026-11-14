@@ -146,9 +146,34 @@ def submit_request(*, event_uuid, owner_hash, ip_hash, client_key, name, phone, 
     return row
 
 
+def attendance_access(owner_hash=None, account_id=None):
+    """Claimed requests require the account; browser possession only grants unclaimed rows."""
+    access = Q(pk__in=[])
+    if owner_hash:
+        access |= Q(owner_hash=owner_hash, account__isnull=True)
+    if account_id:
+        access |= Q(account_id=account_id)
+    return access
+
+
 @transaction.atomic
-def withdraw_request(request_uuid, *, owner_hash):
+def claim_request(request_uuid, *, owner_hash, account_id):
+    if not owner_hash or not account_id:
+        raise PermissionDenied
     row = Request.objects.select_for_update().get(uuid=request_uuid, owner_hash=owner_hash)
+    if row.account_id == account_id:
+        return row
+    if row.account_id is not None:
+        raise PermissionDenied
+    row.account_id = account_id
+    row.save(update_fields=['account', 'updated_at'])
+    _audit(row, 'event_attendance_account_claimed')
+    return row
+
+
+@transaction.atomic
+def withdraw_request(request_uuid, *, owner_hash=None, account_id=None):
+    row = Request.objects.select_for_update().filter(attendance_access(owner_hash, account_id)).get(uuid=request_uuid)
     if row.status == Request.Status.WITHDRAWN:
         return row
     if row.status != Request.Status.PENDING:

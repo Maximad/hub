@@ -2,6 +2,7 @@ from django.urls import path
 
 from member_accounts import card_views, views
 from core.views.customer_service import customer_visit_request
+from core.views.event_attendance import member_attendance_history
 
 
 urlpatterns = [
@@ -10,6 +11,7 @@ urlpatterns = [
     path('me/login/<uuid:challenge_id>/', views.member_login_verify, name='member_account_login_verify'),
     path('me/card/qr.svg', card_views.member_card_qr, name='member_card_qr'),
     path('me/', views.member_home, name='member_account_home'),
+    path('me/attendance/', member_attendance_history, name='member_attendance_history'),
     path('me/logout/', views.member_logout, name='member_account_logout'),
     path('visit/request-service/', customer_visit_request, name='customer_visit_request'),
     path('staff/member-card/<str:token>/', card_views.staff_member_card_scan, name='staff_member_card_scan'),
