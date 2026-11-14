@@ -30,6 +30,7 @@ class PublicAttendanceItem:
     can_withdraw: bool
     approved: bool
     requested_at: datetime
+    booking_confirmed: bool = False
     event_starts_at: datetime | None = None
     event_url: str = ''
 
@@ -52,6 +53,8 @@ def public_attendance_item(row):
         url=reverse('public_attendance_receipt', kwargs={'uuid': row.uuid}),
         can_withdraw=row.status == Request.Status.PENDING, approved=row.status == Request.Status.APPROVED,
         requested_at=timezone.localtime(row.created_at, DAMASCUS),
+        booking_confirmed=bool(row.status == Request.Status.APPROVED and row.reservation_id
+                               and row.reservation.status == 'confirmed'),
         event_starts_at=timezone.localtime(row.event.starts_at, DAMASCUS) if public_source else None,
         event_url=reverse('public_event_detail', kwargs={'uuid': row.event.uuid}) if public_source else '',
     )

@@ -7,6 +7,15 @@
     <p class="ph-eyebrow">هَبّ السويداء / {{ section_title }}</p>
     <h1>{{ item.title }}</h1>
     {% include 'public/_discovery_meta.html' %}
+    <details class="ph-notice" id="joining-steps">
+      <summary>{% if section == 'memberships' %}كيف أنضم؟{% else %}كيف أشارك؟{% endif %}</summary>
+      <ol>
+        <li>اعرض هذه الصفحة على فريق هَب عند زيارتك واسأل عن الانضمام إلى {{ item.title }}.</li>
+        <li>تأكد مع الفريق من التوفر والمواعيد والسعر والشروط قبل الدفع.</li>
+        <li>{% if section == 'memberships' %}اطلب من الفريق تأكيد تفعيل عضويتك، ثم راجع تفاصيلها من حسابي.{% else %}اطلب من الفريق تأكيد تسجيل مشاركتك وتعليمات الحضور.{% endif %}</li>
+      </ol>
+      <p>عرض هذه الصفحة لا يسجل مشاركة أو عضوية ولا يؤكد دفعاً.</p>
+    </details>
     {% if item.ends_at %}{% load tz %}{% timezone 'Asia/Damascus' %}<p>حتى <time datetime="{{ item.ends_at|date:'c' }}"><bdi dir="ltr">{{ item.ends_at|date:'j / n / Y · H:i' }}</bdi></time> · دمشق</p>{% endtimezone %}{% endif %}
     <div class="ph-detail__description">{% if item.description %}{{ item.description|linebreaks }}{% else %}<p>تُنشر التفاصيل الإضافية هنا عند توفرها.</p>{% endif %}</div>
     {% if section == 'memberships' %}<p class="ph-notice">هذه صفحة تعريفية بالخطة، وليست عملية شراء أو تفعيل عضوية.</p>{% else %}<p class="ph-notice">هذه صفحة تعريفية. تفاصيل الحضور أو المشاركة تُعلن ضمن الوصف عند توفرها.</p>{% endif %}
