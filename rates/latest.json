@@ -8,10 +8,10 @@
   "denomination_verification": "numeric_safety_bounds_and_manual_approval",
   "buy_syp_per_usd": "149.5",
   "sell_syp_per_usd": "150.0",
-  "source_timestamp_utc": "2026-11-19T06:53:03.579308Z",
-  "business_date_damascus": "2026-11-19",
-  "collected_at_utc": "2026-11-19T15:39:22.355179Z",
+  "source_timestamp_utc": "2026-11-20T06:53:15.737239Z",
+  "business_date_damascus": "2026-11-20",
+  "collected_at_utc": "2026-11-20T15:20:57.738279Z",
   "source_url": "https://lirascope.syria-cloud.sy/api/v1/rates/latest?currencies=USD&lang=en",
-  "raw_sha256": "4819f3ec50db162314aab3590aadca5c9644f56b8de4500540041ce959dd021c",
+  "raw_sha256": "584629f821f1da52f0a5aab0482755880f249fe57b765b2091ce8325f900ced8",
   "status": "unapproved"
 }
