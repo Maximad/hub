@@ -129,6 +129,12 @@ jobs:
       - name: Collect static files
         run: python manage.py collectstatic --noinput
 
+      - name: Verify table QR order to cashier receipt in Chromium
+        run: |
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
+          python manage.py test scripts.check_table_order_browser --noinput
+
       - name: Exercise Internet worker once
         run: python manage.py run_internet_worker --once
 
@@ -169,10 +175,7 @@ jobs:
         env:
           MOBILE_PREVIEW_DIR: ${{ runner.temp }}/hub-consumption-preview
           PYTHONPATH: .
-        run: |
-          python -m pip install playwright
-          python -m playwright install --with-deps chromium
-          python scripts/check-consumption-mobile.py
+        run: python scripts/check-consumption-mobile.py
 
       - name: Upload consumption mobile preview
         if: always()

@@ -38,7 +38,7 @@
   if (isMenu) {
     nav.innerHTML = [
       navItem('المنيو', menuUrl, true),
-      '<button type="button" class="customer-space-nav__cart" data-customer-cart data-empty="true" aria-label="فتح طلبك">طلبك<span class="customer-space-nav__badge" data-customer-cart-count>0</span></button>',
+      '<button type="button" class="customer-space-nav__cart" data-customer-cart data-cart-sheet-open aria-controls="cart-review" aria-expanded="false" data-empty="true" aria-label="فتح طلبك">طلبك<span class="customer-space-nav__badge" data-customer-cart-count>0</span></button>',
       hasVisit ? navItem('جلستي', visitUrl, false) : '',
     ].filter(Boolean).join('');
   } else if (isVisit) {
@@ -63,8 +63,6 @@
   if (isMenu) {
     const cartButton = nav.querySelector('[data-customer-cart]');
     const countNode = nav.querySelector('[data-customer-cart-count]');
-    const cartTrigger = document.querySelector('[data-cart-sheet-open]');
-    cartButton?.addEventListener('click', () => cartTrigger?.click());
 
     function updateCart(detail) {
       const qty = Math.max(Number(detail?.totalQty || 0), 0);

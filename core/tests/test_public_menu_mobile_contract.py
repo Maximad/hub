@@ -52,9 +52,10 @@ class PublicMenuMobileContractTests(SimpleTestCase):
         javascript = self._read('static/js/customer_space.js')
 
         self.assertIn("body.classList.add('customer-space-nav-active')", javascript)
-        self.assertIn("data-customer-cart", javascript)
-        self.assertIn("const cartTrigger = document.querySelector('[data-cart-sheet-open]')", javascript)
-        self.assertIn("cartButton?.addEventListener('click', () => cartTrigger?.click())", javascript)
+        self.assertIn('data-customer-cart data-cart-sheet-open aria-controls="cart-review"', javascript)
+        menu_cart = self._read('static/js/menu_cart.js')
+        self.assertIn("event.target.closest('[data-cart-sheet-open]')", menu_cart)
+        self.assertIn("openCartSheet(trigger)", menu_cart)
 
     def test_product_modal_containment_and_recipe_action_contrast_contract(self):
         javascript = self._read('static/js/menu_cart.js')
