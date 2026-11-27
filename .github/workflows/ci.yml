@@ -182,6 +182,9 @@ jobs:
           path: ${{ runner.temp }}/hub-consumption-preview
           if-no-files-found: ignore
 
+      - name: Verify table QR order to cashier receipt in Chromium
+        run: python manage.py test scripts.check_table_order_browser --noinput
+
       - name: Verify public charcoal discovery layout
         env:
           PUBLIC_HOMEPAGE_PREVIEW_DIR: ${{ runner.temp }}/hub-public-charcoal-preview
