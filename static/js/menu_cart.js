@@ -36,7 +36,6 @@
   const modal = form.querySelector('[data-menu-modal]');
   const modalBody = form.querySelector('[data-menu-modal-body]');
   const cartSheet = form.querySelector('[data-cart-sheet]');
-  const cartSheetTrigger = form.querySelector('[data-cart-sheet-open]');
   const cartSheetBackdrop = form.querySelector('.public-menu-cart-backdrop');
   const orderError = form.querySelector('[data-order-error]');
   const mobileCartQuery = window.matchMedia('(max-width: 1023px)');
@@ -45,6 +44,7 @@
   let activeModalInitialQuantity = null;
   let activeModalCommitted = false;
   let isSubmitting = false;
+  let cartSheetTrigger = null;
   let previousTotalQty = 0;
   let inertModalBackground = [];
 
@@ -70,12 +70,15 @@
     if (submitWrap.parentElement !== footer) footer.appendChild(submitWrap);
   }
 
-  function openCartSheet() {
+  function openCartSheet(trigger) {
     if (!cartSheet || !mobileCartQuery.matches) return;
     closeItemModal(false);
     cartSheet.classList.add('is-open');
     cartSheet.setAttribute('role', 'dialog');
     cartSheet.setAttribute('aria-modal', 'true');
+    cartSheetTrigger = trigger
+      || document.querySelector('.customer-space-nav [data-cart-sheet-open]')
+      || form.querySelector('[data-cart-sheet-open]');
     cartSheetTrigger?.setAttribute('aria-expanded', 'true');
     if (cartSheetBackdrop) cartSheetBackdrop.hidden = false;
     document.body.classList.add('public-menu-cart-open');
@@ -270,12 +273,14 @@
     dispatchCartUpdated(form, { totalQty, totalPrice });
   }
 
+  document.addEventListener('click', (event) => {
+    const trigger = event.target.closest('[data-cart-sheet-open]');
+    if (!trigger) return;
+    event.preventDefault();
+    openCartSheet(trigger);
+  });
+
   form.addEventListener('click', (event) => {
-    if (event.target.closest('[data-cart-sheet-open]')) {
-      event.preventDefault();
-      openCartSheet();
-      return;
-    }
     if (event.target.closest('[data-cart-sheet-close]')) {
       event.preventDefault();
       closeCartSheet();
