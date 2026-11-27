@@ -1,0 +1,173 @@
+name: Production approval rehearsal
+
+on:
+  workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: Successful Django CI push run for the current main commit
+        required: true
+        type: string
+      current_commit:
+        description: Expected production commit from hub-inspect
+        required: true
+        type: string
+      current_image:
+        description: Expected production GHCR digest reference from hub-inspect
+        required: true
+        type: string
+      allow_operational_data:
+        description: Allow existing operational data at the launch readiness gate
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  prepare:
+    name: Prepare the release for review
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      commit: ${{ steps.ci.outputs.commit }}
+      image: ${{ steps.digest.outputs.image }}
+      ci_attempt: ${{ steps.ci.outputs.attempt }}
+      environment_id: ${{ steps.ci.outputs.environment_id }}
+    steps:
+      - name: Verify CI and rehearsal environment
+        id: ci
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
+          CURRENT_COMMIT: ${{ inputs.current_commit }}
+          CURRENT_IMAGE: ${{ inputs.current_image }}
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$*"; exit 1; }
+          [[ "$GITHUB_REF" == refs/heads/main ]] || fail "Dispatch this workflow from main."
+          [[ "$GITHUB_RUN_ATTEMPT" == 1 ]] || fail "Dispatch a fresh rehearsal for a new approval record."
+          [[ "$CI_RUN_ID" =~ ^[1-9][0-9]*$ ]] || fail "Enter a numeric Django CI run ID."
+          [[ "$CURRENT_COMMIT" =~ ^[a-f0-9]{40}$ ]] || fail "Enter the full production commit SHA."
+          [[ "$CURRENT_IMAGE" =~ ^ghcr\.io/maximad/hub@sha256:[a-f0-9]{64}$ ]] ||
+            fail "Enter a digest-pinned Hub production image."
+
+          environment="$(gh api "repos/$GITHUB_REPOSITORY/environments/production-rehearsal")" ||
+            fail "Create the production-rehearsal environment before dispatching."
+          environment_id="$(jq -er '
+            select(any(.protection_rules[]?; .type == "required_reviewers" and (.reviewers | length > 0)))
+            | .id
+          ' <<< "$environment")" || fail "Configure required reviewers on production-rehearsal."
+
+          main_commit="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
+          [[ "$main_commit" == "$GITHUB_SHA" ]] || fail "main changed after dispatch."
+          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID")"
+          attempt="$(jq -er --arg repo "$GITHUB_REPOSITORY" --arg sha "$main_commit" '
+            select(.head_repository.full_name == $repo and .head_sha == $sha and
+              .head_branch == "main" and .event == "push" and
+              (.path | split("@")[0]) == ".github/workflows/ci.yml" and
+              .status == "completed" and .conclusion == "success")
+            | .run_attempt
+          ' <<< "$run")" || fail "Choose a successful Django CI push run for the current main commit."
+
+          published_after="$(
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID/attempts/$attempt/jobs" |
+              jq -er '[.jobs[] | select(.name == "publish-release" and .conclusion == "success")]
+                | select(length == 1) | .[0].started_at'
+          )" || fail "The selected CI attempt has no successful publish-release job."
+
+          artifact_id="$(
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID/artifacts?name=release-image-digest" |
+              jq -er --arg started "$published_after" '
+                [.artifacts[] | select(.name == "release-image-digest" and
+                  .expired == false and .created_at >= $started)]
+                | select(length == 1) | .[0].id'
+          )" || fail "The selected CI attempt needs one unexpired release-image-digest artifact."
+
+          {
+            echo "commit=$main_commit"
+            echo "attempt=$attempt"
+            echo "artifact_id=$artifact_id"
+            echo "environment_id=$environment_id"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Download the verified release digest artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          artifact-ids: ${{ steps.ci.outputs.artifact_id }}
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.ci_run_id }}
+          path: ${{ runner.temp }}/hub-release-digest
+          merge-multiple: true
+
+      - name: Show the exact release candidate
+        id: digest
+        env:
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
+          CI_ATTEMPT: ${{ steps.ci.outputs.attempt }}
+          CURRENT_COMMIT: ${{ inputs.current_commit }}
+          CURRENT_IMAGE: ${{ inputs.current_image }}
+          TARGET_COMMIT: ${{ steps.ci.outputs.commit }}
+          ALLOW_OPERATIONAL_DATA: ${{ inputs.allow_operational_data }}
+        run: |
+          set -euo pipefail
+          image="$(< "$RUNNER_TEMP/hub-release-digest/release-image.txt")"
+          if [[ ! "$image" =~ ^ghcr\.io/maximad/hub@sha256:[a-f0-9]{64}$ ]]; then
+            echo "::error::CI did not publish exactly one valid Hub image digest."
+            exit 1
+          fi
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          {
+            echo '### Production approval rehearsal'
+            printf -- '- Expected production commit `%s`\n' "$CURRENT_COMMIT"
+            printf -- '- Expected production image `%s`\n' "$CURRENT_IMAGE"
+            printf -- '- Target commit `%s`\n' "$TARGET_COMMIT"
+            printf -- '- CI-tested target image `%s`\n' "$image"
+            printf -- '- [Django CI run %s, attempt %s](%s/%s/actions/runs/%s/attempts/%s)\n' \
+              "$CI_RUN_ID" "$CI_ATTEMPT" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$CI_RUN_ID" "$CI_ATTEMPT"
+            printf -- '- Allow existing operational data at readiness `%s`\n' "$ALLOW_OPERATIONAL_DATA"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  rehearsal:
+    name: Record the approved rehearsal
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: production-rehearsal
+    steps:
+      - name: Record the GitHub approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ENVIRONMENT_ID: ${{ needs.prepare.outputs.environment_id }}
+          TARGET_COMMIT: ${{ needs.prepare.outputs.commit }}
+          TARGET_IMAGE: ${{ needs.prepare.outputs.image }}
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
+          CI_ATTEMPT: ${{ needs.prepare.outputs.ci_attempt }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_RUN_ATTEMPT" == 1 ]] || {
+            echo "::error::Dispatch a fresh rehearsal for a new approval record."
+            exit 1
+          }
+          reviewer="$(
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/approvals" |
+              jq -er --argjson id "$ENVIRONMENT_ID" '
+                [.[] | select(.state == "approved" and any(.environments[]?; .id == $id)) | .user.login]
+                | last | select(type == "string" and length > 0)'
+          )" || {
+            echo "::error::GitHub did not record a reviewer approval for this rehearsal."
+            exit 1
+          }
+          main_commit="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
+          if [[ "$main_commit" != "$TARGET_COMMIT" ]]; then
+            echo "::error::main changed while the rehearsal was awaiting approval."
+            exit 1
+          fi
+          {
+            echo '### Approval rehearsal completed'
+            printf -- '- GitHub reviewer `%s`\n' "$reviewer"
+            printf -- '- Approved commit `%s`\n' "$TARGET_COMMIT"
+            printf -- '- Approved image `%s`\n' "$TARGET_IMAGE"
+            printf -- '- Django CI run `%s`, attempt `%s`\n' "$CI_RUN_ID" "$CI_ATTEMPT"
+          } >> "$GITHUB_STEP_SUMMARY"

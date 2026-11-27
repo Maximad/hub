@@ -6,6 +6,8 @@ IFS=$'\n\t'
 EXPECTED_USER="deploy"
 PROJECT_DIR="/opt/hub"
 BRANCH="main"
+COMMIT_PATTERN='^[a-f0-9]{40}$'
+IMAGE_PATTERN='^ghcr\.io/maximad/hub@sha256:[a-f0-9]{64}$'
 COMPOSE_FILE="docker-compose.prod.yml"
 MIKROTIK_COMPOSE_FILE="docker-compose.mikrotik.yml"
 ENV_FILE=".env"
@@ -16,14 +18,28 @@ ALLOW_PRELAUNCH_OPERATIONAL_DATA="${ALLOW_PRELAUNCH_OPERATIONAL_DATA:-false}"
 
 BACKUP_FILE=""
 BOOTSTRAP_RESUME=false
-if [[ "${1:-}" == "--bootstrap-resume" ]]; then
+PINNED_RELEASE=false
+if [[ "${1:-}" == "--pinned-release" ]]; then
+    if [[ $# -ne 5 || ! "$2" =~ $COMMIT_PATTERN || ! "$3" =~ $IMAGE_PATTERN ||
+          ! "$4" =~ $COMMIT_PATTERN || ! "$5" =~ $IMAGE_PATTERN ]]; then
+        echo "Usage: $0 --pinned-release CURRENT_SHA CURRENT_IMAGE TARGET_SHA TARGET_IMAGE" >&2
+        exit 2
+    fi
+    PINNED_RELEASE=true
+    EXPECTED_CURRENT_COMMIT="$2"
+    EXPECTED_CURRENT_IMAGE="$3"
+    APPROVED_COMMIT="$4"
+    HUB_IMAGE="$5"
+elif [[ "${1:-}" == "--bootstrap-resume" ]]; then
     [[ $# -eq 4 ]] || { echo "Invalid bootstrap handoff" >&2; exit 2; }
     BOOTSTRAP_RESUME=true
     BOOTSTRAP_ROLLBACK="$2"
     BOOTSTRAP_TARGET="$3"
     BOOTSTRAP_BACKUP="$4"
 elif [[ $# -ne 0 ]]; then
-    echo "Usage: $0 [--bootstrap-resume ROLLBACK TARGET VERIFIED_BACKUP]" >&2
+    printf '%s\n' \
+        "Usage: $0 [--pinned-release CURRENT_SHA CURRENT_IMAGE TARGET_SHA TARGET_IMAGE]" \
+        "       $0 --bootstrap-resume ROLLBACK TARGET VERIFIED_BACKUP" >&2
     exit 2
 fi
 
@@ -48,6 +64,30 @@ allow_operational_data() {
         false|0|no|off|'') return 1 ;;
         *) die "ALLOW_PRELAUNCH_OPERATIONAL_DATA must be true or false." ;;
     esac
+}
+
+verify_running_release() {
+    local revision_file=backups/last_deployed_revision.txt
+    local image expected_image_id image_revision running container
+
+    [[ "$CURRENT_COMMIT" == "$EXPECTED_CURRENT_COMMIT" ]] ||
+        die "Production checkout differs from the approved starting commit."
+    [[ -f "$revision_file" && "$(< "$revision_file")" == "$EXPECTED_CURRENT_COMMIT" ]] ||
+        die "Last successful deployment differs from the approved starting commit."
+
+    image="$(docker image inspect "$EXPECTED_CURRENT_IMAGE" \
+        --format '{{.Id}} {{index .Config.Labels "org.opencontainers.image.revision"}}')" ||
+        die "The approved starting image digest is not available locally."
+    IFS=' ' read -r expected_image_id image_revision <<< "$image"
+    [[ "$expected_image_id" =~ ^sha256:[a-f0-9]{64}$ && "$image_revision" == "$CURRENT_COMMIT" ]] ||
+        die "The approved starting image does not match the production commit."
+
+    for container in hub-web hub-management-mcp hub-internet-worker hub-notification-worker; do
+        running="$(docker container inspect "$container" --format '{{.State.Running}} {{.Config.Image}} {{.Image}}')" ||
+            die "Cannot inspect the running release for $container."
+        [[ "$running" == "true $EXPECTED_CURRENT_IMAGE $expected_image_id" ]] ||
+            die "Running release for $container differs from the approved starting image."
+    done
 }
 
 latest_successful_backup() {
@@ -153,6 +193,10 @@ command -v python3 >/dev/null || die "python3 is missing."
 docker info >/dev/null 2>&1 ||
     die "Docker is unavailable to the deploy user."
 
+HUB_IMAGE="${HUB_IMAGE:-$(awk -F= '$1 == "HUB_IMAGE" {sub(/^[^=]*=/, ""); print}' "$ENV_FILE" | tail -n 1)}"
+[[ "$HUB_IMAGE" =~ $IMAGE_PATTERN ]] || die "Set HUB_IMAGE to the tested GHCR digest recorded by Django CI."
+export HUB_IMAGE
+
 dc config --quiet ||
     die "Combined production Docker Compose configuration is invalid."
 
@@ -181,6 +225,9 @@ if [[ -n "$(git status --porcelain)" ]]; then
 fi
 
 CURRENT_COMMIT="$(git rev-parse HEAD)"
+if [[ "$PINNED_RELEASE" == true ]]; then
+    verify_running_release
+fi
 
 if [[ "$BOOTSTRAP_RESUME" == true ]]; then
     log "Validating bootstrap handoff"
@@ -189,22 +236,34 @@ if [[ "$BOOTSTRAP_RESUME" == true ]]; then
     [[ "$(cat backups/rollback_revision.txt)" == "$BOOTSTRAP_ROLLBACK" ]] || die "Rollback revision record is inaccurate."
     git merge-base --is-ancestor "$BOOTSTRAP_ROLLBACK" "$BOOTSTRAP_TARGET" || die "Invalid bootstrap revision range."
     [[ "$BOOTSTRAP_BACKUP" == "$PROJECT_DIR"/backups/production/* && -f "$BOOTSTRAP_BACKUP/SUCCESS" ]] || die "Invalid bootstrap backup."
-    ./scripts/verify-production-backup.sh "$BOOTSTRAP_BACKUP"
     TARGET_COMMIT="$CURRENT_COMMIT"
-    BACKUP_FILE="${BOOTSTRAP_BACKUP#$PROJECT_DIR/}"
 else
     log "Fetching origin/main"
 
     git fetch origin "$BRANCH"
 
-    TARGET_COMMIT="$(git rev-parse origin/$BRANCH)"
+    TARGET_COMMIT="$(git rev-parse --verify "origin/$BRANCH^{commit}")"
+    if [[ "$PINNED_RELEASE" == true && "$TARGET_COMMIT" != "$APPROVED_COMMIT" ]]; then
+        die "origin/main differs from the approved target commit."
+    fi
 
     git merge-base --is-ancestor "$CURRENT_COMMIT" "$TARGET_COMMIT" ||
         die "Local main cannot be safely fast-forwarded."
 
     printf 'Current commit: %s\n' "$CURRENT_COMMIT"
     printf 'Target commit:  %s\n' "$TARGET_COMMIT"
+fi
 
+log "Pulling and verifying the release image"
+docker pull "$HUB_IMAGE" || die "Could not pull the tested release image."
+image_revision="$(docker image inspect "$HUB_IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" ||
+    die "Could not inspect the tested release image."
+[[ "$image_revision" == "$TARGET_COMMIT" ]] || die "Release image revision does not match target commit."
+
+if [[ "$BOOTSTRAP_RESUME" == true ]]; then
+    ./scripts/verify-production-backup.sh "$BOOTSTRAP_BACKUP"
+    BACKUP_FILE="${BOOTSTRAP_BACKUP#$PROJECT_DIR/}"
+else
     PREVIOUS_BACKUP="$(latest_successful_backup || true)"
 
     log "Creating full production backup"
@@ -223,19 +282,21 @@ else
 
     printf '%s\n' "$CURRENT_COMMIT" >backups/rollback_revision.txt.tmp
     mv backups/rollback_revision.txt.tmp backups/rollback_revision.txt
-    git merge --ff-only "origin/$BRANCH"
+    git merge --ff-only "$TARGET_COMMIT"
 fi
 
-HUB_IMAGE="${HUB_IMAGE:-$(awk -F= '$1 == "HUB_IMAGE" {sub(/^[^=]*=/, ""); print}' "$ENV_FILE" | tail -n 1)}"
-[[ "$HUB_IMAGE" =~ ^ghcr\.io/maximad/hub@sha256:[a-f0-9]{64}$ ]] || die "Set HUB_IMAGE to the tested GHCR digest recorded by Django CI."
-export HUB_IMAGE
+if [[ "$PINNED_RELEASE" == true ]]; then
+    # Resolve the selected services from the checkout that will launch them.
+    dc config --format json --no-env-resolution | python3 -c '
+import json
+import sys
 
-log "Building application images"
-
-# Production consumes the exact CI-tested image, never resolves dependencies here.
-dc pull web management-mcp internet-worker notification-worker
-image_revision="$(docker image inspect "$HUB_IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')"
-[[ "$image_revision" == "$TARGET_COMMIT" ]] || die "Release image revision does not match target commit."
+services = json.load(sys.stdin)["services"]
+image, *names = sys.argv[1:]
+sys.exit(not all(services.get(name, {}).get("image") == image for name in names))
+' "$HUB_IMAGE" web management-mcp internet-worker notification-worker ||
+        die "Target Compose services do not all use the approved release image."
+fi
 
 log "Running pre-deployment checks"
 
@@ -276,7 +337,7 @@ dc run --rm -T web python scripts/check-static-manifest.py
 
 log "Replacing web + management integration + background worker containers"
 
-dc up -d --no-deps --force-recreate web management-mcp internet-worker notification-worker
+dc up -d --no-deps --no-build --force-recreate web management-mcp internet-worker notification-worker
 
 log "Checking MCP bridge registration"
 
