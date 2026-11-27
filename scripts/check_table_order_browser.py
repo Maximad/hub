@@ -100,7 +100,7 @@ class TableOrderBrowserTests(StaticLiveServerTestCase):
     async def place_order(self, page, visit):
         await page.get_by_role('button', name=f'عرض تفاصيل {self.product.name_ar}').click()
         await page.get_by_role('dialog').get_by_role('button', name='إضافة إلى الطلب').click()
-        cart = page.get_by_role('button', name='فتح طلبك', exact=True)
+        cart = page.locator('button[data-customer-cart]')
         await cart.click()
         await expect(cart).to_have_attribute('aria-expanded', 'true')
         await expect(page.locator('[data-cart-list]')).to_contain_text(self.product.name_ar)
