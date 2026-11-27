@@ -9,6 +9,36 @@ The manifest contains only timestamps, the Git commit, sizes, and basic counts;
 it contains no database password or application secret. Deployment and backup
 share a non-blocking lock, and deployment runs the full backup before updating.
 
+## Approval rehearsal
+
+The **Production approval rehearsal** workflow validates a successful Django CI
+push to `main` and reads the exact GHCR digest from that run's
+`release-image-digest` artifact. It displays the expected production state,
+target commit, digest, CI run, and operational-data decision for review. Its
+final job records the GitHub reviewer and approved release in the run summary.
+
+After this workflow is on `main`:
+
+1. Under **Settings → Environments**, configure `production-rehearsal` with
+   required reviewers, restrict deployment branches to `main`, and disable
+   administrator bypass. Enable **Prevent self-review** if dispatch and review
+   are handled by different people. The rehearsal uses GitHub read permissions.
+2. Get the expected production commit and image digest from `hub-inspect status`.
+   Dispatch the workflow on `main` with those values and the successful
+   **Django CI** push run ID for the current `main` commit.
+3. Review the release record in the prepare job's summary, then review the
+   waiting job. The rehearsal succeeds only with a recorded GitHub approval.
+   Dispatch a fresh run if the target changes or another approval is needed.
+
+For a separately authorized deploy launcher, `deploy-production.sh` accepts
+`--pinned-release CURRENT_SHA CURRENT_IMAGE TARGET_SHA TARGET_IMAGE`. Pass the
+four values from the reviewed record and set
+`ALLOW_PRELAUNCH_OPERATIONAL_DATA` to the reviewed choice. The script verifies
+the running baseline and the target image revision under its existing lock
+before backup and fast-forward. It checks the resolved Compose images before
+running migrations. The GitHub rehearsal performs only the review and records its
+outcome.
+
 ## One-time timestamp-parser deployment bootstrap
 
 Production commit `51249a4` cannot deploy the parser correction in `6d14032` by
